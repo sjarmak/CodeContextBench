@@ -160,7 +160,7 @@ Use Deep Search as-is with a different hypothesis:
 
 ### Category 1: Package Documentation (doc.go)
 
-**Complexity: Medium | MCP Value: High**
+**Complexity: Medium**
 
 Generate `doc.go` package documentation for undocumented packages.
 
@@ -173,7 +173,7 @@ Generate `doc.go` package documentation for undocumented packages.
 
 ### Category 2: Scheduler Plugin Documentation
 
-**Complexity: High | MCP Value: Very High**
+**Complexity: High**
 
 Document scheduler framework plugins that lack comprehensive README files.
 
@@ -186,7 +186,7 @@ Document scheduler framework plugins that lack comprehensive README files.
 
 ### Category 3: Controller Deep-Dive Documentation
 
-**Complexity: Very High | MCP Value: Very High**
+**Complexity: Very High**
 
 Create comprehensive documentation for internal controllers.
 
@@ -199,7 +199,7 @@ Create comprehensive documentation for internal controllers.
 
 ### Category 4: Kubelet Resource Manager Documentation
 
-**Complexity: Very High | MCP Value: Very High**
+**Complexity: Very High**
 
 Document kubelet's resource management subsystems.
 
@@ -212,7 +212,7 @@ Document kubelet's resource management subsystems.
 
 ### Category 5: API Feature Documentation
 
-**Complexity: Medium-High | MCP Value: High**
+**Complexity: Medium-High**
 
 Document API features based on implementation.
 
@@ -225,7 +225,7 @@ Document API features based on implementation.
 
 ### Category 6: Feature Gate Documentation Update
 
-**Complexity: Medium | MCP Value: High**
+**Complexity: Medium**
 
 Update feature gate documentation based on recent changes.
 
@@ -440,7 +440,7 @@ evaluation_criteria:
   - References resource allocation (CPU, memory, devices)
   - Notes platform differences
 
-mcp_expected_value: high
+difficulty: medium
 rationale: |
   Deep Search can discover related packages, KEPs about resource management,
   and community documentation about kubelet internals that would inform
@@ -481,7 +481,7 @@ package but the existing documentation has been removed.
 A single `doc.go` file with comprehensive package documentation.
 ```
 
-## Why This Benchmark Tests MCP Value
+## Baseline vs MCP Comparison
 
 ### Without MCP (Baseline)
 

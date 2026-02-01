@@ -9,7 +9,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 ## Active Benchmarks
 
 ### 1. [swebench_pro/](swebench_pro/) - Multi-Language Bug Fixing
-**Task Count**: 731 available, 36 selected
+**Tasks**: 36
 **Languages**: Go, TypeScript, Python
 **SDLC Phase**: Implementation (bug fix)
 **Focus**: Long-horizon software engineering on production codebases
@@ -19,7 +19,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 ---
 
 ### 2. [locobench_agent/](locobench_agent/) - Long-Context Agent Tasks
-**Task Count**: 50 available, 25 selected
+**Tasks**: 25
 **Languages**: Rust, C#, C, C++, Python, Java, JavaScript, TypeScript, Go
 **SDLC Phases**: Architecture & Design, Implementation (refactoring), Implementation (bug fix)
 **Focus**: Architectural understanding, cross-file refactoring, bug investigation on synthetic codebases
@@ -28,7 +28,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 ---
 
 ### 3. [github_mined/](github_mined/) - Real PyTorch Pull Requests
-**Task Count**: 25 available, 12 selected
+**Tasks**: 12
 **Languages**: C++ (PyTorch)
 **SDLC Phase**: Implementation (bug fix)
 **Focus**: Multi-file code changes on real production codebase
@@ -38,7 +38,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 ---
 
 ### 4. [big_code_mcp/](big_code_mcp/) - Large Codebase Navigation
-**Task Count**: 4 (all selected)
+**Tasks**: 4
 **Languages**: Go, Rust, C++, TypeScript
 **SDLC Phase**: Implementation (feature)
 **Focus**: Feature implementation in very large codebases
@@ -48,7 +48,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 ---
 
 ### 5. [kubernetes_docs/](kubernetes_docs/) - Documentation Generation
-**Task Count**: 5 (all selected)
+**Tasks**: 5
 **Languages**: Go
 **SDLC Phase**: Documentation
 **Focus**: Reconstruct doc.go/README content for stripped Kubernetes packages
@@ -58,7 +58,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 ---
 
 ### 6. [tac_mcp_value/](tac_mcp_value/) - TheAgentCompany Tasks
-**Task Count**: 8 (all selected)
+**Tasks**: 8
 **Languages**: C++, Python
 **SDLC Phases**: Requirements & Discovery, Implementation (feature), Testing & QA, Maintenance
 **Focus**: Diverse SDE tasks (codebase search, implementation, unit testing, troubleshooting)
@@ -67,7 +67,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 ---
 
 ### 7. [dependeval_benchmark/](dependeval_benchmark/) - Multi-File & Cross-Repo Tasks
-**Task Count**: 9 (all selected)
+**Tasks**: 9
 **Languages**: Python, Java, JavaScript
 **SDLC Phases**: Implementation (refactoring), Maintenance
 **Types**: Dependency Recognition (DR), Repository Construction (RC), Multi-file Editing (ME)
@@ -76,7 +76,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 ---
 
 ### 8. [sweperf/](sweperf/) - Performance Testing
-**Task Count**: 3 (all selected)
+**Tasks**: 3
 **Languages**: Python
 **SDLC Phase**: Testing & QA
 **Focus**: Performance-oriented software engineering tasks
@@ -86,17 +86,17 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ## Benchmark Summary
 
-| Benchmark | Available | Selected | Languages | SDLC Phase |
-|-----------|-----------|----------|-----------|------------|
-| swebench_pro | 731 | 36 | Go, TypeScript, Python | Bug fixing |
-| locobench_agent | 50 | 25 | 9 languages | Architecture, Refactoring |
-| github_mined | 25 | 12 | C++ | Bug fixing |
-| big_code_mcp | 4 | 4 | Go, Rust, C++, TypeScript | Feature implementation |
-| kubernetes_docs | 5 | 5 | Go | Documentation |
-| tac_mcp_value | 8 | 8 | C++, Python | Mixed (4 phases) |
-| dependeval_benchmark | 9 | 9 | Python, Java, JavaScript | Refactoring, Maintenance |
-| sweperf | 3 | 3 | Python | Testing & QA |
-| **Total** | **835** | **102** | | |
+| Benchmark | Tasks | Languages | SDLC Phase |
+|-----------|------:|-----------|------------|
+| swebench_pro | 36 | Go, TypeScript, Python | Bug fixing |
+| locobench_agent | 25 | 9 languages | Architecture, Refactoring |
+| github_mined | 12 | C++ | Bug fixing |
+| dependeval_benchmark | 9 | Python, Java, JavaScript | Refactoring, Maintenance |
+| tac_mcp_value | 8 | C++, Python | Mixed (4 phases) |
+| kubernetes_docs | 5 | Go | Documentation |
+| big_code_mcp | 4 | Go, Rust, C++, TypeScript | Feature implementation |
+| sweperf | 3 | Python | Testing & QA |
+| **Total** | **102** | | |
 
 ---
 

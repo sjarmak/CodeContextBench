@@ -51,16 +51,16 @@ See [docs/TASK_SELECTION_CRITERIA.md](docs/TASK_SELECTION_CRITERIA.md) for detai
 
 ## Task Categories
 
-| Category | MCP Value | Description |
-|----------|-----------|-------------|
-| architectural_understanding | High | System-wide structure analysis |
-| cross_file_refactoring | High | Multi-file changes |
-| bug_investigation | High | Root cause analysis |
-| security_analysis | Medium | Vulnerability identification |
-| feature_implementation | Medium | Adding functionality |
-| code_comprehension | Lower | Understanding specific code |
-| integration_testing | Lower | Test design |
-| multi_session_development | Lower | Iterative development |
+| Category | Description |
+|----------|-------------|
+| architectural_understanding | System-wide structure analysis |
+| cross_file_refactoring | Multi-file changes |
+| bug_investigation | Root cause analysis |
+| security_analysis | Vulnerability identification |
+| feature_implementation | Adding functionality |
+| code_comprehension | Understanding specific code |
+| integration_testing | Test design |
+| multi_session_development | Iterative development |
 
 ## Generated Task Structure
 
