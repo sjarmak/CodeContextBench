@@ -61,7 +61,7 @@ echo ""
 # ============================================
 # CONFIGURATION
 # ============================================
-BENCHMARK_DIR="/home/stephanie_jarmak/CodeContextBench/benchmarks/big_code_mcp"
+BENCHMARK_DIR="/home/stephanie_jarmak/CodeContextBench/benchmarks/ccb_largerepo"
 AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
 MODEL="${MODEL:-anthropic/claude-opus-4-5-20251101}"
 CONCURRENCY=1  # Big codebases - run serially
@@ -124,7 +124,7 @@ readarray -t TASK_DIRS < <(python3 -c "
 import json
 tasks = json.load(open('$SELECTION_FILE'))['tasks']
 for t in tasks:
-    if t['benchmark'] == 'big_code_mcp':
+    if t['benchmark'] == 'ccb_largerepo':
         print(t['task_id'])
 ")
 

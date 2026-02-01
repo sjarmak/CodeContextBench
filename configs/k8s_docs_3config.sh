@@ -61,7 +61,7 @@ echo ""
 # ============================================
 # CONFIGURATION
 # ============================================
-TASKS_DIR="/home/stephanie_jarmak/CodeContextBench/benchmarks/kubernetes_docs"
+TASKS_DIR="/home/stephanie_jarmak/CodeContextBench/benchmarks/ccb_k8sdocs"
 AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
 MODEL="${MODEL:-anthropic/claude-opus-4-5-20251101}"
 CONCURRENCY=2
@@ -124,7 +124,7 @@ readarray -t TASK_IDS < <(python3 -c "
 import json
 tasks = json.load(open('$SELECTION_FILE'))['tasks']
 for t in tasks:
-    if t['benchmark'] == 'kubernetes_docs':
+    if t['benchmark'] == 'ccb_k8sdocs':
         print(t['task_id'])
 ")
 

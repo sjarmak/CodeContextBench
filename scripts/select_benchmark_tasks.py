@@ -39,32 +39,32 @@ SWEBENCH_LANGUAGE_OVERRIDES: dict[str, str] = {
 # (benchmark, category) -> SDLC phase
 SDLC_PHASE_MAP: dict[tuple[str, str], str] = {
     # Requirements & Discovery
-    ("tac_mcp_value", "find-in-codebase"): "Requirements & Discovery",
+    ("ccb_tac", "find-in-codebase"): "Requirements & Discovery",
     # Architecture & Design
-    ("locobench_agent", "architectural_understanding"): "Architecture & Design",
+    ("ccb_locobench", "architectural_understanding"): "Architecture & Design",
     # Implementation (feature)
-    ("big_code_mcp", "big_code_feature"): "Implementation (feature)",
-    ("tac_mcp_value", "implement"): "Implementation (feature)",
-    ("tac_mcp_value", "endpoint"): "Implementation (feature)",
-    ("github_mined", "feature_implementation"): "Implementation (feature)",
+    ("ccb_largerepo", "big_code_feature"): "Implementation (feature)",
+    ("ccb_tac", "implement"): "Implementation (feature)",
+    ("ccb_tac", "endpoint"): "Implementation (feature)",
+    ("ccb_pytorch", "feature_implementation"): "Implementation (feature)",
     # Implementation (bug fix)
-    ("swebench_pro", "debugging"): "Implementation (bug fix)",
-    ("swebench_pro", "swebench_pro"): "Implementation (bug fix)",
-    ("github_mined", "cross_module_bug_fix"): "Implementation (bug fix)",
-    ("locobench_agent", "bug_investigation"): "Implementation (bug fix)",
+    ("ccb_swebenchpro", "debugging"): "Implementation (bug fix)",
+    ("ccb_swebenchpro", "ccb_swebenchpro"): "Implementation (bug fix)",
+    ("ccb_pytorch", "cross_module_bug_fix"): "Implementation (bug fix)",
+    ("ccb_locobench", "bug_investigation"): "Implementation (bug fix)",
     # Implementation (refactoring)
-    ("locobench_agent", "cross_file_refactoring"): "Implementation (refactoring)",
-    ("dependeval_benchmark", "multifile_editing"): "Implementation (refactoring)",
+    ("ccb_locobench", "cross_file_refactoring"): "Implementation (refactoring)",
+    ("ccb_dependeval", "multifile_editing"): "Implementation (refactoring)",
     # Testing & QA
-    ("tac_mcp_value", "unit-test"): "Testing & QA",
-    ("sweperf", "performance"): "Testing & QA",
+    ("ccb_tac", "unit-test"): "Testing & QA",
+    ("ccb_sweperf", "performance"): "Testing & QA",
     # Documentation
-    ("kubernetes_docs", "package-documentation"): "Documentation",
+    ("ccb_k8sdocs", "package-documentation"): "Documentation",
     # Maintenance
-    ("dependeval_benchmark", "dependency_recognition"): "Maintenance",
-    ("dependeval_benchmark", "repository_construction"): "Maintenance",
-    ("tac_mcp_value", "dependency"): "Maintenance",
-    ("tac_mcp_value", "troubleshoot"): "Maintenance",
+    ("ccb_dependeval", "dependency_recognition"): "Maintenance",
+    ("ccb_dependeval", "repository_construction"): "Maintenance",
+    ("ccb_tac", "dependency"): "Maintenance",
+    ("ccb_tac", "troubleshoot"): "Maintenance",
 }
 
 # Per-category MCP affinity weights (for task_category_weight component)
@@ -76,7 +76,7 @@ MCP_CATEGORY_AFFINITY: dict[str, float] = {
     "feature_implementation": 0.8,
     "find-in-codebase": 0.8,
     "debugging": 0.75,
-    "swebench_pro": 0.75,
+    "ccb_swebenchpro": 0.75,
     "package-documentation": 0.7,
     "bug_investigation": 0.7,
     "performance": 0.65,
@@ -144,7 +144,7 @@ def _read_toml(path: Path) -> dict:
         return tomllib.load(f)
 
 
-def load_swebench_pro(bench_dir: Path) -> list[TaskRecord]:
+def load_ccb_swebenchpro(bench_dir: Path) -> list[TaskRecord]:
     tasks_dir = bench_dir / "tasks"
     records: list[TaskRecord] = []
     for d in sorted(tasks_dir.iterdir()):
@@ -172,21 +172,21 @@ def load_swebench_pro(bench_dir: Path) -> list[TaskRecord]:
             files_changed = text.count("diff --git")
 
         task_id = task_sec.get("id", d.name)
-        category = task_sec.get("category", meta.get("category", "swebench_pro"))
+        category = task_sec.get("category", meta.get("category", "ccb_swebenchpro"))
         records.append(TaskRecord(
             task_id=task_id,
-            benchmark="swebench_pro",
+            benchmark="ccb_swebenchpro",
             category=category,
             language=language,
             difficulty=meta.get("difficulty", "hard"),
             repo=repo,
-            task_dir=f"swebench_pro/tasks/{d.name}",
+            task_dir=f"ccb_swebenchpro/tasks/{d.name}",
             solution_files_changed=files_changed,
         ))
     return records
 
 
-def load_locobench_agent(bench_dir: Path) -> list[TaskRecord]:
+def load_ccb_locobench(bench_dir: Path) -> list[TaskRecord]:
     tasks_dir = bench_dir / "tasks"
     records: list[TaskRecord] = []
     for d in sorted(tasks_dir.iterdir()):
@@ -197,18 +197,18 @@ def load_locobench_agent(bench_dir: Path) -> list[TaskRecord]:
         meta = data.get("metadata", {})
         records.append(TaskRecord(
             task_id=meta.get("task_id", d.name),
-            benchmark="locobench_agent",
+            benchmark="ccb_locobench",
             category=meta.get("category", "unknown"),
             language=meta.get("language", "unknown"),
             difficulty=meta.get("difficulty", "unknown"),
-            task_dir=f"locobench_agent/tasks/{d.name}",
+            task_dir=f"ccb_locobench/tasks/{d.name}",
             context_length=int(meta.get("context_length", 0)),
             files_count=int(meta.get("files_count", 0)),
         ))
     return records
 
 
-def load_big_code_mcp(bench_dir: Path) -> list[TaskRecord]:
+def load_ccb_largerepo(bench_dir: Path) -> list[TaskRecord]:
     records: list[TaskRecord] = []
     for d in sorted(bench_dir.iterdir()):
         if not d.name.startswith("big-code-"):
@@ -221,17 +221,17 @@ def load_big_code_mcp(bench_dir: Path) -> list[TaskRecord]:
         task_sec = data.get("task", {})
         records.append(TaskRecord(
             task_id=task_sec.get("id", d.name),
-            benchmark="big_code_mcp",
+            benchmark="ccb_largerepo",
             category=task_sec.get("category", "big_code_feature"),
             language=task_sec.get("language", meta.get("language", "unknown")),
             difficulty=task_sec.get("difficulty", "hard"),
             repo=task_sec.get("repo", ""),
-            task_dir=f"big_code_mcp/{d.name}",
+            task_dir=f"ccb_largerepo/{d.name}",
         ))
     return records
 
 
-def load_tac_mcp_value(bench_dir: Path) -> list[TaskRecord]:
+def load_ccb_tac(bench_dir: Path) -> list[TaskRecord]:
     records: list[TaskRecord] = []
     for d in sorted(bench_dir.iterdir()):
         if not d.name.startswith("tac-"):
@@ -245,16 +245,16 @@ def load_tac_mcp_value(bench_dir: Path) -> list[TaskRecord]:
         task_id = task_sec.get("id", d.name)
         records.append(TaskRecord(
             task_id=task_id,
-            benchmark="tac_mcp_value",
-            category=TAC_CATEGORY_MAP.get(task_id, task_sec.get("category", "tac_mcp_value")),
+            benchmark="ccb_tac",
+            category=TAC_CATEGORY_MAP.get(task_id, task_sec.get("category", "ccb_tac")),
             language=task_sec.get("language", "unknown"),
             difficulty=task_sec.get("difficulty", "medium"),
-            task_dir=f"tac_mcp_value/{d.name}",
+            task_dir=f"ccb_tac/{d.name}",
         ))
     return records
 
 
-def load_github_mined(bench_dir: Path) -> list[TaskRecord]:
+def load_ccb_pytorch(bench_dir: Path) -> list[TaskRecord]:
     records: list[TaskRecord] = []
     for d in sorted(bench_dir.iterdir()):
         if not d.name.startswith("sgt-"):
@@ -276,18 +276,18 @@ def load_github_mined(bench_dir: Path) -> list[TaskRecord]:
 
         records.append(TaskRecord(
             task_id=task_sec.get("id", d.name),
-            benchmark="github_mined",
+            benchmark="ccb_pytorch",
             category=task_sec.get("category", "cross_module_bug_fix"),
             language=task_sec.get("language", "cpp"),
             difficulty=task_sec.get("difficulty", "medium"),
             repo=task_sec.get("repo", "pytorch"),
-            task_dir=f"github_mined/{d.name}",
+            task_dir=f"ccb_pytorch/{d.name}",
             solution_files_changed=files_modified,
         ))
     return records
 
 
-def load_kubernetes_docs(bench_dir: Path) -> list[TaskRecord]:
+def load_ccb_k8sdocs(bench_dir: Path) -> list[TaskRecord]:
     records: list[TaskRecord] = []
     for d in sorted(bench_dir.iterdir()):
         if not d.name.endswith("-doc-001") and "-doc-" not in d.name:
@@ -299,17 +299,17 @@ def load_kubernetes_docs(bench_dir: Path) -> list[TaskRecord]:
         task_sec = data.get("task", {})
         records.append(TaskRecord(
             task_id=task_sec.get("id", d.name),
-            benchmark="kubernetes_docs",
+            benchmark="ccb_k8sdocs",
             category=task_sec.get("category", "package-documentation"),
             language=task_sec.get("language", "go"),
             difficulty=task_sec.get("difficulty", "hard"),
             repo=task_sec.get("repo", "kubernetes"),
-            task_dir=f"kubernetes_docs/{d.name}",
+            task_dir=f"ccb_k8sdocs/{d.name}",
         ))
     return records
 
 
-def load_dependeval_benchmark(bench_dir: Path) -> list[TaskRecord]:
+def load_ccb_dependeval(bench_dir: Path) -> list[TaskRecord]:
     records: list[TaskRecord] = []
     for parent in sorted(bench_dir.iterdir()):
         if not parent.is_dir() or parent.name.startswith("."):
@@ -322,16 +322,16 @@ def load_dependeval_benchmark(bench_dir: Path) -> list[TaskRecord]:
             task_sec = data.get("task", {})
             records.append(TaskRecord(
                 task_id=task_sec.get("name", child.name),
-                benchmark="dependeval_benchmark",
+                benchmark="ccb_dependeval",
                 category=task_sec.get("task_type", "unknown"),
                 language=task_sec.get("language", "unknown"),
                 difficulty=task_sec.get("difficulty", "medium"),
-                task_dir=f"dependeval_benchmark/{parent.name}/{child.name}",
+                task_dir=f"ccb_dependeval/{parent.name}/{child.name}",
             ))
     return records
 
 
-def load_sweperf(bench_dir: Path) -> list[TaskRecord]:
+def load_ccb_sweperf(bench_dir: Path) -> list[TaskRecord]:
     records: list[TaskRecord] = []
     sel_path = bench_dir / "selected_tasks.json"
     if not sel_path.exists():
@@ -341,25 +341,25 @@ def load_sweperf(bench_dir: Path) -> list[TaskRecord]:
         task_id = t["task_id"]
         records.append(TaskRecord(
             task_id=task_id,
-            benchmark="sweperf",
+            benchmark="ccb_sweperf",
             category="performance",
-            language="python",  # all sweperf tasks are Python
+            language="python",  # all ccb_sweperf tasks are Python
             difficulty=t.get("difficulty", "medium"),
             repo=t.get("repo_name", ""),
-            task_dir=f"sweperf/data",
+            task_dir=f"ccb_sweperf/data",
         ))
     return records
 
 
 LOADERS: dict[str, tuple[str, callable]] = {
-    "swebench_pro": ("swebench_pro", load_swebench_pro),
-    "locobench_agent": ("locobench_agent", load_locobench_agent),
-    "big_code_mcp": ("big_code_mcp", load_big_code_mcp),
-    "tac_mcp_value": ("tac_mcp_value", load_tac_mcp_value),
-    "github_mined": ("github_mined", load_github_mined),
-    "kubernetes_docs": ("kubernetes_docs", load_kubernetes_docs),
-    "dependeval_benchmark": ("dependeval_benchmark", load_dependeval_benchmark),
-    "sweperf": ("sweperf", load_sweperf),
+    "ccb_swebenchpro": ("ccb_swebenchpro", load_ccb_swebenchpro),
+    "ccb_locobench": ("ccb_locobench", load_ccb_locobench),
+    "ccb_largerepo": ("ccb_largerepo", load_ccb_largerepo),
+    "ccb_tac": ("ccb_tac", load_ccb_tac),
+    "ccb_pytorch": ("ccb_pytorch", load_ccb_pytorch),
+    "ccb_k8sdocs": ("ccb_k8sdocs", load_ccb_k8sdocs),
+    "ccb_dependeval": ("ccb_dependeval", load_ccb_dependeval),
+    "ccb_sweperf": ("ccb_sweperf", load_ccb_sweperf),
 }
 
 # ---------------------------------------------------------------------------
@@ -374,21 +374,21 @@ def assign_sdlc_phase(task: TaskRecord) -> str:
         return SDLC_PHASE_MAP[key]
 
     # Fallback: try prefix matching for tac categories
-    if task.benchmark == "tac_mcp_value":
+    if task.benchmark == "ccb_tac":
         for (bm, cat), phase in SDLC_PHASE_MAP.items():
-            if bm == "tac_mcp_value" and task.category.startswith(cat):
+            if bm == "ccb_tac" and task.category.startswith(cat):
                 return phase
 
     # Default by benchmark
     defaults = {
-        "swebench_pro": "Implementation (bug fix)",
-        "github_mined": "Implementation (bug fix)",
-        "locobench_agent": "Architecture & Design",
-        "big_code_mcp": "Implementation (feature)",
-        "kubernetes_docs": "Documentation",
-        "sweperf": "Testing & QA",
-        "dependeval_benchmark": "Maintenance",
-        "tac_mcp_value": "Implementation (feature)",
+        "ccb_swebenchpro": "Implementation (bug fix)",
+        "ccb_pytorch": "Implementation (bug fix)",
+        "ccb_locobench": "Architecture & Design",
+        "ccb_largerepo": "Implementation (feature)",
+        "ccb_k8sdocs": "Documentation",
+        "ccb_sweperf": "Testing & QA",
+        "ccb_dependeval": "Maintenance",
+        "ccb_tac": "Implementation (feature)",
     }
     return defaults.get(task.benchmark, "Implementation (feature)")
 
@@ -408,19 +408,19 @@ def score_mcp_benefit(task: TaskRecord) -> tuple[float, dict[str, float]]:
     # --- context_complexity ---
     if task.context_length > 0:
         cc = _clamp(task.context_length / 1_000_000)
-    elif task.benchmark == "big_code_mcp":
+    elif task.benchmark == "ccb_largerepo":
         cc = 0.95  # huge codebases
-    elif task.benchmark == "swebench_pro":
+    elif task.benchmark == "ccb_swebenchpro":
         cc = 0.6
-    elif task.benchmark == "github_mined":
+    elif task.benchmark == "ccb_pytorch":
         cc = 0.7  # PyTorch is large
-    elif task.benchmark == "tac_mcp_value":
+    elif task.benchmark == "ccb_tac":
         cc = 0.5
-    elif task.benchmark == "sweperf":
+    elif task.benchmark == "ccb_sweperf":
         cc = 0.5
-    elif task.benchmark == "kubernetes_docs":
+    elif task.benchmark == "ccb_k8sdocs":
         cc = 0.6
-    elif task.benchmark == "dependeval_benchmark":
+    elif task.benchmark == "ccb_dependeval":
         cc = 0.3
     else:
         cc = 0.4
@@ -430,29 +430,29 @@ def score_mcp_benefit(task: TaskRecord) -> tuple[float, dict[str, float]]:
         cfd = _clamp(task.files_count / 20.0)
     elif task.solution_files_changed > 0:
         cfd = _clamp(task.solution_files_changed / 20.0)
-    elif task.benchmark == "big_code_mcp":
+    elif task.benchmark == "ccb_largerepo":
         cfd = 0.8
-    elif task.benchmark == "locobench_agent":
+    elif task.benchmark == "ccb_locobench":
         cfd = 1.0  # all have 70+ files
-    elif task.benchmark == "github_mined":
+    elif task.benchmark == "ccb_pytorch":
         cfd = 0.3
-    elif task.benchmark == "dependeval_benchmark":
+    elif task.benchmark == "ccb_dependeval":
         cfd = 0.4
     else:
         cfd = 0.3
 
     # --- semantic_search_potential ---
-    if task.benchmark == "big_code_mcp":
+    if task.benchmark == "ccb_largerepo":
         ssp = 0.9
     elif task.category in ("find-in-codebase",):
         ssp = 0.8
     elif task.context_length > 500_000:
         ssp = 0.7
-    elif task.benchmark in ("swebench_pro", "github_mined"):
+    elif task.benchmark in ("ccb_swebenchpro", "ccb_pytorch"):
         ssp = 0.6
-    elif task.benchmark == "kubernetes_docs":
+    elif task.benchmark == "ccb_k8sdocs":
         ssp = 0.5
-    elif task.benchmark == "tac_mcp_value":
+    elif task.benchmark == "ccb_tac":
         ssp = 0.5
     else:
         ssp = 0.4
@@ -481,7 +481,7 @@ def score_mcp_benefit(task: TaskRecord) -> tuple[float, dict[str, float]]:
 # ---------------------------------------------------------------------------
 
 
-def select_swebench_pro(tasks: list[TaskRecord], rng: Random) -> list[TaskRecord]:
+def select_ccb_swebenchpro(tasks: list[TaskRecord], rng: Random) -> list[TaskRecord]:
     """Select ~35 from SWE-Bench Pro, proportional by repo, >=1 per repo."""
     target = 35
 
@@ -546,7 +546,7 @@ def select_swebench_pro(tasks: list[TaskRecord], rng: Random) -> list[TaskRecord
     return deduped
 
 
-def select_locobench_agent(tasks: list[TaskRecord], rng: Random) -> list[TaskRecord]:
+def select_ccb_locobench(tasks: list[TaskRecord], rng: Random) -> list[TaskRecord]:
     """Select ~25 from LoCoBench, prioritizing arch > refactoring > bug."""
     target = 25
     priority_order = ["architectural_understanding", "cross_file_refactoring", "bug_investigation"]
@@ -570,8 +570,8 @@ def select_locobench_agent(tasks: list[TaskRecord], rng: Random) -> list[TaskRec
     return selected[:target]
 
 
-def select_github_mined(tasks: list[TaskRecord], rng: Random) -> list[TaskRecord]:
-    """Select ~12 from github_mined, prefer hard difficulty, then most files modified."""
+def select_ccb_pytorch(tasks: list[TaskRecord], rng: Random) -> list[TaskRecord]:
+    """Select ~12 from ccb_pytorch, prefer hard difficulty, then most files modified."""
     target = 12
 
     # Sort: hard first, then by files modified desc, then by score
@@ -597,14 +597,14 @@ def select_tasks(all_tasks: dict[str, list[TaskRecord]], rng: Random) -> list[Ta
     """Run per-benchmark selection strategies."""
     selected: list[TaskRecord] = []
 
-    if "swebench_pro" in all_tasks:
-        selected.extend(select_swebench_pro(all_tasks["swebench_pro"], rng))
-    if "locobench_agent" in all_tasks:
-        selected.extend(select_locobench_agent(all_tasks["locobench_agent"], rng))
-    if "github_mined" in all_tasks:
-        selected.extend(select_github_mined(all_tasks["github_mined"], rng))
+    if "ccb_swebenchpro" in all_tasks:
+        selected.extend(select_ccb_swebenchpro(all_tasks["ccb_swebenchpro"], rng))
+    if "ccb_locobench" in all_tasks:
+        selected.extend(select_ccb_locobench(all_tasks["ccb_locobench"], rng))
+    if "ccb_pytorch" in all_tasks:
+        selected.extend(select_ccb_pytorch(all_tasks["ccb_pytorch"], rng))
 
-    for bm in ("big_code_mcp", "kubernetes_docs", "tac_mcp_value", "dependeval_benchmark", "sweperf"):
+    for bm in ("ccb_largerepo", "ccb_k8sdocs", "ccb_tac", "ccb_dependeval", "ccb_sweperf"):
         if bm in all_tasks:
             selected.extend(select_all(all_tasks[bm], bm))
 
@@ -684,14 +684,14 @@ def write_json(selected: list[TaskRecord], total_available: int, output_path: Pa
             ],
             "mcp_scoring_weights": MCP_WEIGHTS,
             "selection_targets": {
-                "swebench_pro": "~35 (proportional by repo)",
-                "locobench_agent": "~25 (priority: arch > refactoring > bug)",
-                "github_mined": "~12 (prefer hard, most files)",
-                "big_code_mcp": "all (4)",
-                "kubernetes_docs": "all (5)",
-                "tac_mcp_value": "all (8)",
-                "dependeval_benchmark": "all (9)",
-                "sweperf": "all (3)",
+                "ccb_swebenchpro": "~35 (proportional by repo)",
+                "ccb_locobench": "~25 (priority: arch > refactoring > bug)",
+                "ccb_pytorch": "~12 (prefer hard, most files)",
+                "ccb_largerepo": "all (4)",
+                "ccb_k8sdocs": "all (5)",
+                "ccb_tac": "all (8)",
+                "ccb_dependeval": "all (9)",
+                "ccb_sweperf": "all (3)",
             },
         },
         "statistics": stats,
@@ -754,14 +754,14 @@ def write_markdown(
     lines.append("| Benchmark | Available | Selected | Strategy |")
     lines.append("|-----------|-----------|----------|----------|")
     strategies = {
-        "swebench_pro": "Proportional by repo, prefer most files changed",
-        "locobench_agent": "Priority: arch > refactoring > bug, by MCP score",
-        "github_mined": "Prefer hard difficulty, then most files modified",
-        "big_code_mcp": "All selected (small benchmark)",
-        "kubernetes_docs": "All selected (small benchmark)",
-        "tac_mcp_value": "All selected (small benchmark)",
-        "dependeval_benchmark": "All selected (small benchmark)",
-        "sweperf": "All selected (small benchmark)",
+        "ccb_swebenchpro": "Proportional by repo, prefer most files changed",
+        "ccb_locobench": "Priority: arch > refactoring > bug, by MCP score",
+        "ccb_pytorch": "Prefer hard difficulty, then most files modified",
+        "ccb_largerepo": "All selected (small benchmark)",
+        "ccb_k8sdocs": "All selected (small benchmark)",
+        "ccb_tac": "All selected (small benchmark)",
+        "ccb_dependeval": "All selected (small benchmark)",
+        "ccb_sweperf": "All selected (small benchmark)",
     }
     # We need available counts per benchmark — estimate from selected + rationale
     for bm in sorted(strategies):
@@ -800,7 +800,7 @@ def write_markdown(
                  "(LoCoBench `context_length`) or benchmark-level proxy. Normalized: 1M+ tokens = 1.0")
     lines.append("- **cross_file_deps**: From `files_count`, `solution_files_changed`, or parsed "
                  "from instruction.md. Normalized: 20+ files = 1.0")
-    lines.append("- **semantic_search_potential**: High for large repos (big_code_mcp=0.9), "
+    lines.append("- **semantic_search_potential**: High for large repos (ccb_largerepo=0.9), "
                  "find-in-codebase tasks (0.8), large context (0.7)")
     lines.append("- **task_category_weight**: Per-category MCP affinity "
                  "(architectural_understanding=1.0, cross_file_refactoring=0.9, etc.)")
@@ -830,8 +830,8 @@ def write_markdown(
     lines.append("")
 
     lines.append("### Small Benchmarks (all selected)")
-    lines.append("big_code_mcp (4), kubernetes_docs (5), tac_mcp_value (8), "
-                 "dependeval_benchmark (9), sweperf (3) — all tasks selected due to small size.")
+    lines.append("ccb_largerepo (4), ccb_k8sdocs (5), ccb_tac (8), "
+                 "ccb_dependeval (9), ccb_sweperf (3) — all tasks selected due to small size.")
     lines.append("")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

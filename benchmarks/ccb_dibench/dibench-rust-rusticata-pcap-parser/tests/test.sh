@@ -1,0 +1,35 @@
+#!/bin/bash
+# DI-Bench validator test for ccb_dibench-rust-rusticata-pcap-parser
+set -e
+
+REWARD_FILE="/logs/verifier/reward.txt"
+mkdir -p /logs/verifier
+
+cd /app/repo
+
+python3 << 'EOF'
+import sys
+sys.path.insert(0, '/app')
+
+from validators import validate_task
+from pathlib import Path
+
+repo_path = Path('/app/repo')
+language = 'rust'
+
+print(f"Validating {language} project dependencies...")
+is_valid, errors = validate_task(language, repo_path)
+
+if is_valid:
+    print("PASS: Dependency validation succeeded")
+    with open('/logs/verifier/reward.txt', 'w') as f:
+        f.write('1.0\n')
+    sys.exit(0)
+else:
+    print("FAIL: Dependency validation failed:")
+    for error in errors:
+        print(f"  - {error}")
+    with open('/logs/verifier/reward.txt', 'w') as f:
+        f.write('0.0\n')
+    sys.exit(1)
+EOF

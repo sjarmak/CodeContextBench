@@ -129,14 +129,14 @@ def get_benchmark_name_mapping() -> dict[str, str]:
     full benchmark directory names. This mapping bridges the two.
     """
     return {
-        "locobench": "locobench_agent",
-        "swebenchpro": "swebench_pro",
-        "bigcode": "big_code_mcp",
-        "k8s_docs": "kubernetes_docs",
-        "github_mined": "github_mined",
-        "tac_mcp_value": "tac_mcp_value",
-        "dependeval": "dependeval_benchmark",
-        "sweperf": "sweperf",
+        "locobench": "ccb_locobench",
+        "swebenchpro": "ccb_swebenchpro",
+        "bigcode": "ccb_largerepo",
+        "k8s_docs": "ccb_k8sdocs",
+        "ccb_pytorch": "ccb_pytorch",
+        "ccb_tac": "ccb_tac",
+        "dependeval": "ccb_dependeval",
+        "ccb_sweperf": "ccb_sweperf",
     }
 
 

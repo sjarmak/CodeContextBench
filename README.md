@@ -10,17 +10,17 @@ This repository contains **benchmark task definitions**, **evaluation configs**,
 
 | Suite | Tasks | Languages | Evaluation Method | SDLC Phase |
 |-------|------:|-----------|-------------------|------------|
-| `swebench_pro` | 36 | Go, TypeScript, Python | Test suite | Bug fixing |
-| `locobench_agent` | 25 | 9 languages | Semantic similarity | Architecture, Refactoring |
-| `github_mined` | 12 | C++ | Test suite | Bug fixing |
-| `repoqa` | 10 | Python, C++, Java, Rust, TypeScript | Path + name matching | Code navigation |
-| `dependeval_benchmark` | 9 | Python, Java, JavaScript | Test suite | Refactoring, Maintenance |
-| `tac_mcp_value` | 8 | C++, Python | Deterministic + LLM | Mixed (4 phases) |
-| `kubernetes_docs` | 5 | Go | LLM judge + test scripts | Documentation |
-| `big_code_mcp` | 4 | Go, Rust, C++, TypeScript | Test suite | Feature implementation |
-| `sweperf` | 3 | Python | Test suite | Testing & QA |
-| `10figure` | 5 | Go | Test suite | Architecture, Refactoring, Bug fix, Testing |
-| `dibench` | 8 | Python, Rust, JavaScript, C# | Syntax + dependency validation | Dependency inference |
+| `ccb_swebenchpro` | 36 | Go, TypeScript, Python | Test suite | Bug fixing |
+| `ccb_locobench` | 25 | 9 languages | Semantic similarity | Architecture, Refactoring |
+| `ccb_pytorch` | 12 | C++ | Test suite | Bug fixing |
+| `ccb_repoqa` | 10 | Python, C++, Java, Rust, TypeScript | Path + name matching | Code navigation |
+| `ccb_dependeval` | 9 | Python, Java, JavaScript | Test suite | Refactoring, Maintenance |
+| `ccb_tac` | 8 | C++, Python | Deterministic + LLM | Mixed (4 phases) |
+| `ccb_k8sdocs` | 5 | Go | LLM judge + test scripts | Documentation |
+| `ccb_largerepo` | 4 | Go, Rust, C++, TypeScript | Test suite | Feature implementation |
+| `ccb_sweperf` | 3 | Python | Test suite | Testing & QA |
+| `ccb_crossrepo` | 5 | Go | Test suite | Architecture, Refactoring, Bug fix, Testing |
+| `ccb_dibench` | 8 | Python, Rust, JavaScript, C# | Syntax + dependency validation | Dependency inference |
 | **Total** | **125** | | | |
 
 ---
@@ -43,17 +43,17 @@ See [docs/CONFIGS.md](docs/CONFIGS.md) for the full tool-by-tool breakdown.
 
 ```
 benchmarks/              # Task definitions organized by benchmark suite
-  kubernetes_docs/       #   K8s package documentation generation (5 tasks)
-  big_code_mcp/          #   Large-repo code navigation (4 tasks)
-  locobench_agent/       #   LoCoBench long-context agent tasks (25 tasks)
-  swebench_pro/          #   SWE-Bench Pro bug-fixing tasks (36 tasks)
-  github_mined/          #   GitHub-mined SWE tasks (12 tasks)
-  repoqa/                #   Semantic code navigation (10 tasks)
-  dependeval_benchmark/  #   Multi-file & cross-repo tasks (9 tasks)
-  tac_mcp_value/         #   TheAgentCompany tasks (8 tasks)
-  sweperf/               #   Performance testing (3 tasks)
-  10figure/              #   Enterprise codebase challenges (5 tasks)
-  dibench/               #   Dependency inference tasks (8 tasks)
+  ccb_k8sdocs/       #   K8s package documentation generation (5 tasks)
+  ccb_largerepo/          #   Large-repo code navigation (4 tasks)
+  ccb_locobench/       #   LoCoBench long-context agent tasks (25 tasks)
+  ccb_swebenchpro/          #   SWE-Bench Pro bug-fixing tasks (36 tasks)
+  ccb_pytorch/          #   GitHub-mined SWE tasks (12 tasks)
+  ccb_repoqa/                #   Semantic code navigation (10 tasks)
+  ccb_dependeval/  #   Multi-file & cross-repo tasks (9 tasks)
+  ccb_tac/         #   TheAgentCompany tasks (8 tasks)
+  ccb_sweperf/               #   Performance testing (3 tasks)
+  ccb_crossrepo/              #   Enterprise codebase challenges (5 tasks)
+  ccb_dibench/               #   Dependency inference tasks (8 tasks)
 ralph/                   # Agent working directory
   configs/               #   3-config comparison YAML + shell runners per benchmark
   scripts/               #   Metrics extraction and evaluation pipeline

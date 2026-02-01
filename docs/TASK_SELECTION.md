@@ -8,29 +8,29 @@ Selected **125 tasks** from 835 available across 11 benchmarks, stratified by SD
 
 | SDLC Phase | Tasks | Benchmarks |
 |------------|-------|------------|
-| Requirements & Discovery | 2 | tac_mcp_value |
-| Architecture & Design | 10 | locobench_agent, 10figure |
-| Implementation (feature) | 16 | big_code_mcp, github_mined, tac_mcp_value, dibench |
-| Implementation (bug fix) | 51 | github_mined, locobench_agent, swebench_pro, 10figure |
-| Implementation (refactoring) | 18 | dependeval_benchmark, locobench_agent, 10figure |
-| Testing & QA | 5 | sweperf, tac_mcp_value, 10figure |
-| Documentation | 5 | kubernetes_docs |
-| Maintenance | 8 | dependeval_benchmark, tac_mcp_value |
+| Requirements & Discovery | 2 | ccb_tac |
+| Architecture & Design | 10 | ccb_locobench, ccb_crossrepo |
+| Implementation (feature) | 16 | ccb_largerepo, ccb_pytorch, ccb_tac, ccb_dibench |
+| Implementation (bug fix) | 51 | ccb_pytorch, ccb_locobench, ccb_swebenchpro, ccb_crossrepo |
+| Implementation (refactoring) | 18 | ccb_dependeval, ccb_locobench, ccb_crossrepo |
+| Testing & QA | 5 | ccb_sweperf, ccb_tac, ccb_crossrepo |
+| Documentation | 5 | ccb_k8sdocs |
+| Maintenance | 8 | ccb_dependeval, ccb_tac |
 
 ## Benchmark Coverage
 
 | Benchmark | Available | Selected | Strategy |
 |-----------|-----------|----------|----------|
-| big_code_mcp | 4 | 4 | All selected (small benchmark) |
-| dependeval_benchmark | 9 | 9 | All selected (small benchmark) |
-| github_mined | 25 | 12 | Prefer hard difficulty, then most files modified |
-| kubernetes_docs | 5 | 5 | All selected (small benchmark) |
-| locobench_agent | 50 | 25 | Priority: arch > refactoring > bug, by MCP score |
-| swebench_pro | 731 | 36 | Proportional by repo, prefer most files changed |
-| sweperf | 3 | 3 | All selected (small benchmark) |
-| tac_mcp_value | 8 | 8 | All selected (small benchmark) |
-| 10figure | 5 | 5 | All selected (small benchmark) |
-| dibench | 387 | 8 | 2 per language (python, rust, javascript, csharp), moderate patch complexity |
+| ccb_largerepo | 4 | 4 | All selected (small benchmark) |
+| ccb_dependeval | 9 | 9 | All selected (small benchmark) |
+| ccb_pytorch | 25 | 12 | Prefer hard difficulty, then most files modified |
+| ccb_k8sdocs | 5 | 5 | All selected (small benchmark) |
+| ccb_locobench | 50 | 25 | Priority: arch > refactoring > bug, by MCP score |
+| ccb_swebenchpro | 731 | 36 | Proportional by repo, prefer most files changed |
+| ccb_sweperf | 3 | 3 | All selected (small benchmark) |
+| ccb_tac | 8 | 8 | All selected (small benchmark) |
+| ccb_crossrepo | 5 | 5 | All selected (small benchmark) |
+| ccb_dibench | 387 | 8 | 2 per language (python, rust, javascript, csharp), moderate patch complexity |
 
 ## Language Distribution
 
@@ -64,7 +64,7 @@ score = 0.25 * context_complexity
 
 - **context_complexity**: Derived from codebase token count (LoCoBench `context_length`) or benchmark-level proxy. Normalized: 1M+ tokens = 1.0
 - **cross_file_deps**: From `files_count`, `solution_files_changed`, or parsed from instruction.md. Normalized: 20+ files = 1.0
-- **semantic_search_potential**: High for large repos (big_code_mcp=0.9), find-in-codebase tasks (0.8), large context (0.7)
+- **semantic_search_potential**: High for large repos (ccb_largerepo=0.9), find-in-codebase tasks (0.8), large context (0.7)
 - **task_category_weight**: Per-category MCP affinity (architectural_understanding=1.0, cross_file_refactoring=0.9, etc.)
 
 ## Per-Benchmark Selection Strategies
@@ -82,5 +82,5 @@ All PyTorch cross-module tasks. Selection prioritizes hard difficulty, then task
 2 per language (Python, Rust, JavaScript, C#) from the 387 regular-difficulty instances. Selected for single build file, moderate patch size (3-12 dependency additions), and well-known repositories. Tasks use syntax + dependency presence validators instead of full CI/CD execution.
 
 ### Small Benchmarks (all selected)
-big_code_mcp (4), kubernetes_docs (5), tac_mcp_value (8), dependeval_benchmark (9), sweperf (3), 10figure (5) -- all tasks selected due to small size.
+ccb_largerepo (4), ccb_k8sdocs (5), ccb_tac (8), ccb_dependeval (9), ccb_sweperf (3), ccb_crossrepo (5) -- all tasks selected due to small size.
 

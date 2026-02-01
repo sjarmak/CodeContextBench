@@ -69,7 +69,7 @@ Get CodeContextBench benchmark runs producing valid, comparable results across 3
 
 **Acceptance Criteria:**
 - [ ] Create `configs/k8s_docs_3config.yaml` (or `.sh`) that runs all 5 K8s Docs tasks through Harbor with the 3-config matrix
-- [ ] Task paths point to `CodeContextBench/benchmarks/kubernetes_docs/` task directories
+- [ ] Task paths point to `CodeContextBench/benchmarks/ccb_k8sdocs/` task directories
 - [ ] Verify Harbor can execute K8s Docs tasks: agent gets instruction, produces output, verifier runs `test.sh` and generates `reward.txt`
 - [ ] Results land in `runs/official/k8s_docs_<timestamp>/` with standard structure (`baseline/`, `sourcegraph_no_deepsearch/`, `sourcegraph_hybrid/` subdirectories)
 - [ ] Each task directory contains `agent/claude-code.txt`, `verifier/reward.txt`, and `result.json`
@@ -129,7 +129,7 @@ Get CodeContextBench benchmark runs producing valid, comparable results across 3
 
 **Acceptance Criteria:**
 - [ ] `benchmarks-only` branch content pushed to `main` on `sjarmak/CodeContextBench` (currently only initial commit is on remote)
-- [ ] Verify all benchmark directories are present: `kubernetes_docs/`, `big_code_mcp/`, `github_mined/`, `locobench_agent/`, `swebench_pro/`, `dibench/`, `repoqa/`
+- [ ] Verify all benchmark directories are present: `ccb_k8sdocs/`, `ccb_largerepo/`, `ccb_pytorch/`, `ccb_locobench/`, `ccb_swebenchpro/`, `ccb_dibench/`, `ccb_repoqa/`
 - [ ] README.md updated with benchmark descriptions and task counts
 - [ ] No credentials, API keys, or `.env` files included
 - [ ] MANIFEST.json present for benchmarks that have them
@@ -165,9 +165,9 @@ All runner changes happen in `~/evals/custom_agents/agents/claudecode/`:
 
 ### Benchmark Task Paths
 Configs reference CodeContextBench benchmark dirs via absolute paths:
-- LoCoBench: `/home/stephanie_jarmak/CodeContextBench/benchmarks/locobench_agent/tasks`
-- BigCode: `/home/stephanie_jarmak/CodeContextBench/benchmarks/big_code_mcp`
-- K8s Docs: `/home/stephanie_jarmak/CodeContextBench/benchmarks/kubernetes_docs`
+- LoCoBench: `/home/stephanie_jarmak/CodeContextBench/benchmarks/ccb_locobench/tasks`
+- BigCode: `/home/stephanie_jarmak/CodeContextBench/benchmarks/ccb_largerepo`
+- K8s Docs: `/home/stephanie_jarmak/CodeContextBench/benchmarks/ccb_k8sdocs`
 - SWE-Bench Pro: Uses Harbor registry (`swebenchpro@1.0`), not local paths
 
 ### MCP Mode Implementation

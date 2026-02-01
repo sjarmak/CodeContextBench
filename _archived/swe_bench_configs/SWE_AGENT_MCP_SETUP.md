@@ -98,7 +98,7 @@ source .env.local
 export ANTHROPIC_API_KEY SOURCEGRAPH_ACCESS_TOKEN SOURCEGRAPH_URL
 
 # Pick a test task
-TASK="benchmarks/swebench_pro/tasks/instance_ansible-ansible-0ea40e09d1b35bcb69ff4d9cecf3d0defa4b36e8-v30a923fb5c164d6cd18280c02422f75e611e8fb2"
+TASK="benchmarks/ccb_swebenchpro/tasks/instance_ansible-ansible-0ea40e09d1b35bcb69ff4d9cecf3d0defa4b36e8-v30a923fb5c164d6cd18280c02422f75e611e8fb2"
 
 # Test baseline
 harbor trials start \

@@ -8,7 +8,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ## Active Benchmarks
 
-### 1. [swebench_pro/](swebench_pro/) - Multi-Language Bug Fixing
+### 1. [ccb_swebenchpro/](ccb_swebenchpro/) - Multi-Language Bug Fixing
 **Tasks**: 36
 **Languages**: Go, TypeScript, Python
 **SDLC Phase**: Implementation (bug fix)
@@ -18,7 +18,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 2. [locobench_agent/](locobench_agent/) - Long-Context Agent Tasks
+### 2. [ccb_locobench/](ccb_locobench/) - Long-Context Agent Tasks
 **Tasks**: 25
 **Languages**: Rust, C#, C, C++, Python, Java, JavaScript, TypeScript, Go
 **SDLC Phases**: Architecture & Design, Implementation (refactoring), Implementation (bug fix)
@@ -27,7 +27,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 3. [github_mined/](github_mined/) - Real PyTorch Pull Requests
+### 3. [ccb_pytorch/](ccb_pytorch/) - Real PyTorch Pull Requests
 **Tasks**: 12
 **Languages**: C++ (PyTorch)
 **SDLC Phase**: Implementation (bug fix)
@@ -37,7 +37,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 4. [big_code_mcp/](big_code_mcp/) - Large Codebase Navigation
+### 4. [ccb_largerepo/](ccb_largerepo/) - Large Codebase Navigation
 **Tasks**: 4
 **Languages**: Go, Rust, C++, TypeScript
 **SDLC Phase**: Implementation (feature)
@@ -47,7 +47,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 5. [kubernetes_docs/](kubernetes_docs/) - Documentation Generation
+### 5. [ccb_k8sdocs/](ccb_k8sdocs/) - Documentation Generation
 **Tasks**: 5
 **Languages**: Go
 **SDLC Phase**: Documentation
@@ -57,7 +57,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 6. [tac_mcp_value/](tac_mcp_value/) - TheAgentCompany Tasks
+### 6. [ccb_tac/](ccb_tac/) - TheAgentCompany Tasks
 **Tasks**: 8
 **Languages**: C++, Python
 **SDLC Phases**: Requirements & Discovery, Implementation (feature), Testing & QA, Maintenance
@@ -66,7 +66,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 7. [dependeval_benchmark/](dependeval_benchmark/) - Multi-File & Cross-Repo Tasks
+### 7. [ccb_dependeval/](ccb_dependeval/) - Multi-File & Cross-Repo Tasks
 **Tasks**: 9
 **Languages**: Python, Java, JavaScript
 **SDLC Phases**: Implementation (refactoring), Maintenance
@@ -75,7 +75,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 8. [sweperf/](sweperf/) - Performance Testing
+### 8. [ccb_sweperf/](ccb_sweperf/) - Performance Testing
 **Tasks**: 3
 **Languages**: Python
 **SDLC Phase**: Testing & QA
@@ -84,7 +84,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 9. [repoqa/](repoqa/) - Semantic Code Navigation
+### 9. [ccb_repoqa/](ccb_repoqa/) - Semantic Code Navigation
 **Tasks**: 10
 **Languages**: Python, C++, Java, Rust, TypeScript
 **SDLC Phase**: Requirements & Discovery
@@ -94,18 +94,18 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 10. [10figure/](10figure/) - Enterprise Codebase Challenges
+### 10. [ccb_crossrepo/](ccb_crossrepo/) - Enterprise Codebase Challenges
 **Tasks**: 5
 **Languages**: Go
 **SDLC Phases**: Architecture & Design, Implementation (bug fix), Implementation (refactoring), Testing & QA
 **Focus**: API migration, bug localization, cross-file reasoning, symbol rename, and smoke testing on Kubernetes
 **Repository**: kubernetes/kubernetes
 **Task Format**: Harbor (task.toml, instruction.md, tests/)
-**Note**: Requires `harbor-10figure:base` Docker image built from `base/` directory.
+**Note**: Requires `harbor-ccb_crossrepo:base` Docker image built from `base/` directory.
 
 ---
 
-### 11. [dibench/](dibench/) - Dependency Inference
+### 11. [ccb_dibench/](ccb_dibench/) - Dependency Inference
 **Tasks**: 8
 **Languages**: Python, Rust, JavaScript, C#
 **SDLC Phase**: Implementation (feature)
@@ -120,17 +120,17 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 | Benchmark | Tasks | Languages | SDLC Phase |
 |-----------|------:|-----------|------------|
-| swebench_pro | 36 | Go, TypeScript, Python | Bug fixing |
-| locobench_agent | 25 | 9 languages | Architecture, Refactoring |
-| github_mined | 12 | C++ | Bug fixing |
-| repoqa | 10 | Python, C++, Java, Rust, TypeScript | Code navigation |
-| dependeval_benchmark | 9 | Python, Java, JavaScript | Refactoring, Maintenance |
-| tac_mcp_value | 8 | C++, Python | Mixed (4 phases) |
-| dibench | 8 | Python, Rust, JavaScript, C# | Dependency inference |
-| kubernetes_docs | 5 | Go | Documentation |
-| big_code_mcp | 4 | Go, Rust, C++, TypeScript | Feature implementation |
-| 10figure | 5 | Go | Architecture, Bug fix, Refactoring, Testing |
-| sweperf | 3 | Python | Testing & QA |
+| ccb_swebenchpro | 36 | Go, TypeScript, Python | Bug fixing |
+| ccb_locobench | 25 | 9 languages | Architecture, Refactoring |
+| ccb_pytorch | 12 | C++ | Bug fixing |
+| ccb_repoqa | 10 | Python, C++, Java, Rust, TypeScript | Code navigation |
+| ccb_dependeval | 9 | Python, Java, JavaScript | Refactoring, Maintenance |
+| ccb_tac | 8 | C++, Python | Mixed (4 phases) |
+| ccb_dibench | 8 | Python, Rust, JavaScript, C# | Dependency inference |
+| ccb_k8sdocs | 5 | Go | Documentation |
+| ccb_largerepo | 4 | Go, Rust, C++, TypeScript | Feature implementation |
+| ccb_crossrepo | 5 | Go | Architecture, Bug fix, Refactoring, Testing |
+| ccb_sweperf | 3 | Python | Testing & QA |
 | **Total** | **125** | | |
 
 ---
@@ -158,7 +158,7 @@ bash configs/locobench_3config.sh --baseline-only
 ### Single Task Run
 
 ```bash
-harbor run --path benchmarks/big_code_mcp/big-code-vsc-001 \
+harbor run --path benchmarks/ccb_largerepo/big-code-vsc-001 \
   --agent-import-path agents.claude_baseline_agent:BaselineClaudeCodeAgent \
   --model anthropic/claude-haiku-4-5-20251001 \
   -n 1
@@ -171,9 +171,9 @@ See [`docs/CONFIGS.md`](../docs/CONFIGS.md) for the full tool-by-tool breakdown 
 ## Archived Benchmarks
 
 Unused or superseded benchmarks have been moved to [`_archived/`](../_archived/):
-- `benchmarks_10figure/` - Original 10figure prototype (superseded by benchmarks/10figure/)
-- `benchmarks_dibench/` - Original DI-Bench adapter (superseded by benchmarks/dibench/)
-- `benchmarks_repoqa/` - Original RepoQA adapter (superseded by benchmarks/repoqa/)
+- `benchmarks_ccb_crossrepo/` - Original ccb_crossrepo prototype (superseded by benchmarks/ccb_crossrepo/)
+- `benchmarks_dibench/` - Original DI-Bench adapter (superseded by benchmarks/ccb_dibench/)
+- `benchmarks_repoqa/` - Original RepoQA adapter (superseded by benchmarks/ccb_repoqa/)
 - `benchmarks_no_external_repos/` - Hello world, PRD bench, DevAI bench prototypes
 
 ---

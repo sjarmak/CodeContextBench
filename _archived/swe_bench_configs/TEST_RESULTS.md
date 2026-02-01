@@ -97,7 +97,7 @@ All three SWE agent configurations have been successfully tested and verified to
    for config in baseline sourcegraph_mcp deepsearch_mcp; do
      harbor sweeps run \
        --config swe_bench_configs/${config}.yaml \
-       --dataset benchmarks/swebench_pro \
+       --dataset benchmarks/ccb_swebenchpro \
        --trials-dir jobs/swe_ablation_${config}
    done
    ```

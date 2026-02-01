@@ -128,7 +128,7 @@ readarray -t TASK_IDS < <(python3 -c "
 import json
 tasks = json.load(open('$SELECTION_FILE'))['tasks']
 for t in tasks:
-    if t['benchmark'] == 'swebench_pro':
+    if t['benchmark'] == 'ccb_swebenchpro':
         print(t['task_id'])
 ")
 

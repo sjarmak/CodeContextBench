@@ -37,17 +37,17 @@ def _read_instruction(benchmarks_dir: Path, benchmark: str, task_id: str) -> Opt
     """Locate and read instruction.md for a task from the benchmarks directory.
 
     Mapping:
-        locobench -> benchmarks/locobench_agent/tasks/<task_id>/instruction.md
-        bigcode   -> benchmarks/big_code_mcp/<task_id>/instruction.md
-        k8s_docs  -> benchmarks/kubernetes_docs/<task_id>/instruction.md
+        locobench -> benchmarks/ccb_locobench/tasks/<task_id>/instruction.md
+        bigcode   -> benchmarks/ccb_largerepo/<task_id>/instruction.md
+        k8s_docs  -> benchmarks/ccb_k8sdocs/<task_id>/instruction.md
         swebenchpro -> None (instructions come from Harbor dataset, not local)
     """
     if benchmark == "locobench":
-        p = benchmarks_dir / "locobench_agent" / "tasks" / task_id / "instruction.md"
+        p = benchmarks_dir / "ccb_locobench" / "tasks" / task_id / "instruction.md"
     elif benchmark == "bigcode":
-        p = benchmarks_dir / "big_code_mcp" / task_id / "instruction.md"
+        p = benchmarks_dir / "ccb_largerepo" / task_id / "instruction.md"
     elif benchmark == "k8s_docs":
-        p = benchmarks_dir / "kubernetes_docs" / task_id / "instruction.md"
+        p = benchmarks_dir / "ccb_k8sdocs" / task_id / "instruction.md"
     else:
         return None
 
@@ -60,11 +60,11 @@ def _read_ground_truth(benchmarks_dir: Path, benchmark: str, task_id: str) -> Op
     Looks in ground_truth/ directory. Returns None if not found.
     """
     if benchmark == "locobench":
-        gt_dir = benchmarks_dir / "locobench_agent" / "tasks" / task_id / "solution"
+        gt_dir = benchmarks_dir / "ccb_locobench" / "tasks" / task_id / "solution"
     elif benchmark == "bigcode":
-        gt_dir = benchmarks_dir / "big_code_mcp" / task_id / "solution"
+        gt_dir = benchmarks_dir / "ccb_largerepo" / task_id / "solution"
     elif benchmark == "k8s_docs":
-        gt_dir = benchmarks_dir / "kubernetes_docs" / task_id / "ground_truth"
+        gt_dir = benchmarks_dir / "ccb_k8sdocs" / task_id / "ground_truth"
     else:
         return None
 

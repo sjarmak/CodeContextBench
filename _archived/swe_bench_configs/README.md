@@ -46,19 +46,19 @@ export ANTHROPIC_API_KEY="your-anthropic-key"
 harbor trials start \
   --agent-import-path mini_swe_agent_mcp:MiniSweAgentBaseline \
   -m anthropic/claude-haiku-4-5-20251001 \
-  -p benchmarks/swebench_pro/tasks/instance_xxx
+  -p benchmarks/ccb_swebenchpro/tasks/instance_xxx
 
 # With Sourcegraph MCP (full code intelligence)
 harbor trials start \
   --agent-import-path mini_swe_agent_mcp:MiniSweAgentSourcegraphMCP \
   -m anthropic/claude-haiku-4-5-20251001 \
-  -p benchmarks/swebench_pro/tasks/instance_xxx
+  -p benchmarks/ccb_swebenchpro/tasks/instance_xxx
 
 # With Deep Search MCP (focused semantic search)
 harbor trials start \
   --agent-import-path mini_swe_agent_mcp:MiniSweAgentDeepSearchMCP \
   -m anthropic/claude-haiku-4-5-20251001 \
-  -p benchmarks/swebench_pro/tasks/instance_xxx
+  -p benchmarks/ccb_swebenchpro/tasks/instance_xxx
 ```
 
 ### Using Config Files (Recommended)
@@ -70,15 +70,15 @@ export ANTHROPIC_API_KEY SOURCEGRAPH_ACCESS_TOKEN SOURCEGRAPH_URL
 
 # Baseline
 harbor trials start -c swe_bench_configs/baseline.yaml \
-  -p benchmarks/swebench_pro/tasks/instance_xxx
+  -p benchmarks/ccb_swebenchpro/tasks/instance_xxx
 
 # Sourcegraph MCP
 harbor trials start -c swe_bench_configs/sourcegraph_mcp.yaml \
-  -p benchmarks/swebench_pro/tasks/instance_xxx
+  -p benchmarks/ccb_swebenchpro/tasks/instance_xxx
 
 # Deep Search MCP
 harbor trials start -c swe_bench_configs/deepsearch_mcp.yaml \
-  -p benchmarks/swebench_pro/tasks/instance_xxx
+  -p benchmarks/ccb_swebenchpro/tasks/instance_xxx
 ```
 
 ### Using Dashboard (Recommended for Ablation Studies)
@@ -103,7 +103,7 @@ export ANTHROPIC_API_KEY SOURCEGRAPH_ACCESS_TOKEN SOURCEGRAPH_URL
 
 # Run all three configurations on a task set
 for config in baseline sourcegraph_mcp deepsearch_mcp; do
-  for task in benchmarks/swebench_pro/tasks/instance_*; do
+  for task in benchmarks/ccb_swebenchpro/tasks/instance_*; do
     harbor trials start \
       -c swe_bench_configs/${config}.yaml \
       -p "$task" \

@@ -13,7 +13,7 @@
 #   ./configs/run_selected_tasks.sh [OPTIONS]
 #
 # Options:
-#   --benchmark BENCHMARK  Run only this benchmark (e.g., swebench_pro, locobench_agent)
+#   --benchmark BENCHMARK  Run only this benchmark (e.g., ccb_swebenchpro, ccb_locobench)
 #   --baseline-only        Run only baseline (no MCP)
 #   --no-deepsearch-only   Run only MCP-NoDeepSearch
 #   --full-only            Run only MCP-Full
@@ -133,17 +133,17 @@ benchmark_filter = '$BENCHMARK_FILTER'
 
 # Benchmark -> task_dir base path mapping
 BENCH_BASE = {
-    'swebench_pro': 'benchmarks/swebench_pro/tasks',
-    'locobench_agent': 'benchmarks/locobench_agent/tasks',
-    'big_code_mcp': 'benchmarks/big_code_mcp',
-    'tac_mcp_value': 'benchmarks/tac_mcp_value',
-    'github_mined': 'benchmarks/github_mined',
-    'kubernetes_docs': 'benchmarks/kubernetes_docs',
-    'dependeval_benchmark': 'benchmarks/dependeval_benchmark',
-    'sweperf': 'benchmarks/sweperf',
-    'repoqa': 'benchmarks/repoqa',
-    '10figure': 'benchmarks/10figure',
-    'dibench': 'benchmarks/dibench',
+    'ccb_swebenchpro': 'benchmarks/ccb_swebenchpro/tasks',
+    'ccb_locobench': 'benchmarks/ccb_locobench/tasks',
+    'ccb_largerepo': 'benchmarks/ccb_largerepo',
+    'ccb_tac': 'benchmarks/ccb_tac',
+    'ccb_pytorch': 'benchmarks/ccb_pytorch',
+    'ccb_k8sdocs': 'benchmarks/ccb_k8sdocs',
+    'ccb_dependeval': 'benchmarks/ccb_dependeval',
+    'ccb_sweperf': 'benchmarks/ccb_sweperf',
+    'ccb_repoqa': 'benchmarks/ccb_repoqa',
+    'ccb_crossrepo': 'benchmarks/ccb_crossrepo',
+    'ccb_dibench': 'benchmarks/ccb_dibench',
 }
 
 for task in selection['tasks']:
