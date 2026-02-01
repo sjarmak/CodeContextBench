@@ -1,13 +1,13 @@
 #!/bin/bash
-# Big Code MCP 4-Task 3-Config Comparison Script
+# Large Repo 4-Task 3-Config Comparison Script
 #
-# Runs all 4 big code MCP tasks across 3 configurations:
+# Runs all 4 large repo tasks across 3 configurations:
 #   1. Baseline (no MCP)
 #   2. MCP-NoDeepSearch (Sourcegraph MCP without deep search)
 #   3. MCP-Full (Sourcegraph MCP + deep search)
 #
 # Usage:
-#   ./configs/bigcode_3config.sh [options]
+#   ./configs/largerepo_3config.sh [options]
 #
 # Options:
 #   --baseline-only        Run only baseline (no MCP)

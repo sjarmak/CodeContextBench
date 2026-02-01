@@ -58,7 +58,7 @@ configs/                 # 3-config comparison shell runners + task selection
   run_selected_tasks.sh  #   Unified runner for all 125 tasks
   locobench_3config.sh   #   Per-suite runner: LoCoBench (25 tasks)
   swebenchpro_3config.sh #   Per-suite runner: SWE-Bench Pro (36 tasks)
-  bigcode_3config.sh     #   Per-suite runner: BigCode / Large Repo (4 tasks)
+  largerepo_3config.sh   #   Per-suite runner: Large Repo (4 tasks)
   k8s_docs_3config.sh    #   Per-suite runner: K8s Docs (5 tasks)
   pytorch_3config.sh     #   Per-suite runner: PyTorch (12 tasks)
   repoqa_3config.sh      #   Per-suite runner: RepoQA (10 tasks)
@@ -135,7 +135,7 @@ bash configs/tac_3config.sh              # 8 TheAgentCompany tasks
 bash configs/dibench_3config.sh          # 8 DIBench tasks
 bash configs/crossrepo_3config.sh        # 5 CrossRepo tasks
 bash configs/k8s_docs_3config.sh         # 5 K8s Docs tasks
-bash configs/bigcode_3config.sh          # 4 BigCode / Large Repo tasks
+bash configs/largerepo_3config.sh         # 4 Large Repo tasks
 bash configs/sweperf_3config.sh          # 3 SWE-Perf tasks
 ```
 
