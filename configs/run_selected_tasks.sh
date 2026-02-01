@@ -141,6 +141,7 @@ BENCH_BASE = {
     'kubernetes_docs': 'benchmarks/kubernetes_docs',
     'dependeval_benchmark': 'benchmarks/dependeval_benchmark',
     'sweperf': 'benchmarks/sweperf',
+    'repoqa': 'benchmarks/repoqa',
 }
 
 for task in selection['tasks']:

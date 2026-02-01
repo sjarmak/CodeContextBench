@@ -13,12 +13,13 @@ This repository contains **benchmark task definitions**, **evaluation configs**,
 | `swebench_pro` | 36 | Go, TypeScript, Python | Test suite | Bug fixing |
 | `locobench_agent` | 25 | 9 languages | Semantic similarity | Architecture, Refactoring |
 | `github_mined` | 12 | C++ | Test suite | Bug fixing |
+| `repoqa` | 10 | Python, C++, Java, Rust, TypeScript | Path + name matching | Code navigation |
 | `dependeval_benchmark` | 9 | Python, Java, JavaScript | Test suite | Refactoring, Maintenance |
 | `tac_mcp_value` | 8 | C++, Python | Deterministic + LLM | Mixed (4 phases) |
 | `kubernetes_docs` | 5 | Go | LLM judge + test scripts | Documentation |
 | `big_code_mcp` | 4 | Go, Rust, C++, TypeScript | Test suite | Feature implementation |
 | `sweperf` | 3 | Python | Test suite | Testing & QA |
-| **Total** | **102** | | | |
+| **Total** | **112** | | | |
 
 ---
 
@@ -42,10 +43,13 @@ See [docs/CONFIGS.md](docs/CONFIGS.md) for the full tool-by-tool breakdown.
 benchmarks/              # Task definitions organized by benchmark suite
   kubernetes_docs/       #   K8s package documentation generation (5 tasks)
   big_code_mcp/          #   Large-repo code navigation (4 tasks)
-  locobench_agent/       #   LoCoBench long-context agent tasks (50 tasks)
+  locobench_agent/       #   LoCoBench long-context agent tasks (25 tasks)
   swebench_pro/          #   SWE-Bench Pro bug-fixing tasks (36 tasks)
-  github_mined/          #   GitHub-mined SWE tasks (25 tasks)
-  ...                    #   Additional suites in development
+  github_mined/          #   GitHub-mined SWE tasks (12 tasks)
+  repoqa/                #   Semantic code navigation (10 tasks)
+  dependeval_benchmark/  #   Multi-file & cross-repo tasks (9 tasks)
+  tac_mcp_value/         #   TheAgentCompany tasks (8 tasks)
+  sweperf/               #   Performance testing (3 tasks)
 ralph/                   # Agent working directory
   configs/               #   3-config comparison YAML + shell runners per benchmark
   scripts/               #   Metrics extraction and evaluation pipeline
