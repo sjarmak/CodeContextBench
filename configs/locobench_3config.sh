@@ -1,7 +1,7 @@
 #!/bin/bash
-# LoCoBench-Agent 50-Task 3-Config Comparison Script
+# LoCoBench-Agent 3-Config Comparison Script
 #
-# Runs all 50 selected high-complexity tasks across 3 configurations:
+# Runs selected LoCoBench tasks (from selected_benchmark_tasks.json) across 3 configurations:
 #   1. Baseline (no MCP)
 #   2. MCP-NoDeepSearch (Sourcegraph tools without Deep Search)
 #   3. MCP-Full (Sourcegraph + Deep Search hybrid)
@@ -112,64 +112,21 @@ if { [ "$RUN_NO_DEEPSEARCH" = true ] || [ "$RUN_FULL" = true ]; } && [ -z "$SOUR
     RUN_FULL=false
 fi
 
-# All 50 task IDs
-TASK_IDS=(
-    # Architectural Understanding (27 tasks)
-    "csharp_data_warehouse_expert_012_architectural_understanding_expert_01"
-    "rust_web_social_expert_073_architectural_understanding_expert_01"
-    "c_blockchain_nft_expert_071_architectural_understanding_expert_01"
-    "c_api_microservice_expert_080_architectural_understanding_expert_01"
-    "rust_api_microservice_expert_008_architectural_understanding_expert_01"
-    "python_data_streaming_expert_085_architectural_understanding_expert_01"
-    "c_api_graphql_expert_079_architectural_understanding_expert_01"
-    "rust_data_streaming_expert_013_architectural_understanding_expert_01"
-    "python_game_engine_expert_032_architectural_understanding_expert_01"
-    "cpp_web_blog_expert_040_architectural_understanding_expert_01"
-    "rust_ml_computer_vision_expert_054_architectural_understanding_expert_01"
-    "typescript_system_monitoring_expert_061_architectural_understanding_expert_01"
-    "cpp_data_analytics_expert_010_architectural_understanding_expert_01"
-    "java_web_ecommerce_expert_000_architectural_understanding_expert_01"
-    "python_desktop_development_expert_021_architectural_understanding_expert_01"
-    "python_fintech_payment_expert_029_architectural_understanding_expert_01"
-    "rust_blockchain_nft_expert_071_architectural_understanding_expert_01"
-    "c_ml_nlp_expert_017_architectural_understanding_expert_01"
-    "csharp_web_blog_expert_076_architectural_understanding_expert_01"
-    "csharp_mobile_game_expert_024_architectural_understanding_expert_01"
-    "csharp_blockchain_defi_expert_070_architectural_understanding_expert_01"
-    "java_web_ecommerce_expert_036_architectural_understanding_expert_01"
-    "javascript_ml_nlp_expert_053_architectural_understanding_expert_01"
-    "cpp_system_security_expert_064_architectural_understanding_expert_01"
-    "cpp_web_dashboard_expert_039_architectural_understanding_expert_01"
-    "java_mobile_social_expert_058_architectural_understanding_expert_01"
-    "go_ml_nlp_expert_053_architectural_understanding_expert_01"
-    "typescript_desktop_productivity_expert_055_architectural_understanding_expert_01"
-    "javascript_web_social_expert_073_architectural_understanding_expert_01"
-    "csharp_data_etl_expert_047_architectural_understanding_expert_01"
-    "c_fintech_payment_expert_065_architectural_understanding_expert_01"
-    "csharp_ml_training_expert_087_architectural_understanding_expert_01"
-    "java_api_rest_expert_006_architectural_understanding_expert_01"
-    "javascript_blockchain_nft_expert_035_architectural_understanding_expert_01"
+# Load task IDs from canonical selection file
+SELECTION_FILE="$SCRIPT_DIR/../selected_benchmark_tasks.json"
+if [ ! -f "$SELECTION_FILE" ]; then
+    echo "ERROR: selected_benchmark_tasks.json not found at $SELECTION_FILE"
+    echo "Run: python3 scripts/select_benchmark_tasks.py"
+    exit 1
+fi
 
-    # Cross-File Refactoring (13 tasks)
-    "csharp_data_warehouse_expert_012_cross_file_refactoring_expert_01"
-    "c_blockchain_nft_expert_071_cross_file_refactoring_expert_01"
-    "rust_web_social_expert_073_cross_file_refactoring_expert_01"
-    "c_api_microservice_expert_080_cross_file_refactoring_expert_01"
-    "python_data_streaming_expert_085_cross_file_refactoring_expert_01"
-    "c_api_graphql_expert_079_cross_file_refactoring_expert_01"
-    "rust_data_streaming_expert_013_cross_file_refactoring_expert_01"
-    "rust_api_microservice_expert_008_cross_file_refactoring_expert_01"
-    "python_game_engine_expert_032_cross_file_refactoring_expert_01"
-    "rust_ml_computer_vision_expert_054_cross_file_refactoring_expert_01"
-    "cpp_web_blog_expert_040_cross_file_refactoring_expert_01"
-    "typescript_system_monitoring_expert_061_cross_file_refactoring_expert_01"
-    "python_desktop_development_expert_021_cross_file_refactoring_expert_01"
-
-    # Bug Investigation (3 tasks)
-    "csharp_data_warehouse_expert_012_bug_investigation_expert_01"
-    "rust_web_social_expert_073_bug_investigation_expert_01"
-    "c_blockchain_nft_expert_071_bug_investigation_expert_01"
-)
+readarray -t TASK_IDS < <(python3 -c "
+import json
+tasks = json.load(open('$SELECTION_FILE'))['tasks']
+for t in tasks:
+    if t['benchmark'] == 'locobench_agent':
+        print(t['task_id'])
+")
 
 # Derive short model name for run directory (matches V2 id_generator convention)
 _model_lower=$(echo "$MODEL" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')

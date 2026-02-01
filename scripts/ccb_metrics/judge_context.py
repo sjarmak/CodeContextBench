@@ -323,6 +323,7 @@ def generate_judge_contexts(
     runs_dir: str | Path,
     benchmarks_dir: str | Path,
     output_dir: str | Path,
+    selected_tasks_path: Optional[str | Path] = None,
 ) -> list[dict]:
     """Generate per-task LLM judge context JSON files.
 
@@ -330,6 +331,9 @@ def generate_judge_contexts(
         runs_dir: Path to Harbor runs/official/ directory.
         benchmarks_dir: Path to benchmarks/ directory with task definitions.
         output_dir: Where to write judge context files.
+        selected_tasks_path: Optional path to selected_benchmark_tasks.json.
+            If provided, only generates contexts for canonical tasks and
+            includes SDLC phase / MCP score metadata in each context.
 
     Returns:
         List of index entries (task_id, benchmark, config, path).
@@ -338,6 +342,15 @@ def generate_judge_contexts(
     benchmarks_dir = Path(benchmarks_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load task selection metadata if provided
+    task_index: dict[str, dict] = {}
+    if selected_tasks_path:
+        sel_path = Path(selected_tasks_path)
+        if sel_path.is_file():
+            from .task_selection import load_selected_tasks, build_task_index
+            selection = load_selected_tasks(sel_path)
+            task_index = build_task_index(selection)
 
     task_entries = _find_task_dirs(runs_dir)
 
@@ -349,6 +362,10 @@ def generate_judge_contexts(
 
     index = []
     for (benchmark, config_name, task_id), entry in sorted(deduped.items()):
+        # If task selection is loaded, skip tasks not in the canonical set
+        if task_index and task_id not in task_index:
+            continue
+
         task_dir = entry["task_dir"]
 
         # Read task instructions from benchmarks
@@ -380,6 +397,20 @@ def generate_judge_contexts(
             test_stdout = task_dir / "verifier" / "test-stdout.txt"
             partial_score = extract_swebench_partial_score(test_stdout)
 
+        # Build selection metadata if available
+        selection_meta = {}
+        if task_id in task_index:
+            sel = task_index[task_id]
+            selection_meta = {
+                "sdlc_phase": sel.get("sdlc_phase"),
+                "language": sel.get("language"),
+                "category": sel.get("category"),
+                "difficulty": sel.get("difficulty"),
+                "mcp_benefit_score": sel.get("mcp_benefit_score"),
+                "mcp_breakdown": sel.get("mcp_breakdown"),
+                "selection_rationale": sel.get("selection_rationale"),
+            }
+
         # Build context
         context = {
             "task_id": task_id,
@@ -388,6 +419,7 @@ def generate_judge_contexts(
             "model": entry["model"],
             "reward": entry["reward"],
             "partial_score": partial_score,
+            "task_selection_metadata": selection_meta or None,
             "task_instructions": instructions,
             "agent_transcript_summary": transcript_summary,
             "agent_output": agent_output,
@@ -444,11 +476,18 @@ def main() -> None:
         default="./judge_contexts",
         help="Directory to write judge context JSON files (default: ./judge_contexts/)",
     )
+    parser.add_argument(
+        "--selected-tasks",
+        default="./selected_benchmark_tasks.json",
+        help="Path to selected_benchmark_tasks.json for filtering and metadata "
+             "(default: ./selected_benchmark_tasks.json). Set to empty string to disable.",
+    )
 
     args = parser.parse_args()
     runs_dir = Path(args.runs_dir)
     benchmarks_dir = Path(args.benchmarks_dir)
     output_dir = Path(args.output_dir)
+    selected = args.selected_tasks if args.selected_tasks else None
 
     if not runs_dir.is_dir():
         print(f"Error: runs directory not found: {runs_dir}", file=sys.stderr)
@@ -457,9 +496,11 @@ def main() -> None:
     print(f"Scanning runs: {runs_dir}")
     print(f"Benchmarks:    {benchmarks_dir}")
     print(f"Output:        {output_dir}")
+    if selected:
+        print(f"Task selection: {selected}")
     print()
 
-    index = generate_judge_contexts(runs_dir, benchmarks_dir, output_dir)
+    index = generate_judge_contexts(runs_dir, benchmarks_dir, output_dir, selected)
 
     # Print summary
     benchmarks = sorted({e["benchmark"] for e in index})

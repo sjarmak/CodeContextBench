@@ -112,13 +112,21 @@ if { [ "$RUN_NO_DEEPSEARCH" = true ] || [ "$RUN_FULL" = true ]; } && [ -z "$SOUR
     RUN_FULL=false
 fi
 
-# All 4 big code MCP task directories
-TASK_DIRS=(
-    "big-code-k8s-001"      # Kubernetes: NoScheduleNoTraffic taint (Go, 1.4GB)
-    "big-code-servo-001"    # Servo: scrollend DOM event (Rust)
-    "big-code-trt-001"      # TensorRT implementation (C++)
-    "big-code-vsc-001"      # VS Code feature (TypeScript)
-)
+# Load task IDs from canonical selection file
+SELECTION_FILE="$SCRIPT_DIR/../selected_benchmark_tasks.json"
+if [ ! -f "$SELECTION_FILE" ]; then
+    echo "ERROR: selected_benchmark_tasks.json not found at $SELECTION_FILE"
+    echo "Run: python3 scripts/select_benchmark_tasks.py"
+    exit 1
+fi
+
+readarray -t TASK_DIRS < <(python3 -c "
+import json
+tasks = json.load(open('$SELECTION_FILE'))['tasks']
+for t in tasks:
+    if t['benchmark'] == 'big_code_mcp':
+        print(t['task_id'])
+")
 
 # Sourcegraph repo name mapping for Big Code tasks
 # These override SOURCEGRAPH_REPO_NAME so the agent searches the correct repo

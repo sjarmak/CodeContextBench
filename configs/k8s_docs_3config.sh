@@ -112,14 +112,21 @@ if { [ "$RUN_NO_DEEPSEARCH" = true ] || [ "$RUN_FULL" = true ]; } && [ -z "$SOUR
     RUN_FULL=false
 fi
 
-# All 5 K8s Docs task IDs
-TASK_IDS=(
-    "pkg-doc-001"
-    "client-go-doc-001"
-    "applyconfig-doc-001"
-    "apiserver-doc-001"
-    "fairqueuing-doc-001"
-)
+# Load task IDs from canonical selection file
+SELECTION_FILE="$SCRIPT_DIR/../selected_benchmark_tasks.json"
+if [ ! -f "$SELECTION_FILE" ]; then
+    echo "ERROR: selected_benchmark_tasks.json not found at $SELECTION_FILE"
+    echo "Run: python3 scripts/select_benchmark_tasks.py"
+    exit 1
+fi
+
+readarray -t TASK_IDS < <(python3 -c "
+import json
+tasks = json.load(open('$SELECTION_FILE'))['tasks']
+for t in tasks:
+    if t['benchmark'] == 'kubernetes_docs':
+        print(t['task_id'])
+")
 
 # Derive short model name for run directory (matches V2 id_generator convention)
 _model_lower=$(echo "$MODEL" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')

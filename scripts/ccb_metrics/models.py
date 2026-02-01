@@ -27,6 +27,15 @@ class TaskMetrics:
     partial_score: Optional[float] = None
     status: str = "unknown"  # passed / failed / error
 
+    # Task selection metadata (from selected_benchmark_tasks.json)
+    sdlc_phase: Optional[str] = None
+    language: Optional[str] = None
+    category: Optional[str] = None
+    difficulty: Optional[str] = None
+    mcp_benefit_score: Optional[float] = None
+    mcp_benefit_breakdown: Optional[dict[str, float]] = None
+    repo: Optional[str] = None
+
     # Timing (seconds)
     wall_clock_seconds: Optional[float] = None
     agent_execution_seconds: Optional[float] = None

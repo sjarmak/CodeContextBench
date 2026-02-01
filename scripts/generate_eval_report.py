@@ -33,6 +33,12 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
 from ccb_metrics import discover_runs, EvalReport, RunMetrics
+from ccb_metrics.task_selection import (
+    load_selected_tasks,
+    build_task_index,
+    enrich_runs,
+    filter_runs_to_selected,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +223,104 @@ def _build_tool_utilization(runs: list[RunMetrics]) -> tuple[list[str], list[lis
     return headers, rows
 
 
+def _build_sdlc_phase_breakdown(runs: list[RunMetrics]) -> Optional[tuple[list[str], list[list[str]]]]:
+    """Table: Mean reward by SDLC phase x config (requires enriched tasks)."""
+    # Check if any tasks have sdlc_phase set
+    all_tasks = [t for r in runs for t in r.tasks if t.sdlc_phase]
+    if not all_tasks:
+        return None
+
+    configs = sorted({r.config_name for r in runs})
+    phases = sorted({t.sdlc_phase for t in all_tasks})
+
+    # Build lookup: (phase, config) -> list of rewards
+    lookup: dict[tuple[str, str], list[float]] = {}
+    for r in runs:
+        for t in r.tasks:
+            if t.sdlc_phase and t.reward is not None:
+                lookup.setdefault((t.sdlc_phase, r.config_name), []).append(t.reward)
+
+    headers = ["SDLC Phase", "Tasks"] + configs
+    rows = []
+    for phase in phases:
+        task_count = sum(1 for t in all_tasks if t.sdlc_phase == phase)
+        # Avoid double-counting across configs — count unique task_ids
+        unique_ids = {t.task_id for t in all_tasks if t.sdlc_phase == phase}
+        row = [phase, str(len(unique_ids))]
+        for config in configs:
+            rewards = lookup.get((phase, config), [])
+            row.append(_fmt(_safe_mean(rewards)) if rewards else "-")
+        rows.append(row)
+    return headers, rows
+
+
+def _build_language_breakdown(runs: list[RunMetrics]) -> Optional[tuple[list[str], list[list[str]]]]:
+    """Table: Mean reward by language x config (requires enriched tasks)."""
+    all_tasks = [t for r in runs for t in r.tasks if t.language]
+    if not all_tasks:
+        return None
+
+    configs = sorted({r.config_name for r in runs})
+    languages = sorted({t.language for t in all_tasks})
+
+    lookup: dict[tuple[str, str], list[float]] = {}
+    for r in runs:
+        for t in r.tasks:
+            if t.language and t.reward is not None:
+                lookup.setdefault((t.language, r.config_name), []).append(t.reward)
+
+    headers = ["Language", "Tasks"] + configs
+    rows = []
+    for lang in languages:
+        unique_ids = {t.task_id for t in all_tasks if t.language == lang}
+        row = [lang, str(len(unique_ids))]
+        for config in configs:
+            rewards = lookup.get((lang, config), [])
+            row.append(_fmt(_safe_mean(rewards)) if rewards else "-")
+        rows.append(row)
+    return headers, rows
+
+
+def _build_mcp_benefit_correlation(runs: list[RunMetrics]) -> Optional[tuple[list[str], list[list[str]]]]:
+    """Table: Mean reward by MCP benefit score bucket x config."""
+    all_tasks = [t for r in runs for t in r.tasks if t.mcp_benefit_score is not None]
+    if not all_tasks:
+        return None
+
+    configs = sorted({r.config_name for r in runs})
+
+    # Bucket scores into ranges
+    buckets = [
+        ("0.0-0.4 (low)", 0.0, 0.4),
+        ("0.4-0.6 (medium)", 0.4, 0.6),
+        ("0.6-0.8 (high)", 0.6, 0.8),
+        ("0.8-1.0 (very high)", 0.8, 1.01),
+    ]
+
+    lookup: dict[tuple[str, str], list[float]] = {}
+    task_counts: dict[str, set[str]] = {}
+    for r in runs:
+        for t in r.tasks:
+            if t.mcp_benefit_score is None or t.reward is None:
+                continue
+            for label, lo, hi in buckets:
+                if lo <= t.mcp_benefit_score < hi:
+                    lookup.setdefault((label, r.config_name), []).append(t.reward)
+                    task_counts.setdefault(label, set()).add(t.task_id)
+                    break
+
+    headers = ["MCP Benefit Score", "Tasks"] + configs
+    rows = []
+    for label, lo, hi in buckets:
+        unique = task_counts.get(label, set())
+        row = [label, str(len(unique))]
+        for config in configs:
+            rewards = lookup.get((label, config), [])
+            row.append(_fmt(_safe_mean(rewards)) if rewards else "-")
+        rows.append(row)
+    return headers, rows
+
+
 def _build_swebench_partial(runs: list[RunMetrics]) -> Optional[tuple[list[str], list[list[str]]]]:
     """Table 6: SWE-Bench Pro partial scores per config."""
     swe_runs = [r for r in runs if "swebench" in r.benchmark.lower()]
@@ -242,8 +346,18 @@ def generate_report(
     runs_dir: str | Path,
     output_dir: str | Path,
     write_csv_flag: bool = True,
+    selected_tasks_path: Optional[str | Path] = None,
 ) -> None:
-    """Generate the full evaluation report."""
+    """Generate the full evaluation report.
+
+    Args:
+        runs_dir: Path to Harbor runs/official/ directory.
+        output_dir: Output directory for report files.
+        write_csv_flag: Whether to write CSV files.
+        selected_tasks_path: Optional path to selected_benchmark_tasks.json.
+            If provided, runs are filtered to only canonical tasks, and
+            SDLC phase / MCP benefit metadata is included in the report.
+    """
     runs_dir = Path(runs_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -255,6 +369,22 @@ def generate_report(
     if not runs:
         print("No runs discovered. Check the --runs-dir path.")
         sys.exit(1)
+
+    # Enrich and optionally filter with task selection metadata
+    task_index: dict[str, dict] = {}
+    if selected_tasks_path:
+        sel_path = Path(selected_tasks_path)
+        if sel_path.is_file():
+            print(f"Loading task selection: {sel_path}")
+            selection = load_selected_tasks(sel_path)
+            task_index = build_task_index(selection)
+            enrich_runs(runs, task_index)
+            pre_count = sum(r.task_count for r in runs)
+            runs = filter_runs_to_selected(runs, task_index)
+            post_count = sum(r.task_count for r in runs)
+            print(f"Filtered to selected tasks: {pre_count} -> {post_count}")
+        else:
+            print(f"WARNING: selected tasks file not found: {sel_path}", file=sys.stderr)
 
     # Build EvalReport
     report = EvalReport(
@@ -300,6 +430,22 @@ def generate_report(
     if swe:
         h, r = swe
         tables.append(("SWE-Bench Pro Partial Scores", "swebench_partial_scores", h, r))
+
+    # SDLC and language tables (only if selection metadata was loaded)
+    sdlc = _build_sdlc_phase_breakdown(runs)
+    if sdlc:
+        h, r = sdlc
+        tables.append(("Performance by SDLC Phase", "sdlc_phase_breakdown", h, r))
+
+    lang = _build_language_breakdown(runs)
+    if lang:
+        h, r = lang
+        tables.append(("Performance by Language", "language_breakdown", h, r))
+
+    mcp_corr = _build_mcp_benefit_correlation(runs)
+    if mcp_corr:
+        h, r = mcp_corr
+        tables.append(("Performance by MCP Benefit Score", "mcp_benefit_correlation", h, r))
 
     # Write REPORT.md
     md_lines = [
@@ -397,12 +543,20 @@ def main() -> None:
         dest="csv",
         help="Disable CSV output",
     )
+    parser.add_argument(
+        "--selected-tasks",
+        default="./selected_benchmark_tasks.json",
+        help="Path to selected_benchmark_tasks.json for filtering and metadata enrichment "
+             "(default: ./selected_benchmark_tasks.json). Set to empty string to disable.",
+    )
 
     args = parser.parse_args()
+    selected = args.selected_tasks if args.selected_tasks else None
     generate_report(
         runs_dir=args.runs_dir,
         output_dir=args.output_dir,
         write_csv_flag=args.csv,
+        selected_tasks_path=selected,
     )
 
 
