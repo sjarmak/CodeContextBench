@@ -96,16 +96,16 @@ benchmarks/tac_mcp_value/
 
 ## Curated Tasks
 
-| Task ID                    | Description                     | Language | MCP Value     | Grading       |
-| -------------------------- | ------------------------------- | -------- | ------------- | ------------- |
-| tac-implement-hyperloglog  | Implement HyperLogLog in bustub | C++      | High          | Deterministic |
-| tac-buffer-pool-manager    | Implement buffer pool manager   | C++      | High          | Deterministic |
-| tac-dependency-change      | Update Python dependencies      | Python   | Medium        | Deterministic |
-| tac-find-in-codebase-1     | Find PR for context window      | C++      | **Very High** | LLM-based     |
-| tac-find-in-codebase-2     | Find PR for file change         | C++      | **Very High** | LLM-based     |
-| tac-copilot-arena-endpoint | Add API endpoint                | Python   | Medium-High   | Deterministic |
-| tac-write-unit-test        | Write unit test for function    | Python   | High          | Deterministic |
-| tac-troubleshoot-dev-setup | Debug broken environment        | Python   | Medium        | Mixed         |
+| Task ID                    | Description                     | Language | Difficulty | Grading       |
+| -------------------------- | ------------------------------- | -------- | ---------- | ------------- |
+| tac-implement-hyperloglog  | Implement HyperLogLog in bustub | C++      | Hard       | Deterministic |
+| tac-buffer-pool-manager    | Implement buffer pool manager   | C++      | Hard       | Deterministic |
+| tac-dependency-change      | Update Python dependencies      | Python   | Medium     | Deterministic |
+| tac-find-in-codebase-1     | Find PR for context window      | C++      | Medium     | LLM-based     |
+| tac-find-in-codebase-2     | Find PR for file change         | C++      | Medium     | LLM-based     |
+| tac-copilot-arena-endpoint | Add API endpoint                | Python   | Medium     | Deterministic |
+| tac-write-unit-test        | Write unit test for function    | Python   | Medium     | Deterministic |
+| tac-troubleshoot-dev-setup | Debug broken environment        | Python   | Medium     | Mixed         |
 
 See [task_selection.md](task_selection.md) for detailed selection rationale.
 
