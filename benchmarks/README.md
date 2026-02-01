@@ -1,6 +1,6 @@
 # CodeContextBench Benchmarks
 
-This directory contains all benchmark task definitions for evaluating coding agents with and without Sourcegraph MCP. The canonical task selection is defined in [`selected_benchmark_tasks.json`](../selected_benchmark_tasks.json) (102 tasks across 8 benchmarks).
+This directory contains all benchmark task definitions for evaluating coding agents with and without Sourcegraph MCP. The canonical task selection is defined in [`selected_benchmark_tasks.json`](../selected_benchmark_tasks.json) (112 tasks across 9 benchmarks).
 
 See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection methodology.
 
@@ -80,7 +80,17 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 **Languages**: Python
 **SDLC Phase**: Testing & QA
 **Focus**: Performance-oriented software engineering tasks
-**Task Format**: Harbor (task.toml, instruction.md, tests/)
+**Task Format**: Harbor (via adapter, pre-generated)
+
+---
+
+### 9. [repoqa/](repoqa/) - Semantic Code Navigation
+**Tasks**: 10
+**Languages**: Python, C++, Java, Rust, TypeScript
+**SDLC Phase**: Requirements & Discovery
+**Focus**: Find a function by behavioral description (no name provided)
+**Repositories**: psf/black, python-poetry/poetry, google/gson, square/retrofit, and more
+**Task Format**: Harbor (via adapter, pre-generated)
 
 ---
 
@@ -91,12 +101,13 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 | swebench_pro | 36 | Go, TypeScript, Python | Bug fixing |
 | locobench_agent | 25 | 9 languages | Architecture, Refactoring |
 | github_mined | 12 | C++ | Bug fixing |
+| repoqa | 10 | Python, C++, Java, Rust, TypeScript | Code navigation |
 | dependeval_benchmark | 9 | Python, Java, JavaScript | Refactoring, Maintenance |
 | tac_mcp_value | 8 | C++, Python | Mixed (4 phases) |
 | kubernetes_docs | 5 | Go | Documentation |
 | big_code_mcp | 4 | Go, Rust, C++, TypeScript | Feature implementation |
 | sweperf | 3 | Python | Testing & QA |
-| **Total** | **102** | | |
+| **Total** | **112** | | |
 
 ---
 
@@ -138,7 +149,7 @@ See [`docs/CONFIGS.md`](../docs/CONFIGS.md) for the full tool-by-tool breakdown 
 Unused or superseded benchmarks have been moved to [`_archived/`](../_archived/):
 - `benchmarks_10figure/` - Enterprise codebase challenges (requires external corpus)
 - `benchmarks_dibench/` - Dependency inference (adapter-based, variable task count)
-- `benchmarks_repoqa/` - Tool-sensitive code understanding (adapter-based, variable task count)
+- `benchmarks_repoqa/` - Original RepoQA adapter (superseded by benchmarks/repoqa/)
 - `benchmarks_no_external_repos/` - Hello world, PRD bench, DevAI bench prototypes
 
 ---
