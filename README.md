@@ -1,8 +1,8 @@
 # CodeContextBench
 
-Benchmark suite for evaluating how AI coding agents leverage external context tools (MCP servers) on software engineering tasks across the SDLC. Developed as the reproducibility artifact for the paper *"CodeContextBench: A Systematic Evaluation Framework for Assessing the Impact of Enhanced Code Intelligence on AI Coding Agent Performance."*
+Benchmark suite for evaluating how AI coding agents leverage external context tools on software engineering tasks across the SDLC. Developed as the reproducibility artifact for the paper *"CodeContextBench: A Systematic Evaluation Framework for Assessing the Impact of Enhanced Code Intelligence on AI Coding Agent Performance."*
 
-This repository contains **benchmark task definitions**, **evaluation configs**, and a **metrics extraction pipeline**. Tasks are executed via the [Harbor](https://github.com/mainmatter/harbor) runner with the Claude Code agent harness.
+This repository contains **benchmark task definitions**, **evaluation configs**, and a **metrics extraction pipeline**. Tasks are executed via the [Harbor](https://github.com/laude-institute/harbor/tree/main) runner with the Claude Code agent harness.
 
 ---
 
@@ -127,7 +127,7 @@ bash configs/k8s_docs_3config.sh         # 5 K8s Docs tasks
 
 All runners support `--baseline-only` and `--full-only` flags.
 
-Requires [Harbor](https://github.com/mainmatter/harbor) installed and configured with a Claude API key.
+Requires [Harbor](https://github.com/laude-institute/harbor/tree/main) installed and configured with a Claude API key.
 
 ---
 
