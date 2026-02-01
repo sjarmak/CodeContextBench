@@ -117,7 +117,7 @@ if { [ "$RUN_NO_DEEPSEARCH" = true ] || [ "$RUN_FULL" = true ]; } && [ -z "$SOUR
 fi
 
 # Load task IDs from canonical selection file
-SELECTION_FILE="$SCRIPT_DIR/../selected_benchmark_tasks.json"
+SELECTION_FILE="$SCRIPT_DIR/selected_benchmark_tasks.json"
 if [ ! -f "$SELECTION_FILE" ]; then
     echo "ERROR: selected_benchmark_tasks.json not found at $SELECTION_FILE"
     echo "Run: python3 scripts/select_benchmark_tasks.py"

@@ -51,13 +51,11 @@ class DependencyValidator(ABC):
         syntax_ok, syntax_errors = self.validate_syntax()
         errors.extend(syntax_errors)
 
-        # Run dependency validation (non-critical warnings are OK)
+        # Run dependency validation — all failures are critical
         deps_ok, deps_errors = self.validate_dependencies()
-        # Only add critical errors (not warnings about missing dependencies)
-        errors.extend([e for e in deps_errors if "not found" in e.lower() or "error" in e.lower()])
+        errors.extend(deps_errors)
 
-        # Return based on critical errors only
-        return len(errors) == 0, errors if errors else deps_errors
+        return len(errors) == 0, errors
 
 
 class PythonValidator(DependencyValidator):
@@ -284,9 +282,7 @@ class JavaScriptValidator(DependencyValidator):
         try:
             with open(pkg_path) as f:
                 data = json.load(f)
-                has_deps = bool(data.get("dependencies")) or bool(
-                    data.get("devDependencies")
-                )
+                has_deps = bool(data.get("dependencies"))
                 if not has_deps:
                     errors.append(
                         "No dependencies found in package.json (expected for most projects)"

@@ -856,7 +856,7 @@ def main() -> None:
     parser.add_argument(
         "--output-json",
         type=Path,
-        default=Path("selected_benchmark_tasks.json"),
+        default=Path("configs/selected_benchmark_tasks.json"),
         help="Output JSON file path (default: selected_benchmark_tasks.json)",
     )
     parser.add_argument(

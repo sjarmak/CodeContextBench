@@ -23,7 +23,7 @@
 #   --dry-run              Print tasks without running
 #
 # Prerequisites:
-#   - selected_benchmark_tasks.json in repo root
+#   - configs/selected_benchmark_tasks.json in repo
 #   - ~/evals/.env.local with ANTHROPIC_API_KEY
 #   - SOURCEGRAPH_ACCESS_TOKEN in .env.local (for MCP modes)
 
@@ -35,7 +35,7 @@ cd "$REPO_ROOT"
 
 export PYTHONPATH="$(pwd):$PYTHONPATH"
 
-SELECTION_FILE="$REPO_ROOT/selected_benchmark_tasks.json"
+SELECTION_FILE="$REPO_ROOT/configs/selected_benchmark_tasks.json"
 
 # ============================================
 # PARSE ARGUMENTS
@@ -279,4 +279,4 @@ echo "=============================================="
 echo "Results: runs/${CATEGORY}/"
 echo ""
 echo "Generate report:"
-echo "  python3 scripts/generate_eval_report.py --selected-tasks selected_benchmark_tasks.json"
+echo "  python3 scripts/generate_eval_report.py --selected-tasks configs/selected_benchmark_tasks.json"

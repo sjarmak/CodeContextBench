@@ -478,9 +478,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--selected-tasks",
-        default="./selected_benchmark_tasks.json",
+        default="./configs/selected_benchmark_tasks.json",
         help="Path to selected_benchmark_tasks.json for filtering and metadata "
-             "(default: ./selected_benchmark_tasks.json). Set to empty string to disable.",
+             "(default: ./configs/selected_benchmark_tasks.json). Set to empty string to disable.",
     )
 
     args = parser.parse_args()

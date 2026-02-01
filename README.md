@@ -1,6 +1,6 @@
 # CodeContextBench
 
-Benchmark suite for evaluating how AI coding agents leverage external context tools (MCP servers) on software engineering tasks across the SDLC. Developed as the reproducibility artifact for the paper *"Evaluating the Impact of Model Context Protocol on AI Coding Agent Performance Across the Software Development Lifecycle."*
+Benchmark suite for evaluating how AI coding agents leverage external context tools (MCP servers) on software engineering tasks across the SDLC. Developed as the reproducibility artifact for the paper *"CodeContextBench: A Systematic Evaluation Framework for Assessing the Impact of Enhanced Code Intelligence on AI Coding Agent Performance."*
 
 This repository contains **benchmark task definitions**, **evaluation configs**, and a **metrics extraction pipeline**. Tasks are executed via the [Harbor](https://github.com/mainmatter/harbor) runner with the Claude Code agent harness.
 
@@ -16,11 +16,11 @@ This repository contains **benchmark task definitions**, **evaluation configs**,
 | `ccb_repoqa` | 10 | Python, C++, Java, Rust, TypeScript | Path + name matching | Code navigation |
 | `ccb_dependeval` | 9 | Python, Java, JavaScript | Test suite | Refactoring, Maintenance |
 | `ccb_tac` | 8 | C++, Python | Deterministic + LLM | Mixed (4 phases) |
+| `ccb_dibench` | 8 | Python, Rust, JavaScript, C# | Syntax + dependency validation | Dependency inference |
 | `ccb_k8sdocs` | 5 | Go | LLM judge + test scripts | Documentation |
+| `ccb_crossrepo` | 5 | Go | Test suite | Architecture, Refactoring, Bug fix, Testing |
 | `ccb_largerepo` | 4 | Go, Rust, C++, TypeScript | Test suite | Feature implementation |
 | `ccb_sweperf` | 3 | Python | Test suite | Testing & QA |
-| `ccb_crossrepo` | 5 | Go | Test suite | Architecture, Refactoring, Bug fix, Testing |
-| `ccb_dibench` | 8 | Python, Rust, JavaScript, C# | Syntax + dependency validation | Dependency inference |
 | **Total** | **125** | | | |
 
 ---
@@ -43,25 +43,29 @@ See [docs/CONFIGS.md](docs/CONFIGS.md) for the full tool-by-tool breakdown.
 
 ```
 benchmarks/              # Task definitions organized by benchmark suite
-  ccb_k8sdocs/       #   K8s package documentation generation (5 tasks)
-  ccb_largerepo/          #   Large-repo code navigation (4 tasks)
-  ccb_locobench/       #   LoCoBench long-context agent tasks (25 tasks)
-  ccb_swebenchpro/          #   SWE-Bench Pro bug-fixing tasks (36 tasks)
-  ccb_pytorch/          #   GitHub-mined SWE tasks (12 tasks)
-  ccb_repoqa/                #   Semantic code navigation (10 tasks)
-  ccb_dependeval/  #   Multi-file & cross-repo tasks (9 tasks)
-  ccb_tac/         #   TheAgentCompany tasks (8 tasks)
-  ccb_sweperf/               #   Performance testing (3 tasks)
-  ccb_crossrepo/              #   Enterprise codebase challenges (5 tasks)
-  ccb_dibench/               #   Dependency inference tasks (8 tasks)
-ralph/                   # Agent working directory
-  configs/               #   3-config comparison YAML + shell runners per benchmark
-  scripts/               #   Metrics extraction and evaluation pipeline
-    ccb_metrics/         #     Python package: models, extractors, discovery, judge context
-    generate_eval_report.py  # CLI: deterministic evaluation report generator
+  ccb_crossrepo/         #   Enterprise codebase challenges (5 tasks)
+  ccb_dependeval/        #   Multi-file & cross-repo tasks (9 tasks)
+  ccb_dibench/           #   Dependency inference tasks (8 tasks)
+  ccb_k8sdocs/           #   K8s package documentation generation (5 tasks)
+  ccb_largerepo/         #   Large-repo code navigation (4 tasks)
+  ccb_locobench/         #   LoCoBench long-context agent tasks (25 tasks)
+  ccb_pytorch/           #   GitHub-mined SWE tasks (12 tasks)
+  ccb_repoqa/            #   Semantic code navigation (10 tasks)
+  ccb_swebenchpro/       #   SWE-Bench Pro bug-fixing tasks (36 tasks)
+  ccb_sweperf/           #   Performance testing (3 tasks)
+  ccb_tac/               #   TheAgentCompany tasks (8 tasks)
+configs/                 # 3-config comparison shell runners + task selection
+  run_selected_tasks.sh  #   Unified runner for all 125 tasks
+  locobench_3config.sh   #   Per-suite runner: LoCoBench
+  swebenchpro_3config.sh #   Per-suite runner: SWE-Bench Pro
+  bigcode_3config.sh     #   Per-suite runner: BigCode / Large Repo
+  k8s_docs_3config.sh    #   Per-suite runner: K8s Docs
+  selected_benchmark_tasks.json  # Canonical task selection (125 tasks)
+scripts/                 # Metrics extraction and evaluation pipeline
+  ccb_metrics/           #   Python package: models, extractors, discovery, judge context
+  generate_eval_report.py  # CLI: deterministic evaluation report generator
 docs/                    # Configuration documentation and diagnosis reports
 schemas/                 # JSON schemas for MANIFEST.json, task.toml, etc.
-swe_bench_configs/       # SWE-Bench integration configuration
 ```
 
 Each benchmark directory contains:
@@ -99,20 +103,29 @@ See `python3 scripts/generate_eval_report.py --help` for all options.
 
 ## Running with Harbor
 
-Each benchmark has a shell runner in `configs/` that executes all tasks across the 3-config matrix:
+The unified runner executes all 125 tasks across the 3-config matrix:
 
 ```bash
-# Run all 50 LoCoBench tasks across 3 configs
-bash configs/locobench_3config.sh
+# Run all 125 tasks across 3 configs
+bash configs/run_selected_tasks.sh
 
 # Run only the baseline config
-bash configs/locobench_3config.sh --baseline-only
+bash configs/run_selected_tasks.sh --baseline-only
 
-# Run only MCP-Full config
-bash configs/locobench_3config.sh --full-only
+# Dry run to list tasks without executing
+bash configs/run_selected_tasks.sh --dry-run
 ```
 
-Available runners: `locobench_3config.sh`, `swebenchpro_3config.sh`, `bigcode_3config.sh`, `k8s_docs_3config.sh`.
+Per-suite runners are also available for individual benchmarks:
+
+```bash
+bash configs/locobench_3config.sh        # 25 LoCoBench tasks
+bash configs/swebenchpro_3config.sh      # 36 SWE-Bench Pro tasks
+bash configs/bigcode_3config.sh          # 4 BigCode / Large Repo tasks
+bash configs/k8s_docs_3config.sh         # 5 K8s Docs tasks
+```
+
+All runners support `--baseline-only` and `--full-only` flags.
 
 Requires [Harbor](https://github.com/mainmatter/harbor) installed and configured with a Claude API key.
 

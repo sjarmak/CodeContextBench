@@ -1,6 +1,6 @@
 # CodeContextBench Benchmarks
 
-This directory contains all benchmark task definitions for evaluating coding agents with and without Sourcegraph MCP. The canonical task selection is defined in [`selected_benchmark_tasks.json`](../selected_benchmark_tasks.json) (125 tasks across 11 benchmarks).
+This directory contains all benchmark task definitions for evaluating coding agents with and without Sourcegraph MCP. The canonical task selection is defined in [`selected_benchmark_tasks.json`](../configs/selected_benchmark_tasks.json) (125 tasks across 11 benchmarks).
 
 See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection methodology.
 
@@ -165,16 +165,6 @@ harbor run --path benchmarks/ccb_largerepo/big-code-vsc-001 \
 ```
 
 See [`docs/CONFIGS.md`](../docs/CONFIGS.md) for the full tool-by-tool breakdown of each config.
-
----
-
-## Archived Benchmarks
-
-Unused or superseded benchmarks have been moved to [`_archived/`](../_archived/):
-- `benchmarks_ccb_crossrepo/` - Original ccb_crossrepo prototype (superseded by benchmarks/ccb_crossrepo/)
-- `benchmarks_dibench/` - Original DI-Bench adapter (superseded by benchmarks/ccb_dibench/)
-- `benchmarks_repoqa/` - Original RepoQA adapter (superseded by benchmarks/ccb_repoqa/)
-- `benchmarks_no_external_repos/` - Hello world, PRD bench, DevAI bench prototypes
 
 ---
 
