@@ -10,17 +10,17 @@ This repository contains **benchmark task definitions**, **evaluation configs**,
 
 | Suite | Tasks | Languages | Evaluation Method | SDLC Phase |
 |-------|------:|-----------|-------------------|------------|
-| `ccb_swebenchpro` | 36 | Go, TypeScript, Python | Test suite | Bug fixing |
-| `ccb_locobench` | 25 | 9 languages | Semantic similarity | Architecture, Refactoring |
-| `ccb_pytorch` | 12 | C++ | Test suite | Bug fixing |
-| `ccb_repoqa` | 10 | Python, C++, Java, Rust, TypeScript | Path + name matching | Code navigation |
-| `ccb_dependeval` | 9 | Python, Java, JavaScript | Test suite | Refactoring, Maintenance |
-| `ccb_tac` | 8 | C++, Python | Deterministic + LLM | Mixed (4 phases) |
-| `ccb_dibench` | 8 | Python, Rust, JavaScript, C# | Syntax + dependency validation | Dependency inference |
+| `ccb_swebenchpro` | 36 | Go, TypeScript, Python | LLM judge + test suite | Bug fixing |
+| `ccb_locobench` | 25 | 9 languages | LLM judge + semantic similarity | Architecture, Refactoring |
+| `ccb_pytorch` | 12 | C++ | LLM judge + test suite | Bug fixing |
+| `ccb_repoqa` | 10 | Python, C++, Java, Rust, TypeScript | LLM judge + path/name matching | Code navigation |
+| `ccb_dependeval` | 9 | Python, Java, JavaScript | LLM judge + test suite | Refactoring, Maintenance |
+| `ccb_tac` | 8 | C++, Python | LLM judge + deterministic checks | Mixed (4 phases) |
+| `ccb_dibench` | 8 | Python, Rust, JavaScript, C# | LLM judge + syntax/dependency validation | Dependency inference |
 | `ccb_k8sdocs` | 5 | Go | LLM judge + test scripts | Documentation |
-| `ccb_crossrepo` | 5 | Go | Test suite | Architecture, Refactoring, Bug fix, Testing |
-| `ccb_largerepo` | 4 | Go, Rust, C++, TypeScript | Test suite | Feature implementation |
-| `ccb_sweperf` | 3 | Python | Test suite | Testing & QA |
+| `ccb_crossrepo` | 5 | Go | LLM judge + test suite | Architecture, Refactoring, Bug fix, Testing |
+| `ccb_largerepo` | 4 | Go, Rust, C++, TypeScript | LLM judge + test suite | Feature implementation |
+| `ccb_sweperf` | 3 | Python | LLM judge + test suite | Testing & QA |
 | **Total** | **125** | | | |
 
 ---
