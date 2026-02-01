@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook: block real API tokens/secrets from being committed.
+# Install: git config core.hooksPath .githooks
+#
+
+set -euo pipefail
+
+# Patterns that indicate real secrets
+SECRET_PATTERNS=(
+    'sgp_[a-zA-Z0-9_]{10,}'    # Sourcegraph tokens
+    'sk-[a-zA-Z0-9_-]{20,}'    # Anthropic (sk-ant-*) and OpenAI (sk-*) API keys
+)
+
+# Build combined regex
+COMBINED=""
+for pattern in "${SECRET_PATTERNS[@]}"; do
+    if [ -z "$COMBINED" ]; then
+        COMBINED="$pattern"
+    else
+        COMBINED="$COMBINED|$pattern"
+    fi
+done
+
+# Check staged files only (not the entire repo)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+FOUND=0
+while IFS= read -r file; do
+    # Skip binary files
+    if file "$file" | grep -q "binary"; then
+        continue
+    fi
+
+    # Search for secrets in staged content
+    MATCHES=$(git diff --cached -p -- "$file" | grep -E "^\+" | grep -oE "$COMBINED" 2>/dev/null || true)
+
+    if [ -n "$MATCHES" ]; then
+        if [ "$FOUND" -eq 0 ]; then
+            echo "ERROR: Potential secrets detected in staged files!"
+            echo ""
+        fi
+        FOUND=1
+        echo "  $file:"
+        echo "$MATCHES" | while read -r match; do
+            # Show first 12 chars + redacted
+            echo "    ${match:0:12}...REDACTED"
+        done
+        echo ""
+    fi
+done <<< "$STAGED_FILES"
+
+if [ "$FOUND" -ne 0 ]; then
+    echo "Commit blocked. Remove secrets before committing."
+    echo "If this is a false positive (e.g. test fixture), bypass with:"
+    echo "  git commit --no-verify"
+    exit 1
+fi
+
+exit 0
