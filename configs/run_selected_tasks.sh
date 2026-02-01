@@ -33,7 +33,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$SCRIPT_DIR/.."
 cd "$REPO_ROOT"
 
-export PYTHONPATH="$(pwd):$PYTHONPATH"
+# Agent module lives in the evals repo; add it to PYTHONPATH
+AGENT_DIR="${AGENT_DIR:-$HOME/evals/custom_agents/agents/claudecode}"
+export PYTHONPATH="${AGENT_DIR}:$(pwd):$PYTHONPATH"
 
 SELECTION_FILE="$REPO_ROOT/configs/selected_benchmark_tasks.json"
 

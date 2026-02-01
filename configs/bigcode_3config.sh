@@ -25,8 +25,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
-# Add claudecode directory to PYTHONPATH for agent imports
-export PYTHONPATH="$(pwd):$PYTHONPATH"
+# Agent module lives in the evals repo; add it to PYTHONPATH
+AGENT_DIR="${AGENT_DIR:-$HOME/evals/custom_agents/agents/claudecode}"
+export PYTHONPATH="${AGENT_DIR}:$(pwd):$PYTHONPATH"
 
 # ============================================
 # LOAD CREDENTIALS
