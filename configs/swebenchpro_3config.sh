@@ -144,10 +144,10 @@ case "$_model_lower" in
 esac
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-JOBS_BASE="runs/${CATEGORY}/swebenchpro_50_tasks_${MODEL_SHORT}_${TIMESTAMP}"
+JOBS_BASE="runs/${CATEGORY}/swebenchpro_selected_${MODEL_SHORT}_${TIMESTAMP}"
 
 echo "=============================================="
-echo "SWE-bench Pro 50-Task 3-Config Benchmark"
+echo "SWE-bench Pro 3-Config Benchmark"
 echo "=============================================="
 echo "Model: ${MODEL}"
 echo "Tasks: ${#TASK_IDS[@]}"
@@ -173,7 +173,7 @@ done
 # ============================================
 if [ "$RUN_BASELINE" = true ]; then
     echo ""
-    echo "[BASELINE] Starting 50-task baseline run..."
+    echo "[BASELINE] Starting selected-task baseline run..."
     echo ""
 
     BASELINE_MCP_TYPE=none harbor run \
@@ -192,7 +192,7 @@ fi
 # ============================================
 if [ "$RUN_NO_DEEPSEARCH" = true ]; then
     echo ""
-    echo "[MCP-NoDeepSearch] Starting 50-task MCP-NoDeepSearch run..."
+    echo "[MCP-NoDeepSearch] Starting selected-task MCP-NoDeepSearch run..."
     echo ""
 
     BASELINE_MCP_TYPE=sourcegraph_no_deepsearch harbor run \
@@ -211,7 +211,7 @@ fi
 # ============================================
 if [ "$RUN_FULL" = true ]; then
     echo ""
-    echo "[MCP-Full] Starting 50-task MCP-Full run..."
+    echo "[MCP-Full] Starting selected-task MCP-Full run..."
     echo ""
 
     BASELINE_MCP_TYPE=sourcegraph_hybrid harbor run \

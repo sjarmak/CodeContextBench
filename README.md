@@ -8,15 +8,17 @@ This repository contains **benchmark task definitions**, **evaluation configs**,
 
 ## Benchmark Suites
 
-| Suite | Tasks | Languages | Evaluation Method | SDLC Phase |
-|-------|------:|-----------|-------------------|------------|
-| `kubernetes_docs` | 5 | Go | LLM judge + test scripts | Documentation |
-| `big_code_mcp` | 4 | Go, Rust, C++, TypeScript | Test suite | Code navigation |
-| `locobench_agent` | 50 | Multi-language | Semantic similarity | Long-context reasoning |
-| `swebench_pro` | 50 | Multi-language | Test suite | Bug fixing |
-| `github_mined` | 25 | Python | Test suite | Feature implementation |
-
-Additional benchmark suites (`sweperf`, `tac_mcp_value`, `dibench`, `repoqa`, etc.) are included in early stages of development.
+| Suite | Selected | Available | Languages | Evaluation Method | SDLC Phase |
+|-------|--------:|----------:|-----------|-------------------|------------|
+| `swebench_pro` | 36 | 731 | Go, TypeScript, Python | Test suite | Bug fixing |
+| `locobench_agent` | 25 | 50 | 9 languages | Semantic similarity | Architecture, Refactoring |
+| `github_mined` | 12 | 25 | C++ | Test suite | Bug fixing |
+| `tac_mcp_value` | 8 | 8 | C++, Python | Deterministic + LLM | Mixed (4 phases) |
+| `dependeval_benchmark` | 9 | 9 | Python, Java, JavaScript | Test suite | Refactoring, Maintenance |
+| `kubernetes_docs` | 5 | 5 | Go | LLM judge + test scripts | Documentation |
+| `big_code_mcp` | 4 | 4 | Go, Rust, C++, TypeScript | Test suite | Feature implementation |
+| `sweperf` | 3 | 3 | Python | Test suite | Testing & QA |
+| **Total** | **102** | **835** | | | |
 
 ---
 
@@ -41,7 +43,7 @@ benchmarks/              # Task definitions organized by benchmark suite
   kubernetes_docs/       #   K8s package documentation generation (5 tasks)
   big_code_mcp/          #   Large-repo code navigation (4 tasks)
   locobench_agent/       #   LoCoBench long-context agent tasks (50 tasks)
-  swebench_pro/          #   SWE-Bench Pro bug-fixing tasks (731 available, 50 selected)
+  swebench_pro/          #   SWE-Bench Pro bug-fixing tasks (731 available, 36 selected)
   github_mined/          #   GitHub-mined SWE tasks (25 tasks)
   ...                    #   Additional suites in development
 ralph/                   # Agent working directory
