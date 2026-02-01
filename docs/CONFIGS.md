@@ -90,14 +90,4 @@ The configuration is controlled by the `BASELINE_MCP_TYPE` environment variable 
 
 All three configs use `--dangerously-skip-permissions` for autonomous operation and deliver evaluation context via `--append-system-prompt`.
 
-## Other Configurations (Not Used in 3-Config Comparison)
-
-The agent also supports these modes, which are **not** part of the standard 3-config comparison:
-
-| `BASELINE_MCP_TYPE` | Description |
-|---|---|
-| `sourcegraph` | Full Sourcegraph MCP but local search tools (Grep, Glob) are **blocked**. Only Bash, Read, Edit are allowed as local tools. |
-| `deepsearch` | Deep Search-only MCP (`mcp__deepsearch__deepsearch`). Local search tools are **blocked**. |
-| `deepsearch_hybrid` | Deep Search MCP + all local tools (deprecated, use `sourcegraph_hybrid`). |
-
 Source: `~/evals/custom_agents/agents/claudecode/agents/claude_baseline_agent.py` lines 97-480
