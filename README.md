@@ -56,10 +56,17 @@ benchmarks/              # Task definitions organized by benchmark suite
   ccb_tac/               #   TheAgentCompany tasks (8 tasks)
 configs/                 # 3-config comparison shell runners + task selection
   run_selected_tasks.sh  #   Unified runner for all 125 tasks
-  locobench_3config.sh   #   Per-suite runner: LoCoBench
-  swebenchpro_3config.sh #   Per-suite runner: SWE-Bench Pro
-  bigcode_3config.sh     #   Per-suite runner: BigCode / Large Repo
-  k8s_docs_3config.sh    #   Per-suite runner: K8s Docs
+  locobench_3config.sh   #   Per-suite runner: LoCoBench (25 tasks)
+  swebenchpro_3config.sh #   Per-suite runner: SWE-Bench Pro (36 tasks)
+  bigcode_3config.sh     #   Per-suite runner: BigCode / Large Repo (4 tasks)
+  k8s_docs_3config.sh    #   Per-suite runner: K8s Docs (5 tasks)
+  pytorch_3config.sh     #   Per-suite runner: PyTorch (12 tasks)
+  repoqa_3config.sh      #   Per-suite runner: RepoQA (10 tasks)
+  dependeval_3config.sh  #   Per-suite runner: DependEval (9 tasks)
+  tac_3config.sh         #   Per-suite runner: TheAgentCompany (8 tasks)
+  dibench_3config.sh     #   Per-suite runner: DIBench (8 tasks)
+  crossrepo_3config.sh   #   Per-suite runner: CrossRepo (5 tasks)
+  sweperf_3config.sh     #   Per-suite runner: SWE-Perf (3 tasks)
   selected_benchmark_tasks.json  # Canonical task selection (125 tasks)
 scripts/                 # Metrics extraction and evaluation pipeline
   ccb_metrics/           #   Python package: models, extractors, discovery, judge context
@@ -119,10 +126,17 @@ bash configs/run_selected_tasks.sh --dry-run
 Per-suite runners are also available for individual benchmarks:
 
 ```bash
-bash configs/locobench_3config.sh        # 25 LoCoBench tasks
 bash configs/swebenchpro_3config.sh      # 36 SWE-Bench Pro tasks
-bash configs/bigcode_3config.sh          # 4 BigCode / Large Repo tasks
+bash configs/locobench_3config.sh        # 25 LoCoBench tasks
+bash configs/pytorch_3config.sh          # 12 PyTorch tasks
+bash configs/repoqa_3config.sh           # 10 RepoQA tasks
+bash configs/dependeval_3config.sh       # 9 DependEval tasks
+bash configs/tac_3config.sh              # 8 TheAgentCompany tasks
+bash configs/dibench_3config.sh          # 8 DIBench tasks
+bash configs/crossrepo_3config.sh        # 5 CrossRepo tasks
 bash configs/k8s_docs_3config.sh         # 5 K8s Docs tasks
+bash configs/bigcode_3config.sh          # 4 BigCode / Large Repo tasks
+bash configs/sweperf_3config.sh          # 3 SWE-Perf tasks
 ```
 
 All runners support `--baseline-only` and `--full-only` flags.
