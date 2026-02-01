@@ -142,6 +142,7 @@ BENCH_BASE = {
     'dependeval_benchmark': 'benchmarks/dependeval_benchmark',
     'sweperf': 'benchmarks/sweperf',
     'repoqa': 'benchmarks/repoqa',
+    '10figure': 'benchmarks/10figure',
 }
 
 for task in selection['tasks']:

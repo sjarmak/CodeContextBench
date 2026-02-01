@@ -2,18 +2,18 @@
 
 ## Overview
 
-Selected **102 tasks** from 835 available across 8 benchmarks, stratified by SDLC phase with MCP benefit scoring.
+Selected **117 tasks** from 835 available across 10 benchmarks, stratified by SDLC phase with MCP benefit scoring.
 
 ## SDLC Phase Coverage
 
 | SDLC Phase | Tasks | Benchmarks |
 |------------|-------|------------|
 | Requirements & Discovery | 2 | tac_mcp_value |
-| Architecture & Design | 9 | locobench_agent |
+| Architecture & Design | 10 | locobench_agent, 10figure |
 | Implementation (feature) | 8 | big_code_mcp, github_mined, tac_mcp_value |
-| Implementation (bug fix) | 50 | github_mined, locobench_agent, swebench_pro |
-| Implementation (refactoring) | 16 | dependeval_benchmark, locobench_agent |
-| Testing & QA | 4 | sweperf, tac_mcp_value |
+| Implementation (bug fix) | 51 | github_mined, locobench_agent, swebench_pro, 10figure |
+| Implementation (refactoring) | 18 | dependeval_benchmark, locobench_agent, 10figure |
+| Testing & QA | 5 | sweperf, tac_mcp_value, 10figure |
 | Documentation | 5 | kubernetes_docs |
 | Maintenance | 8 | dependeval_benchmark, tac_mcp_value |
 
@@ -29,13 +29,14 @@ Selected **102 tasks** from 835 available across 8 benchmarks, stratified by SDL
 | swebench_pro | 731 | 36 | Proportional by repo, prefer most files changed |
 | sweperf | 3 | 3 | All selected (small benchmark) |
 | tac_mcp_value | 8 | 8 | All selected (small benchmark) |
+| 10figure | 5 | 5 | All selected (small benchmark) |
 
 ## Language Distribution
 
 | Language | Tasks |
 |----------|-------|
 | python | 29 |
-| go | 19 |
+| go | 24 |
 | cpp | 17 |
 | typescript | 9 |
 | rust | 8 |

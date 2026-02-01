@@ -1,6 +1,6 @@
 # CodeContextBench Benchmarks
 
-This directory contains all benchmark task definitions for evaluating coding agents with and without Sourcegraph MCP. The canonical task selection is defined in [`selected_benchmark_tasks.json`](../selected_benchmark_tasks.json) (112 tasks across 9 benchmarks).
+This directory contains all benchmark task definitions for evaluating coding agents with and without Sourcegraph MCP. The canonical task selection is defined in [`selected_benchmark_tasks.json`](../selected_benchmark_tasks.json) (117 tasks across 10 benchmarks).
 
 See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection methodology.
 
@@ -94,6 +94,17 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
+### 10. [10figure/](10figure/) - Enterprise Codebase Challenges
+**Tasks**: 5
+**Languages**: Go
+**SDLC Phases**: Architecture & Design, Implementation (bug fix), Implementation (refactoring), Testing & QA
+**Focus**: API migration, bug localization, cross-file reasoning, symbol rename, and smoke testing on Kubernetes
+**Repository**: kubernetes/kubernetes
+**Task Format**: Harbor (task.toml, instruction.md, tests/)
+**Note**: Requires `harbor-10figure:base` Docker image built from `base/` directory.
+
+---
+
 ## Benchmark Summary
 
 | Benchmark | Tasks | Languages | SDLC Phase |
@@ -107,7 +118,8 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 | kubernetes_docs | 5 | Go | Documentation |
 | big_code_mcp | 4 | Go, Rust, C++, TypeScript | Feature implementation |
 | sweperf | 3 | Python | Testing & QA |
-| **Total** | **112** | | |
+| 10figure | 5 | Go | Architecture, Bug fix, Refactoring, Testing |
+| **Total** | **117** | | |
 
 ---
 
@@ -147,7 +159,7 @@ See [`docs/CONFIGS.md`](../docs/CONFIGS.md) for the full tool-by-tool breakdown 
 ## Archived Benchmarks
 
 Unused or superseded benchmarks have been moved to [`_archived/`](../_archived/):
-- `benchmarks_10figure/` - Enterprise codebase challenges (requires external corpus)
+- `benchmarks_10figure/` - Original 10figure prototype (superseded by benchmarks/10figure/)
 - `benchmarks_dibench/` - Dependency inference (adapter-based, variable task count)
 - `benchmarks_repoqa/` - Original RepoQA adapter (superseded by benchmarks/repoqa/)
 - `benchmarks_no_external_repos/` - Hello world, PRD bench, DevAI bench prototypes
