@@ -1,10 +1,9 @@
-Migrate from deprecated pointer.Int32() to generic ptr.To() API
+Migrate deprecated grpc.Dial() calls to grpc.NewClient() across the Go ecosystem
 
-Update all uses of pointer.Int32() to ptr.To[int32]() and pointer.Bool() to ptr.To()
+The gRPC Go library deprecated grpc.Dial() and grpc.DialContext() in favor of grpc.NewClient(). Find and update all deprecated gRPC dial calls across the etcd, kubernetes, and containerd codebases under /ccb_crossrepo/src/.
 
-
-
-Search hints:
-- Look for imports of k8s.io/utils/pointer
-- Find calls to pointer.Int32, pointer.Bool, pointer.String
-- Search in pkg/apis/ and test files
+For each callsite:
+- Replace grpc.Dial(target, opts...) with grpc.NewClient(target, opts...)
+- Replace grpc.DialContext(ctx, target, opts...) with grpc.NewClient(target, opts...)
+- Preserve any existing dial options and error handling
+- Do not modify proto definitions or generated code

@@ -130,6 +130,22 @@ for t in tasks:
         print(os.path.relpath(t['task_dir'], 'ccb_dependeval'))
 ")
 
+# Sourcegraph repo name mapping for DependEval tasks
+# These override SOURCEGRAPH_REPO_NAME so the agent searches the correct repo
+# All repos are dormant (last commits 2014-2023); HEAD = correct snapshot
+# RC tasks now included - their repos were identified from code_content.txt
+declare -A TASK_SG_REPO_NAMES=(
+    ["DR_java/dependency_recognition-java-unknown"]="sg-benchmarks/AccountAuthenticator--c01b5a75"
+    ["DR_javascript/dependency_recognition-javascript-unknown"]="sg-benchmarks/FitnessApp--2f7897cc"
+    ["DR_python/dependency_recognition-python-unknown"]="sg-benchmarks/SRCNN-pytorch--064dbaac"
+    ["ME_java/multifile_editing-java-unknown"]="sg-benchmarks/Android-DraggableGridViewPager--7233dbf9"
+    ["ME_javascript/multifile_editing-javascript-unknown"]="sg-benchmarks/React-Native-Reflective-UI--3bdf4020"
+    ["ME_python/multifile_editing-python-unknown"]="sg-benchmarks/SRCNN-pytorch--064dbaac"
+    ["RC_java/repo_construction-java-unknown"]="sg-benchmarks/ProviGen--80c8a202"
+    ["RC_javascript/repo_construction-javascript-unknown"]="sg-benchmarks/cypress-plugin-snapshots--a8bd8838"
+    ["RC_python/repo_construction-python-unknown"]="sg-benchmarks/katana-skipper--053ef083"
+)
+
 # Derive short model name for run directory (matches V2 id_generator convention)
 _model_lower=$(echo "$MODEL" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')
 case "$_model_lower" in
@@ -183,6 +199,15 @@ run_task_batch() {
         fi
 
         echo "Running task: $task_dir ($mode)"
+
+        # Set Sourcegraph repo name override for this task (if mapped)
+        local sg_repo="${TASK_SG_REPO_NAMES[$task_dir]:-}"
+        if [ -n "$sg_repo" ]; then
+            echo "  SOURCEGRAPH_REPO_NAME: $sg_repo"
+            export SOURCEGRAPH_REPO_NAME="$sg_repo"
+        else
+            unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
+        fi
 
         BASELINE_MCP_TYPE=$mcp_type harbor run \
             --path "$task_path" \

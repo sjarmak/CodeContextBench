@@ -134,7 +134,7 @@ for t in tasks:
 declare -A TASK_SG_REPO_NAMES=(
     ["big-code-k8s-001"]="sg-benchmarks/kubernetes--latest"
     ["big-code-servo-001"]="sg-benchmarks/servo--latest"
-    ["big-code-trt-001"]="sg-benchmarks/TensorRT--latest"
+    ["big-code-trt-001"]="sg-benchmarks/TensorRT-LLM--latest"
     ["big-code-vsc-001"]="sg-benchmarks/vscode--latest"
 )
 

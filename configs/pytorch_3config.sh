@@ -129,6 +129,23 @@ for t in tasks:
         print(t['task_id'])
 ")
 
+# Sourcegraph repo name mapping for PyTorch tasks
+# Each task uses a specific pytorch commit; repos are indexed as pytorch--{hash8}
+declare -A TASK_SG_REPO_NAMES=(
+    ["sgt-001"]="sg-benchmarks/pytorch--ca246612"
+    ["sgt-002"]="sg-benchmarks/pytorch--ca246612"
+    ["sgt-003"]="sg-benchmarks/pytorch--d18007a1"
+    ["sgt-005"]="sg-benchmarks/pytorch--ca246612"
+    ["sgt-008"]="sg-benchmarks/pytorch--863edc78"
+    ["sgt-009"]="sg-benchmarks/pytorch--863edc78"
+    ["sgt-010"]="sg-benchmarks/pytorch--5811a8d7"
+    ["sgt-012"]="sg-benchmarks/pytorch--e3e93c71"
+    ["sgt-014"]="sg-benchmarks/pytorch--cbe1a35d"
+    ["sgt-016"]="sg-benchmarks/pytorch--cbe1a35d"
+    ["sgt-021"]="sg-benchmarks/pytorch--cbe1a35d"
+    ["sgt-025"]="sg-benchmarks/pytorch--e8ca8cc3"
+)
+
 # Derive short model name for run directory (matches V2 id_generator convention)
 _model_lower=$(echo "$MODEL" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')
 case "$_model_lower" in
@@ -155,69 +172,79 @@ echo "Run MCP-NoDeepSearch: ${RUN_NO_DEEPSEARCH}"
 echo "Run MCP-Full: ${RUN_FULL}"
 echo ""
 
-# Create task list file for Harbor
-TASK_LIST_FILE="${JOBS_BASE}/task_list.txt"
 mkdir -p "${JOBS_BASE}"
 
-for task_id in "${TASK_IDS[@]}"; do
-    echo "${TASKS_DIR}/${task_id}" >> "${TASK_LIST_FILE}"
-done
+# ============================================
+# HELPER FUNCTIONS
+# ============================================
+log_section() {
+    echo ""
+    echo "========================================"
+    echo "$1"
+    echo "========================================"
+    echo ""
+}
+
+run_task_batch() {
+    local mode=$1
+    local mcp_type=$2
+    local jobs_subdir="${JOBS_BASE}/${mode}"
+
+    log_section "Running PyTorch - Mode: $mode"
+
+    mkdir -p "$jobs_subdir"
+
+    for task_id in "${TASK_IDS[@]}"; do
+        local task_path="${TASKS_DIR}/${task_id}"
+
+        if [ ! -d "$task_path" ]; then
+            echo "ERROR: Task directory not found: $task_path"
+            continue
+        fi
+
+        echo "Running task: $task_id ($mode)"
+
+        # Set Sourcegraph repo name override for this task (if mapped)
+        local sg_repo="${TASK_SG_REPO_NAMES[$task_id]:-}"
+        if [ -n "$sg_repo" ]; then
+            echo "  SOURCEGRAPH_REPO_NAME: $sg_repo"
+            export SOURCEGRAPH_REPO_NAME="$sg_repo"
+        else
+            unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
+        fi
+
+        BASELINE_MCP_TYPE=$mcp_type harbor run \
+            --path "$task_path" \
+            --agent-import-path "$AGENT_PATH" \
+            --model "$MODEL" \
+            --jobs-dir "$jobs_subdir" \
+            -n $CONCURRENCY \
+            --timeout-multiplier $TIMEOUT_MULTIPLIER \
+            2>&1 | tee "${jobs_subdir}/${task_id}.log" \
+            || {
+                echo "WARNING: Task $task_id failed (exit code: $?)"
+                echo "Continuing with remaining tasks..."
+            }
+
+        echo ""
+    done
+
+    log_section "Completed PyTorch - Mode: $mode"
+}
 
 # ============================================
-# RUN BASELINE (no MCP)
+# MAIN EXECUTION
 # ============================================
 if [ "$RUN_BASELINE" = true ]; then
-    echo ""
-    echo "[BASELINE] Starting 12-task baseline run..."
-    echo ""
-
-    BASELINE_MCP_TYPE=none harbor run \
-        --path "${TASKS_DIR}" \
-        --task-name "*" \
-        --agent-import-path "${AGENT_PATH}" \
-        --model "${MODEL}" \
-        --jobs-dir "${JOBS_BASE}/baseline" \
-        -n ${CONCURRENCY} \
-        --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
-        2>&1 | tee "${JOBS_BASE}/baseline.log"
+    run_task_batch "baseline" "none"
 fi
 
-# ============================================
-# RUN MCP-NoDeepSearch (sourcegraph_no_deepsearch)
-# ============================================
 if [ "$RUN_NO_DEEPSEARCH" = true ]; then
-    echo ""
-    echo "[MCP-NoDeepSearch] Starting 12-task MCP-NoDeepSearch run..."
-    echo ""
-
-    BASELINE_MCP_TYPE=sourcegraph_no_deepsearch harbor run \
-        --path "${TASKS_DIR}" \
-        --task-name "*" \
-        --agent-import-path "${AGENT_PATH}" \
-        --model "${MODEL}" \
-        --jobs-dir "${JOBS_BASE}/sourcegraph_no_deepsearch" \
-        -n ${CONCURRENCY} \
-        --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
-        2>&1 | tee "${JOBS_BASE}/sourcegraph_no_deepsearch.log"
+    run_task_batch "sourcegraph_no_deepsearch" "sourcegraph_no_deepsearch"
 fi
 
-# ============================================
-# RUN MCP-Full (sourcegraph_hybrid)
-# ============================================
 if [ "$RUN_FULL" = true ]; then
-    echo ""
-    echo "[MCP-Full] Starting 12-task MCP-Full run..."
-    echo ""
-
-    BASELINE_MCP_TYPE=sourcegraph_hybrid harbor run \
-        --path "${TASKS_DIR}" \
-        --task-name "*" \
-        --agent-import-path "${AGENT_PATH}" \
-        --model "${MODEL}" \
-        --jobs-dir "${JOBS_BASE}/sourcegraph_hybrid" \
-        -n ${CONCURRENCY} \
-        --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
-        2>&1 | tee "${JOBS_BASE}/sourcegraph_hybrid.log"
+    run_task_batch "sourcegraph_hybrid" "sourcegraph_hybrid"
 fi
 
 echo ""
@@ -227,17 +254,4 @@ echo "=============================================="
 echo "Results saved to: ${JOBS_BASE}"
 echo ""
 echo "View results:"
-if [ "$RUN_BASELINE" = true ]; then
-    echo "  # Baseline summary"
-    echo "  cat ${JOBS_BASE}/baseline/*/result.json | jq -s 'map(.trials[].verifier_result.rewards.reward) | {mean: (add/length), count: length}'"
-    echo ""
-fi
-if [ "$RUN_NO_DEEPSEARCH" = true ]; then
-    echo "  # MCP-NoDeepSearch summary"
-    echo "  cat ${JOBS_BASE}/sourcegraph_no_deepsearch/*/result.json | jq -s 'map(.trials[].verifier_result.rewards.reward) | {mean: (add/length), count: length}'"
-    echo ""
-fi
-if [ "$RUN_FULL" = true ]; then
-    echo "  # MCP-Full summary"
-    echo "  cat ${JOBS_BASE}/sourcegraph_hybrid/*/result.json | jq -s 'map(.trials[].verifier_result.rewards.reward) | {mean: (add/length), count: length}'"
-fi
+echo "  cat ${JOBS_BASE}/*/*/result.json | jq -r '.trials[].verifier_result.rewards.reward'"

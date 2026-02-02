@@ -129,6 +129,21 @@ for t in tasks:
         print(t['task_id'])
 ")
 
+# Sourcegraph repo name mapping for RepoQA tasks
+# These override SOURCEGRAPH_REPO_NAME so the agent searches the correct repo
+declare -A TASK_SG_REPO_NAMES=(
+    ["ccb_repoqa-cpp-apache-logging-log4cxx-03"]="sg-benchmarks/apache--logging-log4cxx--502f5711"
+    ["ccb_repoqa-cpp-skypjack-uvw-00"]="sg-benchmarks/skypjack--uvw--ba10b276"
+    ["ccb_repoqa-java-google-gson-03"]="sg-benchmarks/google--gson--ee61e3f0"
+    ["ccb_repoqa-java-square-retrofit-04"]="sg-benchmarks/square--retrofit--10014c2b"
+    ["ccb_repoqa-python-psf-black-01"]="sg-benchmarks/psf--black--f03ee113"
+    ["ccb_repoqa-python-python-poetry-poetry-08"]="sg-benchmarks/python-poetry--poetry--21ffd992"
+    ["ccb_repoqa-rust-rust-bakery-nom-06"]="sg-benchmarks/rust-bakery--nom--e87c7da9"
+    ["ccb_repoqa-rust-helix-editor-helix-03"]="sg-benchmarks/helix-editor--helix--e69292e5"
+    ["ccb_repoqa-typescript-xenova-transformers.js-08"]="sg-benchmarks/xenova--transformers.js--64274313"
+    ["ccb_repoqa-typescript-expressjs-express-07"]="sg-benchmarks/expressjs--express--815f7993"
+)
+
 # Derive short model name for run directory (matches V2 id_generator convention)
 _model_lower=$(echo "$MODEL" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')
 case "$_model_lower" in
@@ -155,69 +170,79 @@ echo "Run MCP-NoDeepSearch: ${RUN_NO_DEEPSEARCH}"
 echo "Run MCP-Full: ${RUN_FULL}"
 echo ""
 
-# Create task list file for Harbor
-TASK_LIST_FILE="${JOBS_BASE}/task_list.txt"
 mkdir -p "${JOBS_BASE}"
 
-for task_id in "${TASK_IDS[@]}"; do
-    echo "${TASKS_DIR}/${task_id}" >> "${TASK_LIST_FILE}"
-done
+# ============================================
+# HELPER FUNCTIONS
+# ============================================
+log_section() {
+    echo ""
+    echo "========================================"
+    echo "$1"
+    echo "========================================"
+    echo ""
+}
+
+run_task_batch() {
+    local mode=$1
+    local mcp_type=$2
+    local jobs_subdir="${JOBS_BASE}/${mode}"
+
+    log_section "Running RepoQA - Mode: $mode"
+
+    mkdir -p "$jobs_subdir"
+
+    for task_id in "${TASK_IDS[@]}"; do
+        local task_path="${TASKS_DIR}/${task_id}"
+
+        if [ ! -d "$task_path" ]; then
+            echo "ERROR: Task directory not found: $task_path"
+            continue
+        fi
+
+        echo "Running task: $task_id ($mode)"
+
+        # Set Sourcegraph repo name override for this task (if mapped)
+        local sg_repo="${TASK_SG_REPO_NAMES[$task_id]:-}"
+        if [ -n "$sg_repo" ]; then
+            echo "  SOURCEGRAPH_REPO_NAME: $sg_repo"
+            export SOURCEGRAPH_REPO_NAME="$sg_repo"
+        else
+            unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
+        fi
+
+        BASELINE_MCP_TYPE=$mcp_type harbor run \
+            --path "$task_path" \
+            --agent-import-path "$AGENT_PATH" \
+            --model "$MODEL" \
+            --jobs-dir "$jobs_subdir" \
+            -n $CONCURRENCY \
+            --timeout-multiplier $TIMEOUT_MULTIPLIER \
+            2>&1 | tee "${jobs_subdir}/${task_id}.log" \
+            || {
+                echo "WARNING: Task $task_id failed (exit code: $?)"
+                echo "Continuing with remaining tasks..."
+            }
+
+        echo ""
+    done
+
+    log_section "Completed RepoQA - Mode: $mode"
+}
 
 # ============================================
-# RUN BASELINE (no MCP)
+# MAIN EXECUTION
 # ============================================
 if [ "$RUN_BASELINE" = true ]; then
-    echo ""
-    echo "[BASELINE] Starting 10-task baseline run..."
-    echo ""
-
-    BASELINE_MCP_TYPE=none harbor run \
-        --path "${TASKS_DIR}" \
-        --task-name "*" \
-        --agent-import-path "${AGENT_PATH}" \
-        --model "${MODEL}" \
-        --jobs-dir "${JOBS_BASE}/baseline" \
-        -n ${CONCURRENCY} \
-        --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
-        2>&1 | tee "${JOBS_BASE}/baseline.log"
+    run_task_batch "baseline" "none"
 fi
 
-# ============================================
-# RUN MCP-NoDeepSearch (sourcegraph_no_deepsearch)
-# ============================================
 if [ "$RUN_NO_DEEPSEARCH" = true ]; then
-    echo ""
-    echo "[MCP-NoDeepSearch] Starting 10-task MCP-NoDeepSearch run..."
-    echo ""
-
-    BASELINE_MCP_TYPE=sourcegraph_no_deepsearch harbor run \
-        --path "${TASKS_DIR}" \
-        --task-name "*" \
-        --agent-import-path "${AGENT_PATH}" \
-        --model "${MODEL}" \
-        --jobs-dir "${JOBS_BASE}/sourcegraph_no_deepsearch" \
-        -n ${CONCURRENCY} \
-        --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
-        2>&1 | tee "${JOBS_BASE}/sourcegraph_no_deepsearch.log"
+    run_task_batch "sourcegraph_no_deepsearch" "sourcegraph_no_deepsearch"
 fi
 
-# ============================================
-# RUN MCP-Full (sourcegraph_hybrid)
-# ============================================
 if [ "$RUN_FULL" = true ]; then
-    echo ""
-    echo "[MCP-Full] Starting 10-task MCP-Full run..."
-    echo ""
-
-    BASELINE_MCP_TYPE=sourcegraph_hybrid harbor run \
-        --path "${TASKS_DIR}" \
-        --task-name "*" \
-        --agent-import-path "${AGENT_PATH}" \
-        --model "${MODEL}" \
-        --jobs-dir "${JOBS_BASE}/sourcegraph_hybrid" \
-        -n ${CONCURRENCY} \
-        --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
-        2>&1 | tee "${JOBS_BASE}/sourcegraph_hybrid.log"
+    run_task_batch "sourcegraph_hybrid" "sourcegraph_hybrid"
 fi
 
 echo ""
@@ -227,17 +252,4 @@ echo "=============================================="
 echo "Results saved to: ${JOBS_BASE}"
 echo ""
 echo "View results:"
-if [ "$RUN_BASELINE" = true ]; then
-    echo "  # Baseline summary"
-    echo "  cat ${JOBS_BASE}/baseline/*/result.json | jq -s 'map(.trials[].verifier_result.rewards.reward) | {mean: (add/length), count: length}'"
-    echo ""
-fi
-if [ "$RUN_NO_DEEPSEARCH" = true ]; then
-    echo "  # MCP-NoDeepSearch summary"
-    echo "  cat ${JOBS_BASE}/sourcegraph_no_deepsearch/*/result.json | jq -s 'map(.trials[].verifier_result.rewards.reward) | {mean: (add/length), count: length}'"
-    echo ""
-fi
-if [ "$RUN_FULL" = true ]; then
-    echo "  # MCP-Full summary"
-    echo "  cat ${JOBS_BASE}/sourcegraph_hybrid/*/result.json | jq -s 'map(.trials[].verifier_result.rewards.reward) | {mean: (add/length), count: length}'"
-fi
+echo "  cat ${JOBS_BASE}/*/*/result.json | jq -r '.verifier_result.rewards | .reward // .score'"

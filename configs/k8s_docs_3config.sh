@@ -190,6 +190,7 @@ if [ "$RUN_NO_DEEPSEARCH" = true ]; then
     echo "[MCP-NoDeepSearch] Starting 5-task MCP-NoDeepSearch run..."
     echo ""
 
+    SOURCEGRAPH_REPO_NAME="sg-benchmarks/kubernetes--8c9c67c0" \
     BASELINE_MCP_TYPE=sourcegraph_no_deepsearch harbor run \
         --path "${TASKS_DIR}" \
         --task-name "*" \
@@ -209,6 +210,7 @@ if [ "$RUN_FULL" = true ]; then
     echo "[MCP-Full] Starting 5-task MCP-Full run..."
     echo ""
 
+    SOURCEGRAPH_REPO_NAME="sg-benchmarks/kubernetes--8c9c67c0" \
     BASELINE_MCP_TYPE=sourcegraph_hybrid harbor run \
         --path "${TASKS_DIR}" \
         --task-name "*" \
