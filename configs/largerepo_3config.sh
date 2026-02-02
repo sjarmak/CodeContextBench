@@ -163,6 +163,24 @@ log_section() {
     echo ""
 }
 
+# Extract per-task metrics for Dashboard
+extract_all_metrics() {
+    local jobs_dir=$1
+    local benchmark=$2
+    local config=$3
+    echo "Extracting per-task metrics from $jobs_dir..."
+    for result_dir in "$jobs_dir"/*/*/; do
+        if [ -f "$result_dir/result.json" ] && [ ! -f "$result_dir/task_metrics.json" ]; then
+            python3 "$SCRIPT_DIR/../scripts/extract_task_metrics.py" \
+                --task-dir "$result_dir" \
+                --benchmark "$benchmark" \
+                --config "$config" \
+                --selected-tasks "$SELECTION_FILE" \
+                2>&1 || echo "  WARNING: metrics extraction failed for $(basename $result_dir)"
+        fi
+    done
+}
+
 run_task_batch() {
     local mode=$1
     local mcp_type=$2
@@ -219,6 +237,9 @@ run_task_batch() {
 
         echo ""
     done
+
+    # Extract metrics for all completed tasks in this mode
+    extract_all_metrics "$jobs_subdir" "ccb_largerepo" "$mode"
 
     log_section "Completed Big Code MCP - Mode: $mode"
     echo "Job results: $jobs_subdir"
