@@ -164,6 +164,27 @@ for task_id in "${TASK_IDS[@]}"; do
 done
 
 # ============================================
+# HELPER FUNCTIONS
+# ============================================
+# Extract per-task metrics for Dashboard
+extract_all_metrics() {
+    local jobs_dir=$1
+    local benchmark=$2
+    local config=$3
+    echo "Extracting per-task metrics from $jobs_dir..."
+    for result_dir in "$jobs_dir"/*/*/; do
+        if [ -f "$result_dir/result.json" ] && [ ! -f "$result_dir/task_metrics.json" ]; then
+            python3 "$SCRIPT_DIR/../scripts/extract_task_metrics.py" \
+                --task-dir "$result_dir" \
+                --benchmark "$benchmark" \
+                --config "$config" \
+                --selected-tasks "$SELECTION_FILE" \
+                2>&1 || echo "  WARNING: metrics extraction failed for $(basename $result_dir)"
+        fi
+    done
+}
+
+# ============================================
 # RUN BASELINE (no MCP)
 # ============================================
 if [ "$RUN_BASELINE" = true ]; then
@@ -180,6 +201,8 @@ if [ "$RUN_BASELINE" = true ]; then
         -n ${CONCURRENCY} \
         --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
         2>&1 | tee "${JOBS_BASE}/baseline.log"
+
+    extract_all_metrics "${JOBS_BASE}/baseline" "ccb_locobench" "baseline"
 fi
 
 # ============================================
@@ -199,6 +222,8 @@ if [ "$RUN_NO_DEEPSEARCH" = true ]; then
         -n ${CONCURRENCY} \
         --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
         2>&1 | tee "${JOBS_BASE}/sourcegraph_no_deepsearch.log"
+
+    extract_all_metrics "${JOBS_BASE}/sourcegraph_no_deepsearch" "ccb_locobench" "sourcegraph_no_deepsearch"
 fi
 
 # ============================================
@@ -218,6 +243,8 @@ if [ "$RUN_FULL" = true ]; then
         -n ${CONCURRENCY} \
         --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
         2>&1 | tee "${JOBS_BASE}/sourcegraph_hybrid.log"
+
+    extract_all_metrics "${JOBS_BASE}/sourcegraph_hybrid" "ccb_locobench" "sourcegraph_hybrid"
 fi
 
 echo ""
