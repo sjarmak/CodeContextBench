@@ -54,7 +54,7 @@ RUN apt-get update && apt-get install -y php php-cli php-mbstring \
     && rm -rf /var/lib/apt/lists/*
 
 # Create working directories
-RUN mkdir -p /app /logs /workspace /tests
+RUN mkdir -p /app /logs /workspace
 
 # Copy project files (project/ is inside environment/ directory)
 COPY project /app/project

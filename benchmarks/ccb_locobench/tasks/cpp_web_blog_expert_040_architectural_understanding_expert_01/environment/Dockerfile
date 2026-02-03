@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y python3 python3-pip \
 
 # Create working directories with world-writable permissions for session files
 # This allows Harbor to read Claude Code session files regardless of user ownership
-RUN mkdir -p /app /logs /workspace /tests /installed-agent &&     chmod 777 /logs /workspace /tests /installed-agent
+RUN mkdir -p /app /logs /workspace /installed-agent &&     chmod 777 /logs /workspace /installed-agent
 
 # Copy project files
 COPY project /app/project
