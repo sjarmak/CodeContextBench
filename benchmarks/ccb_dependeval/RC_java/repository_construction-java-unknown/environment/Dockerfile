@@ -15,13 +15,8 @@ RUN pip install --no-cache-dir \
     networkx \
     pygments
 
-# Copy evaluation scripts, ground truth, and code content
-COPY eval_scripts/ /workspace/eval_scripts/
-COPY ground_truth.json /workspace/ground_truth.json
+# Copy code content for agent analysis
 COPY code_content.txt /workspace/code_content.txt
-
-# Make evaluation scripts executable
-RUN chmod +x /workspace/eval_scripts/*.py
 
 # Set up output directory
 RUN mkdir -p /logs/verifier
