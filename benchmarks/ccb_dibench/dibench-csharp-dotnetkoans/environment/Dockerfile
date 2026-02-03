@@ -11,8 +11,7 @@ RUN apt-get update -qq && apt-get install -y -qq wget && \
     wget -q https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb && \
     dpkg -i packages-microsoft-prod.deb && rm packages-microsoft-prod.deb && \
     apt-get update -qq && apt-get install -y -qq dotnet-sdk-8.0
-# Copy repo and validators
+# Copy repo
 COPY repo /app/repo
-COPY validators.py /app/validators.py
 
 WORKDIR /app/repo

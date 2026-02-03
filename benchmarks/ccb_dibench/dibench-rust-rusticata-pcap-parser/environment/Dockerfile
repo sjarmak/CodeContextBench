@@ -9,8 +9,7 @@ RUN apt-get update -qq && apt-get install -y -qq \
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:$PATH"
-# Copy repo and validators
+# Copy repo
 COPY repo /app/repo
-COPY validators.py /app/validators.py
 
 WORKDIR /app/repo

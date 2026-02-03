@@ -7,8 +7,7 @@ RUN apt-get update -qq && apt-get install -y -qq \
     && rm -rf /var/lib/apt/lists/*
 
 # Python already installed above
-# Copy repo and validators
+# Copy repo
 COPY repo /app/repo
-COPY validators.py /app/validators.py
 
 WORKDIR /app/repo

@@ -5,7 +5,7 @@ set -e
 # Note: Original uses LLM-based evaluation, we use simpler scoring
 
 SUBMISSION_FILE="/workspace/submission.json"
-GROUND_TRUTH_FILE="/workspace/ground_truth.json"
+GROUND_TRUTH_FILE="/tests/ground_truth.json"
 REWARD_FILE="/logs/verifier/reward.txt"
 
 # Ensure output directory exists
@@ -18,7 +18,7 @@ if [ ! -f "$SUBMISSION_FILE" ]; then
 fi
 
 # Run evaluation
-python3 /workspace/eval_scripts/eval_me.py \
+python3 /tests/eval_scripts/eval_me.py \
     --prediction "$SUBMISSION_FILE" \
     --ground_truth "$GROUND_TRUTH_FILE" \
     --output "$REWARD_FILE"

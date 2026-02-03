@@ -9,8 +9,7 @@ RUN apt-get update -qq && apt-get install -y -qq \
 # Install Node.js
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs
-# Copy repo and validators
+# Copy repo
 COPY repo /app/repo
-COPY validators.py /app/validators.py
 
 WORKDIR /app/repo

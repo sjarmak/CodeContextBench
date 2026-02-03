@@ -5,7 +5,7 @@ set -e
 # Evaluates call chain graph similarity using F1 score
 
 SUBMISSION_FILE="/workspace/submission.json"
-GROUND_TRUTH_FILE="/workspace/ground_truth.json"
+GROUND_TRUTH_FILE="/tests/ground_truth.json"
 REWARD_FILE="/logs/verifier/reward.txt"
 
 # Ensure output directory exists
@@ -18,7 +18,7 @@ if [ ! -f "$SUBMISSION_FILE" ]; then
 fi
 
 # Run evaluation
-python3 /workspace/eval_scripts/eval_rc.py \
+python3 /tests/eval_scripts/eval_rc.py \
     --prediction "$SUBMISSION_FILE" \
     --ground_truth "$GROUND_TRUTH_FILE" \
     --output "$REWARD_FILE"

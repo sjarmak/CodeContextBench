@@ -9,7 +9,7 @@ cd /app/repo
 
 python3 << 'EOF'
 import sys
-sys.path.insert(0, '/app')
+sys.path.insert(0, '/tests')
 
 from validators import validate_task
 from pathlib import Path
