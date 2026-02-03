@@ -1,5 +1,5 @@
 #!/bin/bash
-# DependEval 9-Task 3-Config Comparison Script
+# DependEval 6-Task 3-Config Comparison Script
 #
 # Runs selected DependEval tasks (from selected_benchmark_tasks.json) across 3 configurations:
 #   1. Baseline (no MCP)
@@ -139,13 +139,12 @@ for t in tasks:
 # These override SOURCEGRAPH_REPO_NAME so the agent searches the correct repo
 # All repos are dormant (last commits 2014-2023); HEAD = correct snapshot
 # RC tasks now included - their repos were identified from code_content.txt
+# NOTE: ME (multifile_editing) tasks excluded — incomplete task packaging
+#       (missing code_content.txt, empty problem statements, wrong ground_truth format)
 declare -A TASK_SG_REPO_NAMES=(
     ["DR_java/dependency_recognition-java-unknown"]="sg-benchmarks/AccountAuthenticator--c01b5a75"
     ["DR_javascript/dependency_recognition-javascript-unknown"]="sg-benchmarks/FitnessApp--2f7897cc"
     ["DR_python/dependency_recognition-python-unknown"]="sg-benchmarks/SRCNN-pytorch--064dbaac"
-    ["ME_java/multifile_editing-java-unknown"]="sg-benchmarks/Android-DraggableGridViewPager--7233dbf9"
-    ["ME_javascript/multifile_editing-javascript-unknown"]="sg-benchmarks/React-Native-Reflective-UI--3bdf4020"
-    ["ME_python/multifile_editing-python-unknown"]="sg-benchmarks/SRCNN-pytorch--064dbaac"
     ["RC_java/repo_construction-java-unknown"]="sg-benchmarks/ProviGen--80c8a202"
     ["RC_javascript/repo_construction-javascript-unknown"]="sg-benchmarks/cypress-plugin-snapshots--a8bd8838"
     ["RC_python/repo_construction-python-unknown"]="sg-benchmarks/katana-skipper--053ef083"
@@ -250,6 +249,7 @@ run_task_batch() {
 
     # Extract metrics for all completed tasks in this mode
     extract_all_metrics "$jobs_subdir" "ccb_dependeval" "$mode"
+    validate_and_report "$jobs_subdir" "$mode"
 
     log_section "Completed DependEval - Mode: $mode"
 }
@@ -257,7 +257,7 @@ run_task_batch() {
 # ============================================
 # MAIN EXECUTION
 # ============================================
-log_section "DependEval 9-Task 3-Config Benchmark Comparison"
+log_section "DependEval 6-Task 3-Config Benchmark Comparison"
 echo "Starting benchmark run..."
 echo "  Baseline: $RUN_BASELINE"
 echo "  MCP-Base: $RUN_BASE"
@@ -280,6 +280,8 @@ fi
 if [ "$RUN_FULL" = true ]; then
     run_task_batch "sourcegraph_full" "sourcegraph_full"
 fi
+
+print_validation_summary "$JOBS_BASE"
 
 log_section "Benchmark Complete"
 echo "Results saved to: $JOBS_BASE"
