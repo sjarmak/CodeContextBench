@@ -135,7 +135,6 @@ def get_benchmark_name_mapping() -> dict[str, str]:
         "k8s_docs": "ccb_k8sdocs",
         "ccb_pytorch": "ccb_pytorch",
         "ccb_tac": "ccb_tac",
-        "dependeval": "ccb_dependeval",
         "ccb_sweperf": "ccb_sweperf",
     }
 

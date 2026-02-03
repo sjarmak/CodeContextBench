@@ -14,14 +14,13 @@ This repository contains **benchmark task definitions**, **evaluation configs**,
 | `ccb_locobench` | 25 | 9 languages | LLM judge + semantic similarity | Architecture, Refactoring |
 | `ccb_pytorch` | 12 | C++ | LLM judge + test suite | Bug fixing |
 | `ccb_repoqa` | 10 | Python, C++, Java, Rust, TypeScript | LLM judge + path/name matching | Code navigation |
-| `ccb_dependeval` | 9 | Python, Java, JavaScript | LLM judge + test suite | Refactoring, Maintenance |
 | `ccb_tac` | 8 | C++, Python | LLM judge + deterministic checks | Mixed (4 phases) |
 | `ccb_dibench` | 8 | Python, Rust, JavaScript, C# | LLM judge + syntax/dependency validation | Dependency inference |
 | `ccb_k8sdocs` | 5 | Go | LLM judge + test scripts | Documentation |
 | `ccb_crossrepo` | 5 | Go | LLM judge + test suite | Architecture, Refactoring, Bug fix, Testing |
 | `ccb_largerepo` | 4 | Go, Rust, C++, TypeScript | LLM judge + test suite | Feature implementation |
 | `ccb_sweperf` | 3 | Python | LLM judge + test suite | Testing & QA |
-| **Total** | **125** | | | |
+| **Total** | **116** | | | |
 
 ---
 
@@ -44,7 +43,6 @@ See [docs/CONFIGS.md](docs/CONFIGS.md) for the full tool-by-tool breakdown.
 ```
 benchmarks/              # Task definitions organized by benchmark suite
   ccb_crossrepo/         #   Enterprise codebase challenges (5 tasks)
-  ccb_dependeval/        #   Multi-file & cross-repo tasks (9 tasks)
   ccb_dibench/           #   Dependency inference tasks (8 tasks)
   ccb_k8sdocs/           #   K8s package documentation generation (5 tasks)
   ccb_largerepo/         #   Large-repo code navigation (4 tasks)
@@ -62,7 +60,6 @@ configs/                 # 3-config comparison shell runners + task selection
   k8s_docs_3config.sh    #   Per-suite runner: K8s Docs (5 tasks)
   pytorch_3config.sh     #   Per-suite runner: PyTorch (12 tasks)
   repoqa_3config.sh      #   Per-suite runner: RepoQA (10 tasks)
-  dependeval_3config.sh  #   Per-suite runner: DependEval (9 tasks)
   tac_3config.sh         #   Per-suite runner: TheAgentCompany (8 tasks)
   dibench_3config.sh     #   Per-suite runner: DIBench (8 tasks)
   crossrepo_3config.sh   #   Per-suite runner: CrossRepo (5 tasks)
@@ -110,10 +107,10 @@ See `python3 scripts/generate_eval_report.py --help` for all options.
 
 ## Running with Harbor
 
-The unified runner executes all 125 tasks across the 3-config matrix:
+The unified runner executes all 116 tasks across the 3-config matrix:
 
 ```bash
-# Run all 125 tasks across 3 configs
+# Run all 116 tasks across 3 configs
 bash configs/run_selected_tasks.sh
 
 # Run only the baseline config
@@ -130,7 +127,6 @@ bash configs/swebenchpro_3config.sh      # 36 SWE-Bench Pro tasks
 bash configs/locobench_3config.sh        # 25 LoCoBench tasks
 bash configs/pytorch_3config.sh          # 12 PyTorch tasks
 bash configs/repoqa_3config.sh           # 10 RepoQA tasks
-bash configs/dependeval_3config.sh       # 9 DependEval tasks
 bash configs/tac_3config.sh              # 8 TheAgentCompany tasks
 bash configs/dibench_3config.sh          # 8 DIBench tasks
 bash configs/crossrepo_3config.sh        # 5 CrossRepo tasks

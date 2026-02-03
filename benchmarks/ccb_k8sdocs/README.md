@@ -503,7 +503,6 @@ A single `doc.go` file with comprehensive package documentation.
 This benchmark builds on:
 
 - [CodeContextBench ccb_largerepo](../ccb_largerepo/) - Large codebase tasks
-- [dependeval](../ccb_dependeval/) - Multi-file reasoning
 - [ccb_crossrepo](../ccb_crossrepo/) - Enterprise codebase understanding
 
 ## References
