@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Select ~100 benchmark tasks stratified by SDLC phase with MCP benefit scoring.
 
-Reads task.toml files from 8 benchmarks under benchmarks/, assigns each task an
+Reads task.toml files from 7 benchmarks under benchmarks/, assigns each task an
 SDLC phase and MCP benefit score, then performs stratified selection to produce
 selected_benchmark_tasks.json and docs/TASK_SELECTION.md.
 """
@@ -54,15 +54,12 @@ SDLC_PHASE_MAP: dict[tuple[str, str], str] = {
     ("ccb_locobench", "bug_investigation"): "Implementation (bug fix)",
     # Implementation (refactoring)
     ("ccb_locobench", "cross_file_refactoring"): "Implementation (refactoring)",
-    ("ccb_dependeval", "multifile_editing"): "Implementation (refactoring)",
     # Testing & QA
     ("ccb_tac", "unit-test"): "Testing & QA",
     ("ccb_sweperf", "performance"): "Testing & QA",
     # Documentation
     ("ccb_k8sdocs", "package-documentation"): "Documentation",
     # Maintenance
-    ("ccb_dependeval", "dependency_recognition"): "Maintenance",
-    ("ccb_dependeval", "repository_construction"): "Maintenance",
     ("ccb_tac", "dependency"): "Maintenance",
     ("ccb_tac", "troubleshoot"): "Maintenance",
 }
@@ -85,9 +82,6 @@ MCP_CATEGORY_AFFINITY: dict[str, float] = {
     "endpoint": 0.65,
     "dependency": 0.5,
     "troubleshoot": 0.55,
-    "multifile_editing": 0.8,
-    "dependency_recognition": 0.5,
-    "repository_construction": 0.6,
 }
 
 # MCP scoring weights
@@ -309,28 +303,6 @@ def load_ccb_k8sdocs(bench_dir: Path) -> list[TaskRecord]:
     return records
 
 
-def load_ccb_dependeval(bench_dir: Path) -> list[TaskRecord]:
-    records: list[TaskRecord] = []
-    for parent in sorted(bench_dir.iterdir()):
-        if not parent.is_dir() or parent.name.startswith("."):
-            continue
-        for child in sorted(parent.iterdir()):
-            toml_path = child / "task.toml"
-            if not toml_path.exists():
-                continue
-            data = _read_toml(toml_path)
-            task_sec = data.get("task", {})
-            records.append(TaskRecord(
-                task_id=task_sec.get("name", child.name),
-                benchmark="ccb_dependeval",
-                category=task_sec.get("task_type", "unknown"),
-                language=task_sec.get("language", "unknown"),
-                difficulty=task_sec.get("difficulty", "medium"),
-                task_dir=f"ccb_dependeval/{parent.name}/{child.name}",
-            ))
-    return records
-
-
 def load_ccb_sweperf(bench_dir: Path) -> list[TaskRecord]:
     records: list[TaskRecord] = []
     sel_path = bench_dir / "selected_tasks.json"
@@ -358,7 +330,6 @@ LOADERS: dict[str, tuple[str, callable]] = {
     "ccb_tac": ("ccb_tac", load_ccb_tac),
     "ccb_pytorch": ("ccb_pytorch", load_ccb_pytorch),
     "ccb_k8sdocs": ("ccb_k8sdocs", load_ccb_k8sdocs),
-    "ccb_dependeval": ("ccb_dependeval", load_ccb_dependeval),
     "ccb_sweperf": ("ccb_sweperf", load_ccb_sweperf),
 }
 
@@ -387,7 +358,6 @@ def assign_sdlc_phase(task: TaskRecord) -> str:
         "ccb_largerepo": "Implementation (feature)",
         "ccb_k8sdocs": "Documentation",
         "ccb_sweperf": "Testing & QA",
-        "ccb_dependeval": "Maintenance",
         "ccb_tac": "Implementation (feature)",
     }
     return defaults.get(task.benchmark, "Implementation (feature)")
@@ -420,8 +390,6 @@ def score_mcp_benefit(task: TaskRecord) -> tuple[float, dict[str, float]]:
         cc = 0.5
     elif task.benchmark == "ccb_k8sdocs":
         cc = 0.6
-    elif task.benchmark == "ccb_dependeval":
-        cc = 0.3
     else:
         cc = 0.4
 
@@ -436,8 +404,6 @@ def score_mcp_benefit(task: TaskRecord) -> tuple[float, dict[str, float]]:
         cfd = 1.0  # all have 70+ files
     elif task.benchmark == "ccb_pytorch":
         cfd = 0.3
-    elif task.benchmark == "ccb_dependeval":
-        cfd = 0.4
     else:
         cfd = 0.3
 
@@ -604,7 +570,7 @@ def select_tasks(all_tasks: dict[str, list[TaskRecord]], rng: Random) -> list[Ta
     if "ccb_pytorch" in all_tasks:
         selected.extend(select_ccb_pytorch(all_tasks["ccb_pytorch"], rng))
 
-    for bm in ("ccb_largerepo", "ccb_k8sdocs", "ccb_tac", "ccb_dependeval", "ccb_sweperf"):
+    for bm in ("ccb_largerepo", "ccb_k8sdocs", "ccb_tac", "ccb_sweperf"):
         if bm in all_tasks:
             selected.extend(select_all(all_tasks[bm], bm))
 
@@ -667,7 +633,7 @@ def write_json(selected: list[TaskRecord], total_available: int, output_path: Pa
         },
         "methodology": {
             "description": (
-                "Tasks selected via stratified sampling across 8 benchmarks, "
+                "Tasks selected via stratified sampling across 7 benchmarks, "
                 "covering all SDLC phases. Each task scored for MCP benefit using "
                 "weighted combination of context complexity, cross-file dependencies, "
                 "semantic search potential, and task category affinity."
@@ -690,7 +656,6 @@ def write_json(selected: list[TaskRecord], total_available: int, output_path: Pa
                 "ccb_largerepo": "all (4)",
                 "ccb_k8sdocs": "all (5)",
                 "ccb_tac": "all (8)",
-                "ccb_dependeval": "all (9)",
                 "ccb_sweperf": "all (3)",
             },
         },
@@ -721,7 +686,7 @@ def write_markdown(
     lines.append("")
     lines.append(
         f"Selected **{len(selected)} tasks** from {total_available} available across "
-        f"8 benchmarks, stratified by SDLC phase with MCP benefit scoring."
+        f"7 benchmarks, stratified by SDLC phase with MCP benefit scoring."
     )
     lines.append("")
 
@@ -760,7 +725,6 @@ def write_markdown(
         "ccb_largerepo": "All selected (small benchmark)",
         "ccb_k8sdocs": "All selected (small benchmark)",
         "ccb_tac": "All selected (small benchmark)",
-        "ccb_dependeval": "All selected (small benchmark)",
         "ccb_sweperf": "All selected (small benchmark)",
     }
     # We need available counts per benchmark — estimate from selected + rationale
@@ -831,7 +795,7 @@ def write_markdown(
 
     lines.append("### Small Benchmarks (all selected)")
     lines.append("ccb_largerepo (4), ccb_k8sdocs (5), ccb_tac (8), "
-                 "ccb_dependeval (9), ccb_sweperf (3) — all tasks selected due to small size.")
+                 "ccb_sweperf (3) — all tasks selected due to small size.")
     lines.append("")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

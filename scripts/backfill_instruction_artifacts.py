@@ -84,7 +84,7 @@ def resolve_repo_display(task_path: str, task_name: str) -> str:
         return f"sg-benchmarks/{org}--{repo}--{commit}"
 
     # Check other 3config script mappings by reading them dynamically
-    # (dependeval, dibench, largerepo, pytorch, repoqa, sweperf, tac)
+    # (dibench, largerepo, pytorch, repoqa, sweperf, tac)
     configs_dir = Path(__file__).parent.parent / "configs"
     for config_file in configs_dir.glob("*_3config.sh"):
         repo_name = _extract_repo_from_config(config_file, task_name)

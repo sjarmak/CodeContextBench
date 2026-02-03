@@ -1,6 +1,6 @@
 # CodeContextBench Benchmarks
 
-This directory contains all benchmark task definitions for evaluating coding agents with and without Sourcegraph MCP. The canonical task selection is defined in [`selected_benchmark_tasks.json`](../configs/selected_benchmark_tasks.json) (125 tasks across 11 benchmarks).
+This directory contains all benchmark task definitions for evaluating coding agents with and without Sourcegraph MCP. The canonical task selection is defined in [`selected_benchmark_tasks.json`](../configs/selected_benchmark_tasks.json) (116 tasks across 10 benchmarks).
 
 See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection methodology.
 
@@ -66,16 +66,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 7. [ccb_dependeval/](ccb_dependeval/) - Multi-File & Cross-Repo Tasks
-**Tasks**: 9
-**Languages**: Python, Java, JavaScript
-**SDLC Phases**: Implementation (refactoring), Maintenance
-**Types**: Dependency Recognition (DR), Repository Construction (RC), Multi-file Editing (ME)
-**Task Format**: Harbor (task.toml, instruction.md, tests/)
-
----
-
-### 8. [ccb_sweperf/](ccb_sweperf/) - Performance Testing
+### 7. [ccb_sweperf/](ccb_sweperf/) - Performance Testing
 **Tasks**: 3
 **Languages**: Python
 **SDLC Phase**: Testing & QA
@@ -84,7 +75,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 9. [ccb_repoqa/](ccb_repoqa/) - Semantic Code Navigation
+### 8. [ccb_repoqa/](ccb_repoqa/) - Semantic Code Navigation
 **Tasks**: 10
 **Languages**: Python, C++, Java, Rust, TypeScript
 **SDLC Phase**: Requirements & Discovery
@@ -94,7 +85,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 10. [ccb_crossrepo/](ccb_crossrepo/) - Enterprise Codebase Challenges
+### 9. [ccb_crossrepo/](ccb_crossrepo/) - Enterprise Codebase Challenges
 **Tasks**: 5
 **Languages**: Go
 **SDLC Phases**: Architecture & Design, Implementation (bug fix), Implementation (refactoring), Testing & QA
@@ -105,7 +96,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 11. [ccb_dibench/](ccb_dibench/) - Dependency Inference
+### 10. [ccb_dibench/](ccb_dibench/) - Dependency Inference
 **Tasks**: 8
 **Languages**: Python, Rust, JavaScript, C#
 **SDLC Phase**: Implementation (feature)
@@ -124,14 +115,13 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 | ccb_locobench | 25 | 9 languages | Architecture, Refactoring |
 | ccb_pytorch | 12 | C++ | Bug fixing |
 | ccb_repoqa | 10 | Python, C++, Java, Rust, TypeScript | Code navigation |
-| ccb_dependeval | 9 | Python, Java, JavaScript | Refactoring, Maintenance |
 | ccb_tac | 8 | C++, Python | Mixed (4 phases) |
 | ccb_dibench | 8 | Python, Rust, JavaScript, C# | Dependency inference |
 | ccb_k8sdocs | 5 | Go | Documentation |
 | ccb_largerepo | 4 | Go, Rust, C++, TypeScript | Feature implementation |
 | ccb_crossrepo | 5 | Go | Architecture, Bug fix, Refactoring, Testing |
 | ccb_sweperf | 3 | Python | Testing & QA |
-| **Total** | **125** | | |
+| **Total** | **116** | | |
 
 ---
 

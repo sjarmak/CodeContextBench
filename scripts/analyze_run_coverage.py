@@ -150,8 +150,6 @@ def detect_benchmark_from_run_dir(run_dir_name):
         return "ccb_k8sdocs"
     elif "tac" in run_dir_name:
         return "ccb_tac"
-    elif "dependeval" in run_dir_name:
-        return "ccb_dependeval"
     elif "sweperf" in run_dir_name:
         return "ccb_sweperf"
     elif "repoqa" in run_dir_name:
