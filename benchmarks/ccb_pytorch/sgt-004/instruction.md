@@ -10,7 +10,7 @@
 
 Fixes #170499
 
-Fixes #ISSUE_NUMBER
+Fixes #170499
 
 
 cc @voznesenskym @penguinwu @EikanWang @jgong5 @Guobing-Chen @XiaobingSuper @zhuhaozhe @blzheng @wenzhe-nrv @jiayisunx @ipiszy @kadeng @muchulee8 @amjames @chauhang @aakhundov @coconutruben @jataylo @Lucaskabela
@@ -21,7 +21,7 @@ Review the PR: [cherry-pick] Fix vllm issue for flex (#170499)
 
 Description: Fixes #170499
 
-Fixes #ISSUE_NUMBER
+Fixes #170499
 
 
 cc @voznesenskym @penguinwu @EikanWang @jgong5 @Guobing-Chen @XiaobingSuper @zhuhaozhe @blzheng @wenzhe-nrv @jiayisunx @ipiszy @kadeng @muchulee8 @amjames @chauhang @aakhundov @coconutruben @jataylo @Lucaskabela

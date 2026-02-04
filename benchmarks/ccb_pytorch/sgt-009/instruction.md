@@ -8,7 +8,7 @@
 
 ## Description
 
-Fixes #ISSUE_NUMBER
+Fixes #167368
 
 Resolve local ghstack issue
 
@@ -16,7 +16,7 @@ Resolve local ghstack issue
 
 Review the PR: [HOP][print]Add functionalize and side effect
 
-Description: Fixes #ISSUE_NUMBER
+Description: Fixes #167368
 
 Resolve local ghstack issue
 

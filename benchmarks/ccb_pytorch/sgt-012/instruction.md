@@ -10,7 +10,7 @@
 
 Proper fix for #164048, fixes gather too, reverts #164049 Pull Request resolved: https://github.com/pytorch/pytorch/pull/166974 Approved by: https://github.com/eqy
 
-Fixes #ISSUE_NUMBER
+Fixes #164048
 
 
 ## Task
@@ -19,7 +19,7 @@ Review the PR: don't produce invalid grid configs (#166973)
 
 Description: Proper fix for #164048, fixes gather too, reverts #164049 Pull Request resolved: https://github.com/pytorch/pytorch/pull/166974 Approved by: https://github.com/eqy
 
-Fixes #ISSUE_NUMBER
+Fixes #164048
 
 
 Changes:

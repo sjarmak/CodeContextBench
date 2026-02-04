@@ -14,7 +14,7 @@ This reverts commit 65d346ff8c711731c6f2db4b3c045422bf87c582.
 
 Reverted https://github.com/pytorch/pytorch/pull/169497 on behalf of https://github.com/facebook-github-bot due to Diff reverted internally ([comment](https://github.com/pytorch/pytorch/pull/169497#issuecomment-3667072868))
 
-Fixes #ISSUE_NUMBER
+Fixes #169497
 
 
 cc @ezyang @EikanWang @jgong5 @wenzhe-nrv @voznesenskym @penguinwu @Guobing-Chen @XiaobingSuper @zhuhaozhe @blzheng @jiayisunx @kadeng @chauhang @a
@@ -29,7 +29,7 @@ This reverts commit 65d346ff8c711731c6f2db4b3c045422bf87c582.
 
 Reverted https://github.com/pytorch/pytorch/pull/169497 on behalf of https://github.com/facebook-github-bot due to Diff reverted internally ([comment](https://github.com/pytorch/pytorch/pull/169497#issuecomment-3667072868))
 
-Fixes #ISSUE_NUMBER
+Fixes #169497
 
 
 cc @ezyang @EikanWang @jgong5 @wenzhe-nrv @voznesenskym @penguinwu @Guobing-Chen @XiaobingSuper @zhuhaozhe @blzheng @jiayisunx @kadeng @chauhang @a
