@@ -54,6 +54,49 @@ fi
 
 echo "Running Kubernetes tests for taint effects..."
 
+# ── Compilation check ──────────────────────────────────────────────────
+# Build the packages most likely affected by taint-effect changes.
+# If the code doesn't compile, score is 0 regardless of keyword matches.
+echo "Running Go compilation check..."
+BUILD_OK=1
+if ! go build ./pkg/apis/core/... 2>/logs/verifier/build_errors.txt; then
+    echo "FAIL: go build ./pkg/apis/core/... failed"
+    BUILD_OK=0
+fi
+if ! go build ./pkg/scheduler/... 2>>/logs/verifier/build_errors.txt; then
+    echo "FAIL: go build ./pkg/scheduler/... failed"
+    BUILD_OK=0
+fi
+if ! go build ./pkg/kubelet/... 2>>/logs/verifier/build_errors.txt; then
+    echo "FAIL: go build ./pkg/kubelet/... failed"
+    BUILD_OK=0
+fi
+
+if [ "$BUILD_OK" -eq 0 ]; then
+    echo "Compilation failed — score set to 0.0"
+    echo "0.0" > /logs/verifier/reward.txt
+    echo ""
+    echo "[ ] Tests completed - Score: 0.0 (build failure)"
+    exit 0
+fi
+echo "[x] Go compilation check passed"
+
+# ── Unit tests (best-effort) ───────────────────────────────────────────
+# Run taint-related tests if the package exists; failures reduce score
+# but don't zero it out (keyword scoring still applies).
+UNIT_TEST_PASS=1
+go test ./pkg/apis/core/taint/... 2>/logs/verifier/test_errors.txt && TEST_RC=0 || TEST_RC=$?
+if [ "$TEST_RC" -eq 0 ]; then
+    echo "[x] Taint unit tests passed"
+elif [ "$TEST_RC" -eq 1 ]; then
+    echo "NOTE: Taint unit tests failed"
+    UNIT_TEST_PASS=0
+else
+    # Exit code 2+ usually means package not found or build error
+    echo "NOTE: No taint test package found, skipping"
+fi
+
+# ── Keyword-based scoring (secondary signal) ───────────────────────────
 # Check if NoScheduleNoTraffic taint effect was added
 if grep -r "NoScheduleNoTraffic" pkg/ 2>/dev/null | head -3; then
     echo "[x] NoScheduleNoTraffic taint effect found"
@@ -94,14 +137,18 @@ else
 fi
 
 # Calculate reward based on implementation (using bash arithmetic, avoiding bc)
+# Weights: taint constant=0.3, file changes=0.2, tests added=0.2, unit tests pass=0.3
 SCORE_NUMERATOR=0
 if [ "$TAINT_ADDED" -eq 1 ]; then
-    SCORE_NUMERATOR=$((SCORE_NUMERATOR + 4))  # 0.4 * 10
-fi
-if [ "$CHANGES_MADE" -eq 1 ]; then
     SCORE_NUMERATOR=$((SCORE_NUMERATOR + 3))  # 0.3 * 10
 fi
+if [ "$CHANGES_MADE" -eq 1 ]; then
+    SCORE_NUMERATOR=$((SCORE_NUMERATOR + 2))  # 0.2 * 10
+fi
 if [ "$TESTS_ADDED" -eq 1 ]; then
+    SCORE_NUMERATOR=$((SCORE_NUMERATOR + 2))  # 0.2 * 10
+fi
+if [ "$UNIT_TEST_PASS" -eq 1 ]; then
     SCORE_NUMERATOR=$((SCORE_NUMERATOR + 3))  # 0.3 * 10
 fi
 
