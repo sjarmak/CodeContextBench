@@ -35,15 +35,15 @@ Selected **116 tasks** from 835 available across 10 benchmarks, stratified by SD
 
 | Language | Tasks |
 |----------|-------|
-| python | 33 |
-| go | 24 |
+| python | 32 |
+| go | 22 |
 | cpp | 19 |
 | rust | 12 |
 | typescript | 11 |
-| javascript | 8 |
 | c | 7 |
+| javascript | 5 |
 | csharp | 5 |
-| java | 5 |
+| java | 2 |
 | python,cpp | 1 |
 
 ## MCP Benefit Scoring
