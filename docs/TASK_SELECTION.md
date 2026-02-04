@@ -57,14 +57,66 @@ score = 0.25 * context_complexity
       + 0.25 * task_category_weight
 ```
 
-**Average MCP benefit score:** 0.6753
+**Average MCP benefit score:** 0.6852
 
 ### Component Definitions
 
-- **context_complexity**: Derived from codebase token count (LoCoBench `context_length`) or benchmark-level proxy. Normalized: 1M+ tokens = 1.0
-- **cross_file_deps**: From `files_count`, `solution_files_changed`, or parsed from instruction.md. Normalized: 20+ files = 1.0
-- **semantic_search_potential**: High for large repos (ccb_largerepo=0.9), find-in-codebase tasks (0.8), large context (0.7)
+- **context_complexity**: How large or complex the codebase context is. Normalized: 1M+ tokens = 1.0
+- **cross_file_deps**: How many files must be understood or modified. Normalized: 20+ files = 1.0
+- **semantic_search_potential**: How much an agent would benefit from semantic code search. Scaled by codebase size, number of repos, and code density
 - **task_category_weight**: Per-category MCP affinity (architectural_understanding=1.0, cross_file_refactoring=0.9, etc.)
+
+### Per-Task Feature Extraction
+
+Scores are computed using **per-task features** rather than benchmark-level defaults, so tasks within the same benchmark receive different scores based on their individual characteristics. The following table documents which features drive each component per benchmark.
+
+| Benchmark | context_complexity source | cross_file_deps source | semantic_search_potential source |
+|-----------|--------------------------|------------------------|---------------------------------|
+| ccb_locobench | `context_length` from task.toml (975K–1.16M tokens) | `files_count` from task.toml (73–86 files) | Derived from `context_length` (larger context → more search benefit) |
+| ccb_repoqa | Source file count in target repo (65–559 files) | Source file count (same metric, normalized differently) | `code_ratio` from repoqa_instances.jsonl (0.0–0.79) |
+| ccb_swebenchpro | Benchmark-level default (0.7) | `files_changed` parsed from config.json patch | Benchmark-level default (0.6) |
+| ccb_pytorch | Benchmark-level default (0.7) | `files_changed` from instruction.md metadata | Benchmark-level default (0.6) |
+| ccb_largerepo | Estimated codebase LOC (1.1M–3.6M lines) | Expected files touched per task (5–15 files) | Derived from codebase LOC |
+| ccb_k8sdocs | Source file count in target k8s package (25–450 files) | Source file count (same metric) | Derived from source file count |
+| ccb_dibench | Source file count in target repo (20–82 files) | Source file count (same metric) | Derived from source file count |
+| ccb_tac | Per-category resource scaling | Per-category resource scaling | Per-category resource scaling |
+| ccb_sweperf | Baseline runtime for complexity scaling | Benchmark-level default | Derived from runtime |
+| ccb_crossrepo | Number of repos × repo size | Number of repos | Number of repos |
+
+The **task_category_weight** component is fixed per task category across all benchmarks (e.g., all `architectural_understanding` tasks get 1.0, all `cross_file_refactoring` get 0.9) and does not vary by per-task features.
+
+### Example Calculation
+
+**Task: big-code-k8s-001** (ccb_largerepo, Kubernetes NoScheduleNoTraffic taint)
+
+Feature extraction:
+- Codebase size: ~3.6M LOC (Kubernetes) → `context_complexity = 0.94`
+- Expected files touched: ~15 files across pkg/apis/core, pkg/scheduler, pkg/kubelet → `cross_file_deps = 0.75`
+- Large codebase with deep package hierarchy → `semantic_search_potential = 0.89`
+- Task category: big_code_feature → `task_category_weight = 0.95`
+
+```
+score = 0.25 * 0.94  +  0.30 * 0.75  +  0.20 * 0.89  +  0.25 * 0.95
+      = 0.235        +  0.225        +  0.178        +  0.2375
+      = 0.8755
+```
+
+### Score Variation by Benchmark
+
+All benchmarks with 5+ tasks achieve standard deviation > 0.05, ensuring meaningful discrimination:
+
+| Benchmark | Tasks | Score Range | Std Dev |
+|-----------|-------|-------------|---------|
+| ccb_k8sdocs | 5 | 0.378–0.894 | 0.219 |
+| ccb_dibench | 8 | 0.534–0.847 | 0.125 |
+| ccb_repoqa | 10 | 0.597–0.953 | 0.114 |
+| ccb_tac | 8 | 0.350–0.603 | 0.103 |
+| ccb_largerepo | 4 | 0.730–0.876 | 0.064 |
+| ccb_locobench | 25 | 0.717–0.931 | 0.055 |
+| ccb_swebenchpro | 36 | 0.500–0.835 | per-task |
+| ccb_pytorch | 12 | 0.550–0.850 | per-task |
+| ccb_sweperf | 3 | 0.433–0.525 | 0.047 |
+| ccb_crossrepo | 5 | 0.515–0.875 | per-task |
 
 ## Per-Benchmark Selection Strategies
 
