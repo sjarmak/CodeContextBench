@@ -23,14 +23,27 @@ UNSTAGED_COUNT=$(git diff --stat 2>/dev/null | wc -l)
 STAGED_COUNT=$(git diff --cached --stat 2>/dev/null | wc -l)
 UNTRACKED_COUNT=$(git ls-files --others --exclude-standard 2>/dev/null | wc -l)
 # Detect new commits: compare HEAD to the original clone point
+# Use origin refs (most reliable for shallow clones created by git clone --depth 1)
 COMMIT_COUNT=0
-if git rev-parse FETCH_HEAD >/dev/null 2>&1; then
+ORIGIN_REF_GUARD=""
+for ref in origin/master origin/main origin/HEAD; do
+    if git rev-parse "$ref" >/dev/null 2>&1; then
+        ORIGIN_REF_GUARD="$ref"
+        break
+    fi
+done
+if [ -n "$ORIGIN_REF_GUARD" ]; then
+    COMMIT_COUNT=$(git log --oneline "$ORIGIN_REF_GUARD..HEAD" 2>/dev/null | wc -l)
+elif git rev-parse FETCH_HEAD >/dev/null 2>&1; then
     COMMIT_COUNT=$(git log --oneline FETCH_HEAD..HEAD 2>/dev/null | wc -l)
-elif git rev-parse ORIG_HEAD >/dev/null 2>&1; then
-    COMMIT_COUNT=$(git log --oneline ORIG_HEAD..HEAD 2>/dev/null | wc -l)
 else
-    COMMIT_COUNT=$(git reflog --no-decorate 2>/dev/null | grep -c "commit" || echo 0)
+    # Fallback: in a --depth 1 clone there is 1 commit; more means agent committed
+    TOTAL_COMMITS=$(git log --oneline 2>/dev/null | wc -l)
+    if [ "$TOTAL_COMMITS" -gt 1 ]; then
+        COMMIT_COUNT=$((TOTAL_COMMITS - 1))
+    fi
 fi
+echo "Change detection: unstaged=$UNSTAGED_COUNT staged=$STAGED_COUNT untracked=$UNTRACKED_COUNT commits=$COMMIT_COUNT (origin_ref=${ORIGIN_REF_GUARD:-none})"
 if [ "$UNSTAGED_COUNT" -eq 0 ] && [ "$STAGED_COUNT" -eq 0 ] && [ "$UNTRACKED_COUNT" -eq 0 ] && [ "$COMMIT_COUNT" -eq 0 ]; then
     echo "No code changes detected — agent did not execute successfully"
     echo "0.0" > /logs/verifier/reward.txt
@@ -41,6 +54,91 @@ fi
 
 echo "Testing W4A8_MXFP4_INT8 quantization mode implementation..."
 
+# ── Syntax checks ─────────────────────────────────────────────────────
+# Full CUDA compilation is not feasible in Docker; syntax checks are
+# the practical minimum to ensure the agent didn't produce broken code.
+echo "Running Python syntax checks on modified .py files..."
+SYNTAX_OK=1
+
+# Collect all modified/added .py files (unstaged, staged, committed, untracked)
+ORIGIN_REF=""
+for ref in origin/master origin/main origin/HEAD; do
+    if git rev-parse "$ref" >/dev/null 2>&1; then
+        ORIGIN_REF="$ref"
+        break
+    fi
+done
+
+MODIFIED_PY=""
+if [ -n "$ORIGIN_REF" ]; then
+    MODIFIED_PY=$(git diff --name-only "$ORIGIN_REF..HEAD" 2>/dev/null | grep '\.py$' || true)
+fi
+MODIFIED_PY="$MODIFIED_PY
+$(git diff --name-only 2>/dev/null | grep '\.py$' || true)
+$(git diff --cached --name-only 2>/dev/null | grep '\.py$' || true)
+$(git ls-files --others --exclude-standard 2>/dev/null | grep '\.py$' || true)"
+# Deduplicate
+MODIFIED_PY=$(echo "$MODIFIED_PY" | sort -u | grep -v '^$' || true)
+
+if [ -n "$MODIFIED_PY" ]; then
+    PY_FAIL=0
+    while IFS= read -r pyfile; do
+        if [ -f "$pyfile" ]; then
+            if ! python -m py_compile "$pyfile" 2>>/logs/verifier/syntax_errors.txt; then
+                echo "FAIL: Python syntax error in $pyfile"
+                PY_FAIL=1
+            fi
+        fi
+    done <<< "$MODIFIED_PY"
+    if [ "$PY_FAIL" -eq 1 ]; then
+        SYNTAX_OK=0
+    else
+        echo "[x] All modified Python files pass syntax check"
+    fi
+else
+    echo "NOTE: No modified Python files to check"
+fi
+
+# C++ syntax check for modified .h/.cpp/.cc files (using g++ -fsyntax-only)
+echo "Running C++ syntax checks on modified .h/.cpp/.cc files..."
+MODIFIED_CPP=""
+if [ -n "$ORIGIN_REF" ]; then
+    MODIFIED_CPP=$(git diff --name-only "$ORIGIN_REF..HEAD" 2>/dev/null | grep -E '\.(h|hpp|cpp|cc|cxx)$' || true)
+fi
+MODIFIED_CPP="$MODIFIED_CPP
+$(git diff --name-only 2>/dev/null | grep -E '\.(h|hpp|cpp|cc|cxx)$' || true)
+$(git diff --cached --name-only 2>/dev/null | grep -E '\.(h|hpp|cpp|cc|cxx)$' || true)
+$(git ls-files --others --exclude-standard 2>/dev/null | grep -E '\.(h|hpp|cpp|cc|cxx)$' || true)"
+MODIFIED_CPP=$(echo "$MODIFIED_CPP" | sort -u | grep -v '^$' || true)
+
+if [ -n "$MODIFIED_CPP" ]; then
+    CPP_FAIL=0
+    while IFS= read -r cppfile; do
+        if [ -f "$cppfile" ]; then
+            # Use -fsyntax-only for syntax-only check; suppress missing header errors
+            # since we don't have CUDA/TRT headers installed
+            if ! g++ -fsyntax-only -std=c++17 "$cppfile" 2>>/logs/verifier/syntax_errors.txt; then
+                # C++ syntax check failure is informational since headers may be missing
+                echo "NOTE: C++ syntax check issue in $cppfile (may be missing headers)"
+            fi
+        fi
+    done <<< "$MODIFIED_CPP"
+    # Don't fail on C++ since missing CUDA headers will cause false positives
+    echo "[x] C++ syntax check completed (informational only)"
+else
+    echo "NOTE: No modified C++ files to check"
+fi
+
+if [ "$SYNTAX_OK" -eq 0 ]; then
+    echo "Python syntax check failed — score set to 0.0"
+    echo "0.0" > /logs/verifier/reward.txt
+    echo ""
+    echo "[ ] Tests completed - Score: 0.0 (syntax failure)"
+    exit 0
+fi
+echo "[x] Syntax checks passed"
+
+# ── Keyword-based scoring (secondary signal) ──────────────────────────
 # Check if quantization mode code exists
 if grep -r "W4A8_MXFP4_INT8" . --include="*.py" --include="*.h" --include="*.cc" 2>/dev/null | head -5; then
     echo "[x] W4A8_MXFP4_INT8 mode references found"
@@ -59,8 +157,16 @@ else
     MXFP4_FOUND=0
 fi
 
-# Check for relevant code changes
-if git diff --name-only 2>/dev/null | grep -E "(quant|mode|config)" | head -5; then
+# Check for relevant code changes (unstaged OR committed)
+CHANGED_FILES=""
+if [ -n "$ORIGIN_REF" ]; then
+    CHANGED_FILES=$(git diff --name-only "$ORIGIN_REF..HEAD" 2>/dev/null)
+fi
+# Also include any unstaged/staged changes
+CHANGED_FILES="$CHANGED_FILES
+$(git diff --name-only 2>/dev/null)
+$(git diff --cached --name-only 2>/dev/null)"
+if echo "$CHANGED_FILES" | grep -E "(quant|mode|config)" | head -5; then
     echo "[x] Quantization-related files modified"
     CHANGES_MADE=1
 else
