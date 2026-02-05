@@ -7,7 +7,7 @@ set -x
 # NOTE: set -e intentionally NOT used — fallback logic requires graceful failure handling
 
 PATCH_FILE="/logs/agent/patch.diff"
-EXPECTED_CHANGES="/task/tests/expected_changes.json"
+EXPECTED_CHANGES="/tests/expected_changes.json"
 CORPUS_ROOT="/ccb_crossrepo"
 REWARD_FILE="/logs/verifier/reward.txt"
 VALIDATION_RESULT="/logs/verifier/validation_result.json"

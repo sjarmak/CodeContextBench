@@ -296,11 +296,15 @@ def _iter_task_dirs(config_path: Path):
         if not entry.is_dir():
             continue
 
+        # Skip archived/broken subdirectories at any level
+        if should_skip(entry.name):
+            continue
+
         # Check if this is a batch timestamp dir (starts with "20")
         if entry.name.startswith("20"):
             # Timestamp batch dir — task dirs are inside
             for trial_dir in sorted(entry.iterdir()):
-                if trial_dir.is_dir() and not trial_dir.name.startswith("20"):
+                if trial_dir.is_dir() and not trial_dir.name.startswith("20") and not should_skip(trial_dir.name):
                     yield trial_dir
         elif "__" in entry.name:
             # Direct task dir (task_name__hash)

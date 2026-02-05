@@ -21,6 +21,60 @@ from pathlib import Path
 REAL_HOME = os.environ.get("HOME", os.path.expanduser("~"))
 
 
+def try_refresh_token(creds_file: Path) -> dict | None:
+    """Attempt to refresh an expired OAuth token. Returns new expiry info or None."""
+    try:
+        data = json.loads(creds_file.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    oauth = data.get("claudeAiOauth", {})
+    refresh_token = oauth.get("refreshToken")
+    if not refresh_token:
+        return None
+
+    import urllib.request
+    import urllib.error
+
+    payload = json.dumps({
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+    }).encode()
+
+    req = urllib.request.Request(
+        "https://console.anthropic.com/api/oauth/token",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST"
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            token_data = json.loads(resp.read())
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError):
+        return None
+
+    new_access = token_data.get("access_token")
+    if not new_access:
+        return None
+
+    expires_in = token_data.get("expires_in", 28800)
+    oauth["accessToken"] = new_access
+    new_refresh = token_data.get("refresh_token")
+    if new_refresh:
+        oauth["refreshToken"] = new_refresh
+    oauth["expiresAt"] = int(time.time() * 1000) + (expires_in * 1000)
+    data["claudeAiOauth"] = oauth
+
+    try:
+        creds_file.write_text(json.dumps(data, indent=2))
+    except OSError:
+        pass
+
+    return {"expires_in": expires_in, "remaining_min": expires_in // 60}
+
+
 def check_oauth_token(home_dir: str | None = None) -> dict:
     """Check OAuth token validity and time remaining."""
     home = home_dir or REAL_HOME
@@ -54,12 +108,33 @@ def check_oauth_token(home_dir: str | None = None) -> dict:
     has_access = bool(oauth.get("accessToken"))
 
     if remaining_s <= 0:
+        # Access token expired — try to refresh it
+        if has_refresh:
+            refresh_result = try_refresh_token(creds_file)
+            if refresh_result:
+                return {
+                    "check": "oauth_token",
+                    "status": "OK",
+                    "message": f"Token was expired, refreshed successfully ({refresh_result['remaining_min']} min remaining)",
+                    "remaining_minutes": refresh_result["remaining_min"],
+                    "has_refresh_token": True,
+                    "home": home,
+                }
+            else:
+                return {
+                    "check": "oauth_token",
+                    "status": "WARN",
+                    "message": f"Access token expired ({abs(remaining_min)} min ago). Refresh failed but agent may auto-refresh at runtime.",
+                    "remaining_minutes": remaining_min,
+                    "has_refresh_token": has_refresh,
+                    "home": home,
+                }
         return {
             "check": "oauth_token",
             "status": "FAIL",
-            "message": f"Token EXPIRED ({abs(remaining_min)} min ago). Run: source configs/_common.sh && refresh_claude_token",
+            "message": f"Token EXPIRED ({abs(remaining_min)} min ago), no refresh token. Run: claude login",
             "remaining_minutes": remaining_min,
-            "has_refresh_token": has_refresh,
+            "has_refresh_token": False,
             "home": home,
         }
     elif remaining_s < 1800:  # < 30 min
@@ -210,15 +285,14 @@ def check_harbor() -> dict:
     """Check harbor CLI is available."""
     try:
         result = subprocess.run(
-            ["harbor", "--version"],
+            ["harbor", "--help"],
             capture_output=True, timeout=10,
         )
         if result.returncode == 0:
-            version = result.stdout.decode(errors="replace").strip()
             return {
                 "check": "harbor",
                 "status": "OK",
-                "message": f"harbor available: {version}",
+                "message": "harbor CLI available",
             }
         else:
             return {

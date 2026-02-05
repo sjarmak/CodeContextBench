@@ -17,6 +17,35 @@ This benchmark suite wraps TheAgentCompany tasks to measure how much Sourcegraph
 1. **Docker** - TAC tasks run in Docker containers
 2. **Harbor** - CodeContextBench's evaluation framework
 3. **TAC Docker images** - Pre-built images from TheAgentCompany
+4. **TAC Server** - Local TAC server infrastructure (GitLab, RocketChat, API server)
+
+### TAC Server Setup
+
+TAC tasks require a local TAC server because repos are cloned at runtime from TAC's private GitLab and evaluators interact with TAC services.
+
+```bash
+# 1. Ensure Docker socket is accessible
+sudo chmod 666 /var/run/docker.sock
+
+# 2. Run the official TAC setup script (pulls ~20 images, starts services)
+curl -fsSL https://github.com/TheAgentCompany/the-agent-company-backup-data/releases/download/setup-script-20241208/setup.sh | sh
+
+# 3. Add hostname mapping
+echo "127.0.0.1 the-agent-company.com" | sudo tee -a /etc/hosts
+```
+
+Verify services:
+```bash
+curl -s http://the-agent-company.com:8929/        # GitLab
+curl -s http://the-agent-company.com:3000/        # RocketChat
+curl -s http://the-agent-company.com:2999/api/healthcheck  # API server
+```
+
+The `tac_3config.sh` script checks these automatically before running (use `--skip-server-check` to bypass).
+
+### Network Mode
+
+TAC containers use `network_mode: host` (via custom `docker-compose.yaml` in each task's `environment/` dir) so they can reach TAC server services on localhost. This overrides Harbor's default `bridge` network isolation.
 
 ### Pull TAC Docker Images
 
@@ -29,12 +58,19 @@ python import_tac_tasks.py --verify-images --pull
 docker pull ghcr.io/theagentcompany/sde-implement-hyperloglog-image:1.0.0
 ```
 
-### Verify Tasks
+### Sourcegraph Repo Indexing
+
+For MCP configs (SG_base, SG_full), TAC repos must be indexed in Sourcegraph with pinned commits:
 
 ```bash
-# Verify all tasks have proper grading configuration
-python scripts/verify_grader.py --all
+# After TAC server is running, create pinned SG repos:
+./scripts/create_sg_tac_repos.sh
+
+# Or dry-run first:
+./scripts/create_sg_tac_repos.sh --dry-run
 ```
+
+This queries TAC GitLab for exact commit hashes and pushes the corresponding upstream repos to `sg-benchmarks/` for Sourcegraph indexing.
 
 ### Run a Task
 
@@ -82,7 +118,8 @@ benchmarks/ccb_tac/
 │   ├── task.toml
 │   ├── instruction.md
 │   ├── environment/
-│   │   └── Dockerfile
+│   │   ├── Dockerfile
+│   │   └── docker-compose.yaml   # network_mode: host for TAC server access
 │   └── tests/
 │       └── test.sh
 ├── tac-buffer-pool-manager/       # Task: Buffer pool manager

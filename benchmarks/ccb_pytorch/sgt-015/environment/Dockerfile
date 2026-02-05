@@ -12,10 +12,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-# Clone PyTorch repository at task-specific commit
-RUN git clone https://github.com/pytorch/pytorch.git /workspace && \
+# Clone PyTorch repository at task-specific commit (no submodules needed)
+RUN git clone --no-checkout https://github.com/pytorch/pytorch.git /workspace && \
     cd /workspace && \
-    git checkout a06141f73d603084910db381504b7c41eedb7210 && \
-    git submodule update --init --recursive
+    git checkout a06141f73d603084910db381504b7c41eedb7210
 
-# Task setup complete
+# Pre-create claude user and fix ownership so Harbor agent setup is instant
+RUN (adduser --disabled-password --gecos '' claude 2>/dev/null || adduser -D -s /bin/bash claude 2>/dev/null || true) && \
+    chown -R claude:claude /workspace

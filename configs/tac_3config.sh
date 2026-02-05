@@ -16,6 +16,7 @@
 #   --model MODEL          Override model (default: claude-opus-4-5-20251101)
 #   --category CATEGORY    Run category (default: official)
 #   --parallel N           Number of parallel task subshells (default: 1)
+#   --skip-server-check    Skip TAC server health check
 #
 # Prerequisites:
 #   - ~/evals/.env.local with ANTHROPIC_API_KEY (required)
@@ -66,6 +67,48 @@ echo ""
 ensure_fresh_token
 
 # ============================================
+# TAC SERVER CHECK
+# ============================================
+check_tac_server() {
+    local ok=true
+
+    # Check /etc/hosts
+    if ! grep -q "the-agent-company.com" /etc/hosts 2>/dev/null; then
+        echo "ERROR: /etc/hosts missing 'the-agent-company.com' entry"
+        echo "  Fix: echo '127.0.0.1 the-agent-company.com' | sudo tee -a /etc/hosts"
+        ok=false
+    fi
+
+    # Check GitLab
+    if ! curl -sf --max-time 5 "http://the-agent-company.com:8929/" >/dev/null 2>&1; then
+        echo "ERROR: TAC GitLab not reachable at :8929"
+        ok=false
+    fi
+
+    # Check RocketChat
+    if ! curl -sf --max-time 5 "http://the-agent-company.com:3000/" >/dev/null 2>&1; then
+        echo "WARNING: TAC RocketChat not reachable at :3000 (needed by some tasks)"
+    fi
+
+    # Check API server (healthcheck endpoints are per-service)
+    if ! curl -sf --max-time 5 "http://the-agent-company.com:2999/api/healthcheck/gitlab" >/dev/null 2>&1; then
+        echo "WARNING: TAC API server not reachable at :2999 (needed by some tasks)"
+    fi
+
+    if [ "$ok" = false ]; then
+        echo ""
+        echo "TAC server infrastructure is required. Setup instructions:"
+        echo "  1. curl -fsSL https://github.com/TheAgentCompany/the-agent-company-backup-data/releases/download/setup-script-20241208/setup.sh | sh"
+        echo "  2. echo '127.0.0.1 the-agent-company.com' | sudo tee -a /etc/hosts"
+        echo ""
+        echo "Use --skip-server-check to bypass this check."
+        exit 1
+    fi
+
+    echo "TAC server: OK (GitLab reachable)"
+}
+
+# ============================================
 # CONFIGURATION
 # ============================================
 TASKS_DIR="/home/stephanie_jarmak/CodeContextBench/benchmarks/ccb_tac"
@@ -76,6 +119,7 @@ TIMEOUT_MULTIPLIER=10
 RUN_BASELINE=true
 RUN_BASE=true
 RUN_FULL=true
+SKIP_SERVER_CHECK=false
 CATEGORY="${CATEGORY:-official}"
 
 # Parse arguments
@@ -108,12 +152,21 @@ while [[ $# -gt 0 ]]; do
             PARALLEL_JOBS="$2"
             shift 2
             ;;
+        --skip-server-check)
+            SKIP_SERVER_CHECK=true
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
             exit 1
             ;;
     esac
 done
+
+# Verify TAC server infrastructure
+if [ "$SKIP_SERVER_CHECK" = false ]; then
+    check_tac_server
+fi
 
 # Set up dual-account support (auto-detects second account)
 setup_dual_accounts
@@ -138,19 +191,19 @@ readarray -t TASK_IDS < <(python3 -c "
 import json
 tasks = json.load(open('$SELECTION_FILE'))['tasks']
 for t in tasks:
-    if t['benchmark'] == 'ccb_tac':
+    if t['benchmark'] == 'ccb_tac' and not t.get('excluded', False):
         print(t['task_id'])
 ")
 
 # Sourcegraph repo name mapping for TAC tasks
 # These override SOURCEGRAPH_REPO_NAME so the agent searches the correct repo
 declare -A TASK_SG_REPO_NAMES=(
-    ["tac-buffer-pool-manager"]="sg-benchmarks/bustub--latest"
+    ["tac-buffer-pool-manager"]="sg-benchmarks/bustub--d5f79431"
     ["tac-copilot-arena-endpoint"]="sg-benchmarks/copilot-arena--latest"
     ["tac-dependency-change"]="sg-benchmarks/OpenHands--latest"
-    ["tac-find-in-codebase-1"]="sg-benchmarks/llama.cpp--latest"
-    ["tac-find-in-codebase-2"]="sg-benchmarks/llama.cpp--latest"
-    ["tac-implement-hyperloglog"]="sg-benchmarks/bustub--latest"
+    ["tac-find-in-codebase-1"]="sg-benchmarks/llama.cpp--56399714"
+    ["tac-find-in-codebase-2"]="sg-benchmarks/llama.cpp--56399714"
+    ["tac-implement-hyperloglog"]="sg-benchmarks/bustub--d5f79431"
     ["tac-troubleshoot-dev-setup"]="sg-benchmarks/copilot-arena--latest"
     ["tac-write-unit-test"]="sg-benchmarks/OpenHands--latest"
 )

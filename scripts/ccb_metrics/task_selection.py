@@ -83,6 +83,8 @@ def enrich_task_metrics(
     tm.mcp_benefit_score = meta.get("mcp_benefit_score")
     tm.mcp_benefit_breakdown = meta.get("mcp_breakdown")
     tm.repo = meta.get("repo")
+    tm.task_context_length = meta.get("context_length")
+    tm.task_files_count = meta.get("files_count")
 
 
 def enrich_runs(

@@ -26,7 +26,17 @@ python_default /utils/eval.py \
 mkdir -p /logs/verifier
 
 if [ -f "$OUTPUT_PATH" ]; then
-    SCORE=$(python3 -c "import json; print(json.load(open('$OUTPUT_PATH')).get('score', 0))" 2>/dev/null || echo "0")
+    SCORE=$(python_default -c "
+import json
+d = json.load(open('$OUTPUT_PATH'))
+if 'score' in d:
+    print(d['score'])
+elif 'final_score' in d:
+    fs = d['final_score']
+    print(round(fs['result'] / fs['total'], 4) if fs.get('total', 0) > 0 else 0)
+else:
+    print(0)
+" 2>/dev/null || echo "0")
     echo "TAC Score: $SCORE"
     echo "$SCORE" > /logs/verifier/reward.txt
     cp "$OUTPUT_PATH" /logs/verifier/reward.json 2>/dev/null || true

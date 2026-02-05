@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import statistics as _statistics
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -20,7 +21,8 @@ def _parse_iso(ts: Optional[str]) -> Optional[datetime]:
     if not ts:
         return None
     try:
-        return datetime.fromisoformat(ts)
+        # Python 3.10 fromisoformat doesn't handle 'Z' suffix
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except (ValueError, TypeError):
         return None
 
@@ -540,6 +542,28 @@ def _build_search_results(
     }
 
 
+def classify_search_strategy(
+    keyword: int,
+    nls: int,
+    deepsearch: int,
+) -> Optional[str]:
+    """Classify search strategy from call counts.
+
+    Returns:
+        'keyword_only', 'nls_focused', 'deepsearch_heavy', 'mixed', or None.
+    """
+    total = keyword + nls + deepsearch
+    if total == 0:
+        return None
+    if deepsearch > 0 and deepsearch >= keyword + nls:
+        return "deepsearch_heavy"
+    if nls > 0 and nls >= keyword:
+        return "nls_focused"
+    if keyword > 0 and nls == 0 and deepsearch == 0:
+        return "keyword_only"
+    return "mixed"
+
+
 def extract_search_patterns_from_trajectory(
     trajectory_json_path: str | Path,
 ) -> dict:
@@ -850,3 +874,441 @@ def extract_reward_from_file(
         return float(text)
     except (OSError, ValueError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# Tier 1 extractors
+# ---------------------------------------------------------------------------
+
+
+def extract_error_fingerprint(
+    result_json_path: str | Path,
+) -> Optional[dict]:
+    """Classify exception_info from result.json using status_fingerprints.
+
+    Lazy-imports fingerprint_error to avoid circular deps.
+
+    Returns:
+        Dict with fingerprint_id, label, severity (subset), or None.
+    """
+    path = Path(result_json_path)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    exception_info = data.get("exception_info")
+    if not exception_info:
+        return None
+
+    try:
+        from status_fingerprints import fingerprint_error
+    except ImportError:
+        import sys
+        # Ensure scripts/ is on sys.path
+        scripts_dir = str(Path(__file__).resolve().parent.parent)
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        from status_fingerprints import fingerprint_error
+
+    result = fingerprint_error(exception_info)
+    if result is None:
+        return None
+    # Return a compact subset for the metrics file
+    return {
+        "fingerprint_id": result.get("fingerprint_id"),
+        "label": result.get("label"),
+        "severity": result.get("severity"),
+    }
+
+
+def extract_verifier_test_summary(
+    test_stdout_path: str | Path,
+    benchmark: str = "",
+) -> Optional[dict]:
+    """Parse verifier/test-stdout.txt with benchmark-specific logic.
+
+    Returns:
+        Dict with tests_passed, tests_total, failure_reasons, raw_score.
+        None if file missing or unparseable.
+    """
+    path = Path(test_stdout_path)
+    if not path.is_file():
+        return None
+    try:
+        text = path.read_text()
+    except OSError:
+        return None
+
+    bench_lower = benchmark.lower()
+
+    # SWE-bench: "Required tests: N" / "Required tests that passed: M"
+    if "swebench" in bench_lower:
+        req = re.search(r"Required tests:\s*(\d+)", text)
+        passed = re.search(r"Required tests that passed:\s*(\d+)", text)
+        if req and passed:
+            total = int(req.group(1))
+            p = int(passed.group(1))
+            return {
+                "tests_passed": p,
+                "tests_total": total,
+                "failure_reasons": [],
+                "raw_score": p / total if total > 0 else 0.0,
+            }
+
+    # LoCoBench: "Score: X.XXXX"
+    if "locobench" in bench_lower:
+        m = re.search(r"Score:\s*([0-9.]+)", text)
+        if m:
+            score = float(m.group(1))
+            return {
+                "tests_passed": None,
+                "tests_total": None,
+                "failure_reasons": [],
+                "raw_score": score,
+            }
+
+    # PyTorch: count [PASS] / [FAIL] lines
+    if "pytorch" in bench_lower:
+        passes = len(re.findall(r"\[PASS\]", text))
+        fails = len(re.findall(r"\[FAIL\]", text))
+        total = passes + fails
+        if total > 0:
+            fail_lines = [
+                line.strip() for line in text.splitlines()
+                if "[FAIL]" in line
+            ]
+            return {
+                "tests_passed": passes,
+                "tests_total": total,
+                "failure_reasons": fail_lines[:10],
+                "raw_score": passes / total,
+            }
+
+    # Generic fallback: count PASS/FAIL patterns
+    passes = len(re.findall(r"\bPASS(?:ED)?\b", text, re.IGNORECASE))
+    fails = len(re.findall(r"\bFAIL(?:ED)?\b", text, re.IGNORECASE))
+    total = passes + fails
+    if total > 0:
+        fail_lines = [
+            line.strip() for line in text.splitlines()
+            if re.search(r"\bFAIL(?:ED)?\b", line, re.IGNORECASE)
+        ]
+        return {
+            "tests_passed": passes,
+            "tests_total": total,
+            "failure_reasons": fail_lines[:10],
+            "raw_score": passes / total,
+        }
+
+    return None
+
+
+def extract_agent_return_code(
+    task_dir: str | Path,
+) -> Optional[int]:
+    """Read agent/command-1/return-code.txt and return the integer."""
+    path = Path(task_dir) / "agent" / "command-1" / "return-code.txt"
+    if not path.is_file():
+        return None
+    try:
+        return int(path.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def extract_mcp_info(
+    task_dir: str | Path,
+) -> dict:
+    """Read agent/.mcp.json for MCP config presence and server names.
+
+    Returns:
+        Dict with mcp_config_present (bool) and mcp_servers (list[str]|None).
+    """
+    path = Path(task_dir) / "agent" / ".mcp.json"
+    if not path.is_file():
+        return {"mcp_config_present": False, "mcp_servers": None}
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {"mcp_config_present": True, "mcp_servers": None}
+
+    servers = data.get("mcpServers") or {}
+    return {
+        "mcp_config_present": True,
+        "mcp_servers": sorted(servers.keys()) if servers else None,
+    }
+
+
+def extract_instruction_length(
+    task_dir: str | Path,
+) -> Optional[int]:
+    """Return character count of agent/instruction.txt."""
+    path = Path(task_dir) / "agent" / "instruction.txt"
+    if not path.is_file():
+        return None
+    try:
+        return len(path.read_text())
+    except OSError:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Tier 2 extractors
+# ---------------------------------------------------------------------------
+
+# Context window size for Opus (tokens)
+_CONTEXT_WINDOW = 200_000
+
+
+def extract_conversation_analysis_from_transcript(
+    claude_code_txt_path: str | Path,
+) -> dict:
+    """Single-pass JSONL scan for conversation metrics.
+
+    Returns dict with: conversation_turns, tool_errors_total,
+    tool_errors_by_name, backtrack_count, context_window_peak_pct.
+    All values None if file missing.
+    """
+    empty = {
+        "conversation_turns": None,
+        "tool_errors_total": None,
+        "tool_errors_by_name": None,
+        "backtrack_count": None,
+        "context_window_peak_pct": None,
+    }
+    path = Path(claude_code_txt_path)
+    if not path.is_file():
+        return empty
+
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return empty
+
+    assistant_turns = 0
+    # Map tool_use id -> tool name (from assistant entries)
+    pending_tool_uses: dict[str, str] = {}
+    tool_errors_total = 0
+    tool_errors_by_name: dict[str, int] = {}
+    # Track files edited for backtrack counting
+    edited_files: set[str] = set()
+    backtrack_count = 0
+    peak_input = 0
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        etype = entry.get("type")
+
+        if etype == "assistant":
+            assistant_turns += 1
+            message = entry.get("message") or {}
+            content = message.get("content") or []
+            # Track usage for context window peak
+            usage = message.get("usage") or entry.get("usage") or {}
+            inp = (usage.get("input_tokens") or 0)
+            cache_create = (usage.get("cache_creation_input_tokens") or 0)
+            cache_read = (usage.get("cache_read_input_tokens") or 0)
+            total_input = inp + cache_create + cache_read
+            if total_input > peak_input:
+                peak_input = total_input
+
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "tool_use":
+                    tool_id = block.get("id")
+                    tool_name = block.get("name", "")
+                    if tool_id:
+                        pending_tool_uses[tool_id] = tool_name
+                    # Backtrack: Edit to already-edited file
+                    if tool_name == "Edit":
+                        fp = (block.get("input") or {}).get("file_path")
+                        if fp:
+                            if fp in edited_files:
+                                backtrack_count += 1
+                            edited_files.add(fp)
+
+        elif etype == "tool_result":
+            # Check for is_error on tool results
+            content_blocks = entry.get("content") or []
+            tool_use_id = entry.get("tool_use_id")
+            is_error = entry.get("is_error", False)
+            # Also check content-level is_error
+            if not is_error and isinstance(content_blocks, list):
+                for cb in content_blocks:
+                    if isinstance(cb, dict) and cb.get("is_error"):
+                        is_error = True
+                        break
+            if is_error:
+                tool_errors_total += 1
+                name = pending_tool_uses.get(tool_use_id, "unknown")
+                tool_errors_by_name[name] = tool_errors_by_name.get(name, 0) + 1
+
+    if assistant_turns == 0:
+        return empty
+
+    ctx_peak = (peak_input / _CONTEXT_WINDOW) if peak_input > 0 else None
+
+    return {
+        "conversation_turns": assistant_turns,
+        "tool_errors_total": tool_errors_total,
+        "tool_errors_by_name": tool_errors_by_name if tool_errors_by_name else None,
+        "backtrack_count": backtrack_count,
+        "context_window_peak_pct": round(ctx_peak, 4) if ctx_peak is not None else None,
+    }
+
+
+def extract_conversation_analysis_from_trajectory(
+    trajectory_json_path: str | Path,
+) -> dict:
+    """Extract conversation metrics from ATIF trajectory.json.
+
+    Returns same schema as transcript version (minus context_window_peak_pct
+    which is transcript-only).
+    """
+    empty = {
+        "conversation_turns": None,
+        "tool_errors_total": None,
+        "tool_errors_by_name": None,
+        "backtrack_count": None,
+        "context_window_peak_pct": None,
+    }
+    path = Path(trajectory_json_path)
+    if not path.is_file():
+        return empty
+
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return empty
+
+    steps = data.get("steps") or []
+    if not steps:
+        return empty
+
+    assistant_turns = 0
+    tool_errors_total = 0
+    tool_errors_by_name: dict[str, int] = {}
+    edited_files: set[str] = set()
+    backtrack_count = 0
+
+    for step in steps:
+        # Each step with tool_calls or output counts as an assistant turn
+        if step.get("tool_calls") or step.get("output"):
+            assistant_turns += 1
+
+        tool_calls = step.get("tool_calls") or []
+        tool_results = step.get("tool_results") or []
+
+        # Build a map of tool call index -> name for error attribution
+        tc_names = {}
+        for i, tc in enumerate(tool_calls):
+            name = tc.get("function_name") or ""
+            tc_names[i] = name
+            # Backtrack
+            if name == "Edit":
+                fp = (tc.get("arguments") or {}).get("file_path")
+                if fp:
+                    if fp in edited_files:
+                        backtrack_count += 1
+                    edited_files.add(fp)
+
+        # Check tool results for errors
+        for i, tr in enumerate(tool_results):
+            is_error = tr.get("is_error", False)
+            if is_error:
+                tool_errors_total += 1
+                name = tc_names.get(i, "unknown")
+                tool_errors_by_name[name] = tool_errors_by_name.get(name, 0) + 1
+
+    if assistant_turns == 0:
+        return empty
+
+    return {
+        "conversation_turns": assistant_turns,
+        "tool_errors_total": tool_errors_total,
+        "tool_errors_by_name": tool_errors_by_name if tool_errors_by_name else None,
+        "backtrack_count": backtrack_count,
+        "context_window_peak_pct": None,  # Not available from trajectory
+    }
+
+
+def extract_mcp_latency_from_trajectory(
+    trajectory_json_path: str | Path,
+) -> dict:
+    """Compute MCP call latency from trajectory step timestamps.
+
+    Duration = next_step.timestamp - current_step.timestamp for MCP calls.
+    This is an approximation that includes model inference overhead.
+
+    Returns:
+        Dict with mcp_latency_p50_ms and mcp_latency_p95_ms, or None values.
+    """
+    empty = {"mcp_latency_p50_ms": None, "mcp_latency_p95_ms": None}
+    path = Path(trajectory_json_path)
+    if not path.is_file():
+        return empty
+
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return empty
+
+    steps = data.get("steps") or []
+    if len(steps) < 2:
+        return empty
+
+    # Collect (step_index, timestamp) for steps with MCP tool calls
+    mcp_step_indices: list[int] = []
+    timestamps: list[Optional[datetime]] = []
+
+    for i, step in enumerate(steps):
+        ts = _parse_iso(step.get("timestamp"))
+        timestamps.append(ts)
+        tool_calls = step.get("tool_calls") or []
+        for tc in tool_calls:
+            name = tc.get("function_name") or ""
+            if _is_mcp_tool(name):
+                mcp_step_indices.append(i)
+                break  # Only count step once
+
+    if not mcp_step_indices:
+        return empty
+
+    # Compute durations: time from MCP step to next step
+    durations_ms: list[float] = []
+    for idx in mcp_step_indices:
+        if idx + 1 < len(timestamps):
+            t_start = timestamps[idx]
+            t_end = timestamps[idx + 1]
+            if t_start is not None and t_end is not None:
+                delta_ms = (t_end - t_start).total_seconds() * 1000
+                if delta_ms >= 0:
+                    durations_ms.append(delta_ms)
+
+    if not durations_ms:
+        return empty
+
+    p50 = _statistics.median(durations_ms)
+    if len(durations_ms) >= 2:
+        try:
+            p95 = _statistics.quantiles(durations_ms, n=20)[-1]  # 95th percentile
+        except _statistics.StatisticsError:
+            p95 = max(durations_ms)
+    else:
+        p95 = durations_ms[0]
+
+    return {
+        "mcp_latency_p50_ms": round(p50, 1),
+        "mcp_latency_p95_ms": round(p95, 1),
+    }

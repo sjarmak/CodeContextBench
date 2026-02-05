@@ -35,6 +35,8 @@ class TaskMetrics:
     mcp_benefit_score: Optional[float] = None
     mcp_benefit_breakdown: Optional[dict[str, float]] = None
     repo: Optional[str] = None
+    task_context_length: Optional[int] = None
+    task_files_count: Optional[int] = None
 
     # Timing (seconds)
     wall_clock_seconds: Optional[float] = None
@@ -64,6 +66,7 @@ class TaskMetrics:
     search_calls_nls: Optional[int] = None
     search_calls_deepsearch: Optional[int] = None
     deepsearch_keyword_ratio: Optional[float] = None
+    search_strategy_type: Optional[str] = None  # keyword_only | nls_focused | deepsearch_heavy | mixed
 
     # Code changes
     files_modified: Optional[int] = None
@@ -73,6 +76,23 @@ class TaskMetrics:
     # Derived efficiency
     input_output_ratio: Optional[float] = None
     cache_hit_rate: Optional[float] = None
+
+    # Tier 1: error & environment
+    error_fingerprint: Optional[dict] = None
+    verifier_test_summary: Optional[dict] = None
+    agent_return_code: Optional[int] = None
+    mcp_config_present: Optional[bool] = None
+    mcp_servers: Optional[list[str]] = None
+    instruction_length_chars: Optional[int] = None
+
+    # Tier 2: conversation analysis
+    conversation_turns: Optional[int] = None
+    tool_errors_total: Optional[int] = None
+    tool_errors_by_name: Optional[dict[str, int]] = None
+    backtrack_count: Optional[int] = None
+    mcp_latency_p50_ms: Optional[float] = None
+    mcp_latency_p95_ms: Optional[float] = None
+    context_window_peak_pct: Optional[float] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -154,6 +174,44 @@ class RunMetrics:
     def mean_files_modified(self) -> Optional[float]:
         return _safe_mean([t.files_modified for t in self.tasks])
 
+    @property
+    def error_rate(self) -> Optional[float]:
+        """Fraction of tasks with non-None error_fingerprint."""
+        if not self.tasks:
+            return None
+        errored = sum(1 for t in self.tasks if t.error_fingerprint is not None)
+        return errored / len(self.tasks)
+
+    @property
+    def mean_conversation_turns(self) -> Optional[float]:
+        return _safe_mean([t.conversation_turns for t in self.tasks])
+
+    @property
+    def mean_tool_errors(self) -> Optional[float]:
+        return _safe_mean([t.tool_errors_total for t in self.tasks])
+
+    @property
+    def mean_backtrack_count(self) -> Optional[float]:
+        return _safe_mean([t.backtrack_count for t in self.tasks])
+
+    @property
+    def mean_mcp_latency_p50(self) -> Optional[float]:
+        return _safe_mean([t.mcp_latency_p50_ms for t in self.tasks])
+
+    @property
+    def mean_context_window_peak(self) -> Optional[float]:
+        return _safe_mean([t.context_window_peak_pct for t in self.tasks])
+
+    @property
+    def error_fingerprint_summary(self) -> Optional[dict[str, int]]:
+        """Count of each error fingerprint_id across tasks."""
+        counts: dict[str, int] = {}
+        for t in self.tasks:
+            if t.error_fingerprint and isinstance(t.error_fingerprint, dict):
+                fid = t.error_fingerprint.get("fingerprint_id", "unknown")
+                counts[fid] = counts.get(fid, 0) + 1
+        return counts if counts else None
+
     def to_dict(self) -> dict:
         return {
             "run_id": self.run_id,
@@ -174,6 +232,13 @@ class RunMetrics:
             "mean_input_output_ratio": self.mean_input_output_ratio,
             "mean_cache_hit_rate": self.mean_cache_hit_rate,
             "mean_files_modified": self.mean_files_modified,
+            "error_rate": self.error_rate,
+            "mean_conversation_turns": self.mean_conversation_turns,
+            "mean_tool_errors": self.mean_tool_errors,
+            "mean_backtrack_count": self.mean_backtrack_count,
+            "mean_mcp_latency_p50": self.mean_mcp_latency_p50,
+            "mean_context_window_peak": self.mean_context_window_peak,
+            "error_fingerprint_summary": self.error_fingerprint_summary,
         }
 
     @classmethod
@@ -183,7 +248,10 @@ class RunMetrics:
         for key in ("mean_reward", "mean_partial_score", "pass_rate",
                      "mean_tokens", "mean_wall_clock", "mean_mcp_ratio",
                      "mean_deepsearch_keyword_ratio", "mean_input_output_ratio",
-                     "mean_cache_hit_rate", "mean_files_modified"):
+                     "mean_cache_hit_rate", "mean_files_modified",
+                     "error_rate", "mean_conversation_turns", "mean_tool_errors",
+                     "mean_backtrack_count", "mean_mcp_latency_p50",
+                     "mean_context_window_peak", "error_fingerprint_summary"):
             data.pop(key, None)
         known = {f.name for f in cls.__dataclass_fields__.values()}
         filtered = {k: v for k, v in data.items() if k in known}

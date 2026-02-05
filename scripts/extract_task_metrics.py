@@ -37,6 +37,15 @@ from ccb_metrics.extractors import (
     extract_code_changes_from_trajectory,
     extract_code_changes_from_transcript,
     calculate_cost_from_tokens,
+    extract_error_fingerprint,
+    extract_verifier_test_summary,
+    extract_agent_return_code,
+    extract_mcp_info,
+    extract_instruction_length,
+    extract_conversation_analysis_from_trajectory,
+    extract_conversation_analysis_from_transcript,
+    extract_mcp_latency_from_trajectory,
+    classify_search_strategy,
 )
 from ccb_metrics.task_selection import load_selected_tasks, build_task_index, enrich_task_metrics
 
@@ -135,6 +144,11 @@ def process_task_dir(
         tm.search_calls_nls = search["search_calls_nls"]
         tm.search_calls_deepsearch = search["search_calls_deepsearch"]
         tm.deepsearch_keyword_ratio = search["deepsearch_keyword_ratio"]
+        tm.search_strategy_type = classify_search_strategy(
+            search["search_calls_keyword"] or 0,
+            search["search_calls_nls"] or 0,
+            search["search_calls_deepsearch"] or 0,
+        )
 
     # Code changes — prefer trajectory, fall back to transcript
     changes = extract_code_changes_from_trajectory(trajectory_path)
@@ -161,6 +175,42 @@ def process_task_dir(
             tm.input_tokens, tm.output_tokens,
             tm.cache_creation_tokens, tm.cache_read_tokens,
         )
+
+    # --- Tier 1: error & environment ---
+    tm.error_fingerprint = extract_error_fingerprint(result_json)
+    tm.agent_return_code = extract_agent_return_code(task_dir)
+
+    mcp_info = extract_mcp_info(task_dir)
+    tm.mcp_config_present = mcp_info["mcp_config_present"]
+    tm.mcp_servers = mcp_info["mcp_servers"]
+
+    tm.instruction_length_chars = extract_instruction_length(task_dir)
+
+    test_stdout = task_dir / "verifier" / "test-stdout.txt"
+    tm.verifier_test_summary = extract_verifier_test_summary(test_stdout, benchmark)
+
+    # --- Tier 2: conversation analysis ---
+    conv = extract_conversation_analysis_from_trajectory(trajectory_path)
+    if conv.get("conversation_turns") is None:
+        conv = extract_conversation_analysis_from_transcript(transcript_path)
+
+    if conv.get("conversation_turns") is not None:
+        tm.conversation_turns = conv["conversation_turns"]
+        tm.tool_errors_total = conv["tool_errors_total"]
+        tm.tool_errors_by_name = conv["tool_errors_by_name"]
+        tm.backtrack_count = conv["backtrack_count"]
+        tm.context_window_peak_pct = conv["context_window_peak_pct"]
+
+    # If trajectory didn't give us context_window_peak, try transcript
+    if tm.context_window_peak_pct is None and transcript_path.is_file():
+        transcript_conv = extract_conversation_analysis_from_transcript(transcript_path)
+        if transcript_conv.get("context_window_peak_pct") is not None:
+            tm.context_window_peak_pct = transcript_conv["context_window_peak_pct"]
+
+    # MCP latency from trajectory
+    latency = extract_mcp_latency_from_trajectory(trajectory_path)
+    tm.mcp_latency_p50_ms = latency["mcp_latency_p50_ms"]
+    tm.mcp_latency_p95_ms = latency["mcp_latency_p95_ms"]
 
     return tm
 

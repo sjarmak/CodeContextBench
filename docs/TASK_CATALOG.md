@@ -1,6 +1,6 @@
 # CodeContextBench Task Catalog
 
-A detailed reference for every benchmark task in CodeContextBench. This document covers all 10 benchmark suites and 93 selected evaluation tasks, plus additional available tasks from 3 supplementary benchmarks.
+A detailed reference for every benchmark task in CodeContextBench. This document covers all 10 benchmark suites. The current evaluation selection contains 91 tasks from 7 benchmarks. Three additional benchmarks (CrossRepo, RepoQA, DIBench) have fully defined tasks with test scripts and scoring but have not yet been wired into the selection pipeline (`scripts/select_benchmark_tasks.py`).
 
 **Selection methodology:** Tasks were chosen via stratified sampling across benchmarks, covering all SDLC phases. Each task is scored for MCP benefit using a weighted combination of context complexity (0.25), cross-file dependencies (0.30), semantic search potential (0.20), and tool-chain weight (0.25). See `docs/TASK_SELECTION.md` for full scoring methodology.
 
@@ -14,10 +14,10 @@ A detailed reference for every benchmark task in CodeContextBench. This document
 4. [PyTorch (12 tasks)](#4-pytorch--pytorch-pr-level-tasks)
 5. [SWE-bench Pro (36 tasks)](#5-swe-bench-pro--real-world-software-engineering)
 6. [SWE-Perf (3 tasks)](#6-swe-perf--performance-optimization)
-7. [TAC (8 tasks)](#7-tac--tool-augmented-coding)
-8. [CrossRepo (5 tasks)](#8-crossrepo--cross-repository-reasoning) *(supplementary)*
-9. [RepoQA (10 tasks)](#9-repoqa--semantic-code-retrieval) *(supplementary)*
-10. [DIBench (8 tasks)](#10-dibench--dependency-installation) *(supplementary)*
+7. [TAC (6 tasks)](#7-tac--the-agent-company)
+8. [CrossRepo (5 tasks)](#8-crossrepo--cross-repository-reasoning) *(not yet in selection pipeline)*
+9. [RepoQA (10 tasks)](#9-repoqa--semantic-code-retrieval) *(not yet in selection pipeline)*
+10. [DIBench (8 tasks)](#10-dibench--dependency-installation) *(not yet in selection pipeline)*
 
 ---
 
@@ -377,28 +377,27 @@ Optimize series aggregation in groupby operations in `pandas/_libs/groupby.pyx` 
 
 ---
 
-## 7. TAC -- Tool-Augmented Coding
+## 7. TAC -- The Agent Company
 
-**Focus:** Tasks requiring agents to use external tools, navigate unfamiliar repositories, and interact with services (GitLab, RocketChat) beyond just editing code.
+**Focus:** Tasks from The Agent Company (TAC) benchmark, requiring agents to use external tools, navigate unfamiliar repositories, and interact with services (GitLab, RocketChat) beyond just editing code.
+**Prerequisites:** TAC server infrastructure (GitLab, RocketChat, API server). See `benchmarks/ccb_tac/README.md` for setup.
 
 | Task | Language | Difficulty | Category | MCP Score |
 |------|----------|-----------|----------|-----------|
 | tac-buffer-pool-manager | C++ | hard | implement | 0.490 |
-| tac-copilot-arena-endpoint | Python | medium | endpoint | 0.478 |
 | tac-dependency-change | Python | medium | dependency | 0.440 |
 | tac-find-in-codebase-1 | C++ | medium | find-in-codebase | 0.575 |
 | tac-find-in-codebase-2 | C++ | medium | find-in-codebase | 0.575 |
 | tac-implement-hyperloglog | C++ | hard | implement | 0.490 |
-| tac-troubleshoot-dev-setup | Python | medium | troubleshoot | 0.453 |
 | tac-write-unit-test | Python | medium | unit-test | 0.465 |
+
+**Excluded tasks (2):**
+- `tac-copilot-arena-endpoint` -- copilot-arena-server repo not present in TAC GitLab backup data
+- `tac-troubleshoot-dev-setup` -- same repo dependency; task fails at clone
 
 ### tac-buffer-pool-manager
 
 Implement a buffer pool manager for the bustub database system (from TheAgentCompany GitLab). This is the core component managing in-memory page cache and disk coordination. The component interacts with disk manager, page guard, and LRU-K replacer -- understanding the dependency graph and existing patterns is critical.
-
-### tac-copilot-arena-endpoint
-
-Implement a copilot arena endpoint feature in Python. Requires understanding existing API patterns and service architecture.
 
 ### tac-dependency-change
 
@@ -416,10 +415,6 @@ Similar codebase search task in llama.cpp. Find a specific improvement or PR thr
 
 Implement the HyperLogLog algorithm for approximate cardinality estimation in C++. Requires understanding the probabilistic data structure and implementing it correctly within the existing codebase.
 
-### tac-troubleshoot-dev-setup
-
-Debug and fix development environment setup issues in a Python project. Tests the agent's ability to diagnose configuration problems, missing dependencies, and environment mismatches.
-
 ### tac-write-unit-test
 
 Navigate to the OpenHands repository, find the `search_file` function in `/workspace/openhands/openhands/runtime/plugins/agent_skills/file_ops/file_ops.py`, and write comprehensive unit tests in `/workspace/openhands/tests/unit/test_agent_skill.py`. Tests the agent's ability to understand existing code and write meaningful test coverage.
@@ -429,7 +424,7 @@ Navigate to the OpenHands repository, find the `search_file` function in `/works
 ## 8. CrossRepo -- Cross-Repository Reasoning
 
 **Focus:** Tasks that span multiple repositories, testing the ability to trace interactions, APIs, and data flows across codebases.
-**Status:** Supplementary benchmark (not in the 93 selected tasks). Verifier fixed but ~80% task failure rate due to inherent task difficulty.
+**Note:** Not yet wired into the selection pipeline. Verifier fixed but ~80% task failure rate due to inherent task difficulty.
 
 | Task | Repositories | Description |
 |------|-------------|-------------|
@@ -465,7 +460,7 @@ Create a marker file `test_marker.txt` containing exactly `MARKER_CREATED`. This
 
 **Focus:** Find functions by behavioral description alone (no name given). Tests semantic search capability -- the agent must read a description of what a function does and locate it in the repository.
 **Difficulty:** hard (all tasks) | **Agent Timeout:** 10 min | **Verifier Timeout:** 5 min
-**Status:** Supplementary benchmark (not in the 93 selected tasks).
+**Note:** Not yet wired into the selection pipeline.
 **Output:** JSON to `/app/solution.json` with `function_path`, `function_name`, `justification`.
 **Scoring:** 1.0 (perfect match), 0.7-0.9 (good), 0.3-0.6 (partial), 0.0 (wrong).
 
@@ -528,7 +523,7 @@ Find a function that rearranges multi-dimensional array elements based on specif
 
 **Focus:** Infer and add missing dependencies to build files by analyzing source code imports. The agent must not modify source code -- only edit dependency configuration files.
 **Difficulty:** medium (all tasks) | **Agent Timeout:** 15 min | **Verifier Timeout:** 15 min
-**Status:** Supplementary benchmark (not in the 93 selected tasks).
+**Note:** Not yet wired into the selection pipeline.
 
 | Task | Language | Project | Build File |
 |------|----------|---------|------------|
@@ -555,14 +550,14 @@ Each task follows the same pattern: the agent must analyze the project's source 
 | PyTorch | 12 | medium - hard | C++ | 0.555 |
 | SWE-bench Pro | 36 | hard | Go, TS, Python, JS | 0.660 |
 | SWE-Perf | 3 | medium - hard | Python | 0.458 |
-| TAC | 8 | medium - hard | C++, Python | 0.496 |
+| TAC | 6 | medium - hard | C++, Python | 0.506 |
 | CrossRepo | 5* | medium - hard | Go, Python | -- |
 | RepoQA | 10* | hard | C++, Java, Python, Rust, TS | -- |
 | DIBench | 8* | medium | C#, JS, Python, Rust | -- |
 
-\* Supplementary benchmarks, not included in the 93 selected evaluation tasks.
+\* Not yet wired into the selection pipeline (`scripts/select_benchmark_tasks.py`). Tasks are fully defined with test scripts and scoring.
 
-**Total selected tasks:** 93
+**Total selected tasks:** 91
 **Total available tasks:** 826
 **Languages covered:** C, C++, C#, Go, Java, JavaScript, Python, Rust, TypeScript
 **SDLC phases covered:** Requirements & Discovery, Architecture & Design, Implementation (feature), Implementation (bug fix), Implementation (refactoring), Testing & QA, Documentation, Maintenance

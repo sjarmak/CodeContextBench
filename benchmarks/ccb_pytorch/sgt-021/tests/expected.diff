@@ -1,0 +1,52 @@
+diff --git a/test/dynamo/test_decorators.py b/test/dynamo/test_decorators.py
+index 6af25a385c2f6..8b4ebc84fc290 100644
+--- a/test/dynamo/test_decorators.py
++++ b/test/dynamo/test_decorators.py
+@@ -2016,6 +2016,23 @@ def f():
+ 
+         self.assertEqual(f(), 1)
+ 
++    def test_error_on_graph_break_nonempty_checkpoint(self):
++        cnts = torch._dynamo.testing.CompileCounter()
++
++        @torch.compile(backend=cnts)
++        def fn(x):
++            x = x + 1
++            x = x + 1
++            x = x + 1
++            with torch._dynamo.error_on_graph_break(True):
++                torch._dynamo.graph_break()
++            return x + 1
++
++        with self.assertRaises(Unsupported):
++            fn(torch.ones(3))
++
++        self.assertEqual(cnts.frame_count, 0)
++
+     def test_nested_compile_fullgraph(self):
+         # Test that fullgraph=True cannot be toggled back by fullgraph=False
+         inp = torch.ones(3)
+diff --git a/torch/_dynamo/symbolic_convert.py b/torch/_dynamo/symbolic_convert.py
+index 26588dee2674d..8cee8b0113257 100644
+--- a/torch/_dynamo/symbolic_convert.py
++++ b/torch/_dynamo/symbolic_convert.py
+@@ -1355,6 +1355,19 @@ def step(self) -> bool:
+         except (ReturnValueOp, YieldValueOp):
+             return False
+         except Unsupported:
++            # More restrictive condition than should_compile_partial_graph:
++            # if this condition is true, then we SHOULD NOT attempt to find
++            # a previous checkpoint to resume from and try to resume - we should
++            # immediately error out.
++            # The condition is more restrictive because, it may be possible to resume significantly earlier
++            # in the code (the most recent speculation point). This happens, for example, in the case
++            # of a graph break in a try block.
++            if (
++                self.one_graph
++                or self.error_on_graph_break
++                or self.is_tracing_resume_prologue
++            ):
++                raise
+             if self.current_speculation is None:
+                 log.debug("empty checkpoint")
+                 raise

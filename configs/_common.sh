@@ -5,9 +5,16 @@
 # ============================================
 # AUTHENTICATION MODE
 # ============================================
-# Use Claude Max subscription instead of API key.
-# The agent reads ~/.claude/.credentials.json for the OAuth access token.
-export USE_SUBSCRIPTION=true
+# Set to "true" for Claude Max subscription (OAuth tokens), "false" for API key.
+# API mode uses ANTHROPIC_API_KEY from .env.local; subscription mode uses ~/.claude/.credentials.json.
+export USE_SUBSCRIPTION=${USE_SUBSCRIPTION:-false}
+
+# ============================================
+# FAIL-FAST MODE
+# ============================================
+# When true, if any task errors out, kill all running tasks and abort immediately.
+# Recommended for API mode to avoid wasting credits on a broken batch.
+FAIL_FAST=${FAIL_FAST:-true}
 
 # ============================================
 # TOKEN REFRESH
@@ -155,6 +162,17 @@ SKIP_ACCOUNTS="${SKIP_ACCOUNTS:-account2}"
 setup_multi_accounts() {
     CLAUDE_HOMES=()
 
+    # API mode: no multi-account needed
+    if [ "$USE_SUBSCRIPTION" != "true" ]; then
+        CLAUDE_HOMES=("$HOME")
+        echo "API mode (USE_SUBSCRIPTION=false) — single account"
+        if [ "$PARALLEL_JOBS" -eq 0 ]; then
+            PARALLEL_JOBS=$(nproc 2>/dev/null || echo 8)
+            echo "Parallel jobs auto-set to $PARALLEL_JOBS (CPU count)"
+        fi
+        return
+    fi
+
     # Check for explicit account directories: account1, account2, ...
     local account_num=1
     while true; do
@@ -222,45 +240,154 @@ ensure_fresh_token_all() {
 #   - PID tracking and exit code collection
 #
 # Returns 0 if all tasks succeeded, 1 if any failed.
+# Rate-limit / account-exhaustion patterns (checked in task log output).
+# If a failed task's log matches any of these, it's eligible for retry on a different account.
+RATE_LIMIT_PATTERNS="rate.limit|429|too many requests|throttl|overloaded|token.*refresh.*fail|credentials.*expired|403.*Forbidden|capacity|resource_exhausted"
+
+# Check if a task failure looks like a rate-limit / account-exhaustion error.
+# Args: $1 = task_id, $2 = log directory (where ${task_id}.log might be)
+# Returns 0 if rate-limited, 1 otherwise.
+_is_rate_limited() {
+    local task_id=$1
+    local log_dir=$2
+
+    # Check the task log file if it exists
+    local log_file="${log_dir}/${task_id}.log"
+    if [ -f "$log_file" ]; then
+        if grep -qEi "$RATE_LIMIT_PATTERNS" "$log_file" 2>/dev/null; then
+            return 0
+        fi
+    fi
+
+    # Also check any result.json files that were recently written for this task
+    local result_files
+    result_files=$(find "$log_dir" -name "result.json" -newer "$log_dir" -path "*${task_id}*" 2>/dev/null || true)
+    for rf in $result_files; do
+        if grep -qEi "$RATE_LIMIT_PATTERNS" "$rf" 2>/dev/null; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Pick a different account home than the one that failed.
+# Args: $1 = failed account home
+# Prints the alternate account home, or empty if only one account.
+_pick_alternate_account() {
+    local failed_home=$1
+    local num_accounts=${#CLAUDE_HOMES[@]}
+
+    if [ "$num_accounts" -le 1 ]; then
+        echo ""
+        return
+    fi
+
+    for home in "${CLAUDE_HOMES[@]}"; do
+        if [ "$home" != "$failed_home" ]; then
+            echo "$home"
+            return
+        fi
+    done
+    echo ""
+}
+
 run_tasks_parallel() {
     local -n _task_ids=$1
     local cmd_fn=$2
     local pids=()
     local task_for_pid=()
+    local home_for_pid=()
     local failed=0
+    local abort=false
     local account_idx=0
     local num_accounts=${#CLAUDE_HOMES[@]}
 
+    # Retry queue: tasks to retry on a different account
+    local retry_tasks=()
+    local retry_homes=()
+    # Track which tasks already retried (prevent infinite loops)
+    declare -A _retried
+
+    # Infer log directory from the calling script's jobs_subdir variable (if set)
+    local _log_dir="${jobs_subdir:-}"
+
     echo "Parallel execution: ${#_task_ids[@]} tasks, max $PARALLEL_JOBS concurrent, $num_accounts account(s)"
 
-    for task_id in "${_task_ids[@]}"; do
-        # Wait if at PARALLEL_JOBS limit
-        while [ ${#pids[@]} -ge $PARALLEL_JOBS ]; do
-            # Wait for any one child to finish
-            local done_pid=""
-            for i in "${!pids[@]}"; do
-                if ! kill -0 "${pids[$i]}" 2>/dev/null; then
-                    done_pid="${pids[$i]}"
-                    wait "$done_pid" 2>/dev/null || {
-                        echo "WARNING: Task ${task_for_pid[$i]} (PID $done_pid) exited with error"
+    # _kill_all: terminate all running task PIDs.
+    _kill_all() {
+        if [ ${#pids[@]} -eq 0 ]; then return; fi
+        echo "FAIL-FAST: Killing ${#pids[@]} running task(s)..."
+        for i in "${!pids[@]}"; do
+            kill "${pids[$i]}" 2>/dev/null || true
+            echo "  Killed ${task_for_pid[$i]} (PID ${pids[$i]})"
+        done
+        sleep 2
+        for i in "${!pids[@]}"; do
+            kill -9 "${pids[$i]}" 2>/dev/null || true
+        done
+        pids=()
+        task_for_pid=()
+        home_for_pid=()
+    }
+
+    # _reap_one: check finished PIDs, handle rate-limit retries.
+    # Sets done_pid to the reaped PID, or empty if none finished.
+    _reap_one() {
+        done_pid=""
+        for i in "${!pids[@]}"; do
+            if ! kill -0 "${pids[$i]}" 2>/dev/null; then
+                done_pid="${pids[$i]}"
+                local _task="${task_for_pid[$i]}"
+                local _home="${home_for_pid[$i]}"
+                local _exit=0
+                wait "$done_pid" 2>/dev/null || _exit=$?
+
+                if [ "$_exit" -ne 0 ]; then
+                    # Check if this is a rate-limit failure eligible for retry
+                    if [ -n "$_log_dir" ] && \
+                       [ "$num_accounts" -gt 1 ] && \
+                       [ -z "${_retried[$_task]:-}" ] && \
+                       _is_rate_limited "$_task" "$_log_dir"; then
+                        local alt_home
+                        alt_home=$(_pick_alternate_account "$_home")
+                        if [ -n "$alt_home" ]; then
+                            echo "RATE-LIMIT RETRY: Task $_task failed on $(basename "$_home"), will retry on $(basename "$alt_home")"
+                            retry_tasks+=("$_task")
+                            retry_homes+=("$alt_home")
+                            _retried[$_task]=1
+                        else
+                            echo "WARNING: Task $_task rate-limited but no alternate account available"
+                            failed=1
+                        fi
+                    else
+                        echo "ERROR: Task $_task (PID $done_pid) exited with code $_exit"
                         failed=1
-                    }
-                    unset 'pids[i]'
-                    unset 'task_for_pid[i]'
-                    # Re-index arrays
-                    pids=("${pids[@]}")
-                    task_for_pid=("${task_for_pid[@]}")
-                    break
+                        if [ "$FAIL_FAST" = "true" ]; then
+                            echo "FAIL-FAST: Aborting remaining tasks due to error in $_task"
+                            _kill_all
+                            abort=true
+                            return
+                        fi
+                    fi
                 fi
-            done
-            # If no PID finished yet, sleep briefly and re-check
-            if [ -z "$done_pid" ]; then
-                sleep 2
+
+                unset 'pids[i]'
+                unset 'task_for_pid[i]'
+                unset 'home_for_pid[i]'
+                # Re-index arrays
+                pids=("${pids[@]}")
+                task_for_pid=("${task_for_pid[@]}")
+                home_for_pid=("${home_for_pid[@]}")
+                break
             fi
         done
+    }
 
-        local task_home="${CLAUDE_HOMES[$account_idx]}"
-        account_idx=$(( (account_idx + 1) % num_accounts ))
+    # _launch: launch a task on a given account
+    _launch() {
+        local task_id=$1
+        local task_home=$2
 
         (
             export HOME="$task_home"
@@ -268,15 +395,59 @@ run_tasks_parallel() {
         ) &
         pids+=($!)
         task_for_pid+=("$task_id")
+        home_for_pid+=("$task_home")
         echo "  Launched task $task_id (PID $!, account HOME=$task_home)"
+        # Stagger launches to avoid Harbor batch-directory timestamp collisions
+        sleep 2
+    }
+
+    for task_id in "${_task_ids[@]}"; do
+        if [ "$abort" = true ]; then break; fi
+
+        # Wait if at PARALLEL_JOBS limit
+        while [ ${#pids[@]} -ge $PARALLEL_JOBS ]; do
+            _reap_one
+            if [ "$abort" = true ]; then break 2; fi
+            if [ -z "$done_pid" ]; then
+                sleep 2
+            fi
+        done
+
+        local task_home="${CLAUDE_HOMES[$account_idx]}"
+        account_idx=$(( (account_idx + 1) % num_accounts ))
+        _launch "$task_id" "$task_home"
     done
 
-    # Wait for remaining tasks
-    for i in "${!pids[@]}"; do
-        wait "${pids[$i]}" 2>/dev/null || {
-            echo "WARNING: Task ${task_for_pid[$i]} (PID ${pids[$i]}) exited with error"
-            failed=1
-        }
+    # Wait for remaining tasks, then process retry queue
+    while [ ${#pids[@]} -gt 0 ] || [ ${#retry_tasks[@]} -gt 0 ]; do
+        if [ "$abort" = true ]; then break; fi
+
+        # Drain running PIDs
+        while [ ${#pids[@]} -gt 0 ]; do
+            _reap_one
+            if [ "$abort" = true ]; then break 2; fi
+            if [ -z "$done_pid" ]; then
+                sleep 2
+            fi
+        done
+
+        # Launch any queued retries
+        if [ ${#retry_tasks[@]} -gt 0 ]; then
+            echo "Processing ${#retry_tasks[@]} rate-limit retry task(s)..."
+            for ri in "${!retry_tasks[@]}"; do
+                if [ "$abort" = true ]; then break; fi
+                while [ ${#pids[@]} -ge $PARALLEL_JOBS ]; do
+                    _reap_one
+                    if [ "$abort" = true ]; then break 2; fi
+                    if [ -z "$done_pid" ]; then
+                        sleep 2
+                    fi
+                done
+                _launch "${retry_tasks[$ri]}" "${retry_homes[$ri]}"
+            done
+            retry_tasks=()
+            retry_homes=()
+        fi
     done
 
     # Restore real HOME
