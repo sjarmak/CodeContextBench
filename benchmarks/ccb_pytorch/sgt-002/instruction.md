@@ -1,38 +1,31 @@
-# Revert "[annotation][export] Add metadata hook for all nodes created …
+# Cherry-pick revert of Inductor ReLU/GELU(Addmm) fusions (#168157)
 
-**Repository:** pytorch  
-**Difficulty:** MEDIUM  
+**Repository:** pytorch
+**Difficulty:** HARD
 **Category:** cross_module_bug_fix
 
 
 
 ## Description
 
-…in runtime_assert pass (#169497)"
+This is a cherry-pick of the revert of PR #168157, which added `Activation(Addmm) -> _addmm_activation` pattern replacement in the Inductor lowering pass.
 
-This reverts commit 65d346ff8c711731c6f2db4b3c045422bf87c582.
+PR #168157 introduced pattern matching in the Inductor compiler to fuse activation functions (ReLU, GELU) with Addmm (matrix multiply + bias add) operations into a single `_addmm_activation` call that leverages cuBLASLt's fused epilogue support. This optimization aimed to reduce kernel launches and memory traffic for common `Linear -> Activation` patterns.
 
-Reverted https://github.com/pytorch/pytorch/pull/169497 on behalf of https://github.com/facebook-github-bot due to Diff reverted internally ([comment](https://github.com/pytorch/pytorch/pull/169497#issuecomment-3667072868))
+However, the fusion caused regressions in certain model configurations and needed to be reverted. This cherry-pick applies the revert to the release branch, undoing:
+- The `_addmm_activation` pattern replacement in Inductor's lowering/decomposition passes
+- The associated pattern matcher registrations for ReLU(Addmm) and GELU(Addmm)
+- Any cuBLASLt epilogue fusion paths added for these patterns
 
-Fixes #169497
-
-
-cc @ezyang @EikanWang @jgong5 @wenzhe-nrv @voznesenskym @penguinwu @Guobing-Chen @XiaobingSuper @zhuhaozhe @blzheng @jiayisunx @kadeng @chauhang @a
+Changes:
+- 4 files modified
+- 93 additions, 87 deletions
 
 ## Task
 
-Review the PR: Revert "[annotation][export] Add metadata hook for all nodes created …
+Implement the fix: Cherry-pick revert of Inductor ReLU/GELU(Addmm) fusions
 
-Description: …in runtime_assert pass (#169497)"
-
-This reverts commit 65d346ff8c711731c6f2db4b3c045422bf87c582.
-
-Reverted https://github.com/pytorch/pytorch/pull/169497 on behalf of https://github.com/facebook-github-bot due to Diff reverted internally ([comment](https://github.com/pytorch/pytorch/pull/169497#issuecomment-3667072868))
-
-Fixes #169497
-
-
-cc @ezyang @EikanWang @jgong5 @wenzhe-nrv @voznesenskym @penguinwu @Guobing-Chen @XiaobingSuper @zhuhaozhe @blzheng @jiayisunx @kadeng @chauhang @a
+Description: Revert PR #168157 which added `Activation(Addmm) -> _addmm_activation` pattern replacement in the Inductor lowering pass for cuBLASLt fused epilogue support. The fusion caused regressions and needs to be reverted.
 
 Changes:
 - 4 files modified
@@ -59,5 +52,5 @@ Run the test command to verify your implementation:
 make test
 ```
 
-**Time Limit:** 10 minutes  
+**Time Limit:** 10 minutes
 **Estimated Context:** 8000 tokens

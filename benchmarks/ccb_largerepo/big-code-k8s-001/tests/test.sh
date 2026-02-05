@@ -4,6 +4,11 @@
 # 1. Taint effect constant is defined
 # 2. Tests for the new effect pass
 # 3. No regressions in existing taint logic
+#
+# NOTE: A reward.json file exists alongside this task defining additional
+# manual evaluation criteria (e.g., architecture_understanding, code_quality).
+# These criteria are NOT automatically scored by this script and would require
+# an LLM judge to evaluate. This script handles automated scoring only.
 
 set -e
 

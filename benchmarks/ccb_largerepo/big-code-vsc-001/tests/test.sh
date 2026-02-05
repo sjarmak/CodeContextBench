@@ -5,6 +5,11 @@
 # 2. Diagnostics-related files were modified
 # 3. TypeScript language features contain git/branch awareness
 # 4. No regressions in diagnostics pipeline
+#
+# NOTE: A reward.json file exists alongside this task defining additional
+# manual evaluation criteria (e.g., architecture_understanding, code_quality).
+# These criteria are NOT automatically scored by this script and would require
+# an LLM judge to evaluate. This script handles automated scoring only.
 
 set -e
 

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 from .models import TaskMetrics, RunMetrics
+from .task_selection import normalize_benchmark_name
 from .extractors import (
     extract_task_from_result_json,
     extract_task_tokens_from_transcript,
@@ -35,21 +36,38 @@ def _infer_benchmark(run_name: str) -> str:
     """Infer benchmark name from run directory name.
 
     Examples:
-        locobench_50_tasks_20260127_170300 -> locobench
-        swebenchpro_50_tasks_20260128_152150 -> swebenchpro
-        bigcode_mcp_opus_20260131_130446 -> bigcode
+        locobench_selected_opus_20260203_060731 -> locobench
+        swebenchpro_selected_opus_20260203_160607 -> swebenchpro
+        bigcode_mcp_opus_20260204_023501 -> bigcode
+        pytorch_opus_20260203_160607 -> pytorch
+        crossrepo_opus_20260204_133742 -> crossrepo
+        dibench_opus_20260203_160835 -> dibench
+        repoqa_opus_20260203_160835 -> repoqa
+        sweperf_opus_20260203_160835 -> sweperf
+        tac_opus_20260203_160607 -> tac
+        k8s_docs_opus_20260203_160607 -> k8s_docs
     """
     name = run_name.lower()
-    if name.startswith("locobench"):
-        return "locobench"
-    if name.startswith("swebench"):
-        return "swebenchpro"
-    if name.startswith("bigcode"):
-        return "bigcode"
-    if name.startswith("k8s") or name.startswith("kubernetes"):
-        return "k8s_docs"
+    # Explicit prefixes (order matters — check longer prefixes first)
+    prefixes = [
+        ("locobench", "locobench"),
+        ("swebench", "swebenchpro"),
+        ("bigcode", "bigcode"),
+        ("k8s_docs", "k8s_docs"),
+        ("k8s", "k8s_docs"),
+        ("kubernetes", "k8s_docs"),
+        ("crossrepo", "crossrepo"),
+        ("pytorch", "pytorch"),
+        ("dibench", "dibench"),
+        ("repoqa", "repoqa"),
+        ("sweperf", "sweperf"),
+        ("tac", "tac"),
+    ]
+    for prefix, bench in prefixes:
+        if name.startswith(prefix):
+            return bench
     # Fallback: take first segment before underscore-digit patterns
-    m = re.match(r"^([a-z_]+?)(?:_\d|_mcp|_pro)", name)
+    m = re.match(r"^([a-z_]+?)(?:_\d|_mcp|_pro|_opus|_selected)", name)
     if m:
         return m.group(1)
     return run_name
@@ -228,11 +246,16 @@ def discover_runs(runs_dir: str | Path) -> list[RunMetrics]:
     run_metadata: dict[tuple[str, str], dict] = {}
     harness_configs: dict[tuple[str, str], dict] = {}
 
+    # Suffixes / patterns that mark a run directory as non-canonical
+    _SKIP_PATTERNS = ("archive", "__broken", "__duplicate", "__all_errored", "__partial", "__integrated")
+
     for run_dir in sorted(runs_dir.iterdir()):
         if not run_dir.is_dir():
             continue
         run_name = run_dir.name
-        benchmark = _infer_benchmark(run_name)
+        if any(pat in run_name for pat in _SKIP_PATTERNS):
+            continue
+        benchmark = normalize_benchmark_name(_infer_benchmark(run_name))
 
         for config_dir in sorted(run_dir.iterdir()):
             if not config_dir.is_dir():

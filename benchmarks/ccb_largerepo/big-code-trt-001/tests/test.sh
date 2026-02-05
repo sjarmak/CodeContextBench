@@ -4,6 +4,11 @@
 # 1. W4A8_MXFP4_INT8 mode is defined in quantization enums
 # 2. Quantization pipeline supports the new mode
 # 3. Unit tests pass for the new mode
+#
+# NOTE: A reward.json file exists alongside this task defining additional
+# manual evaluation criteria (e.g., architecture_understanding, code_quality).
+# These criteria are NOT automatically scored by this script and would require
+# an LLM judge to evaluate. This script handles automated scoring only.
 
 set -e
 

