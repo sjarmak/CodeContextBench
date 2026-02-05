@@ -56,7 +56,7 @@ def evaluate_runtime(
 
     # Check if tests passed (correctness check)
     tests_passed = benchmark_results.get("tests_passed", True)
-    if isinstance(tests_passed, int):
+    if isinstance(tests_passed, int) and not isinstance(tests_passed, bool):
         tests_total = benchmark_results.get("tests_total", tests_passed)
         tests_passed = tests_passed >= tests_total if tests_total > 0 else True
 

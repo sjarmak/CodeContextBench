@@ -126,6 +126,7 @@ class TaskRecord:
     context_length: int = 0
     files_count: int = 0
     solution_files_changed: int = 0
+    solution_loc_changed: int = 0  # additions + deletions
 
 
 # ---------------------------------------------------------------------------
@@ -158,12 +159,19 @@ def load_ccb_swebenchpro(bench_dir: Path) -> list[TaskRecord]:
                 language = correct_lang
                 break
 
-        # Count files changed from solution/solve.sh
+        # Count files changed and LOC from solution/solve.sh
         files_changed = 0
+        loc_changed = 0
         solve_sh = d / "solution" / "solve.sh"
         if solve_sh.exists():
             text = solve_sh.read_text(errors="replace")
             files_changed = text.count("diff --git")
+            # Count actual diff lines (additions + deletions)
+            for line in text.splitlines():
+                if line.startswith("+") and not line.startswith("+++"):
+                    loc_changed += 1
+                elif line.startswith("-") and not line.startswith("---"):
+                    loc_changed += 1
 
         task_id = task_sec.get("id", d.name)
         category = task_sec.get("category", meta.get("category", "ccb_swebenchpro"))
@@ -176,6 +184,7 @@ def load_ccb_swebenchpro(bench_dir: Path) -> list[TaskRecord]:
             repo=repo,
             task_dir=f"ccb_swebenchpro/tasks/{d.name}",
             solution_files_changed=files_changed,
+            solution_loc_changed=loc_changed,
         ))
     return records
 
@@ -259,14 +268,18 @@ def load_ccb_pytorch(bench_dir: Path) -> list[TaskRecord]:
         data = _read_toml(toml_path)
         task_sec = data.get("task", {})
 
-        # Parse files modified from instruction.md
+        # Parse files modified and LOC from instruction.md
         files_modified = 0
+        loc_changed = 0
         instr = d / "instruction.md"
         if instr.exists():
             text = instr.read_text(errors="replace")
             m = re.search(r"(\d+)\s+files?\s+modified", text)
             if m:
                 files_modified = int(m.group(1))
+            m_loc = re.search(r"(\d+)\s+additions?,\s*(\d+)\s+deletions?", text)
+            if m_loc:
+                loc_changed = int(m_loc.group(1)) + int(m_loc.group(2))
 
         records.append(TaskRecord(
             task_id=task_sec.get("id", d.name),
@@ -277,11 +290,20 @@ def load_ccb_pytorch(bench_dir: Path) -> list[TaskRecord]:
             repo=task_sec.get("repo", "pytorch"),
             task_dir=f"ccb_pytorch/{d.name}",
             solution_files_changed=files_modified,
+            solution_loc_changed=loc_changed,
         ))
     return records
 
 
 def load_ccb_k8sdocs(bench_dir: Path) -> list[TaskRecord]:
+    # Approximate source file counts per K8s package (for MCP scoring)
+    K8S_PACKAGE_FILES: dict[str, int] = {
+        "apiserver-doc-001": 450,      # staging/src/k8s.io/apiserver — large
+        "applyconfig-doc-001": 280,    # staging/src/k8s.io/client-go/applyconfigurations
+        "client-go-doc-001": 380,      # staging/src/k8s.io/client-go — large
+        "fairqueuing-doc-001": 25,     # deep nested single package
+        "pkg-doc-001": 120,            # pkg/kubelet/cm — medium
+    }
     records: list[TaskRecord] = []
     for d in sorted(bench_dir.iterdir()):
         if not d.name.endswith("-doc-001") and "-doc-" not in d.name:
@@ -291,14 +313,16 @@ def load_ccb_k8sdocs(bench_dir: Path) -> list[TaskRecord]:
             continue
         data = _read_toml(toml_path)
         task_sec = data.get("task", {})
+        task_id = task_sec.get("id", d.name)
         records.append(TaskRecord(
-            task_id=task_sec.get("id", d.name),
+            task_id=task_id,
             benchmark="ccb_k8sdocs",
             category=task_sec.get("category", "package-documentation"),
             language=task_sec.get("language", "go"),
             difficulty=task_sec.get("difficulty", "hard"),
             repo=task_sec.get("repo", "kubernetes"),
             task_dir=f"ccb_k8sdocs/{d.name}",
+            files_count=K8S_PACKAGE_FILES.get(task_id, 100),
         ))
     return records
 
@@ -376,8 +400,16 @@ def score_mcp_benefit(task: TaskRecord) -> tuple[float, dict[str, float]]:
     """Compute MCP benefit score in [0, 1] with breakdown."""
 
     # --- context_complexity ---
+    # Use per-task LOC changed as proxy for change scope when available
     if task.context_length > 0:
         cc = _clamp(task.context_length / 1_000_000)
+    elif task.benchmark == "ccb_pytorch" and task.solution_loc_changed > 0:
+        # PyTorch codebase is always large (~3.6M LOC); blend base + patch scope
+        patch_complexity = _clamp(task.solution_loc_changed / 500.0, 0.0, 1.0)
+        cc = 0.6 + 0.4 * patch_complexity  # range [0.6, 1.0]
+    elif task.benchmark == "ccb_swebenchpro" and task.solution_loc_changed > 0:
+        # Varied repo sizes; use patch LOC as proxy for change scope
+        cc = _clamp(task.solution_loc_changed / 500.0, 0.2, 1.0)
     elif task.benchmark == "ccb_largerepo":
         cc = 0.95  # huge codebases
     elif task.benchmark == "ccb_swebenchpro":
@@ -388,13 +420,19 @@ def score_mcp_benefit(task: TaskRecord) -> tuple[float, dict[str, float]]:
         cc = 0.5
     elif task.benchmark == "ccb_sweperf":
         cc = 0.5
+    elif task.benchmark == "ccb_k8sdocs" and task.files_count > 0:
+        # K8s is always huge; package scope drives complexity
+        cc = _clamp(task.files_count / 450.0, 0.3, 1.0)
     elif task.benchmark == "ccb_k8sdocs":
         cc = 0.6
     else:
         cc = 0.4
 
     # --- cross_file_deps ---
-    if task.files_count > 0:
+    if task.benchmark == "ccb_k8sdocs" and task.files_count > 0:
+        # K8s packages range 25-450 files; scale accordingly
+        cfd = _clamp(task.files_count / 450.0, 0.1, 1.0)
+    elif task.files_count > 0:
         cfd = _clamp(task.files_count / 20.0)
     elif task.solution_files_changed > 0:
         cfd = _clamp(task.solution_files_changed / 20.0)
@@ -408,14 +446,24 @@ def score_mcp_benefit(task: TaskRecord) -> tuple[float, dict[str, float]]:
         cfd = 0.3
 
     # --- semantic_search_potential ---
+    # More files touched = more need for search to find relevant code
     if task.benchmark == "ccb_largerepo":
         ssp = 0.9
     elif task.category in ("find-in-codebase",):
         ssp = 0.8
     elif task.context_length > 500_000:
         ssp = 0.7
+    elif task.benchmark == "ccb_pytorch" and task.solution_files_changed > 0:
+        # PyTorch is always a large search space; files touched adds variation
+        file_factor = _clamp(task.solution_files_changed / 30.0, 0.0, 1.0)
+        ssp = 0.5 + 0.5 * file_factor  # range [0.5, 1.0]
+    elif task.benchmark == "ccb_swebenchpro" and task.solution_files_changed > 0:
+        # Varied repo sizes; more files = more search needed
+        ssp = _clamp(task.solution_files_changed / 30.0, 0.3, 1.0)
     elif task.benchmark in ("ccb_swebenchpro", "ccb_pytorch"):
         ssp = 0.6
+    elif task.benchmark == "ccb_k8sdocs" and task.files_count > 0:
+        ssp = _clamp(task.files_count / 400.0, 0.3, 1.0)
     elif task.benchmark == "ccb_k8sdocs":
         ssp = 0.5
     elif task.benchmark == "ccb_tac":

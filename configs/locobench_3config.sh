@@ -15,6 +15,7 @@
 #   --full-only            Run only MCP-Full (sourcegraph_full)
 #   --model MODEL          Override model (default: claude-opus-4-5-20251101)
 #   --category CATEGORY    Run category (default: official)
+#   --parallel N           Number of parallel task subshells (default: 1)
 #
 # Prerequisites:
 #   - ~/evals/.env.local with ANTHROPIC_API_KEY (required)
@@ -103,12 +104,19 @@ while [[ $# -gt 0 ]]; do
             CATEGORY="$2"
             shift 2
             ;;
+        --parallel)
+            PARALLEL_JOBS="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
             exit 1
             ;;
     esac
 done
+
+# Set up dual-account support (auto-detects second account)
+setup_dual_accounts
 
 # Check MCP credentials if MCP modes requested
 if { [ "$RUN_BASE" = true ] || [ "$RUN_FULL" = true ]; } && [ -z "$SOURCEGRAPH_ACCESS_TOKEN" ]; then
@@ -154,6 +162,7 @@ echo "=============================================="
 echo "Model: ${MODEL}"
 echo "Tasks: ${#TASK_IDS[@]}"
 echo "Concurrency: ${CONCURRENCY}"
+echo "Parallel jobs: ${PARALLEL_JOBS}"
 echo "Jobs directory: ${JOBS_BASE}"
 echo "Run baseline: ${RUN_BASELINE}"
 echo "Run MCP-Base: ${RUN_BASE}"
@@ -203,22 +212,25 @@ get_sg_repo_name() {
     echo ""
 }
 
-# Run MCP mode tasks one-by-one so SOURCEGRAPH_REPO_NAME can be set per task
+# Run MCP mode tasks with parallel support; SOURCEGRAPH_REPO_NAME set per task
 run_mcp_task_batch() {
     local mode=$1
     local mcp_type=$2
     local jobs_subdir="${JOBS_BASE}/${mode}"
-    ensure_fresh_token
+    ensure_fresh_token_all
     mkdir -p "$jobs_subdir"
-    for task_id in "${TASK_IDS[@]}"; do
+
+    _locobench_mcp_run_single() {
+        local task_id=$1
+        local task_home=$2
         local task_path="${TASKS_DIR}/${task_id}"
         local sg_repo=$(get_sg_repo_name "$task_path")
         if [ -n "$sg_repo" ]; then
             export SOURCEGRAPH_REPO_NAME="$sg_repo"
-            echo "  [${mode}] Task ${task_id} -> SOURCEGRAPH_REPO_NAME=${sg_repo}"
+            echo "  [${mode}] Task ${task_id} -> SOURCEGRAPH_REPO_NAME=${sg_repo} [HOME=$task_home]"
         else
             unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
-            echo "  [${mode}] Task ${task_id} -> no SG repo mapping"
+            echo "  [${mode}] Task ${task_id} -> no SG repo mapping [HOME=$task_home]"
         fi
         BASELINE_MCP_TYPE=$mcp_type harbor run \
             --path "$task_path" \
@@ -229,8 +241,10 @@ run_mcp_task_batch() {
             --timeout-multiplier $TIMEOUT_MULTIPLIER \
             --force-build \
             2>&1 | tee "${jobs_subdir}/${task_id}.log" || true
-    done
-    unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
+    }
+
+    run_tasks_parallel TASK_IDS _locobench_mcp_run_single || true
+
     extract_all_metrics "$jobs_subdir" "ccb_locobench" "$mode"
     validate_and_report "$jobs_subdir" "$mode"
 }
@@ -243,12 +257,15 @@ if [ "$RUN_BASELINE" = true ]; then
     echo "[BASELINE] Starting selected-task baseline run..."
     echo ""
 
-    # Run selected tasks one-by-one (same as MCP modes but without SOURCEGRAPH_REPO_NAME)
     BASELINE_JOBS="${JOBS_BASE}/baseline"
+    ensure_fresh_token_all
     mkdir -p "$BASELINE_JOBS"
-    for task_id in "${TASK_IDS[@]}"; do
-        task_path="${TASKS_DIR}/${task_id}"
-        echo "  [baseline] Task ${task_id}"
+
+    _locobench_baseline_run_single() {
+        local task_id=$1
+        local task_home=$2
+        local task_path="${TASKS_DIR}/${task_id}"
+        echo "  [baseline] Task ${task_id} [HOME=$task_home]"
         BASELINE_MCP_TYPE=none harbor run \
             --path "$task_path" \
             --agent-import-path "${AGENT_PATH}" \
@@ -258,7 +275,9 @@ if [ "$RUN_BASELINE" = true ]; then
             --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
             --force-build \
             2>&1 | tee "${BASELINE_JOBS}/${task_id}.log" || true
-    done
+    }
+
+    run_tasks_parallel TASK_IDS _locobench_baseline_run_single || true
 
     extract_all_metrics "${BASELINE_JOBS}" "ccb_locobench" "baseline"
     validate_and_report "${BASELINE_JOBS}" "baseline"

@@ -614,9 +614,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--runs-dir",
-        default=str(Path.home() / "evals/custom_agents/agents/claudecode/runs/official"),
+        default="./runs/official/",
         help="Path to the Harbor runs/official/ directory "
-             "(default: ~/evals/custom_agents/agents/claudecode/runs/official/)",
+             "(default: ./runs/official/)",
     )
     parser.add_argument(
         "--output-dir",

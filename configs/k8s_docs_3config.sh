@@ -15,6 +15,7 @@
 #   --full-only            Run only MCP-Full (sourcegraph_full)
 #   --model MODEL          Override model (default: claude-opus-4-5-20251101)
 #   --category CATEGORY    Run category (default: official)
+#   --parallel N           Number of parallel task subshells (default: 1)
 #
 # Prerequisites:
 #   - ~/evals/.env.local with ANTHROPIC_API_KEY (required)
@@ -62,7 +63,7 @@ else
 fi
 echo ""
 
-ensure_fresh_token
+ensure_fresh_token_all
 
 # ============================================
 # CONFIGURATION
@@ -103,12 +104,19 @@ while [[ $# -gt 0 ]]; do
             CATEGORY="$2"
             shift 2
             ;;
+        --parallel)
+            PARALLEL_JOBS="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
             exit 1
             ;;
     esac
 done
+
+# Set up dual-account support (auto-detects second account)
+setup_dual_accounts
 
 # Check MCP credentials if MCP modes requested
 if { [ "$RUN_BASE" = true ] || [ "$RUN_FULL" = true ]; } && [ -z "$SOURCEGRAPH_ACCESS_TOKEN" ]; then
@@ -154,6 +162,7 @@ echo "=============================================="
 echo "Model: ${MODEL}"
 echo "Tasks: ${#TASK_IDS[@]}"
 echo "Concurrency: ${CONCURRENCY}"
+echo "Parallel jobs: ${PARALLEL_JOBS}"
 echo "Jobs directory: ${JOBS_BASE}"
 echo "Run baseline: ${RUN_BASELINE}"
 echo "Run MCP-Base: ${RUN_BASE}"
@@ -193,7 +202,7 @@ extract_all_metrics() {
 # RUN BASELINE (no MCP)
 # ============================================
 if [ "$RUN_BASELINE" = true ]; then
-    ensure_fresh_token
+    ensure_fresh_token_all
     echo ""
     echo "[BASELINE] Starting 5-task baseline run..."
     echo ""
@@ -216,7 +225,7 @@ fi
 # RUN MCP-Base (sourcegraph_base)
 # ============================================
 if [ "$RUN_BASE" = true ]; then
-    ensure_fresh_token
+    ensure_fresh_token_all
     echo ""
     echo "[MCP-Base] Starting 5-task MCP-Base run..."
     echo ""
@@ -240,7 +249,7 @@ fi
 # RUN MCP-Full (sourcegraph_full)
 # ============================================
 if [ "$RUN_FULL" = true ]; then
-    ensure_fresh_token
+    ensure_fresh_token_all
     echo ""
     echo "[MCP-Full] Starting 5-task MCP-Full run..."
     echo ""

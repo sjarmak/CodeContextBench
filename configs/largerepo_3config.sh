@@ -15,6 +15,7 @@
 #   --full-only            Run only MCP-Full (sourcegraph_full)
 #   --model MODEL          Override model (default: claude-opus-4-5-20251101)
 #   --category CATEGORY    Override run category (default: official)
+#   --parallel N           Number of parallel task subshells (default: 1)
 #
 # Prerequisites:
 #   - ~/evals/.env.local with ANTHROPIC_API_KEY (required)
@@ -103,12 +104,19 @@ while [[ $# -gt 0 ]]; do
             CATEGORY="$2"
             shift 2
             ;;
+        --parallel)
+            PARALLEL_JOBS="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
             exit 1
             ;;
     esac
 done
+
+# Set up dual-account support (auto-detects second account)
+setup_dual_accounts
 
 # Check MCP credentials if MCP modes requested
 if { [ "$RUN_BASE" = true ] || [ "$RUN_FULL" = true ]; } && [ -z "$SOURCEGRAPH_ACCESS_TOKEN" ]; then
@@ -191,7 +199,7 @@ run_task_batch() {
     local mcp_type=$2
     local jobs_subdir="${JOBS_BASE}/${mode}"
 
-    ensure_fresh_token
+    ensure_fresh_token_all
 
     log_section "Running Big Code MCP - Mode: $mode"
 
@@ -201,29 +209,27 @@ run_task_batch() {
     echo "  Model: $MODEL"
     echo "  Tasks: ${#TASK_DIRS[@]}"
     echo "  Concurrency: $CONCURRENCY"
+    echo "  Parallel jobs: $PARALLEL_JOBS"
     echo "  Timeout Multiplier: ${TIMEOUT_MULTIPLIER}x"
     echo "  Jobs directory: $jobs_subdir"
     echo ""
 
-    # Create jobs subdirectory
     mkdir -p "$jobs_subdir"
 
-    # Run each task individually (since they're in separate directories)
-    for task_dir in "${TASK_DIRS[@]}"; do
+    _largerepo_run_single() {
+        local task_dir=$1
+        local task_home=$2
         local task_path="$BENCHMARK_DIR/$task_dir"
 
         if [ ! -d "$task_path" ]; then
             echo "ERROR: Task directory not found: $task_path"
-            continue
+            return 1
         fi
 
-        echo "Running task: $task_dir ($mode)"
-        echo "  Path: $task_path"
+        echo "Running task: $task_dir ($mode) [HOME=$task_home]"
 
-        # Set Sourcegraph repo name override for this task (if mapped)
         local sg_repo="${TASK_SG_REPO_NAMES[$task_dir]:-}"
         if [ -n "$sg_repo" ]; then
-            echo "  SOURCEGRAPH_REPO_NAME: $sg_repo"
             export SOURCEGRAPH_REPO_NAME="$sg_repo"
         else
             unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
@@ -239,11 +245,10 @@ run_task_batch() {
             2>&1 | tee "${jobs_subdir}/${task_dir}.log" \
             || {
                 echo "WARNING: Task $task_dir failed (exit code: $?)"
-                echo "Continuing with remaining tasks..."
             }
+    }
 
-        echo ""
-    done
+    run_tasks_parallel TASK_DIRS _largerepo_run_single || true
 
     # Extract metrics for all completed tasks in this mode
     extract_all_metrics "$jobs_subdir" "ccb_largerepo" "$mode"

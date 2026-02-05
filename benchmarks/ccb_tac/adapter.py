@@ -877,7 +877,7 @@ fi
 DECRYPTION_KEY="${{DECRYPTION_KEY:-theagentcompany is all you need}}" \\
 python_default /utils/eval.py \\
     --trajectory_path "$TRAJECTORY_PATH" \\
-    --output_path "$OUTPUT_PATH" \\
+    --result_path "$OUTPUT_PATH" \\
     2>&1 || {{
     echo "TAC evaluator failed, attempting alternative evaluation..."
     # Some tasks may not need full TAC eval infrastructure

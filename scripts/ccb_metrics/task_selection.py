@@ -37,13 +37,27 @@ def load_selected_tasks(path: str | Path) -> dict:
 def build_task_index(selection: dict) -> dict[str, dict]:
     """Build a task_id → task metadata lookup from the selection document.
 
+    The index maps both the canonical task_id (e.g. 'ccb_dibench-python-inducer-cgen')
+    and the bare task name without benchmark prefix (e.g. 'dibench-python-inducer-cgen')
+    to the same metadata dict.  This allows matching result.json task_name values
+    (which lack the 'ccb_' prefix) against the canonical selection.
+
     Args:
         selection: The parsed selected_benchmark_tasks.json document.
 
     Returns:
-        Dict mapping task_id to its full metadata dict.
+        Dict mapping task_id (and normalized variants) to its full metadata dict.
     """
-    return {t["task_id"]: t for t in selection.get("tasks", [])}
+    index: dict[str, dict] = {}
+    for t in selection.get("tasks", []):
+        tid = t["task_id"]
+        index[tid] = t
+        # Also index without 'ccb_' prefix for matching result.json task_name
+        if tid.startswith("ccb_"):
+            bare = tid[4:]  # strip 'ccb_' prefix
+            if bare not in index:
+                index[bare] = t
+    return index
 
 
 def enrich_task_metrics(
@@ -133,6 +147,13 @@ def get_benchmark_name_mapping() -> dict[str, str]:
         "swebenchpro": "ccb_swebenchpro",
         "bigcode": "ccb_largerepo",
         "k8s_docs": "ccb_k8sdocs",
+        "pytorch": "ccb_pytorch",
+        "tac": "ccb_tac",
+        "sweperf": "ccb_sweperf",
+        "crossrepo": "ccb_crossrepo",
+        "dibench": "ccb_dibench",
+        "repoqa": "ccb_repoqa",
+        # Also handle already-prefixed names
         "ccb_pytorch": "ccb_pytorch",
         "ccb_tac": "ccb_tac",
         "ccb_sweperf": "ccb_sweperf",

