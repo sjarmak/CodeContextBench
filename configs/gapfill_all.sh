@@ -39,7 +39,7 @@ ensure_fresh_token
 # CONFIGURATION
 # ============================================
 AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
-MODEL="${MODEL:-anthropic/claude-opus-4-5-20251101}"
+MODEL="${MODEL:-anthropic/claude-opus-4-6}"
 CONCURRENCY=2
 TIMEOUT_MULTIPLIER=10
 CATEGORY="${CATEGORY:-official}"

@@ -21,7 +21,7 @@ if [ "${1:-}" = "--dry-run" ]; then
 fi
 
 SELECTION_FILE="$REPO_ROOT/configs/selected_benchmark_tasks.json"
-MODEL="${MODEL:-anthropic/claude-opus-4-5-20251101}"
+MODEL="${MODEL:-anthropic/claude-opus-4-6}"
 AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 JOBS_DIR="runs/validation/smoke_${TIMESTAMP}"
