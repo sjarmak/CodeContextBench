@@ -130,7 +130,7 @@ dn_file = "src/Components/Web/src/Forms/DisplayName.cs"
 if os.path.isfile(dn_file):
     with open(dn_file) as f:
         dn = f.read()
-    if "For is null" in dn and "InvalidOperationException" in dn:
+    if ("For is null" in dn or "For == null" in dn) and "InvalidOperationException" in dn:
         fix_hits += 1
         print("Fix defect-2: PASS (For null check restored)", file=sys.stderr)
     else:
