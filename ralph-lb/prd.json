@@ -1,0 +1,186 @@
+{
+  "project": "CodeContextBench Leaderboard Verification Normalization",
+  "branchName": "ralph/leaderboard-verification",
+  "description": "Define and implement the verification normalization layer for external agent leaderboard compatibility: result schema, verifier normalization, leaderboard scoring spec, and leaderboard generator.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create result.json JSON Schema",
+      "description": "As a tooling developer, I want a formal JSON Schema for result.json so that submissions can be validated programmatically.",
+      "acceptanceCriteria": [
+        "File schemas/result.schema.json exists and is valid JSON Schema (draft 2020-12)",
+        "Schema requires: task_name (string), verifier_result.rewards.reward (number 0.0-1.0), exception_info (null or object), started_at (string), finished_at (string)",
+        "Schema defines optional fields: agent_info.name, agent_info.model_info.name, agent_result.n_input_tokens (integer), agent_result.n_output_tokens (integer), trajectory_path (string)",
+        "rewards.reward is documented as REQUIRED in schema description — not 'score'",
+        "python3 -c \"import json; json.load(open('schemas/result.schema.json'))\" exits 0"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Create schemas/ directory. Reference actual result.json structure from runs/official/ — see generate_manifest.py:107-138 for the fields Harbor produces. The schema should match Harbor's output format exactly."
+    },
+    {
+      "id": "US-002",
+      "title": "Create submission validation script",
+      "description": "As a tooling developer, I want a script that validates a submission directory against the result schema so that malformed submissions are caught early.",
+      "acceptanceCriteria": [
+        "scripts/validate_submission.py exists and is executable",
+        "Takes --submission-dir argument pointing to a directory of task result.json files",
+        "Validates each result.json against schemas/result.schema.json",
+        "Reports clear errors: 'task X: missing required field verifier_result.rewards.reward'",
+        "Exits 0 if all valid, exits 1 with summary if any invalid",
+        "Uses only stdlib + jsonschema (pip-installable, no exotic deps)",
+        "python3 scripts/validate_submission.py --help exits 0 with usage info"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Depends on US-001 for schema. Use jsonschema library for validation. Walk the --submission-dir looking for result.json files. Print per-file validation status."
+    },
+    {
+      "id": "US-003",
+      "title": "Fix RepoQA test.sh to write reward.txt",
+      "description": "As a maintainer, I want RepoQA verifiers to write reward.txt (plain float) so that all benchmarks use the same canonical reward output.",
+      "acceptanceCriteria": [
+        "All test.sh files under benchmarks/ccb_repoqa/ write /logs/verifier/reward.txt as a plain decimal float",
+        "grep -r 'reward.txt' benchmarks/ccb_repoqa/*/tests/test.sh returns matches for all RepoQA tasks",
+        "Existing reward.json write is preserved (backward compat) but reward.txt is the canonical output",
+        "Each modified test.sh has a comment header: '# Reward: semantic_similarity (0.0-1.0) — correct function retrieval score'"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "RepoQA test.sh files currently write only /logs/verifier/reward.json with {'score': float}. Add a line after the JSON write: extract score from reward.json and echo to reward.txt. There are 10 RepoQA tasks. Check benchmarks/ccb_repoqa/*/tests/test.sh for the exact pattern."
+    },
+    {
+      "id": "US-004",
+      "title": "Add comment headers to all test.sh files",
+      "description": "As a leaderboard consumer, I want each test.sh to document what its reward measures so that scores are interpretable.",
+      "acceptanceCriteria": [
+        "All test.sh files in benchmarks/ccb_*/*/tests/ have a comment header after the shebang with format: '# Reward: {reward_type} (0.0-1.0) — {one-sentence description}'",
+        "reward_type is one of: binary, checklist, test_ratio, semantic_similarity, diff_similarity",
+        "Headers are accurate: SWE-bench Pro = test_ratio, PyTorch = diff_similarity, LoCoBench = semantic_similarity, K8s Docs = checklist, CodeReview = checklist, LinuxFLBench = checklist, DIBench = binary, RepoQA = semantic_similarity, CrossRepo = semantic_similarity, TAC = checklist, LargeRepo = checklist, SWE-Perf = test_ratio, DependEval = binary",
+        "grep -r '^# Reward:' benchmarks/ccb_*/*/tests/test.sh | wc -l equals total test.sh count"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "~900 test.sh files across 13 benchmarks. Within each benchmark, all tasks use the same reward_type. Write a helper script or use find+sed to batch-insert the header line after #!/bin/bash (or first line). Be careful: some test.sh start with #!/bin/bash, others with #!/usr/bin/env bash. Insert the comment on line 2 (after shebang)."
+    },
+    {
+      "id": "US-005",
+      "title": "Add verification metadata to task.toml files",
+      "description": "As a leaderboard consumer, I want task.toml to declare what the reward measures so that metadata is machine-readable.",
+      "acceptanceCriteria": [
+        "All task.toml files in benchmarks/ccb_*/*/task.toml have a [verification] section (not [verifier] or [evaluation])",
+        "Each [verification] section includes: reward_type (string matching the test.sh header), description (string, 1 sentence)",
+        "K8s Docs: verification command is 'bash /tests/test.sh' (not /workspace/tests/test.sh)",
+        "grep -r 'reward_type' benchmarks/ccb_*/*/task.toml | wc -l equals total task.toml count",
+        "scripts/sync_task_metadata.py --suite ccb_pytorch runs without errors (existing functionality still works)"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "~893 task.toml files. Within each benchmark, all tasks have the same reward_type. Some benchmarks already have [verification], some use [verifier] (CrossRepo, DIBench, LoCoBench), some use [evaluation] (DependEval). Add/update [verification] section with reward_type and description. Do NOT remove existing [verifier] sections if they contain timeout_sec or command — Harbor reads those. Just ADD the reward_type and description fields. Use same reward_type values as US-004."
+    },
+    {
+      "id": "US-006",
+      "title": "Write Agent Interface Specification",
+      "description": "As an external researcher, I want a spec of what my agent receives and must produce so I can integrate without reading Harbor source.",
+      "acceptanceCriteria": [
+        "docs/AGENT_INTERFACE.md exists",
+        "Documents input: workspace at /workspace/, instruction at /workspace/instruction.md, time limit from task.toml",
+        "Documents output: agent modifies files in /workspace/, verifier runs test.sh afterward",
+        "Documents 3 configs: baseline (no MCP), SG_base (keyword+NLS search), SG_full (+Deep Search)",
+        "Documents environment variables: TASK_NAME, TIME_LIMIT_SEC",
+        "Includes minimal agent example (5-line bash script that reads instruction.md and creates a file)",
+        "Documents constraints: network access (varies by task), resource limits (from task.toml environment section)"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "This is a documentation-only story. Reference actual Harbor behavior from ~/evals/custom_agents/agents/claudecode/agents/claude_baseline_agent.py for accuracy. The 3 MCP configs are: none (baseline), sourcegraph_base, sourcegraph_full. Environment vars like TASK_NAME come from Harbor. Keep it concise — 1-2 pages max."
+    },
+    {
+      "id": "US-007",
+      "title": "Write Leaderboard Scoring Specification",
+      "description": "As a benchmark user, I want documented rules for how the leaderboard ranks agents.",
+      "acceptanceCriteria": [
+        "docs/LEADERBOARD.md exists",
+        "Documents primary metric: mean_reward per benchmark",
+        "Documents aggregate: macro-average of per-benchmark mean_rewards (equal benchmark weight)",
+        "Documents errored tasks count as reward=0.0 (not excluded)",
+        "Documents per-benchmark completeness: must run ALL tasks in a benchmark to qualify for that benchmark's leaderboard",
+        "Documents partial submissions: appear only on qualifying per-benchmark views, not aggregate",
+        "Documents tie-breaking: pass_rate > median_reward > token_efficiency",
+        "Includes 'Interpreting Scores' section listing each benchmark's reward_type and what 0.8 means in context"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Documentation-only story. Reference the reward_type mapping from US-004. The 13 benchmarks have different scoring semantics — this doc must make that clear. Keep it actionable: a reader should know exactly how to calculate their score."
+    },
+    {
+      "id": "US-008",
+      "title": "Write Submission Format Documentation",
+      "description": "As an external researcher, I want documented submission format so I know how to package my results.",
+      "acceptanceCriteria": [
+        "docs/SUBMISSION.md exists",
+        "Documents directory structure: one subdir per task containing result.json + trajectory.json (or trajectory.txt)",
+        "Documents that trajectory logs are REQUIRED — submissions without them are rejected",
+        "Documents trajectory format: JSON array of {role, content, tool_calls, timestamp} OR plain text transcript",
+        "Includes example directory tree showing a valid 3-task submission",
+        "References schemas/result.schema.json for result format",
+        "References scripts/validate_submission.py for pre-submission validation"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Documentation-only story. Keep concise. The example directory tree should show: submission/ccb_pytorch/sgt-001/result.json, submission/ccb_pytorch/sgt-001/trajectory.json, etc."
+    },
+    {
+      "id": "US-009",
+      "title": "Build leaderboard generator script",
+      "description": "As a paper author, I want a script that produces leaderboard views from MANIFEST data.",
+      "acceptanceCriteria": [
+        "scripts/generate_leaderboard.py exists and is executable",
+        "Reads runs/official/MANIFEST.json as input",
+        "Produces leaderboard.json with: per_benchmark array (benchmark, agent, config, mean_reward, pass_rate, task_count) and aggregate array (agent, config, ccb_aggregate_score, benchmarks_completed, total_tasks)",
+        "Produces LEADERBOARD_RESULTS.md with per-benchmark ranking tables + aggregate ranking table",
+        "Aggregate score = unweighted mean of per-benchmark mean_rewards; only includes entries with all-benchmark coverage",
+        "Entries missing benchmarks appear in per-benchmark views but NOT aggregate",
+        "python3 scripts/generate_leaderboard.py --help exits 0",
+        "python3 scripts/generate_leaderboard.py produces valid JSON (python3 -c \"import json; json.load(open('leaderboard.json'))\" exits 0)"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "Read MANIFEST.json structure from runs/official/MANIFEST.json. The MANIFEST groups by 'suite/config' keys. Each run has mean_reward, pass_rate (passed/task_count), task_count. For aggregate: group by (agent, config), compute mean of per-benchmark mean_rewards. Output both JSON and Markdown. Use selected_benchmark_tasks.json to know total benchmark count for completeness check."
+    },
+    {
+      "id": "US-010",
+      "title": "Create submission packaging script",
+      "description": "As an external researcher, I want a script that bundles my results into a validated submission package.",
+      "acceptanceCriteria": [
+        "scripts/package_submission.py exists and is executable",
+        "Takes --results-dir (directory with task subdirs) and --output (tar.gz path) arguments",
+        "Validates each result.json against schemas/result.schema.json before packaging",
+        "Checks that each task subdir contains a trajectory file (trajectory.json or trajectory.txt)",
+        "Fails fast with clear errors if validation fails: 'task X: missing trajectory file'",
+        "On success, creates .tar.gz with correct directory structure",
+        "python3 scripts/package_submission.py --help exits 0"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "Depends on US-001 (schema) and US-002 (validation). Reuse validate_submission.py logic for validation. Use tarfile stdlib module for packaging. Keep it simple — no compression options needed, just tar.gz."
+    },
+    {
+      "id": "US-011",
+      "title": "Migrate existing results and remove score fallback",
+      "description": "As a maintainer, I want existing results using rewards.score migrated to rewards.reward so the fallback logic can be removed.",
+      "acceptanceCriteria": [
+        "scripts/migrate_results.py exists and scans runs/official/ for result.json files",
+        "Any result.json with rewards.score (but not rewards.reward) gets score renamed to reward",
+        "Creates result.json.bak backup before each modification",
+        "Reports: 'Migrated N files, skipped M files (already compliant)'",
+        "After migration: grep -r '\"score\"' runs/official/*/config/*/result.json returns no matches inside rewards objects",
+        "generate_manifest.py line 116 updated: removes rewards.get('score') fallback, reads only rewards.get('reward')",
+        "python3 scripts/generate_manifest.py runs successfully after migration (MANIFEST task_count unchanged)"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "This MUST run last — after all other stories. The fallback removal in generate_manifest.py is the final step. Be careful: only rename score→reward INSIDE the rewards dict, not elsewhere in the JSON. Some result.json files may have score in other contexts. Use the two directory layouts: config/batch_ts/task__hash/result.json and config/task__hash/result.json."
+    }
+  ]
+}
