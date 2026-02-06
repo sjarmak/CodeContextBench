@@ -1,0 +1,168 @@
+## Codebase Patterns
+
+### Project Structure
+- Benchmark tasks live in `benchmarks/ccb_*/{task_name}/` with task.toml, instruction.md, environment/, tests/, solution/
+- Task selection: `configs/selected_benchmark_tasks.json` (flat JSON array of task objects)
+- Instance-to-mirror mapping: `configs/instance_to_mirror.json` (task_name -> sg-benchmarks/repo)
+- Config scripts: `configs/*_3config.sh`, common infra in `configs/_common.sh`
+- Run logs: `runs/official/` directories
+
+### DependEval Specifics
+- Archived tasks at `archive/ccb_dependeval/` — 9 tasks, all scored 0.0
+- Archived config at `archive/dependeval_3config.sh`
+- Original DependEval data to be cloned to `vendor/DependEval/`
+- DependEval content format: `'repo_name/path/file.ext'\n:...code...` with files separated by path headers
+- DependEval Task 1 (ME) JSON: has `content`, `called_code_segment`, `invoking_code_segment`, `feature_description`, `detailed_feature_description`, `modified_complete_code` (dict with INCONSISTENT keys: `#file N`, `fileN`, `name.ext`, `path/name.ext`, or raw string for ~15 instances)
+- DependEval Task 2 (DR) JSON: has `files` (shuffled list), `content` (concatenated code), `gt` (correctly ordered file list)
+- Task 4 (RC) is out of scope — no source code, NL descriptions only
+
+### Harbor Task Format
+- task.toml must include time_limit_sec (QA audit C3)
+- Dockerfiles must use pinned base images (QA audit C2)
+- instruction.md must NOT reference MCP/Sourcegraph/Deep Search (QA audit C1 contamination prevention)
+- Evaluation: test.sh runs eval script, writes reward to /logs/verifier/reward.txt
+- Agent output: /workspace/submission.json
+
+### Eval Script Patterns
+- Eval scripts are self-contained (stdlib only): can be copied into task dirs
+- DR eval: element-wise exact match averaged across positions; normalizes path quotes
+- ME eval: 3-strategy key matching (direct → basename → positional) handles all GT key variants
+- Both write reward to `/logs/verifier/reward.txt`, read from `/workspace/submission.json` and `/tests/ground_truth.json`
+- Both support `--test` flag for inline smoke tests
+
+### Config Patterns
+- 3config scripts source _common.sh for run_tasks_parallel, ensure_fresh_token, etc.
+- Use --path mode for custom tasks (not --dataset which requires harbor registry)
+- Task-to-repo mapping done in config script for MCP runs
+- instance_to_mirror.json keys use `ccb_{benchmark}/{task_name}` format — keeps benchmark prefix in key for easy filtering
+
+### Task Generation Patterns
+- Generator script reads configs/dependeval_selected_instances.json + vendor/DependEval/data/
+- Task naming: {task_type_full}-{language}-{instance_id} — flat directory under benchmarks/ccb_dependeval/
+- MCP config belongs in task.toml [environment.setup_scripts] section — never in instruction.md
+- Eval scripts are self-contained stdlib-only — safe to copy into task dirs
+- Dockerfile must use pinned base image (e.g., python:3.10.13-slim) per QA audit C2
+- Use `_lang_ext()` helper for file extension mapping, not string slicing on language names
+
+### Key Root Cause (from prior analysis)
+- DR tasks failed because instruction says "identify all dependencies" (package names) but ground_truth.json contains file ordering (callee-before-caller) — completely different task
+- ME tasks may have failed due to ground truth format mismatch: DependEval uses `{"#file 1": "...", "#file 2": "..."}` keyed dict
+- All 9 tasks scored 0.0 on Feb 3 baseline run
+
+### Git Gotchas
+- Always verify `git symbolic-ref HEAD` before committing — `git branch --show-current` can be misleading after stash operations
+- Multiple ralph-* instance dirs exist for different PRDs — make sure vendor/ and ralph-*/ patterns in .gitignore don't conflict across branches
+
+### Manual Steps (NOT in Ralph scope)
+- US-005 from PRD: Push materialized repos to sg-benchmarks/ GitHub org and index in Sourcegraph
+- US-009 from PRD: Run 3-config validation (baseline + SG_base + SG_full) via harbor
+
+## Progress
+
+## 2026-02-06 - US-001
+- Diagnosed all 9 archived DependEval task failures
+- Created docs/dependeval_diagnosis.md with per-task-type root cause analysis
+- Files changed: docs/dependeval_diagnosis.md (new)
+- **Learnings for future iterations:**
+  - DR ground truth is actually Android import packages (not file ordering as noted in PRD) — a hybrid that doesn't match DependEval's actual Task 2
+  - ME ground truth files contain file dependency pairs (Task 2 DR data), NOT modified_complete_code (Task 1 ME data) — fundamental data loading error
+  - ME tasks had TWO failures stacked: Docker build (missing code_content.txt) AND wrong ground truth
+  - ME instruction "Problem Statement" section was empty — no feature description extracted from DependEval
+  - Agent effort was extremely low on DR/RC tasks (4-31 output tokens, 2-5 tool calls)
+  - Run results are at `runs/official/archive/dependeval_opus_20260203_160607/baseline/` (note the archive/ in the path)
+  - Result reward field is at `verifier_result.rewards.reward` in result.json
+---
+
+## 2026-02-06 - US-002
+- Cloned DependEval dataset from https://github.com/ink7-sudo/DependEval to vendor/DependEval/
+- Verified all 8 data files exist for 4 languages (python, java, javascript, typescript): task1_*.json (ME) and task2_*_final.json (DR)
+- Created vendor/DependEval/data_inventory.json with per-language/task counts, content lengths, example instance IDs
+- Added vendor/DependEval/ and vendor/dependeval_repos/ to .gitignore
+- Files changed: .gitignore (modified), vendor/DependEval/data_inventory.json (new, gitignored)
+- **Learnings for future iterations:**
+  - DependEval also has c, c++, c#, php data — we only need python/java/javascript/typescript
+  - Instance counts: Python ME=217, Java ME=177, JS ME=208, TS ME=191; DR=180 for all langs
+  - ME content lengths are large (avg 8K-32K chars), DR content is smaller (avg 10K-14K chars)
+  - DR instances avg 3.4-4.5 files per instance
+  - Data also includes task4_*_new.json (RC tasks) — out of scope per US-001 findings
+  - The `ralph-*/` gitignore entry gets removed on branch switch — make sure to only modify `.gitignore` on the working branch
+---
+
+## 2026-02-06 - US-003
+- Built `scripts/select_dependeval_tasks.py` — selects 32 representative DependEval instances
+- Selection criteria: content length 2K-20K chars, DR 3+ files, ME non-empty modified_complete_code + feature_description
+- Stratified sampling: sorts candidates by content length, picks evenly spaced instances for diversity
+- Output: `configs/dependeval_selected_instances.json` mapping instance_id -> {language, task_type, repo_name, content_length, file_count}
+- Files changed: scripts/select_dependeval_tasks.py (new), configs/dependeval_selected_instances.json (new)
+- **Learnings for future iterations:**
+  - After filtering (2K-20K content, 3+ files for DR, non-empty modified_complete_code for ME), candidate counts: Python ME=123, Java ME=80, JS ME=161, TS ME=137; DR=141-157 per lang
+  - Java ME has fewest candidates (80) due to larger average content lengths — many exceed 20K char limit
+  - ME instances also need feature_description filter — some have empty descriptions which would produce useless instructions
+  - `git stash pop` across branches creates merge conflicts for files that exist on one branch but not another — use `git rm` to resolve
+  - Always verify `git symbolic-ref HEAD` (not just `git branch --show-current`) before committing — stash operations can leave HEAD on an unexpected branch
+---
+
+## 2026-02-06 - US-004
+- Built `scripts/materialize_dependeval_repos.py` — extracts source code from DependEval content fields into Git repos
+- Parses content format: regex matches `'repo/path/file.ext'` header lines, strips leading `:` from first code line per file
+- Creates proper directory trees, initializes Git repo with single commit per instance
+- 32 repos materialized to `vendor/dependeval_repos/dependeval-{lang}-{task_type}-{instance_id}`
+- Supports --dry-run, --help, --output-dir, --selection flags
+- Idempotent: skips existing repos on re-run
+- Files changed: scripts/materialize_dependeval_repos.py (new)
+- **Learnings for future iterations:**
+  - DR content fields may contain FEWER files than the `files` field lists — this is expected. The content has code snippets for dependency analysis, but `files` lists ALL file paths the agent must order
+  - Some ME instances have empty files (0 chars) in content — e.g., `pinata.js`, `dropout.py`. These are legitimate (empty starter files the agent must populate)
+  - The `modified_complete_code` dict keys in ME data are INCONSISTENT: `#file N` (most common), `fileN`, `name.ext`, or `path/name.ext` — downstream eval scripts must handle all variants
+  - Content parsing regex: `^'([^']+/[^']+)'$` — requires at least one `/` in the path to avoid matching code strings with single quotes
+  - Git env vars (GIT_AUTHOR_NAME etc.) must be set explicitly since the materialization runs outside any configured Git identity
+---
+
+## 2026-02-06 - US-005
+- Wrote `scripts/dependeval_eval_dr.py` — scores file dependency ordering via element-wise exact match averaged across positions
+- Wrote `scripts/dependeval_eval_me.py` — scores multi-file code edits via average difflib.SequenceMatcher ratio per file
+- Both handle missing/malformed submissions gracefully (reward=0.0), partial outputs score what exists
+- Both include inline smoke tests (--test flag), all tests pass with exit 0
+- Files changed: scripts/dependeval_eval_dr.py (new), scripts/dependeval_eval_me.py (new)
+- **Learnings for future iterations:**
+  - ME ground truth keys across 16 selected instances: 7 use `#file N`, 4 use `file_N`, 1 uses `fileN`, 4 use actual filenames (some with repo prefix, some without)
+  - ME eval needs 3-strategy key matching: (1) direct key match, (2) basename match, (3) positional fallback — this correctly handles all 5 observed key variants
+  - DR ground truth file paths are quoted with single quotes (e.g., `"'repo/path/file.py'"`) — eval normalizes by stripping quotes before comparison
+  - DR metric is position-sensitive (not set-based): same files in different order gives partial credit proportional to matching positions
+  - Both eval scripts are self-contained (no external deps beyond stdlib) so they can be copied into task eval_scripts/ dirs without dependency issues
+  - The `is_positional_key` regex pattern `^(#file\s*\d+|file_?\d+)$` correctly matches all 3 positional variants: `#file 1`, `file1`, `file_1`
+---
+
+## 2026-02-06 - US-006
+- Built `scripts/generate_dependeval_tasks.py` — generates 32 complete Harbor-compatible task directories
+- Removed 9 old broken task directories (DR_*, ME_*, RC_*) from benchmarks/ccb_dependeval/
+- Generated 32 new tasks: 16 DR + 16 ME across 4 languages (python, java, javascript, typescript)
+- Each task directory includes: task.toml, instruction.md, environment/Dockerfile, environment/code_content.txt, tests/test.sh, tests/ground_truth.json, tests/eval_scripts/eval_{dr,me}.py, solution/solve.sh
+- All task.toml files include time_limit_sec=600, source=DependEval, MCP setup_scripts
+- All Dockerfiles use pinned python:3.10.13-slim base image
+- All instruction.md files are baseline-clean: zero MCP/Sourcegraph/Deep Search references
+- DR instructions correctly ask for file dependency ordering (not package names)
+- ME instructions include feature descriptions from DependEval detailed_feature_description field
+- Eval scripts copied from scripts/dependeval_eval_{dr,me}.py into each task's eval_scripts/
+- Files changed: scripts/generate_dependeval_tasks.py (new), benchmarks/ccb_dependeval/ (32 new task dirs, 9 old dirs removed)
+- **Learnings for future iterations:**
+  - DR instruction example extension was initially using `language[:2]` which truncated "java" to "ja" — must use the _lang_ext() helper to get proper extensions
+  - Old tasks used nested subdirectories (DR_python/dependency_recognition-python-unknown/) — new flat structure is cleaner
+  - DependEval ground truth file paths include surrounding single quotes — instruction must tell agent to preserve these quotes in submission
+  - Old tasks had mismatched eval scripts (DR eval checked package names, ME eval read wrong ground truth format) — new tasks copy corrected eval scripts from US-005
+  - MCP config goes in task.toml setup_scripts section, NOT in instruction.md — keeps baseline runs clean
+  - Must use shutil.rmtree for idempotent regeneration, otherwise stale files from previous runs persist
+---
+
+## 2026-02-06 - US-007
+- Updated `configs/selected_benchmark_tasks.json` with 32 DependEval task entries (16 DR + 16 ME across 4 languages)
+- Created `configs/instance_to_mirror.json` with 32 mappings: `ccb_dependeval/{task_name}` -> `sg-benchmarks/dependeval-{lang}-{type}-{instance_id}`
+- Rewrote `configs/dependeval_3config.sh` for 32 new tasks: dynamic repo mapping from instance_to_mirror.json, flat task names, --path mode, ensure_fresh_token
+- Updated metadata in selected_benchmark_tasks.json: total_selected=148, removed dependeval_removed note, updated task counts
+- Files changed: configs/selected_benchmark_tasks.json (modified), configs/instance_to_mirror.json (new), configs/dependeval_3config.sh (rewritten), ralph-dependeval/prd.json (updated)
+- **Learnings for future iterations:**
+  - instance_to_mirror.json keys must contain the benchmark prefix (e.g., `ccb_dependeval/task_name`) for the AC `'dependeval' in k` check to pass — bare task names don't include "dependeval"
+  - The old dependeval_3config.sh already existed in configs/ (not just archive/) — it was on this branch from the initial setup, so no "restore from archive" step was needed
+  - DependEval MCP benefit scores: DR=0.72 (moderate cross-file deps), ME=0.78 (high cross-file deps for multi-file editing)
+  - Config scripts don't use `run_tasks_parallel` from _common.sh — they iterate tasks sequentially within `run_task_batch` function, which is fine for 32 tasks
+---

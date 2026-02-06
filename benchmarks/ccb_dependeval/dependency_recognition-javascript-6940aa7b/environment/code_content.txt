@@ -1,0 +1,401 @@
+'Next-GraphQL-Blog/client/pages/index.js'
+:import React, { Component } from 'react'
+import { Query } from 'react-apollo'
+import { Transition, animated } from 'react-spring'
+
+import FeedList from '../components/FeedList'
+import SearchForm from '../components/SearchForm'
+import LoadPendingButton from '../components/LoadPendingButton'
+import FeedLoader from '../components/FeedLoader'
+
+import ALL_POSTS from '../api/queries/post/allPosts'
+import { NEW_LIKE_SUB, newLikeUpdate } from '../api/subscriptions/newLike'
+import {
+  NEW_COMMENT_SUB,
+  newCommentUpdate
+} from '../api/subscriptions/newComment'
+import { NEW_POST_SUB } from '../api/subscriptions/newPost'
+
+import { POSTS_LIMIT } from '../api/constants'
+
+class Home extends Component {
+  static async getInitialProps(ctx) {
+    const isFromServer = !!ctx.req
+
+    return {
+      isFromServer
+    }
+  }
+  state = {
+    newPosts: []
+  }
+
+  subscribeToNewLikes = subscribeToMore =>
+    subscribeToMore({
+      document: NEW_LIKE_SUB,
+      updateQuery: (prev, result) => newLikeUpdate(prev, result)
+    })
+
+  subscribeToNewComments = subscribeToMore =>
+    subscribeToMore({
+      document: NEW_COMMENT_SUB,
+      updateQuery: (prev, result) => newCommentUpdate(prev, result)
+    })
+
+  subscribeToNewPosts = subscribeToMore =>
+    subscribeToMore({
+      document: NEW_POST_SUB,
+
+
+      updateQuery: (prev, { subscriptionData }) => {
+        if (!subscriptionData.data) return prev
+
+        const newPost = { ...subscriptionData.data.newPost }
+        newPost.likes = []
+        newPost.comments = []
+
+        this.setState(prevState => {
+          return {
+            newPosts: [newPost, ...prevState.newPosts]
+          }
+        })
+      }
+    })
+
+  fetchMorePosts = (fetchMore, offset) =>
+    fetchMore({
+      variables: { offset },
+      updateQuery: (prev, { fetchMoreResult }) => {
+        if (!fetchMoreResult) return prev
+        const newPosts = [
+          ...prev.allPosts.posts,
+          ...fetchMoreResult.allPosts.posts
+        ]
+
+
+
+        const updatedPosts = newPosts.filter(
+          (post, index, self) =>
+            index === self.findIndex(t => t._id === post._id)
+        )
+
+        return {
+          ...prev,
+          allPosts: {
+            __typename: 'PostFeed',
+            count: prev.allPosts.count,
+            posts: updatedPosts
+          }
+        }
+      }
+    })
+
+  loadPendingPosts = () => {
+
+
+
+    const { allPosts } = this.props.client.readQuery({
+      query: ALL_POSTS,
+      variables: { offset: 0, limit: POSTS_LIMIT, sort: '-createdAt' }
+    })
+
+    const newPostslength = this.state.newPosts.length
+    allPosts.posts.unshift(...this.state.newPosts)
+
+    this.props.client.writeQuery({
+      query: ALL_POSTS,
+      variables: { offset: 0, limit: POSTS_LIMIT, sort: '-createdAt' },
+      data: {
+        allPosts: {
+          __typename: 'PostFeed',
+          count: allPosts.count + newPostslength,
+          posts: [...allPosts.posts]
+        }
+      }
+    })
+    window.scroll(0, 0)
+    this.setState({
+      newPosts: []
+    })
+  }
+
+  render() {
+    return (
+      <Query
+        query={ALL_POSTS}
+        variables={{ sort: '-createdAt', limit: POSTS_LIMIT, offset: 0 }}
+        fetchPolicy="cache-and-network"
+        notifyOnNetworkStatusChange
+      >
+        {({ loading, subscribeToMore, fetchMore, data: { allPosts } }) => {
+          const postLength = allPosts.posts.length
+          const pendingPostLength = this.state.newPosts.length
+          return (
+            <>
+              <Transition
+                from={{ top: '-50px' }}
+                enter={{ top: '50px' }}
+                leave={{ top: '-50px' }}
+              >
+                {!!pendingPostLength &&
+                  (style => (
+                    <LoadPendingButton
+                      style={{ ...style }}
+                      onClick={this.loadPendingPosts}
+                    >
+                      Load {pendingPostLength} new post...
+                    </LoadPendingButton>
+                  ))}
+              </Transition>
+
+              <SearchForm client={this.props.client} />
+
+              <FeedList
+                posts={allPosts.posts}
+                isFromServer={this.props.isFromServer}
+                subscribeToNewLikes={() =>
+                  this.subscribeToNewLikes(subscribeToMore)
+                }
+                subscribeToNewComments={() =>
+                  this.subscribeToNewComments(subscribeToMore)
+                }
+                subscribeToNewPosts={() =>
+                  this.subscribeToNewPosts(subscribeToMore)
+                }
+                hasMorePosts={allPosts.count !== postLength}
+                fetchMore={() => this.fetchMorePosts(fetchMore, postLength)}
+              />
+
+              {loading && <FeedLoader />}
+            </>
+          )
+        }}
+      </Query>
+    )
+  }
+}
+
+export default Home
+
+'Next-GraphQL-Blog/client/components/FeedList.js'
+:import React, { Component } from 'react'
+import styled from 'styled-components'
+import InfiniteScroll from 'react-infinite-scroll-component'
+import FlipMove from 'react-flip-move'
+
+import PostCard from './PostCard'
+
+class FeedList extends Component {
+  componentDidMount() {
+    this.props.subscribeToNewLikes()
+    this.props.subscribeToNewComments()
+    this.props.subscribeToNewPosts()
+  }
+
+  render() {
+    const { posts, fetchMore, hasMorePosts, isFromServer } = this.props
+    return (
+      <Container>
+        <InfiniteScroll
+          dataLength={posts.length}
+          next={fetchMore}
+          hasMore={hasMorePosts}
+          style={{ overflow: 'visible' }}
+        >
+          <FlipMove
+            duration={500}
+            easing="ease-in-out"
+            appearAnimation={isFromServer ? 'none' : 'fade'}
+            enterAnimation="accordionHorizontal"
+            leaveAnimation="accordionHorizontal"
+            typeName="ul"
+            style={{
+              position: 'relative',
+              padding: 0,
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center'
+            }}
+          >
+            {!!posts.length ? (
+              posts.map((post, index) => (
+                <li key={post._id} style={{ display: 'inline-block' }}>
+                  <PostCard key={post._id} index={index} {...post} />
+                </li>
+              ))
+            ) : (
+              <div>No Posts here... :(</div>
+            )}
+          </FlipMove>
+        </InfiniteScroll>
+      </Container>
+    )
+  }
+}
+
+const Container = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  flex: 1;
+  .ui.card {
+    margin: 15px;
+    width: 310px;
+  }
+  .ui.card:first-child {
+    margin-top: 15px;
+  }
+  .ui.card:last-child {
+    margin-bottom: 15px;
+  }
+`
+export default FeedList
+
+'Next-GraphQL-Blog/client/components/PostCard.js'
+:import React, { Component } from 'react'
+import { Card, Icon, Image, Divider } from 'semantic-ui-react'
+import styled from 'styled-components'
+import { Query, Mutation } from 'react-apollo'
+import gql from 'graphql-tag'
+
+import ALL_POSTS from '../api/queries/post/allPosts'
+import { LIKE_POST, likePostOptions } from '../api/mutations/like/likePost'
+import {
+  DELETE_POST,
+  deletePostOptions
+} from '../api/mutations/post/deletePost'
+
+import withUser from '../lib/withUser'
+import parseError from '../lib/parseError'
+import { showSuccessAlert, showErrorAlert } from '../lib/alerts'
+
+import CommentList from './CommentList'
+
+class PostCard extends Component {
+  state = {
+    showComments: false
+  }
+
+  toggleComments = () => {
+    this.setState({
+      showComments: !this.state.showComments
+    })
+  }
+
+  render() {
+    const { showComments } = this.state
+    const {
+      _id,
+      name,
+      content,
+      postedBy,
+      likes,
+      comments,
+      createdAt,
+      image,
+      user
+    } = this.props
+
+    return (
+      <Mutation mutation={LIKE_POST} variables={{ postId: _id }}>
+        {likePost => (
+          <Mutation mutation={DELETE_POST} variables={{ _id: _id }}>
+            {deletePost => (
+              <StyledCard props={{ showComments }}>
+                {user &&
+                  user._id === postedBy._id && (
+                    <RemoveIcon
+                      name="remove"
+                      onClick={() => {
+                        deletePost(deletePostOptions(this.props)).then(() =>
+                          showSuccessAlert('Post was deleted!')
+                        )
+                      }}
+                    />
+                  )}
+
+                <StyledImage
+                  src={image ? image : '/static/blog-placeholder.jpg'}
+                />
+
+                <Card.Content>
+                  <Card.Header style={ellipsisStyle}>{name}</Card.Header>
+                  <Card.Meta style={ellipsisStyle}>
+                    By {postedBy.name}
+                  </Card.Meta>
+                  <Card.Description style={ellipsisStyle}>
+                    {content}
+                  </Card.Description>
+                </Card.Content>
+
+                <BottomSection extra>
+                  <a onClick={this.toggleComments}>
+                    <Icon name="comment" />
+                    {comments.length} Comments
+                  </a>
+                  <a
+                    onClick={() => {
+                      likePost(likePostOptions(this.props))
+                        .then(() => showSuccessAlert('You liked a Post!'))
+                        .catch(e => showErrorAlert(parseError(e.message)))
+                    }}
+                  >
+                    <Icon name="like" />
+                    {likes.length} Likes
+                  </a>
+                </BottomSection>
+
+                {showComments && (
+                  <CommentList comments={comments} postId={_id} />
+                )}
+              </StyledCard>
+            )}
+          </Mutation>
+        )}
+      </Mutation>
+    )
+  }
+}
+
+const StyledCard = styled(Card)`
+  &&& {
+    height: ${props => (props.props.showComments ? 'auto' : '325px')};
+    box-shadow: 0px 3px 25px 2px #00000014;
+    border-bottom-left-radius: 0px;
+    border-bottom-right-radius: 0px;
+  }
+`
+
+const BottomSection = styled(Card.Content)`
+  display: flex;
+  justify-content: space-between;
+`
+
+const RemoveIcon = styled(Icon)`
+  &&& {
+    font-size: 18px;
+    position: absolute;
+    top: 5px;
+    z-index: 9;
+    right: 0;
+    cursor: pointer;
+    transition: 0.2s all ease;
+    &:hover {
+      font-size: 22px;
+    }
+  }
+`
+
+const StyledImage = styled(Image)`
+  &&& {
+    height: 191px;
+    object-fit: cover;
+  }
+`
+
+const ellipsisStyle = {
+  whiteSpace: 'nowrap',
+  textOverflow: 'ellipsis',
+  overflow: 'hidden'
+}
+
+export default withUser(PostCard)
