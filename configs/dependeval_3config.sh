@@ -1,10 +1,13 @@
 #!/bin/bash
-# DependEval 6-Task 3-Config Comparison Script
+# DependEval 32-Task 3-Config Comparison Script
 #
 # Runs selected DependEval tasks (from selected_benchmark_tasks.json) across 3 configurations:
 #   1. Baseline (no MCP)
 #   2. MCP-Base (Sourcegraph tools without Deep Search)
 #   3. MCP-Full (Sourcegraph + Deep Search hybrid)
+#
+# Uses --path mode since DependEval tasks are custom (not in harbor's registry).
+# Each task maps to a sg-benchmarks/dependeval-{lang}-{type}-{id} repo for MCP runs.
 #
 # Usage:
 #   ./configs/dependeval_3config.sh [OPTIONS]
@@ -118,7 +121,7 @@ if { [ "$RUN_BASE" = true ] || [ "$RUN_FULL" = true ]; } && [ -z "$SOURCEGRAPH_A
     RUN_FULL=false
 fi
 
-# Load task dirs from canonical selection file (DependEval tasks are nested under category subdirs)
+# Load task names from canonical selection file
 SELECTION_FILE="$SCRIPT_DIR/selected_benchmark_tasks.json"
 if [ ! -f "$SELECTION_FILE" ]; then
     echo "ERROR: selected_benchmark_tasks.json not found at $SELECTION_FILE"
@@ -126,29 +129,30 @@ if [ ! -f "$SELECTION_FILE" ]; then
     exit 1
 fi
 
-readarray -t TASK_DIRS < <(python3 -c "
-import json, os
+readarray -t TASK_NAMES < <(python3 -c "
+import json
 tasks = json.load(open('$SELECTION_FILE'))['tasks']
 for t in tasks:
     if t['benchmark'] == 'ccb_dependeval':
-        # task_dir is 'ccb_dependeval/DR_java/task_id' -- strip benchmark prefix
-        print(os.path.relpath(t['task_dir'], 'ccb_dependeval'))
+        print(t['task_id'])
 ")
 
-# Sourcegraph repo name mapping for DependEval tasks
-# These override SOURCEGRAPH_REPO_NAME so the agent searches the correct repo
-# All repos are dormant (last commits 2014-2023); HEAD = correct snapshot
-# RC tasks now included - their repos were identified from code_content.txt
-# NOTE: ME (multifile_editing) tasks excluded — incomplete task packaging
-#       (missing code_content.txt, empty problem statements, wrong ground_truth format)
-declare -A TASK_SG_REPO_NAMES=(
-    ["DR_java/dependency_recognition-java-unknown"]="sg-benchmarks/AccountAuthenticator--c01b5a75"
-    ["DR_javascript/dependency_recognition-javascript-unknown"]="sg-benchmarks/FitnessApp--2f7897cc"
-    ["DR_python/dependency_recognition-python-unknown"]="sg-benchmarks/SRCNN-pytorch--064dbaac"
-    ["RC_java/repo_construction-java-unknown"]="sg-benchmarks/ProviGen--80c8a202"
-    ["RC_javascript/repo_construction-javascript-unknown"]="sg-benchmarks/cypress-plugin-snapshots--a8bd8838"
-    ["RC_python/repo_construction-python-unknown"]="sg-benchmarks/katana-skipper--053ef083"
-)
+# Load Sourcegraph repo name mapping from instance_to_mirror.json
+# Maps ccb_dependeval/{task_name} -> sg-benchmarks/dependeval-{lang}-{type}-{id}
+MIRROR_FILE="$SCRIPT_DIR/instance_to_mirror.json"
+declare -A TASK_SG_REPO_NAMES
+if [ -f "$MIRROR_FILE" ]; then
+    while IFS='=' read -r key value; do
+        TASK_SG_REPO_NAMES["$key"]="$value"
+    done < <(python3 -c "
+import json
+mirror = json.load(open('$MIRROR_FILE'))
+for k, v in mirror.items():
+    if k.startswith('ccb_dependeval/'):
+        task_name = k.replace('ccb_dependeval/', '')
+        print(f'{task_name}={v}')
+")
+fi
 
 # Derive short model name for run directory (matches V2 id_generator convention)
 _model_lower=$(echo "$MODEL" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')
@@ -206,7 +210,7 @@ run_task_batch() {
     echo "  Mode: $mode"
     echo "  MCP Type: $mcp_type"
     echo "  Model: $MODEL"
-    echo "  Tasks: ${#TASK_DIRS[@]}"
+    echo "  Tasks: ${#TASK_NAMES[@]}"
     echo "  Concurrency: $CONCURRENCY"
     echo "  Timeout Multiplier: ${TIMEOUT_MULTIPLIER}x"
     echo "  Jobs directory: $jobs_subdir"
@@ -214,18 +218,18 @@ run_task_batch() {
 
     mkdir -p "$jobs_subdir"
 
-    for task_dir in "${TASK_DIRS[@]}"; do
-        local task_path="$BENCHMARK_DIR/$task_dir"
+    for task_name in "${TASK_NAMES[@]}"; do
+        local task_path="$BENCHMARK_DIR/$task_name"
 
         if [ ! -d "$task_path" ]; then
             echo "ERROR: Task directory not found: $task_path"
             continue
         fi
 
-        echo "Running task: $task_dir ($mode)"
+        echo "Running task: $task_name ($mode)"
 
         # Set Sourcegraph repo name override for this task (if mapped)
-        local sg_repo="${TASK_SG_REPO_NAMES[$task_dir]:-}"
+        local sg_repo="${TASK_SG_REPO_NAMES[$task_name]:-}"
         if [ -n "$sg_repo" ]; then
             echo "  SOURCEGRAPH_REPO_NAME: $sg_repo"
             export SOURCEGRAPH_REPO_NAME="$sg_repo"
@@ -240,9 +244,9 @@ run_task_batch() {
             --jobs-dir "$jobs_subdir" \
             -n $CONCURRENCY \
             --timeout-multiplier $TIMEOUT_MULTIPLIER \
-            2>&1 | tee "${jobs_subdir}/$(basename $task_dir).log" \
+            2>&1 | tee "${jobs_subdir}/${task_name}.log" \
             || {
-                echo "WARNING: Task $task_dir failed (exit code: $?)"
+                echo "WARNING: Task $task_name failed (exit code: $?)"
                 echo "Continuing with remaining tasks..."
             }
 
@@ -259,7 +263,7 @@ run_task_batch() {
 # ============================================
 # MAIN EXECUTION
 # ============================================
-log_section "DependEval 6-Task 3-Config Benchmark Comparison"
+log_section "DependEval 32-Task 3-Config Benchmark Comparison"
 echo "Starting benchmark run..."
 echo "  Baseline: $RUN_BASELINE"
 echo "  MCP-Base: $RUN_BASE"
