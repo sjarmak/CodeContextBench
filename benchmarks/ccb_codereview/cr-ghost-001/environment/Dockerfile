@@ -1,9 +1,10 @@
 FROM ubuntu:22.04
 
-# Install common tools
+# Install common tools (python3 needed for inject_defects.sh)
 RUN apt-get update && apt-get install -y \
     git \
     curl \
+    python3 \
     ripgrep \
     && rm -rf /var/lib/apt/lists/*
 
@@ -16,15 +17,21 @@ RUN if ! command -v node &> /dev/null; then \
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-# Clone repo at pinned commit
-RUN git clone --filter=blob:none https://github.com/agentic-review-benchmarks/benchmark-pr-mapping.git /workspace && \
+# Clone TryGhost/Ghost at pinned commit (PR #26260 merge commit)
+RUN git clone --filter=blob:none --no-checkout https://github.com/TryGhost/Ghost.git /workspace && \
     cd /workspace && \
-    git checkout 5f6c30d18fbf5c310513eca7f4e160ccb0e0e668
+    git checkout b43bfc85b719ab3971b83b5ef954601bf2d95fbf && \
+    git config user.email "agent@example.com" && \
+    git config user.name "Agent"
 
-# Create directories
+# Inject defects into the codebase
+COPY environment/inject_defects.sh /tmp/inject_defects.sh
+RUN chmod +x /tmp/inject_defects.sh && /tmp/inject_defects.sh && rm /tmp/inject_defects.sh
+
+# Create directories for verifier
 RUN mkdir -p /workspace/tests /logs/verifier
 
-# Copy test files
+# Copy ground truth files to /workspace/tests/ (agent should not see these directly)
 COPY tests/ /workspace/tests/
 RUN chmod +x /workspace/tests/test.sh
 
