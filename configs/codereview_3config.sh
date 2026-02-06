@@ -143,8 +143,11 @@ for t in tasks:
 ")
 
 # Sourcegraph repo name mapping for code review tasks
+# Each task targets a different public GitHub repo
 declare -A TASK_SG_REPO_NAMES=(
-    ["cr-ghost-001"]="agentic-review-benchmarks/benchmark-pr-mapping"
+    ["cr-aspnetcore-001"]="github.com/dotnet/aspnetcore"
+    ["cr-calcom-001"]="github.com/calcom/cal.com"
+    ["cr-ghost-001"]="github.com/TryGhost/Ghost"
 )
 
 # Derive short model name for run directory

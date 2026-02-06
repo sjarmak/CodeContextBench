@@ -13,9 +13,10 @@ RUN apt-get update && apt-get install -y \
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-# Clone the actual VS Code repository
+# Clone the actual VS Code repository at pinned commit (1.96.0)
 # This ensures BOTH baseline and MCP agents have identical file access
-RUN git clone --depth 1 https://github.com/microsoft/vscode.git . && \
+RUN git clone --filter=blob:none --no-checkout https://github.com/microsoft/vscode.git . && \
+    git checkout 1.96.0 && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

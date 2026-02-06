@@ -36,7 +36,7 @@ docs/
   ERROR_CATALOG.md           # Known error fingerprints, causes, fixes
 ```
 
-## Benchmarks (10)
+## Benchmarks (11)
 
 | Benchmark | Tasks | Language(s) | Focus |
 |-----------|-------|-------------|-------|
@@ -50,6 +50,7 @@ docs/
 | TAC | 6 | Mixed | Tool-augmented coding |
 | DIBench | 8 | Mixed | Dependency installation |
 | SWE-Perf | 3 | Python | Performance optimization |
+| CodeReview | 3 | TS, C#, Mixed | AI code review: find & fix injected PR defects |
 
 ## Running Tasks
 

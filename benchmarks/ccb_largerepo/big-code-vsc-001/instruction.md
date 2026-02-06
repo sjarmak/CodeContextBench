@@ -11,8 +11,6 @@
 
 Users are seeing stale TypeScript diagnostics in the Problems panel after switching Git branches. Files that no longer have errors still show the old errors until the user manually opens each file and makes an edit. It seems like the diagnostics pipeline only refreshes on in-editor changes and misses file-on-disk changes from Git operations.
 
-**Why this requires MCP:** The VS Code codebase (1GB+ TypeScript) has the diagnostics pipeline distributed across many modules—file watchers, extension host, text change listeners, problem panel updates. Understanding the full flow from a file change through to the Problems view, and identifying where file-system changes should trigger updates, requires broad architectural context that local grep cannot efficiently provide.
-
 ## Task
 
 YOU MUST IMPLEMENT CODE CHANGES to fix stale diagnostics.
@@ -25,7 +23,7 @@ Check the full diagnostics flow from a text change through the extension host to
 
 ### Implementation Steps
 
-1. **Understand the diagnostics pipeline** (use Sourcegraph MCP for broad search):
+1. **Understand the diagnostics pipeline**:
    - Find the main diagnostics collection and how it stores errors per file
    - Locate the extension host communication for sending diagnostics to the client
    - Find the Problems view panel and how it subscribes to diagnostics
@@ -79,6 +77,5 @@ Check the full diagnostics flow from a text change through the extension host to
 npm test
 ```
 
-**Time Limit:** 20 minutes  
-**Estimated Context:** 15,000 tokens  
-**Why MCP Helps:** Finding all diagnostic refresh points across VS Code's extension host, language servers, and problem panel requires semantic search. Understanding how `deleteAllDiagnosticsInFile` and `onWillChange` listeners work requires tracing through the entire codebase.
+**Time Limit:** 20 minutes
+**Estimated Context:** 15,000 tokens

@@ -11,12 +11,6 @@ Navigate to the OpenHands repository, find and understand the search_file functi
 then write a comprehensive unit test for it. This tests code understanding and
 test authoring skills.
 
-**Why this benefits from MCP:**
-- Finding the function implementation in a large codebase
-- Understanding function behavior from implementation
-- Finding existing test patterns in the codebase as examples
-- Understanding usage patterns of the function
-
 ## Task
 
 Navigate to the OpenHands GitLab at http://the-agent-company.com:8929/root/openhands
@@ -37,5 +31,4 @@ Navigate to the OpenHands GitLab at http://the-agent-company.com:8929/root/openh
 ## Notes
 
 - This task tests understanding of function behavior for test design
-- MCP helps find existing test patterns and understand the function
 - Deterministic grading via test execution
