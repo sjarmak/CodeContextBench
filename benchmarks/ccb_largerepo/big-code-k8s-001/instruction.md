@@ -16,8 +16,6 @@ Implement a new Node taint effect called `NoScheduleNoTraffic` that:
 
 This is a distinct effect from existing `NoSchedule` (which doesn't affect traffic) and `NoExecute` (which evicts pods).
 
-**Why this requires MCP:** The Kubernetes codebase (1.4GB+ Go code) has taint effect logic distributed across many packages—admission controllers, scheduler, endpoint controller, node controller, etc. Finding all the places where taint effects are evaluated and understanding the interaction patterns requires broad architectural context that local grep cannot efficiently provide.
-
 ## Task
 
 YOU MUST IMPLEMENT CODE CHANGES to add `NoScheduleNoTraffic` support.
@@ -54,7 +52,7 @@ Find and modify code in these areas:
 
 ### Implementation Steps
 
-1. **Understand taint effect architecture** (use Sourcegraph MCP for broad search):
+1. **Understand taint effect architecture**:
    - Find all definitions of taint effects constants
    - Find where `NoSchedule` and `NoExecute` are used
    - Understand the tolerance matching algorithm
@@ -99,6 +97,5 @@ Find and modify code in these areas:
 make test
 ```
 
-**Time Limit:** 15 minutes  
-**Estimated Context:** 15,000 tokens  
-**Why MCP Helps:** Finding all taint effect references across scheduler, admission, endpoint, and node controllers requires semantic search. Local grep would require multiple searches and might miss critical locations.
+**Time Limit:** 15 minutes
+**Estimated Context:** 15,000 tokens
