@@ -1,0 +1,344 @@
+'cls-rtracer/samples/express.pino.js'
+:'use strict'
+
+const rTracer = require('../index')
+
+
+
+const logger = require('pino')({
+  mixin () {
+    return { requestId: rTracer.id() }
+  }
+})
+
+
+
+const express = require('express')
+
+const app = express()
+app.use(rTracer.expressMiddleware())
+
+app.get('/', function (req, res) {
+  logger.info('Starting request handling')
+  fakeDbAccess()
+    .then((result) => res.json(result))
+})
+
+async function fakeDbAccess () {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      logger.info('Logs from fakeDbAccess')
+      resolve({ message: 'Hello from cls-rtracer Express example' })
+    }, 0)
+  })
+}
+
+app.listen(3000, (err) => {
+  if (err) {
+    logger.error('The app could not start')
+  }
+  logger.info('The app is listening on 3000')
+})
+
+'cls-rtracer/src/rtracer.js'
+:'use strict'
+
+const { wrapEmitter } = require('./util')
+const { v1: uuidv1 } = require('uuid')
+const { AsyncLocalStorage, AsyncResource } = require('async_hooks')
+
+const pluginName = 'cls-rtracer'
+
+const als = new AsyncLocalStorage()
+
+const wrapHttpEmitters = (req, res) => {
+  const asyncResource = new AsyncResource('cls-rtracer')
+  wrapEmitter(req, asyncResource)
+  wrapEmitter(res, asyncResource)
+}
+
+const expressSetResHeaderFn = (res, headerName, requestId) => {
+  res.set(headerName, requestId)
+}
+const fastifySetResHeaderFn = (res, headerName, requestId) => {
+  res.setHeader(headerName, requestId)
+}
+
+
+const expressMiddleware = (setResHeaderFn) => {
+
+  return ({
+    useHeader = false,
+    headerName = 'X-Request-Id',
+    requestIdFactory = uuidv1,
+    echoHeader = false
+  } = {}) => {
+    return (req, res, next) => {
+      let requestId
+      if (useHeader) {
+        requestId = req.headers[headerName.toLowerCase()]
+      }
+      requestId = requestId || requestIdFactory(req)
+
+      if (echoHeader) {
+        setResHeaderFn(res, headerName, requestId)
+      }
+
+      als.run(requestId, () => {
+        wrapHttpEmitters(req, res)
+        next()
+      })
+    }
+  }
+}
+
+
+const fastifyPlugin = (fastify, options, next) => {
+  const {
+    useHeader = false,
+    headerName = 'X-Request-Id',
+    useFastifyRequestId = false,
+    requestIdFactory = uuidv1,
+    echoHeader = false
+  } = options
+
+  fastify.addHook('onRequest', (request, reply, done) => {
+    let requestId
+    if (useHeader) {
+      requestId = request.headers[headerName.toLowerCase()]
+    }
+    if (useFastifyRequestId) {
+      requestId = requestId || request.id
+    }
+    requestId = requestId || requestIdFactory(request)
+
+    if (echoHeader) {
+      reply.header(headerName, requestId)
+    }
+
+    als.run(requestId, () => {
+      wrapHttpEmitters(request.raw, reply.raw || reply.res)
+      done()
+    })
+  })
+  next()
+}
+
+fastifyPlugin[Symbol.for('skip-override')] = true
+fastifyPlugin[Symbol.for('fastify.display-name')] = pluginName
+
+
+const koaMiddleware = ({
+  useHeader = false,
+  headerName = 'X-Request-Id',
+  requestIdFactory = uuidv1,
+  echoHeader = false
+} = {}) => {
+  return (ctx, next) => {
+    let requestId
+    if (useHeader) {
+      requestId = ctx.request.headers[headerName.toLowerCase()]
+    }
+    requestId = requestId || requestIdFactory(ctx.request)
+
+    if (echoHeader) {
+      ctx.set(headerName, requestId)
+    }
+
+    return als.run(requestId, () => {
+      wrapHttpEmitters(ctx.req, ctx.res)
+      return next()
+    })
+  }
+}
+
+
+const koaV1Middleware = ({
+  useHeader = false,
+  headerName = 'X-Request-Id',
+  requestIdFactory = uuidv1,
+  echoHeader = false
+} = {}) => {
+  return function * (next) {
+    let requestId
+    if (useHeader) {
+      requestId = this.request.headers[headerName.toLowerCase()]
+    }
+    requestId = requestId || requestIdFactory(this.request)
+
+    if (echoHeader) {
+      this.response.set(headerName, requestId)
+    }
+
+    als.enterWith(requestId)
+    try {
+      wrapHttpEmitters(this.req, this.res)
+      yield next
+    } finally {
+      als.enterWith(undefined)
+    }
+  }
+}
+
+
+const hapiPlugin = ({
+  name: pluginName,
+  once: true,
+  register: async (server, options) => {
+    const {
+      useHeader = false,
+      headerName = 'X-Request-Id',
+      requestIdFactory = uuidv1,
+      echoHeader = false
+    } = options
+
+    server.ext('onRequest', (request, h) => {
+      let requestId
+      if (useHeader) {
+        requestId = request.headers[headerName.toLowerCase()]
+      }
+      requestId = requestId || requestIdFactory(request)
+
+      als.enterWith(requestId)
+      wrapHttpEmitters(request.raw.req, request.raw.res)
+
+      return h.continue
+    })
+
+    if (echoHeader) {
+      server.ext('onPreResponse', async (request, h) => {
+        if (request.response.output) {
+          request.response.output.headers[headerName] = id()
+        } else {
+          request.response.header(headerName, id())
+        }
+        return h.continue
+      })
+    }
+
+    server.events.on('response', () => {
+      als.enterWith(undefined)
+    })
+  }
+})
+
+
+const runWithId = (fn, id) => {
+  id = id || uuidv1()
+  return als.run(id, fn)
+}
+
+
+const id = () => als.getStore()
+
+module.exports = {
+  expressMiddleware: expressMiddleware(expressSetResHeaderFn),
+  fastifyPlugin,
+  fastifyMiddleware: expressMiddleware(fastifySetResHeaderFn),
+  koaMiddleware,
+  koaV1Middleware,
+  hapiPlugin,
+  runWithId,
+  id
+}
+
+'cls-rtracer/index.js'
+:'use strict'
+
+const {
+  expressMiddleware,
+  fastifyPlugin,
+  fastifyMiddleware,
+  koaMiddleware,
+  koaV1Middleware,
+  hapiPlugin,
+  runWithId,
+  id
+} = require('./src/rtracer')
+
+module.exports = {
+  expressMiddleware,
+  fastifyPlugin,
+  fastifyMiddleware,
+  koaMiddleware,
+  koaV1Middleware,
+  hapiPlugin,
+  runWithId,
+  id
+}
+
+'cls-rtracer/src/util.js'
+:'use strict'
+
+const isWrappedSymbol = Symbol('cls-rtracer-is-wrapped')
+const wrappedSymbol = Symbol('cls-rtracer-wrapped-function')
+
+function wrapEmitterMethod (emitter, method, wrapper) {
+  if (emitter[method][isWrappedSymbol]) {
+    return
+  }
+
+  const original = emitter[method]
+  const wrapped = wrapper(original)
+  wrapped[isWrappedSymbol] = true
+  emitter[method] = wrapped
+
+  return wrapped
+}
+
+const addMethods = [
+  'on',
+  'addListener',
+  'prependListener'
+]
+
+const removeMethods = [
+  'off',
+  'removeListener'
+]
+
+
+function wrapEmitter (emitter, asyncResource) {
+  for (const method of addMethods) {
+    wrapEmitterMethod(emitter, method, (original) => function (event, handler) {
+      let wrapped = emitter[wrappedSymbol]
+      if (wrapped === undefined) {
+        wrapped = {}
+        emitter[wrappedSymbol] = wrapped
+      }
+      const wrappedHandler = asyncResource.runInAsyncScope.bind(asyncResource, handler, emitter)
+      const existing = wrapped[event]
+      if (existing === undefined) {
+        wrapped[event] = wrappedHandler
+      } else if (typeof existing === 'function') {
+        wrapped[event] = [existing, wrappedHandler]
+      } else {
+        wrapped[event].push(wrappedHandler)
+      }
+      return original.call(this, event, wrappedHandler)
+    })
+  }
+
+  for (const method of removeMethods) {
+    wrapEmitterMethod(emitter, method, (original) => function (event, handler) {
+      let wrappedHandler
+      const wrapped = emitter[wrappedSymbol]
+      if (wrapped !== undefined) {
+        const existing = wrapped[event]
+        if (existing !== undefined) {
+          if (typeof existing === 'function') {
+            wrappedHandler = existing
+            delete wrapped[event]
+          } else {
+            wrappedHandler = existing.pop()
+          }
+        }
+      }
+      return original.call(this, event, wrappedHandler || handler)
+    })
+  }
+}
+
+module.exports = {
+  wrapEmitter
+}

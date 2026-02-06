@@ -1,0 +1,399 @@
+'RadioDroid/app/src/main/java/net/programmierecke/radiodroid2/database/RadioDroidDatabase.java'
+:package net.programmierecke.radiodroid2.database;
+
+import android.content.Context;
+
+import androidx.annotation.NonNull;
+import androidx.room.Database;
+import androidx.room.Room;
+import androidx.room.RoomDatabase;
+import androidx.room.TypeConverters;
+import androidx.sqlite.db.SupportSQLiteDatabase;
+
+import net.programmierecke.radiodroid2.history.TrackHistoryDao;
+import net.programmierecke.radiodroid2.history.TrackHistoryEntry;
+
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+
+import static net.programmierecke.radiodroid2.history.TrackHistoryEntry.MAX_UNKNOWN_TRACK_DURATION;
+
+@Database(entities = {TrackHistoryEntry.class}, version = 1)
+@TypeConverters({Converters.class})
+public abstract class RadioDroidDatabase extends RoomDatabase {
+    public abstract TrackHistoryDao songHistoryDao();
+
+    private static volatile RadioDroidDatabase INSTANCE;
+
+    private Executor queryExecutor = Executors.newSingleThreadExecutor(runnable -> new Thread(runnable, "RadioDroidDatabase Executor"));
+
+    public static RadioDroidDatabase getDatabase(final Context context) {
+        if (INSTANCE == null) {
+            synchronized (RadioDroidDatabase.class) {
+                if (INSTANCE == null) {
+                    INSTANCE = Room.databaseBuilder(context.getApplicationContext(),
+                            RadioDroidDatabase.class, "radio_droid_database")
+                            .addCallback(CALLBACK)
+                            .fallbackToDestructiveMigration()
+                            .build();
+                }
+            }
+        }
+        return INSTANCE;
+    }
+
+    public Executor getQueryExecutor() {
+        return queryExecutor;
+    }
+
+    private static RoomDatabase.Callback CALLBACK = new RoomDatabase.Callback() {
+        @Override
+        public void onCreate(@NonNull SupportSQLiteDatabase db) {
+            super.onCreate(db);
+        }
+
+        @Override
+        public void onOpen(@NonNull SupportSQLiteDatabase db) {
+            super.onOpen(db);
+
+            INSTANCE.queryExecutor.execute(() -> {
+                // App may have been terminated without notice so we should set last track history entry's
+                // end time to something reasonable.
+                INSTANCE.songHistoryDao().setLastHistoryItemEndTimeRelative(MAX_UNKNOWN_TRACK_DURATION);
+            });
+        }
+    };
+
+}
+
+'RadioDroid/app/src/androidTest/java/net/programmierecke/radiodroid2/tests/utils/RecyclerDragAndDropAction.java'
+:package net.programmierecke.radiodroid2.tests.utils;
+
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.ViewConfiguration;
+
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.espresso.PerformException;
+import androidx.test.espresso.UiController;
+import androidx.test.espresso.ViewAction;
+import androidx.test.espresso.action.GeneralLocation;
+import androidx.test.espresso.action.MotionEvents;
+import androidx.test.espresso.action.PrecisionDescriber;
+import androidx.test.espresso.action.Press;
+import androidx.test.espresso.action.Swipe;
+import androidx.test.espresso.action.Swiper;
+import androidx.test.espresso.util.HumanReadables;
+
+import org.hamcrest.Matcher;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+import static androidx.test.espresso.core.internal.deps.guava.base.Preconditions.checkElementIndex;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayingAtLeast;
+
+public class RecyclerDragAndDropAction implements ViewAction {
+
+    /**
+     * The minimum amount of a view that must be displayed in order to swipe across it.
+     */
+    private static final int VIEW_DISPLAY_PERCENTAGE = 50;
+
+    /**
+     * The number of motion events to send for each swipe.
+     */
+    private static final int DRAG_EVENT_COUNT = 10;
+
+    private static final int DRAG_DURATION = 600;
+
+    private final Swiper swiper;
+    private final int idxFrom;
+    private final int idxTo;
+    private final PrecisionDescriber precisionDescriber;
+
+    public static ViewAction recyclerDragAndDrop(int idxFrom, int idxTo) {
+        return new RecyclerDragAndDropAction(Swipe.FAST, idxFrom, idxTo, Press.FINGER);
+    }
+
+    public RecyclerDragAndDropAction(Swiper swiper, int idxFrom, int idxTo, PrecisionDescriber precisionDescriber) {
+        this.swiper = swiper;
+        this.idxFrom = idxFrom;
+        this.idxTo = idxTo;
+        this.precisionDescriber = precisionDescriber;
+    }
+
+    @Override
+    public Matcher<View> getConstraints() {
+        return isDisplayingAtLeast(VIEW_DISPLAY_PERCENTAGE);
+    }
+
+    private static float[][] interpolate(float[] start, float[] end, int steps) {
+        checkElementIndex(1, start.length);
+        checkElementIndex(1, end.length);
+
+        float[][] res = new float[steps][2];
+
+        for (int i = 1; i < steps + 1; i++) {
+            res[i - 1][0] = start[0] + (end[0] - start[0]) * i / (steps);
+            res[i - 1][1] = start[1] + (end[1] - start[1]) * i / (steps);
+        }
+
+        return res;
+    }
+
+    @Override
+    public void perform(UiController uiController, View view) {
+        final RecyclerView recyclerView = (RecyclerView) view;
+
+        TestUtils.centerItemInRecycler(uiController, recyclerView, idxFrom);
+        uiController.loopMainThreadUntilIdle();
+
+        final View fromView = Objects.requireNonNull(recyclerView.findViewHolderForAdapterPosition(idxFrom)).itemView;
+        final float[] fromViewPosition = GeneralLocation.VISIBLE_CENTER.calculateCoordinates(fromView);
+
+        final float[] precision = precisionDescriber.describePrecision();
+
+        final List<MotionEvent> events = new ArrayList<>();
+        MotionEvents.DownResultHolder downEvent = null;
+
+        boolean success = false;
+        for (int i = 0; i < 3 && !success; i++) {
+            try {
+                downEvent = MotionEvents.sendDown(uiController, fromViewPosition, precision);
+
+                final int longPressTimeout = (int) (ViewConfiguration.getLongPressTimeout() * 1.5f);
+                uiController.loopMainThreadForAtLeast(longPressTimeout);
+
+                TestUtils.centerItemInRecycler(uiController, recyclerView, idxTo);
+                uiController.loopMainThreadUntilIdle();
+
+                final View toView = Objects.requireNonNull(recyclerView.findViewHolderForAdapterPosition(idxTo)).itemView;
+                float[] toViewPosition = GeneralLocation.TOP_CENTER.calculateCoordinates(toView);
+
+                float[][] steps = interpolate(fromViewPosition, toViewPosition, DRAG_EVENT_COUNT);
+
+                final long intervalMS = DRAG_DURATION / steps.length;
+                long eventTime = downEvent.down.getDownTime();
+                for (float[] step : steps) {
+                    eventTime += intervalMS;
+                    events.add(MotionEvents.obtainMovement(downEvent.down.getDownTime(), eventTime, step));
+                }
+
+                eventTime += intervalMS;
+                events.add(
+                        MotionEvent.obtain(
+                                downEvent.down.getDownTime(),
+                                eventTime,
+                                MotionEvent.ACTION_UP,
+                                toViewPosition[0],
+                                toViewPosition[1],
+                                0));
+                uiController.injectMotionEventSequence(events);
+                success = true;
+            } catch (Exception e) {
+                throw new PerformException.Builder()
+                        .withActionDescription(this.getDescription())
+                        .withViewDescription(HumanReadables.describe(view))
+                        .withCause(e)
+                        .build();
+            } finally {
+                for (MotionEvent event : events) {
+                    event.recycle();
+                }
+
+                if (downEvent != null) {
+                    downEvent.down.recycle();
+                }
+            }
+        }
+
+        int duration = ViewConfiguration.getPressedStateDuration();
+        // ensures that all work enqueued to process the swipe has been run.
+        if (duration > 0) {
+            uiController.loopMainThreadForAtLeast(duration);
+        }
+    }
+
+    @Override
+    public String getDescription() {
+        return swiper.toString().toLowerCase() + " recycler-drag-and-drop";
+    }
+}
+
+'RadioDroid/app/src/androidTest/java/net/programmierecke/radiodroid2/tests/UIFavouritesFragmentTest.java'
+:package net.programmierecke.radiodroid2.tests;
+
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.hasDescendant;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
+import static net.programmierecke.radiodroid2.tests.utils.RecyclerDragAndDropAction.recyclerDragAndDrop;
+import static net.programmierecke.radiodroid2.tests.utils.RecyclerRecyclingMatcher.recyclerRecycles;
+import static net.programmierecke.radiodroid2.tests.utils.RecyclerViewMatcher.withRecyclerView;
+import static net.programmierecke.radiodroid2.tests.utils.ScrollToRecyclerItemAction.scrollToRecyclerItem;
+import static net.programmierecke.radiodroid2.tests.utils.TestUtils.getFakeRadioStationName;
+import static net.programmierecke.radiodroid2.tests.utils.conditionwatcher.ViewMatchWaiter.waitForView;
+import static org.hamcrest.Matchers.allOf;
+import static org.junit.Assert.assertEquals;
+
+import android.content.pm.ActivityInfo;
+import android.os.Build;
+import android.os.SystemClock;
+
+import androidx.test.core.app.ApplicationProvider;
+import androidx.test.espresso.action.ViewActions;
+import androidx.test.espresso.matcher.ViewMatchers;
+import androidx.test.filters.LargeTest;
+import androidx.test.filters.SdkSuppress;
+import androidx.test.rule.ActivityTestRule;
+
+import net.programmierecke.radiodroid2.ActivityMain;
+import net.programmierecke.radiodroid2.FavouriteManager;
+import net.programmierecke.radiodroid2.R;
+import net.programmierecke.radiodroid2.RadioDroidApp;
+import net.programmierecke.radiodroid2.tests.utils.FirstViewMatcher;
+import net.programmierecke.radiodroid2.tests.utils.TestUtils;
+
+import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+
+import java.util.Arrays;
+
+@LargeTest
+@RunWith(Parameterized.class)
+public class UIFavouritesFragmentTest {
+
+    @Parameterized.Parameter(value = 0)
+    public int orientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+
+    @Parameterized.Parameters(name = "orientation={0}")
+    public static Iterable<Object[]> initParameters() {
+        return Arrays.asList(new Object[][]{
+                {ActivityInfo.SCREEN_ORIENTATION_PORTRAIT},
+                {ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+        });
+    }
+
+    @Rule
+    public ActivityTestRule<ActivityMain> activityRule
+            = new ActivityTestRule<ActivityMain>(ActivityMain.class) {
+        @Override
+        protected void afterActivityLaunched() {
+            getActivity().setRequestedOrientation(orientation);
+            super.afterActivityLaunched();
+        }
+    };
+
+    private static final int STATIONS_COUNT = 20;
+
+    private FavouriteManager favouriteManager;
+
+    @Before
+    public void setUp() {
+        TestUtils.populateFavourites(ApplicationProvider.getApplicationContext(), STATIONS_COUNT);
+
+        RadioDroidApp app = ApplicationProvider.getApplicationContext();
+        favouriteManager = app.getFavouriteManager();
+    }
+
+    @Test
+    public void stationsRecyclerFavourites_ShouldRecycleItems() {
+        onView(ViewMatchers.withId(R.id.nav_item_starred)).perform(ViewActions.click());
+
+        onView(allOf((withId(R.id.recyclerViewStations)), FirstViewMatcher.firstView())).check(matches(recyclerRecycles()));
+    }
+
+    @Ignore("Disabled until drag and drop is fixed, see " +
+            "https://stackoverflow.com/questions/27992427/recyclerview-adapter-notifyitemmoved0-1-scrolls-screen")
+    @Test
+    public void stationInFavourites_ShouldBeReordered_WithDragAndDrop() {
+        onView(ViewMatchers.withId(R.id.nav_item_starred)).perform(ViewActions.click());
+        // 0 1 2 3 4
+
+        onView(withId(R.id.recyclerViewStations)).perform(recyclerDragAndDrop(4, 0));
+        // 4 0 1 2 3
+        onView(withRecyclerView(R.id.recyclerViewStations).atPosition(0))
+                .check(matches(hasDescendant(withText(getFakeRadioStationName(4)))));
+        assertEquals(getFakeRadioStationName(4), favouriteManager.getList().get(0).Name);
+
+        onView(withId(R.id.recyclerViewStations)).perform(recyclerDragAndDrop(4, 3));
+        // 4 0 1 3 2
+        onView(withRecyclerView(R.id.recyclerViewStations).atPosition(3))
+                .check(matches(hasDescendant(withText(getFakeRadioStationName(3)))));
+        assertEquals(getFakeRadioStationName(3), favouriteManager.getList().get(3).Name);
+        onView(withRecyclerView(R.id.recyclerViewStations).atPosition(4))
+                .check(matches(hasDescendant(withText(getFakeRadioStationName(2)))));
+        assertEquals(getFakeRadioStationName(2), favouriteManager.getList().get(4).Name);
+
+        onView(withId(R.id.recyclerViewStations)).perform(recyclerDragAndDrop(3, 1));
+        // 4 3 0 1 2
+        onView(withRecyclerView(R.id.recyclerViewStations).atPosition(1))
+                .check(matches(hasDescendant(withText(getFakeRadioStationName(3)))));
+        assertEquals(getFakeRadioStationName(3), favouriteManager.getList().get(1).Name);
+        onView(withRecyclerView(R.id.recyclerViewStations).atPosition(2))
+                .check(matches(hasDescendant(withText(getFakeRadioStationName(0)))));
+        assertEquals(getFakeRadioStationName(0), favouriteManager.getList().get(2).Name);
+    }
+
+    @Ignore("Disabled until drag and drop is fixed, see " +
+            "https://stackoverflow.com/questions/27992427/recyclerview-adapter-notifyitemmoved0-1-scrolls-screen")
+    @Test
+    public void stationInFavourites_ShouldBeReordered_WithSimpleDragAndDrop() {
+        onView(ViewMatchers.withId(R.id.nav_item_starred)).perform(ViewActions.click());
+        // 0 1
+
+        onView(withId(R.id.recyclerViewStations)).perform(scrollToRecyclerItem(0));
+        onView(withId(R.id.recyclerViewStations)).perform(recyclerDragAndDrop(1, 0));
+        // 1 0
+        onView(withRecyclerView(R.id.recyclerViewStations).atPosition(0))
+                .check(matches(hasDescendant(withText(getFakeRadioStationName(1)))));
+        assertEquals(getFakeRadioStationName(1), favouriteManager.getList().get(0).Name);
+        onView(withRecyclerView(R.id.recyclerViewStations).atPosition(1))
+                .check(matches(hasDescendant(withText(getFakeRadioStationName(0)))));
+        assertEquals(getFakeRadioStationName(0), favouriteManager.getList().get(1).Name);
+    }
+
+    @SdkSuppress(maxSdkVersion = 32)
+    @Test
+    public void stationInFavourites_ShouldBeDeleted_WithSwipeRight() {
+        onView(withId(R.id.nav_item_starred)).perform(ViewActions.click());
+
+        onView(allOf((withId(R.id.recyclerViewStations)), FirstViewMatcher.firstView())).perform(scrollToRecyclerItem(0));
+        onView(withRecyclerView(R.id.recyclerViewStations).atPosition(0)).perform(ViewActions.swipeRight());
+        waitForView(withId(com.google.android.material.R.id.snackbar_action));
+        SystemClock.sleep(1000);
+        assertEquals(STATIONS_COUNT - 1, favouriteManager.getList().size());
+
+        onView(allOf((withId(R.id.recyclerViewStations)), FirstViewMatcher.firstView())).perform(scrollToRecyclerItem(1));
+        onView(withRecyclerView(R.id.recyclerViewStations).atPosition(1)).perform(ViewActions.swipeRight());
+        waitForView(withId(com.google.android.material.R.id.snackbar_action));
+        SystemClock.sleep(1000);
+        assertEquals(STATIONS_COUNT - 2, favouriteManager.getList().size());
+
+        onView(allOf((withId(R.id.recyclerViewStations)), FirstViewMatcher.firstView())).perform(scrollToRecyclerItem(2));
+        onView(withRecyclerView(R.id.recyclerViewStations).atPosition(2)).perform(ViewActions.swipeRight());
+        waitForView(withId(com.google.android.material.R.id.snackbar_action));
+        SystemClock.sleep(1000);
+        assertEquals(STATIONS_COUNT - 3, favouriteManager.getList().size());
+
+        // Snackbar with undo action
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP) {
+            // for whatever reason this often does not work on API 21 emulators
+            onView(withId(com.google.android.material.R.id.snackbar_action)).perform(ViewActions.click());
+
+            assertEquals(STATIONS_COUNT - 2, favouriteManager.getList().size());
+            onView(withId(R.id.recyclerViewStations)).perform(scrollToRecyclerItem(2));
+            onView(withRecyclerView(R.id.recyclerViewStations).atPosition(2))
+                    .check(matches(hasDescendant(withText(getFakeRadioStationName(4)))));
+        }
+    }
+}
+

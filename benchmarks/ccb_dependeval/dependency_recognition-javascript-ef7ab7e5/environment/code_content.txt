@@ -1,0 +1,160 @@
+'better-onetab/src/background/index.js'
+:import init from './init'
+
+init()
+
+'better-onetab/src/common/migrate.js'
+:import _ from 'lodash'
+import {normalizeList} from './list'
+import logger from './logger'
+import {genObjectId, compareVersion} from './utils'
+import listManager from './listManager'
+import browser from 'webextension-polyfill'
+listManager.init()
+
+const migrations = {
+  '1.4.0': async () => {
+
+    const {lists} = await browser.storage.local.get('lists')
+    if (lists) {
+      const {0: listsWithoutId, 1: listsWithId} = _.groupBy(lists.map(normalizeList), list => +!!list._id)
+      if (listsWithId) await browser.storage.local.set({lists: listsWithId})
+
+      for (const list of listsWithoutId.reverse()) {
+        list._id = genObjectId()
+        await listManager.addList(list)
+      }
+    }
+
+    await browser.storage.local.remove(['conflict'])
+  }
+}
+
+const migrate = async () => {
+  const {version: dataVersion} = await browser.storage.local.get('version')
+  const {version: currentVersion} = browser.runtime.getManifest()
+  if (dataVersion === currentVersion) return
+  const sorted = Object.keys(migrations).sort(compareVersion)
+  for (const v of sorted) {
+    if (compareVersion(currentVersion, v) > 0) continue
+    try {
+      console.debug('[migrate] migrating:', v)
+      await migrations[v]()
+      await browser.storage.local.set({version: v})
+      console.debug('[migrate] migrated to:', v)
+    } catch (err) {
+      logger.error('[migrate] migrate failed')
+      logger.error(err)
+      throw err
+    }
+  }
+}
+
+export default migrate
+
+'better-onetab/src/background/init.js'
+:import _ from 'lodash'
+import logger from '../common/logger'
+import options from '../common/options'
+import storage from '../common/storage'
+import migrate from '../common/migrate'
+import boss from '../common/service/boss'
+import {normalizeList} from '../common/list'
+import commandHandler from './commandHandler'
+import messageHandler from './messageHandler'
+import listManager from '../common/listManager'
+import {setupContextMenus, dynamicDisableMenu} from './contextMenus'
+import installedEventHandler from './installedEventHandler'
+import {updateBrowserAction} from './browserAction'
+
+import browser from 'webextension-polyfill'
+
+
+if (DEBUG && !MOZ) import(
+
+  '../common/autoreload'
+).then(({autoreload}) => autoreload())
+
+
+if (PRODUCTION) import(
+
+  '../common/tracker'
+).then(({tracker}) => tracker())
+
+if (DEBUG) {
+  window.browser = browser
+  window.listManager = listManager
+  window.boss = boss
+  browser.browserAction.setBadgeText({text: 'dev'})
+  import(
+
+    '../common/helper'
+  ).then(helper => { window.helper = helper })
+}
+
+const initOptions = async () => {
+
+  const opts = window.opts = await storage.getOptions() || {}
+  const defaultOptions = options.getDefaultOptions()
+
+
+  if (_.keys(defaultOptions).some(key => !_.has(opts, key))) {
+    _.defaults(opts, defaultOptions)
+    await storage.setOptions(opts)
+  }
+
+
+  window.nightmode = opts.defaultNightMode
+  return opts
+}
+
+const storageChangedHandler = changes => {
+  console.debug('[storage changed]', changes)
+  if (changes.boss_token) {
+    window.boss_token = changes.boss_token
+  }
+  if (changes.lists) {
+    if (window.opts.disableDynamicMenu) return
+    setupContextMenus(window.opts)
+  }
+}
+
+const tabsChangedHandler = activeInfo => {
+  if (window.opts.disableDynamicMenu) return
+  window.coverBrowserAction(activeInfo)
+  dynamicDisableMenu(activeInfo)
+}
+
+const fixDirtyData = async () => {
+  const unlock = await listManager.RWLock.lock()
+  const {lists} = await browser.storage.local.get('lists')
+  if (lists) {
+    const cleanLists = lists.filter(_.isPlainObject).map(normalizeList)
+    await browser.storage.local.set({lists: cleanLists})
+  }
+  await unlock()
+}
+
+const init = async () => {
+  logger.init()
+  await listManager.init()
+  const opts = await initOptions()
+  await updateBrowserAction(opts.browserAction)
+  await setupContextMenus(opts)
+  await Promise.all([
+    browser.commands.onCommand.addListener(commandHandler),
+    browser.runtime.onMessageExternal.addListener(commandHandler),
+    browser.runtime.onMessage.addListener(messageHandler),
+    browser.runtime.onUpdateAvailable.addListener(detail => { window.update = detail.version }),
+    browser.runtime.onInstalled.addListener(installedEventHandler),
+    browser.browserAction.onClicked.addListener(() => window.browswerActionClickedHandler()),
+    browser.contextMenus.onClicked.addListener(info => window.contextMenusClickedHandler(info)),
+    browser.tabs.onActivated.addListener(_.debounce(tabsChangedHandler, 200)),
+    browser.storage.onChanged.addListener(storageChangedHandler),
+  ])
+  await migrate()
+  await fixDirtyData()
+  await boss.init()
+}
+
+export default init
