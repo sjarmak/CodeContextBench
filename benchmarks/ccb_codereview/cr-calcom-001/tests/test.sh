@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test script for cr-ghost-001: Review a Ghost PR for injected functional bugs and compliance violations
+# Test script for cr-calcom-001: Review a cal.com PR for injected functional bugs and compliance violations
 
 set -e
 
@@ -108,54 +108,71 @@ print(f"Detection: precision={precision:.3f} recall={recall:.3f} F1={f1:.3f}", f
 # Check if agent's code changes contain the expected fix patterns
 fix_hits = 0
 
-# Defect 1: NotFoundError guard restored in comments-service.js
-svc_file = "ghost/core/core/server/services/comments/comments-service.js"
-if os.path.isfile(svc_file):
-    with open(svc_file) as f:
-        svc = f.read()
-    if "NotFoundError" in svc and "commentNotFound" in svc and "!comment" in svc:
+# Defect 1: Filter should use state.globalEnabled (not !state.globalEnabled)
+service_file = "packages/features/feature-opt-in/services/FeatureOptInService.ts"
+if os.path.isfile(service_file):
+    with open(service_file) as f:
+        service = f.read()
+    # Check the filter uses state.globalEnabled without negation
+    if ".filter((state) => state.globalEnabled)" in service or ".filter(state => state.globalEnabled)" in service:
         fix_hits += 1
-        print("Fix defect-1: PASS (NotFoundError guard restored)", file=sys.stderr)
+        print("Fix defect-1: PASS (globalEnabled filter restored)", file=sys.stderr)
     else:
-        print("Fix defect-1: FAIL (NotFoundError guard not found)", file=sys.stderr)
+        print("Fix defect-1: FAIL (inverted filter not fixed)", file=sys.stderr)
 else:
-    print(f"Fix defect-1: FAIL ({svc_file} not found)", file=sys.stderr)
+    print(f"Fix defect-1: FAIL ({service_file} not found)", file=sys.stderr)
 
-# Defect 2: frame.options.id restored in comments-controller.js
-ctrl_file = "ghost/core/core/server/services/comments/comments-controller.js"
-if os.path.isfile(ctrl_file):
-    with open(ctrl_file) as f:
-        ctrl = f.read()
-    if "frame.options.id" in ctrl:
+# Defect 2: isFeatureAllowedForScope should have !config.scope fallback
+config_file = "packages/features/feature-opt-in/config.ts"
+if os.path.isfile(config_file):
+    with open(config_file) as f:
+        config = f.read()
+    if "!config.scope" in config and "config.scope.includes(scope)" in config:
         fix_hits += 1
-        print("Fix defect-2: PASS (frame.options.id restored)", file=sys.stderr)
+        print("Fix defect-2: PASS (scope fallback restored)", file=sys.stderr)
     else:
-        print("Fix defect-2: FAIL (frame.options.id not found)", file=sys.stderr)
+        print("Fix defect-2: FAIL (scope fallback not restored)", file=sys.stderr)
 else:
-    print(f"Fix defect-2: FAIL ({ctrl_file} not found)", file=sys.stderr)
+    print(f"Fix defect-2: FAIL ({config_file} not found)", file=sys.stderr)
 
-# Defect 3: cacheInvalidate: false restored in comment-likes.js
-ep_file = "ghost/core/core/server/api/endpoints/comment-likes.js"
-if os.path.isfile(ep_file):
-    with open(ep_file) as f:
-        ep = f.read()
-    if "cacheInvalidate" in ep:
-        fix_hits += 1
-        print("Fix defect-3: PASS (cacheInvalidate header restored)", file=sys.stderr)
+# Defect 3: setUserState should validate with isOptInFeature
+router_file = "packages/trpc/server/routers/viewer/featureOptIn/_router.ts"
+if os.path.isfile(router_file):
+    with open(router_file) as f:
+        router = f.read()
+    # Find the setUserState mutation and check for isOptInFeature validation
+    # Look for the pattern in the setUserState section
+    set_user_idx = router.find("setUserState")
+    if set_user_idx >= 0:
+        # Check if isOptInFeature appears between setUserState and the next mutation
+        set_team_idx = router.find("setTeamState", set_user_idx)
+        section = router[set_user_idx:set_team_idx] if set_team_idx > set_user_idx else router[set_user_idx:]
+        if "isOptInFeature" in section:
+            fix_hits += 1
+            print("Fix defect-3: PASS (isOptInFeature validation restored)", file=sys.stderr)
+        else:
+            print("Fix defect-3: FAIL (isOptInFeature check not found in setUserState)", file=sys.stderr)
     else:
-        print("Fix defect-3: FAIL (cacheInvalidate not found)", file=sys.stderr)
+        print("Fix defect-3: FAIL (setUserState not found in router)", file=sys.stderr)
 else:
-    print(f"Fix defect-3: FAIL ({ep_file} not found)", file=sys.stderr)
+    print(f"Fix defect-3: FAIL ({router_file} not found)", file=sys.stderr)
 
-# Defect 4: withRelated: ['member'] restored in comments-service.js
-if os.path.isfile(svc_file):
-    if "'member'" in svc or '"member"' in svc:
-        fix_hits += 1
-        print("Fix defect-4: PASS (member relation restored)", file=sys.stderr)
+# Defect 4: Policy should come from config, not be hardcoded
+if os.path.isfile(service_file):
+    if "getOptInFeatureConfig" in service and "featureConfig" in service and "policy" in service:
+        # Check that getOptInFeatureConfig is used to get policy, not hardcoded
+        if 'policy: OptInFeaturePolicy = "permissive"' not in service or "getOptInFeatureConfig(featureId)" in service:
+            if "getOptInFeatureConfig(featureId)" in service:
+                fix_hits += 1
+                print("Fix defect-4: PASS (policy read from config)", file=sys.stderr)
+            else:
+                print("Fix defect-4: FAIL (getOptInFeatureConfig not called)", file=sys.stderr)
+        else:
+            print("Fix defect-4: FAIL (policy still hardcoded)", file=sys.stderr)
     else:
-        print("Fix defect-4: FAIL (member relation not found in withRelated)", file=sys.stderr)
+        print("Fix defect-4: FAIL (config-based policy lookup not found)", file=sys.stderr)
 else:
-    print(f"Fix defect-4: FAIL ({svc_file} not found)", file=sys.stderr)
+    print(f"Fix defect-4: FAIL ({service_file} not found)", file=sys.stderr)
 
 fix_score = fix_hits / num_expected if num_expected > 0 else 0.0
 print(f"Fix score: {fix_hits}/{num_expected} = {fix_score:.3f}", file=sys.stderr)

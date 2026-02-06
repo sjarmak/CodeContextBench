@@ -22,6 +22,7 @@ SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive"]
 # Map on-disk dir prefixes to MANIFEST suite names
 DIR_PREFIX_TO_SUITE = {
     "bigcode_mcp_": "ccb_largerepo",
+    "codereview_": "ccb_codereview",
     "crossrepo_": "ccb_crossrepo",
     "dibench_": "ccb_dibench",
     "k8s_docs_": "ccb_k8sdocs",

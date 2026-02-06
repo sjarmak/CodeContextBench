@@ -17,10 +17,10 @@ RUN if ! command -v node &> /dev/null; then \
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-# Clone TryGhost/Ghost at pinned commit (PR #26260 merge commit)
-RUN git clone --filter=blob:none --no-checkout https://github.com/TryGhost/Ghost.git /workspace && \
+# Clone dotnet/aspnetcore at pinned commit (PR #64636 merge commit)
+RUN git clone --filter=blob:none --no-checkout https://github.com/dotnet/aspnetcore.git /workspace && \
     cd /workspace && \
-    git checkout b43bfc85b719ab3971b83b5ef954601bf2d95fbf && \
+    git checkout 875255737993775850f1f3650c10ddb43ef00ced && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

@@ -1,32 +1,31 @@
-# Code Review: Ghost Comment Likes Feature
+# Code Review: ASP.NET Core Blazor DisplayName Feature
 
-- **Repository**: TryGhost/Ghost
+- **Repository**: dotnet/aspnetcore
 - **Difficulty**: hard
 - **Category**: code-review
 - **Task Type**: repo-clone
 
 ## Description
 
-You are reviewing a recently merged pull request that adds a "comment likes" feature to the Ghost blogging platform. The PR introduces a new API endpoint for browsing comment likes, along with supporting controller and service methods. However, several defects were introduced during the merge — both functional bugs and compliance violations.
+You are reviewing a recently merged pull request that adds a `DisplayName<TValue>` component to Blazor. This component reads `[Display]` and `[DisplayName]` attributes from model properties and renders the display name in forms. The PR introduces the component class, an expression member accessor helper with caching, and updates to project templates. However, several defects were introduced during the merge — both functional bugs and compliance violations.
 
 Your task is to **find the defects, fix them in the code, and produce a structured review report**.
 
 ## Context
 
-The comment likes feature spans three backend files:
+The DisplayName feature spans two core C# source files:
 
-1. **`ghost/core/core/server/services/comments/comments-service.js`** — Service layer: `getCommentLikes()` method that queries the database for likes on a given comment.
-2. **`ghost/core/core/server/services/comments/comments-controller.js`** — Controller layer: `getCommentLikes()` method that extracts the comment ID from the request frame and delegates to the service.
-3. **`ghost/core/core/server/api/endpoints/comment-likes.js`** — API endpoint definition: `browse` action configuration including HTTP headers and query options.
+1. **`src/Components/Web/src/Forms/DisplayName.cs`** — Component class: implements `IComponent`, accepts a `For` expression parameter, resolves the display name via `ExpressionMemberAccessor`, and renders it.
+2. **`src/Components/Web/src/Forms/ExpressionMemberAccessor.cs`** — Static helper: caches expression-to-member mappings and member-to-display-name mappings, supports hot reload cache clearing, resolves display names from `[Display]` and `[DisplayName]` attributes.
 
 ## Task
 
 YOU MUST IMPLEMENT CODE CHANGES to complete this task.
 
-Review the three files listed above for the following types of defects:
+Review the two files listed above for the following types of defects:
 
-- **Functional bugs**: Logic errors that cause incorrect behavior (e.g., missing error handling, wrong variable references, broken data loading).
-- **Compliance violations**: Deviations from Ghost's API conventions (e.g., incorrect cache control headers on read-only endpoints).
+- **Functional bugs**: Logic errors that cause incorrect behavior (e.g., wrong attribute precedence, missing null checks, broken cache invalidation).
+- **Compliance violations**: Deviations from ASP.NET Core component conventions (e.g., unnecessary re-rendering, missing render optimization).
 
 For each defect you find:
 
@@ -40,8 +39,8 @@ After completing your review, write a JSON file at `/workspace/review.json` cont
 ```json
 [
   {
-    "file": "ghost/core/core/server/services/comments/comments-service.js",
-    "line": 263,
+    "file": "src/Components/Web/src/Forms/ExpressionMemberAccessor.cs",
+    "line": 60,
     "severity": "critical",
     "description": "Brief description of what is wrong and why",
     "fix_applied": true
