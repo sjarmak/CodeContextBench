@@ -27,6 +27,11 @@ class TaskMetrics:
     partial_score: Optional[float] = None
     status: str = "unknown"  # passed / failed / error
 
+    # LLM Judge (optional — separate from verifier reward)
+    judge_score: Optional[float] = None
+    judge_rubric: Optional[dict[str, float]] = None
+    judge_model: Optional[str] = None
+
     # Task selection metadata (from selected_benchmark_tasks.json)
     sdlc_phase: Optional[str] = None
     language: Optional[str] = None
@@ -143,6 +148,17 @@ class RunMetrics:
         return sum(1 for t in scored if t.status == "passed") / len(scored)
 
     @property
+    def mean_judge_score(self) -> Optional[float]:
+        return _safe_mean([t.judge_score for t in self.tasks])
+
+    @property
+    def judge_coverage(self) -> Optional[float]:
+        if not self.tasks:
+            return None
+        judged = sum(1 for t in self.tasks if t.judge_score is not None)
+        return judged / len(self.tasks)
+
+    @property
     def mean_tokens(self) -> Optional[float]:
         totals = []
         for t in self.tasks:
@@ -224,6 +240,8 @@ class RunMetrics:
             "harness_config": self.harness_config,
             "mean_reward": self.mean_reward,
             "mean_partial_score": self.mean_partial_score,
+            "mean_judge_score": self.mean_judge_score,
+            "judge_coverage": self.judge_coverage,
             "pass_rate": self.pass_rate,
             "mean_tokens": self.mean_tokens,
             "mean_wall_clock": self.mean_wall_clock,
@@ -245,7 +263,8 @@ class RunMetrics:
     def from_dict(cls, data: dict) -> RunMetrics:
         tasks_data = data.pop("tasks", [])
         # Remove computed properties that may be in serialized form
-        for key in ("mean_reward", "mean_partial_score", "pass_rate",
+        for key in ("mean_reward", "mean_partial_score", "mean_judge_score",
+                     "judge_coverage", "pass_rate",
                      "mean_tokens", "mean_wall_clock", "mean_mcp_ratio",
                      "mean_deepsearch_keyword_ratio", "mean_input_output_ratio",
                      "mean_cache_hit_rate", "mean_files_modified",

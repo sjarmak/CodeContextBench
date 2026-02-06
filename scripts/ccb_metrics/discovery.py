@@ -175,6 +175,17 @@ def _process_task_dir(
         if partial is not None:
             tm.partial_score = partial
 
+    # LLM Judge score (optional — stored alongside result.json)
+    judge_result_path = task_dir / "judge_result.json"
+    if judge_result_path.is_file():
+        try:
+            judge_data = json.loads(judge_result_path.read_text())
+            tm.judge_score = judge_data.get("judge_score")
+            tm.judge_rubric = judge_data.get("rubric")
+            tm.judge_model = judge_data.get("judge_model")
+        except (OSError, json.JSONDecodeError):
+            pass
+
     # Tool usage — prefer trajectory, fall back to transcript
     trajectory_path = task_dir / "agent" / "trajectory.json"
     transcript_path = task_dir / "agent" / "claude-code.txt"
