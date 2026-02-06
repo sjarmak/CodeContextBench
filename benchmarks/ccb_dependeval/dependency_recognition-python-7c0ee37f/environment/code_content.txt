@@ -1,0 +1,460 @@
+'semi-supervised-music-tagging-transformer/src/train.py'
+:import os
+import torch
+import logging
+import argparse
+import numpy as np
+import pytorch_lightning as pl
+
+from torch import nn
+from models import MusicTaggingTransformer
+from lightning_model import PLModel
+from callbacks_loggers import get_loggers, get_callbacks
+from training_utils import DirManager
+
+
+def train(args):
+    dir_manager = DirManager(output_dir=args.output_dir)
+
+
+    _network = MusicTaggingTransformer(
+        conv_ndim=args.conv_ndim,
+        n_mels=args.n_mels,
+        sample_rate=args.sample_rate,
+        n_fft=args.n_fft,
+        f_min=args.f_min,
+        f_max=args.f_max,
+        attention_ndim=args.attention_ndim,
+        attention_nheads=args.attention_nheads,
+        attention_nlayers=args.attention_nlayers,
+        attention_max_len=args.attention_max_len,
+        dropout=args.dropout,
+        n_seq_cls=args.n_seq_cls,
+        n_token_cls=args.n_token_cls,
+    )
+    if args.is_expansion:
+        _teacher_network = MusicTaggingTransformer(
+            conv_ndim=args.teacher_conv_ndim,
+            n_mels=args.n_mels,
+            sample_rate=args.sample_rate,
+            n_fft=args.n_fft,
+            f_min=args.f_min,
+            f_max=args.f_max,
+            attention_ndim=args.teacher_attention_ndim,
+            attention_nheads=args.teacher_attention_nheads,
+            attention_nlayers=args.teacher_attention_nlayers,
+            attention_max_len=args.attention_max_len,
+            dropout=args.dropout,
+            n_seq_cls=args.n_seq_cls,
+            n_token_cls=args.n_token_cls,
+        )
+        S = torch.load(args.teacher_model_path)
+        S = {k[8:]: v for k, v in S.items() if k[:7]!='teacher'}
+        _teacher_network.load_state_dict(S)
+    else:
+        _teacher_network = nn.Module()
+
+
+    num_gpus = torch.cuda.device_count()
+
+
+    callbacks = get_callbacks(patience=40, dir_manager=dir_manager, monitor='valid_loss')
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=args.output_dir, save_top_k=1, verbose=True, monitor='valid_loss', mode='min')
+    loggers = get_loggers(tb_save_dir=dir_manager.tensorboard_dir)
+
+
+    model = PLModel(
+        data_path=args.data_path,
+        network=_network,
+        teacher_network=_teacher_network,
+        loss_function=nn.BCELoss(),
+        learning_rate=args.learning_rate,
+        optimizer_class=torch.optim.Adam,
+        batch_size=args.batch_size,
+        num_samples=args.input_length,
+        num_chunks=args.num_chunks,
+        num_workers=args.num_workers,
+        is_augmentation=args.is_augmentation,
+        is_expansion=args.is_expansion,
+    )
+
+
+    trainer = pl.Trainer(
+        gpus=num_gpus,
+        num_nodes=args.num_nodes,
+        logger=loggers,
+        callbacks=callbacks,
+        max_epochs=args.max_epochs,
+        checkpoint_callback=checkpoint_callback,
+        sync_batchnorm=True,
+        reload_dataloaders_every_epoch=True,
+        resume_from_checkpoint=None,
+        num_sanity_val_steps=2,
+        automatic_optimization=True,
+        replace_sampler_ddp=False,
+        accelerator="ddp",
+        multiple_trainloader_mode='max_size_cycle',
+    )
+    trainer.fit(model)
+    logging.info('Training is done. Exporting the best model..')
+
+
+    model = PLModel.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
+    torch.save(model.state_dict(), dir_manager.best_model_statedict)
+    logging.info('Best performing model was exported to onnx and torchscript.')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument('--num_workers', type=int, default=0)
+    parser.add_argument('--mode', type=str, default='TRAIN', choices=['TRAIN', 'TEST'])
+    parser.add_argument('--is_augmentation', type=bool, default=False)
+    parser.add_argument('--is_expansion', type=bool, default=False)
+
+
+    parser.add_argument('--n_mels', type=int, default=128)
+    parser.add_argument('--n_fft', type=int, default=1024)
+    parser.add_argument('--f_min', type=int, default=0)
+    parser.add_argument('--f_max', type=int, default=11025)
+    parser.add_argument('--sample_rate', type=int, default=22050)
+
+
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--num_chunks', type=int, default=8)
+    parser.add_argument('--input_length', type=int, default=220500)
+
+
+    parser.add_argument('--conv_ndim', type=int, default=128)
+    parser.add_argument('--attention_ndim', type=int, default=256)
+    parser.add_argument('--attention_nheads', type=int, default=8)
+    parser.add_argument('--attention_nlayers', type=int, default=4)
+    parser.add_argument('--attention_max_len', type=int, default=512)
+    parser.add_argument('--dropout', type=float, default=0.1)
+    parser.add_argument('--n_seq_cls', type=int, default=50)
+    parser.add_argument('--n_token_cls', type=int, default=1)
+
+
+    parser.add_argument('--teacher_conv_ndim', type=int, default=128)
+    parser.add_argument('--teacher_attention_ndim', type=int, default=256)
+    parser.add_argument('--teacher_attention_nheads', type=int, default=8)
+    parser.add_argument('--teacher_attention_nlayers', type=int, default=4)
+
+
+    parser.add_argument('--max_epochs', type=int, default=200)
+    parser.add_argument('--gpu_id', type=str, default=0)
+    parser.add_argument('--num_nodes', type=int, default=1)
+    parser.add_argument('--learning_rate', type=float, default=1e-4)
+
+
+    parser.add_argument('--data_path', type=str, default='./../data/')
+    parser.add_argument('--output_dir', type=str, default='./results/exp')
+    parser.add_argument('--teacher_model_path', type=str, default='./results/exp')
+
+
+    args = parser.parse_args()
+
+    print(args)
+    train(args)
+
+'semi-supervised-music-tagging-transformer/src/lightning_model.py'
+:import math
+import random
+import torch
+import torchaudio
+import logging
+import numpy as np
+import pytorch_lightning as pl
+
+from torch import nn
+from sklearn import metrics
+
+from msd_config import MSDConfig
+from data_loader import msd_dataloader
+
+
+class PLModel(pl.LightningModule):
+    def __init__(
+        self,
+        data_path,
+        network,
+        teacher_network,
+        loss_function,
+        learning_rate,
+        optimizer_class,
+        batch_size,
+        num_samples,
+        num_chunks=1,
+        num_workers=1,
+        is_augmentation=False,
+        is_expansion=False,
+    ):
+
+        super().__init__()
+        self.data_path = data_path
+        self.network = network
+        self.teacher_network = teacher_network
+        self.loss_function = loss_function
+        self.learning_rate = learning_rate
+        self.optimizer_class = optimizer_class
+        self.batch_size = batch_size
+        self.num_samples = num_samples
+        self.num_chunks = num_chunks
+        self.num_workers = num_workers
+        self.is_augmentation = is_augmentation
+        self.is_expansion = is_expansion
+
+        self.save_hyperparameters()
+        logging.info('Building pytorch lightning model - done')
+
+        self.eval_logits = []
+        self.eval_targets = []
+
+    def train_dataloader(self):
+        if self.is_expansion:
+            labeled_loader = self.get_labeled_dataloader(data_split='TRAIN',
+                                                         batch_size=self.batch_size//2,
+                                                         is_agumentation=self.is_augmentation)
+            unlabeled_loader = self.get_unlabeled_dataloader(batch_size=self.batch_size//2)
+            loaders = {
+                        'labeled': labeled_loader,
+                        'unlabeled': unlabeled_loader
+                       }
+            return loaders
+        else:
+            return self.get_labeled_dataloader(data_split='TRAIN',
+                                               batch_size=self.batch_size,
+                                               is_augmentation=self.is_augmentation)
+
+    def val_dataloader(self):
+        return self.get_labeled_dataloader(data_split='VALID',
+                                           batch_size=self.batch_size//self.num_chunks,
+                                           is_augmentation=False,
+                                           num_chunks=self.num_chunks)
+
+    def test_dataloader(self):
+        return self.get_labeled_dataloader(data_split='TEST',
+                                           batch_size=self.batch_size//self.num_chunks,
+                                           is_augmentation=False,
+                                           num_chunks=self.num_chunks)
+
+    def get_labeled_dataloader(self, data_split, batch_size, is_augmentation, num_chunks=1):
+        return msd_dataloader(data_path=self.data_path, data_split=data_split, batch_size=batch_size, num_samples=self.num_samples, num_workers=self.num_workers, num_chunks=1, is_augmentation=is_augmentation)
+
+    def get_unlabeled_dataloader(self, batch_size):
+        return msd_dataloader(data_path=self.data_path, data_split='STUDENT', batch_size=batch_size, num_samples=self.num_samples, num_workers=self.num_workers, num_chunks=1)
+
+    def training_step(self, batch, batch_idx):
+
+        if self.is_expansion:
+            wav, target_tag_binary = batch['labeled']
+            wav = wav.squeeze(1)
+            original_wav, noised_wav = batch['unlabeled']
+            original_wav = original_wav.squeeze(1)
+            noised_wav = noised_wav.squeeze(1)
+
+
+            teacher_input = torch.cat([wav, original_wav])
+            student_input = torch.cat([wav, noised_wav])
+
+
+            self.teacher_network.eval()
+            with torch.no_grad():
+                teacher_output = self.teacher_network.forward(teacher_input)
+                teacher_prd = teacher_output[:len(wav)]
+                pseudo_label = teacher_output[len(wav):]
+
+
+            logits = self.network.forward(student_input)
+
+
+            teacher_loss = self.skeptical_loss(logits[:len(wav)], target_tag_binary, teacher_prd)
+            student_loss = self.loss_function(logits[len(wav):], pseudo_label)
+            loss = teacher_loss + student_loss
+
+        else:
+            wav, target_tag_binary = batch
+            wav = wav.squeeze(1)
+            logits = self.network.forward(wav)
+            loss = self.loss_function(logits, target_tag_binary)
+
+        self.log('train_loss_step', loss)
+        return {'loss': loss}
+
+    def validation_step(self, batch, batch_idx):
+        wav, target_tag_binary = batch
+        b, c, t = wav.size()
+        logits = self.network.forward(wav.view(-1, t))
+        logits = logits.view(b, c, -1).mean(dim=1)
+        loss = self.loss_function(logits, target_tag_binary)
+        self.log('valid_loss_step', loss, sync_dist=True)
+        self.eval_logits.append(logits.detach().cpu())
+        self.eval_targets.append(target_tag_binary.detach().cpu())
+
+    def test_step(self, batch, batch_idx):
+        wav, target_tag_binary = batch
+        b, c, t = wav.size()
+        logits = self.network.forward(wav.view(-1, t))
+        logits = logits.view(b, c, -1).mean(dim=1)
+        loss = self.loss_function(logits, target_tag_binary)
+        self.log('test_loss_step', loss, on_epoch=True)
+        self.eval_logits.append(logits.detach().cpu())
+        self.eval_targets.append(target_tag_binary.detach().cpu())
+
+    def configure_optimizers(self):
+        optimizer = self.optimizer_class(self.network.parameters(), lr=self.learning_rate)
+        return optimizer
+
+    def validation_epoch_end(self, outputs):
+        logits = torch.cat(self.eval_logits, dim=0)
+        target_binaries = torch.cat(self.eval_targets, dim=0)
+        loss = self.loss_function(logits, target_binaries)
+        roc_auc, pr_auc = self.get_auc_scores(logits, target_binaries)
+        self.log('valid_loss', loss.cuda(), sync_dist=True)
+        self.log('valid_roc_auc', roc_auc.cuda(), sync_dist=True)
+        self.log('valid_pr_auc', pr_auc.cuda(), sync_dist=True)
+        self.eval_logits = []
+        self.eval_targets = []
+
+    def test_epoch_end(self, outputs):
+        logits = torch.cat(self.eval_logits, dim=0)
+        target_binaries = torch.cat(self.eval_targets, dim=0)
+        loss = self.loss_function(logits, target_binaries)
+        roc_auc, pr_auc = self.get_auc_scores(logits, target_binaries)
+        self.eval_logits = []
+        self.eval_targets = []
+
+    def get_auc_scores(self, logits, targets):
+        try:
+            roc_auc = metrics.roc_auc_score(targets, logits, average='macro')
+            pr_auc = metrics.average_precision_score(targets, logits, average='macro')
+            print('roc_auc: %.4f' % roc_auc)
+            print('pr_auc: %.4f' % pr_auc)
+
+
+            roc_aucs = metrics.roc_auc_score(targets, logits, average=None)
+            pr_aucs = metrics.average_precision_score(targets, logits, average=None)
+            for i in range(50):
+                print('%s: %.4f, %.4f' % (MSDConfig.tag_names[i], roc_aucs[i], pr_aucs[i]))
+        except ValueError as e:
+            roc_auc, pr_auc = 0, 0
+            print('auc not available')
+        return torch.tensor(roc_auc), torch.tensor(pr_auc)
+
+'semi-supervised-music-tagging-transformer/src/data_loader.py'
+:
+import os
+import random
+import pickle
+import torch
+import numpy as np
+import soundfile as sf
+from torch.utils import data
+from torchaudio_augmentations import (
+    RandomResizedCrop,
+    RandomApply,
+    PolarityInversion,
+    Noise,
+    Gain,
+    HighLowPass,
+    Delay,
+    PitchShift,
+    Reverb,
+    Compose,
+)
+
+
+class MSDDataset(data.Dataset):
+    def __init__(self, data_path, data_split, num_samples, num_chunks, is_augmentation):
+        assert data_split in ['TRAIN', 'VALID', 'TEST', 'STUDENT', 'NONE']
+        self.data_path = data_path
+        self.data_split = data_split
+        self.num_samples = num_samples
+        self.num_chunks = num_chunks
+        self.is_augmentation = is_augmentation
+        self._load_data()
+        if is_augmentation or (data_split=='STUDENT'):
+            self._get_augmentations()
+
+    def __getitem__(self, index):
+        wav = self._read_audio(index)
+        if self.data_split == 'TRAIN':
+            wav = self._process_train(wav)
+            binary = self.binaries[index].astype('float32')
+            return wav, binary
+        elif self.data_split in ['VALID', 'TEST']:
+            wav = self._process_valid(wav)
+            binary = self.binaries[index].astype('float32')
+            return wav, binary
+        elif self.data_split == 'STUDENT':
+            original_wav, noisy_wav = self._process_student(wav)
+            return original_wav, noisy_wav
+
+    def _load_data(self):
+        split_fn = os.path.join(self.data_path, 'splits', '%s_ids.npy' % self.data_split.lower())
+        self.track_ids = np.load(split_fn)
+        if self.data_split in ['TRAIN', 'VALID', 'TEST']:
+            binary_fn = os.path.join(self.data_path, 'splits', '%s_binaries.npy' % self.data_split.lower())
+            self.binaries = np.load(binary_fn)
+
+    def _get_augmentations(self):
+
+        transforms = [
+            RandomResizedCrop(n_samples=self.num_samples),
+            RandomApply([PolarityInversion()], p=0.8),
+            RandomApply([Noise(min_snr=0.3, max_snr=0.5)], p=0.3),
+            RandomApply([Gain()], p=0.2),
+            RandomApply([HighLowPass(sample_rate=22050)], p=0.8),
+            RandomApply([Delay(sample_rate=22050)], p=0.5),
+            RandomApply([PitchShift(n_samples=self.num_samples, sample_rate=22050)], p=0.4),
+            RandomApply([Reverb(sample_rate=22050)], p=0.3),
+        ]
+        self.augmentation = Compose(transforms=transforms)
+
+    def _read_audio(self, index):
+
+        track_id = self.track_ids[index]
+        filename = '{}/{}/{}/{}.wav'.format(track_id[2], track_id[3], track_id[4], track_id)
+        audio_path = os.path.join(self.data_path, 'audio', filename)
+
+
+        wav, _ = sf.read(audio_path)
+
+
+        if len(wav.shape) == 2:
+            wav = np.mean(wav, axis=1)
+        return wav
+
+    def _process_train(self, wav):
+
+        random_index = random.randint(0, len(wav) - self.num_samples - 1)
+        wav = wav[random_index : random_index + self.num_samples].astype('float32')
+        if self.is_augmentation:
+            wav = self.augmentation(torch.from_numpy(wav).unsqueeze(0)).squeeze(0).numpy()
+        return wav
+
+    def _process_valid(self, wav):
+
+        hop = (len(wav) - self.num_samples) // self.num_chunks
+        wav = np.array([wav[i * hop : i * hop + self.num_samples] for i in range(self.num_chunks)]).astype('float32')
+        return wav
+
+    def _process_student(self, wav):
+
+        random_index = random.randint(0, len(wav) - self.num_samples - 1)
+        original_wav = wav[random_index : random_index + self.num_samples].astype('float32')
+        noisy_wav = self.augmentation(torch.from_numpy(original_wav).unsqueeze(0)).squeeze(0).numpy()
+        return original_wav, noisy_wav
+
+    def __len__(self):
+        return len(self.track_ids)
+
+
+def msd_dataloader(data_path, data_split, batch_size, num_samples, num_workers, num_chunks, is_augmentation=False):
+    data_loader = data.DataLoader(dataset=MSDDataset(data_path, data_split, num_samples, num_chunks, is_augmentation),
+                                  batch_size=batch_size,
+                                  shuffle=True,
+                                  drop_last=False,
+                                  num_workers=num_workers)
+    return data_loader
+
