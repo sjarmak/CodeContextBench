@@ -1,6 +1,6 @@
 # CodeContextBench Task Catalog
 
-A detailed reference for every benchmark task in CodeContextBench. This document covers all 11 benchmark suites. The current evaluation selection contains 94 tasks from 8 benchmarks. Three additional benchmarks (CrossRepo, RepoQA, DIBench) have fully defined tasks with test scripts and scoring but have not yet been wired into the selection pipeline (`scripts/select_benchmark_tasks.py`).
+A detailed reference for every benchmark task in CodeContextBench. This document covers all 13 benchmark suites totaling 156 tasks.
 
 **Selection methodology:** Tasks were chosen via stratified sampling across benchmarks, covering all SDLC phases. Each task is scored for MCP benefit using a weighted combination of context complexity (0.25), cross-file dependencies (0.30), semantic search potential (0.20), and tool-chain weight (0.25). See `docs/TASK_SELECTION.md` for full scoring methodology.
 
@@ -15,10 +15,12 @@ A detailed reference for every benchmark task in CodeContextBench. This document
 5. [SWE-bench Pro (36 tasks)](#5-swe-bench-pro--real-world-software-engineering)
 6. [SWE-Perf (3 tasks)](#6-swe-perf--performance-optimization)
 7. [TAC (6 tasks)](#7-tac--the-agent-company)
-8. [CrossRepo (5 tasks)](#8-crossrepo--cross-repository-reasoning) *(not yet in selection pipeline)*
-9. [RepoQA (10 tasks)](#9-repoqa--semantic-code-retrieval) *(not yet in selection pipeline)*
-10. [DIBench (8 tasks)](#10-dibench--dependency-installation) *(not yet in selection pipeline)*
+8. [CrossRepo (5 tasks)](#8-crossrepo--cross-repository-reasoning)
+9. [RepoQA (10 tasks)](#9-repoqa--semantic-code-retrieval)
+10. [DIBench (8 tasks)](#10-dibench--dependency-installation)
 11. [CodeReview (3 tasks)](#11-codereview--ai-code-review)
+12. [DependEval (32 tasks)](#12-dependeval--dependency-ordering)
+13. [LinuxFLBench (5 tasks)](#13-linuxflbench--linux-kernel-fault-localization)
 
 ---
 
@@ -425,7 +427,6 @@ Navigate to the OpenHands repository, find the `search_file` function in `/works
 ## 8. CrossRepo -- Cross-Repository Reasoning
 
 **Focus:** Tasks that span multiple repositories, testing the ability to trace interactions, APIs, and data flows across codebases.
-**Note:** Not yet wired into the selection pipeline. Verifier fixed but ~80% task failure rate due to inherent task difficulty.
 
 | Task | Repositories | Description |
 |------|-------------|-------------|
@@ -461,7 +462,6 @@ Create a marker file `test_marker.txt` containing exactly `MARKER_CREATED`. This
 
 **Focus:** Find functions by behavioral description alone (no name given). Tests semantic search capability -- the agent must read a description of what a function does and locate it in the repository.
 **Difficulty:** hard (all tasks) | **Agent Timeout:** 10 min | **Verifier Timeout:** 5 min
-**Note:** Not yet wired into the selection pipeline.
 **Output:** JSON to `/app/solution.json` with `function_path`, `function_name`, `justification`.
 **Scoring:** 1.0 (perfect match), 0.7-0.9 (good), 0.3-0.6 (partial), 0.0 (wrong).
 
@@ -524,7 +524,6 @@ Find a function that rearranges multi-dimensional array elements based on specif
 
 **Focus:** Infer and add missing dependencies to build files by analyzing source code imports. The agent must not modify source code -- only edit dependency configuration files.
 **Difficulty:** medium (all tasks) | **Agent Timeout:** 15 min | **Verifier Timeout:** 15 min
-**Note:** Not yet wired into the selection pipeline.
 
 | Task | Language | Project | Build File |
 |------|----------|---------|------------|
@@ -573,25 +572,102 @@ Review cal.com PR #26801 (feature opt-in scope configuration) targeting `calcom/
 
 ---
 
+## 12. DependEval -- Dependency Ordering
+
+**Focus:** Identify and correctly order dependencies in real-world repositories. Two task types: recognizing dependencies from source code, and editing multiple files to fix dependency issues.
+**Languages:** Java, JavaScript, Python, TypeScript | **Difficulty:** medium | **Time Limit:** 10 min per task
+**Source:** [DependEval benchmark](https://github.com/nicholasgasior/dependeval)
+
+### Task Types
+
+| Task Type | Count | Description |
+|-----------|-------|-------------|
+| Dependency Recognition | 16 | Analyze source code to identify and list all dependency relationships |
+| Multifile Editing | 16 | Edit multiple files to resolve dependency ordering issues |
+
+### Dependency Recognition Tasks (16)
+
+| Task | Language | Repository |
+|------|----------|------------|
+| dependency_recognition-java-488d70a0 | Java | ProviGen |
+| dependency_recognition-java-a06aa17b | Java | iceberg |
+| dependency_recognition-java-a6bb8222 | Java | iceberg |
+| dependency_recognition-java-c7138508 | Java | oracle-r2dbc |
+| dependency_recognition-javascript-6940aa7b | JavaScript | Next-GraphQL-Blog |
+| dependency_recognition-javascript-d52503a0 | JavaScript | place-to-stay |
+| dependency_recognition-javascript-dafb5116 | JavaScript | cls-rtracer |
+| dependency_recognition-javascript-ef7ab7e5 | JavaScript | better-onetab |
+| dependency_recognition-python-58e6c2b0 | Python | MLOS |
+| dependency_recognition-python-7c0ee37f | Python | semi-supervised-music-tagging-transformer |
+| dependency_recognition-python-83d51f82 | Python | xos |
+| dependency_recognition-python-bb854fc4 | Python | alexa-apis-for-python |
+| dependency_recognition-typescript-a36bf7a5 | TypeScript | Rankings-Backend |
+| dependency_recognition-typescript-b512c0c8 | TypeScript | predicates |
+| dependency_recognition-typescript-b8647ec9 | TypeScript | rules |
+| dependency_recognition-typescript-d13f8f68 | TypeScript | installer-gui |
+
+### Multifile Editing Tasks (16)
+
+| Task | Language | Repository |
+|------|----------|------------|
+| multifile_editing-java-2e96d995 | Java | kafka-webview |
+| multifile_editing-java-5edcbb0d | Java | RadioDroid |
+| multifile_editing-java-8d0d378a | Java | NuProcess |
+| multifile_editing-java-e1c422ed | Java | PowerTutor |
+| multifile_editing-javascript-460fab96 | JavaScript | winston-logstash |
+| multifile_editing-javascript-86e61c71 | JavaScript | NFT-Marketplace-Tutorial |
+| multifile_editing-javascript-beeb2c66 | JavaScript | three.bas |
+| multifile_editing-javascript-bf306859 | JavaScript | type-to-reducer |
+| multifile_editing-python-37688cee | Python | PiGlow |
+| multifile_editing-python-6e11aa67 | Python | Codex-CLI |
+| multifile_editing-python-85970e74 | Python | Magisk_Manager_Recovery_Tool |
+| multifile_editing-python-ea840a03 | Python | modAL |
+| multifile_editing-typescript-01b00e0e | TypeScript | akello |
+| multifile_editing-typescript-1469d2cc | TypeScript | stromjs |
+| multifile_editing-typescript-4253968d | TypeScript | Day59-Angular-Practice |
+| multifile_editing-typescript-73e7d1bc | TypeScript | event-sourcing-demo-app |
+
+---
+
+## 13. LinuxFLBench -- Linux Kernel Fault Localization
+
+**Focus:** Locate the root cause of real Linux kernel bugs from Bugzilla reports. The agent must identify the exact source file(s) and function(s) responsible for hardware/driver failures across kernel subsystems.
+**Language:** C | **Difficulty:** expert (all tasks) | **Time Limit:** 30 min per task
+**Repository:** linux (kernel source tree) | **Build Timeout:** 30 min (kernel partial clone ~2GB)
+
+| Task | Subsystem | Description |
+|------|-----------|-------------|
+| lfl-acpi-207835 | ACPI | Backlight brightness control does not work on Acer TravelMate 5735Z -- ACPI video backlight control non-functional by default |
+| lfl-nfs-117651 | NFS | Root NFS and autofs mount disappears due to inode revalidate failure in sunrpc |
+| lfl-sata-203475 | SATA | Samsung 860 EVO queued TRIM causes timeout errors in libata |
+| lfl-sound-53441 | Sound | HDA Intel sound stops working after suspend to RAM due to missing runtime PM disable |
+| lfl-wifi-206661 | WiFi | iwlwifi missing PCI subdevice entries for 0x2526 causing firmware load failure |
+
+Each task provides:
+- A Bugzilla-style bug report describing the symptoms
+- The full Linux kernel source tree at a relevant commit
+- A test script that validates the agent correctly identifies the faulty file(s) and function(s)
+
+---
+
 ## Appendix: Summary Statistics
 
-| Benchmark | Selected | Difficulty Range | Language(s) | Avg MCP Score |
-|-----------|----------|-----------------|-------------|---------------|
+| Benchmark | Tasks | Difficulty Range | Language(s) | Avg MCP Score |
+|-----------|-------|-----------------|-------------|---------------|
 | K8s Docs | 5 | medium - hard | Go | 0.628 |
 | LargeRepo | 4 | hard | Go, Rust, Python/C++, TS | 0.895 |
 | LoCoBench | 25 | expert | C, C++, C#, Python, Rust, TS | 0.914 |
 | PyTorch | 12 | medium - hard | C++ | 0.555 |
 | SWE-bench Pro | 36 | hard | Go, TS, Python, JS | 0.660 |
+| DependEval | 32 | medium | Java, JS, Python, TS | -- |
 | SWE-Perf | 3 | medium - hard | Python | 0.458 |
 | TAC | 6 | medium - hard | C++, Python | 0.506 |
-| CrossRepo | 5* | medium - hard | Go, Python | -- |
-| RepoQA | 10* | hard | C++, Java, Python, Rust, TS | -- |
-| DIBench | 8* | medium | C#, JS, Python, Rust | -- |
+| CrossRepo | 5 | medium - hard | Go, Python | -- |
+| RepoQA | 10 | hard | C++, Java, Python, Rust, TS | -- |
+| DIBench | 8 | medium | C#, JS, Python, Rust | -- |
 | CodeReview | 3 | hard | JS, C#, TS | 0.830 |
+| LinuxFLBench | 5 | expert | C | -- |
 
-\* Not yet wired into the selection pipeline (`scripts/select_benchmark_tasks.py`). Tasks are fully defined with test scripts and scoring.
-
-**Total selected tasks:** 94
-**Total available tasks:** 826
+**Total tasks:** 156
 **Languages covered:** C, C++, C#, Go, Java, JavaScript, Python, Rust, TypeScript
-**SDLC phases covered:** Requirements & Discovery, Architecture & Design, Implementation (feature), Implementation (bug fix), Implementation (refactoring), Testing & QA, Documentation, Maintenance
+**SDLC phases covered:** Requirements & Discovery, Architecture & Design, Implementation (feature), Implementation (bug fix), Implementation (refactoring), Testing & QA, Documentation, Maintenance, Dependency Management, Fault Localization

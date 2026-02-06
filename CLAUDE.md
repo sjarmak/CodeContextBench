@@ -5,7 +5,7 @@
 ```
 configs/
   _common.sh                 # Shared infra: token refresh, parallel execution, multi-account
-  *_3config.sh               # Per-benchmark run scripts (10 total)
+  *_3config.sh               # Per-benchmark run scripts (12 total; DependEval has no 3config yet)
   selected_benchmark_tasks.json  # Task selection with metadata, difficulty, MCP scores
 
 benchmarks/
@@ -36,11 +36,12 @@ docs/
   ERROR_CATALOG.md           # Known error fingerprints, causes, fixes
 ```
 
-## Benchmarks (12)
+## Benchmarks (13)
 
 | Benchmark | Tasks | Language(s) | Focus |
 |-----------|-------|-------------|-------|
 | SWE-bench Pro | 36 | Go, TS, Python | Real-world SWE across repos |
+| DependEval | 32 | Java, JS, Python, TS | Dependency ordering |
 | PyTorch | 12 | Python | PyTorch PR-level tasks |
 | LoCoBench | 25 | Mixed | Long-context understanding |
 | RepoQA | 10 | Mixed | Repository Q&A |
