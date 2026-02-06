@@ -5,6 +5,12 @@ LoCoBench-Agent Solution Verifier
 Evaluates agent solutions against ground truth using keyword matching
 and structural analysis. For more sophisticated evaluation, this can
 be extended to use LLM-based semantic similarity.
+
+Scoring Weights (updated for better evaluation):
+- keyword_overlap: 0.35 (reduced from 0.5 - ground truth keywords can be overly specific)
+- file_references: 0.30 (increased from 0.2 - shows agent explored codebase)
+- code_blocks: 0.25 (increased from 0.2 - shows evidence-based analysis)
+- length_score: 0.10 (unchanged - basic sanity check)
 """
 
 import argparse
@@ -134,16 +140,16 @@ def evaluate_solution(
     solution_len = len(solution_text.split())
     length_score = min(solution_len / 100, 1.0)  # Full credit at 100+ words
 
-    # Weighted combination
-    # Keyword overlap is most important for semantic similarity
-    # File references show the agent explored the codebase
-    # Code blocks show implementation effort
-    # Length is a basic sanity check
+    # Weighted combination (updated weights for better evaluation)
+    # Keyword overlap reduced - ground truth keywords can be overly specific
+    # File references increased - shows agent explored the codebase correctly
+    # Code blocks increased - shows evidence-based analysis with code
+    # Length unchanged - basic sanity check
     final_score = (
-        0.5 * keyword_score +
-        0.2 * file_ref_score +
-        0.2 * code_block_score +
-        0.1 * length_score
+        0.35 * keyword_score +
+        0.30 * file_ref_score +
+        0.25 * code_block_score +
+        0.10 * length_score
     )
 
     return {
