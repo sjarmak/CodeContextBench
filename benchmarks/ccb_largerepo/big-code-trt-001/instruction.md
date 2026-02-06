@@ -15,8 +15,6 @@ Follow the patterns used by the existing `W4A8_MXFP4_FP8` mode—find everywhere
 
 Unsupported combinations (certain attention backends, incompatible KV cache settings) should fail at build time with clear errors. Add tests to cover the new mode.
 
-**Why this requires MCP:** The TensorRT-LLM codebase (1.6GB+ Python/C++) has quantization modes defined and used across Python/C++ boundaries, kernel selection logic, build system, validation, and tests. Finding all locations where quantization modes are evaluated and understood the cross-language architecture requires broad semantic search across many files that local grep cannot efficiently provide.
-
 ## Task
 
 YOU MUST IMPLEMENT CODE CHANGES to add W4A8_MXFP4_INT8 support.
@@ -60,7 +58,7 @@ Find and modify code in these areas:
 
 ### Implementation Steps
 
-1. **Understand the quantization architecture** (use Sourcegraph MCP for broad search):
+1. **Understand the quantization architecture**:
    - Find all Python files that reference `W4A8_MXFP4_FP8`
    - Find all C++ files that handle this mode
    - Understand the Python-C++ binding patterns
@@ -123,6 +121,5 @@ Find and modify code in these areas:
 python -m pytest tests/ -v -k "quantization"
 ```
 
-**Time Limit:** 25 minutes  
-**Estimated Context:** 20,000 tokens  
-**Why MCP Helps:** Quantization modes are defined and used across Python/C++ boundary, kernel selection, validation, and build system. Finding all locations and understanding cross-language architecture requires semantic search across the entire codebase.
+**Time Limit:** 25 minutes
+**Estimated Context:** 20,000 tokens

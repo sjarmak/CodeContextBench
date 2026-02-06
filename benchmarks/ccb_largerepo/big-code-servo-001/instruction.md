@@ -13,8 +13,6 @@ Add support for the `scrollend` DOM event in Servo. This event should fire on sc
 
 The event should debounce properly—multiple rapid scroll inputs should result in a single `scrollend` after movement stops. Don't fire if the scroll position didn't actually change.
 
-**Why this requires MCP:** The Servo codebase (1.6GB+ Rust) has scroll handling scattered across the browser engine, DOM event system, and compositor. Finding all scroll event handlers, understanding debouncing patterns, and integrating into the event system requires broad architectural context across multiple subsystems that local grep cannot efficiently provide.
-
 ## Task
 
 YOU MUST IMPLEMENT CODE CHANGES to add scrollend event support.
@@ -44,7 +42,7 @@ The `scrollend` event must fire in these contexts:
 
 ### Implementation Steps
 
-1. **Understand the scroll architecture** (use Sourcegraph MCP for broad search):
+1. **Understand the scroll architecture**:
    - Find all places where scroll events (scroll, wheel, keyboard scroll) are handled
    - Identify existing scroll debouncing mechanisms in Servo
    - Understand how the event system integrates with the DOM
@@ -104,6 +102,5 @@ The `scrollend` event must fire in these contexts:
 ./mach test-servo
 ```
 
-**Time Limit:** 25 minutes  
-**Estimated Context:** 18,000 tokens  
-**Why MCP Helps:** Scroll handling is scattered across browser architecture (DOM events, compositor, scroll handlers). Finding all scroll event handlers and understanding integration points requires semantic search across multiple Servo subsystems.
+**Time Limit:** 25 minutes
+**Estimated Context:** 18,000 tokens
