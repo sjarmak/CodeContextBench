@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: semantic_similarity (0.0-1.0) — correct function retrieval score
 # RepoQA Verification Script
 # Verifies agent solution against ground truth
 
@@ -27,7 +28,8 @@ if [ ! -f /tests/ground_truth.json ]; then
     echo "Contents of /tests:"
     ls -la /tests/ || echo "Cannot list /tests"
     echo '{"score": 0.0}' > /logs/verifier/reward.json
-    echo "DEBUG: Wrote error reward to /logs/verifier/reward.json"
+    echo "0.0" > /logs/verifier/reward.txt
+    echo "DEBUG: Wrote error reward to /logs/verifier/reward.json and reward.txt"
     exit 0
 fi
 echo "DEBUG: Found /tests/ground_truth.json"
@@ -41,6 +43,7 @@ if [ ! -f "$SOLUTION_FILE" ]; then
     echo "Contents of /app:"
     ls -la /app/ | head -20
     echo '{"score": 0.0}' > /logs/verifier/reward.json
+    echo "0.0" > /logs/verifier/reward.txt
     exit 0
 fi
 echo "DEBUG: Found /app/solution.json"
@@ -84,6 +87,8 @@ try:
     # Write reward
     with open('/logs/verifier/reward.json', 'w') as f:
         json.dump(reward, f, indent=2)
+    with open('/logs/verifier/reward.txt', 'w') as f:
+        f.write(str(reward['score']))
 
 except Exception as e:
     import traceback
@@ -92,6 +97,8 @@ except Exception as e:
     reward = {'score': 0.0}
     with open('/logs/verifier/reward.json', 'w') as f:
         json.dump(reward, f, indent=2)
+    with open('/logs/verifier/reward.txt', 'w') as f:
+        f.write(str(reward['score']))
 PYEOF
 
 echo "DEBUG: Created /tmp/verify.py, now running python3..."
@@ -105,6 +112,7 @@ fi
 
 # Ensure proper permissions
 chmod 664 /logs/verifier/reward.json 2>/dev/null || true
+chmod 664 /logs/verifier/reward.txt 2>/dev/null || true
 
 # Always exit 0 for Harbor compatibility
 exit 0
