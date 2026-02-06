@@ -8,10 +8,10 @@ Reads runs/official/MANIFEST.json and produces:
 
 Scoring rules (see docs/LEADERBOARD.md):
   - Per-benchmark: mean_reward across all tasks
-  - Aggregate: unweighted mean of per-benchmark mean_rewards (all 13 required)
+  - Aggregate: unweighted mean of per-benchmark mean_rewards over qualifying benchmarks
   - Errored tasks count as reward=0.0
   - Must run ALL tasks in a benchmark to qualify for that benchmark's leaderboard
-  - Tie-breaking: pass_rate > median_reward > token_efficiency
+  - Tie-breaking: benchmarks_completed > pass_rate > median_reward > token_efficiency
 """
 
 import argparse
@@ -103,16 +103,35 @@ def generate_leaderboard(manifest: dict, benchmark_task_counts: dict) -> dict:
     # Build per-benchmark leaderboard
     per_benchmark = []
     for (agent, config), benchmarks in sorted(agent_benchmarks.items()):
+        short_agent = agent.rsplit("/", 1)[-1] if "/" in agent else agent
+        submission_name = f"{short_agent} ({config})"
+
         for benchmark, run_data in sorted(benchmarks.items()):
             required = benchmark_task_counts.get(benchmark)
             actual = run_data.get("task_count", 0)
             is_complete = required is not None and actual >= required
 
+            # Judge score: use run-level mean if present, else compute from tasks
+            mean_judge = run_data.get("mean_judge_score")
+            judge_count = run_data.get("judge_count", 0)
+            if mean_judge is None:
+                # Compute from per-task judge_score fields
+                task_judges = [
+                    t.get("judge_score") for t in run_data.get("tasks", {}).values()
+                    if t.get("judge_score") is not None
+                ]
+                if task_judges:
+                    mean_judge = round(sum(task_judges) / len(task_judges), 4)
+                    judge_count = len(task_judges)
+
             entry = {
                 "benchmark": benchmark,
+                "submission": submission_name,
                 "agent": agent,
                 "config": config,
                 "mean_reward": run_data.get("mean_reward", 0.0),
+                "mean_judge_score": mean_judge,
+                "judge_count": judge_count,
                 "pass_rate": compute_pass_rate(run_data.get("tasks", {})),
                 "task_count": actual,
                 "required_tasks": required or actual,
@@ -123,7 +142,6 @@ def generate_leaderboard(manifest: dict, benchmark_task_counts: dict) -> dict:
     # Build aggregate leaderboard
     aggregate = []
     for (agent, config), benchmarks in sorted(agent_benchmarks.items()):
-        # Check completeness: must have all 13 benchmarks with full task coverage
         complete_benchmarks = []
         for benchmark, run_data in benchmarks.items():
             required = benchmark_task_counts.get(benchmark)
@@ -150,10 +168,33 @@ def generate_leaderboard(manifest: dict, benchmark_task_counts: dict) -> dict:
         total_pass_rate = compute_pass_rate(all_tasks)
         median_reward = compute_median_reward(all_tasks)
 
+        # Display name: short agent name + config
+        short_agent = agent.rsplit("/", 1)[-1] if "/" in agent else agent
+        submission_name = f"{short_agent} ({config})"
+
+        # Aggregate judge score: mean of per-benchmark mean_judge_scores where available
+        benchmark_judge_scores = []
+        for b in complete_benchmarks:
+            rd = benchmarks[b]
+            mj = rd.get("mean_judge_score")
+            if mj is None:
+                # Compute from per-task judge_score fields
+                tj = [
+                    t.get("judge_score") for t in rd.get("tasks", {}).values()
+                    if t.get("judge_score") is not None
+                ]
+                if tj:
+                    mj = sum(tj) / len(tj)
+            if mj is not None:
+                benchmark_judge_scores.append(mj)
+        agg_judge = round(sum(benchmark_judge_scores) / len(benchmark_judge_scores), 4) if benchmark_judge_scores else None
+
         entry = {
+            "submission": submission_name,
             "agent": agent,
             "config": config,
             "ccb_aggregate_score": agg_score,
+            "ccb_aggregate_judge_score": agg_judge,
             "benchmarks_completed": benchmarks_completed,
             "total_benchmarks": TOTAL_BENCHMARKS,
             "total_tasks": total_tasks,
@@ -168,11 +209,11 @@ def generate_leaderboard(manifest: dict, benchmark_task_counts: dict) -> dict:
         key=lambda e: (e["benchmark"], -e["mean_reward"], -e["pass_rate"]),
     )
 
-    # Sort aggregate: all-complete first, then by ccb_aggregate_score desc, tie-breakers
+    # Sort aggregate: by ccb_aggregate_score desc, then benchmarks_completed, then tie-breakers
     aggregate.sort(
         key=lambda e: (
-            -int(e["all_benchmarks_complete"]),
             -e["ccb_aggregate_score"],
+            -e["benchmarks_completed"],
             -e["pass_rate"],
             -e["median_reward"],
         ),
@@ -199,36 +240,24 @@ def generate_markdown(leaderboard: dict, benchmark_task_counts: dict) -> str:
     lines.append("## Aggregate Ranking")
     lines.append("")
     agg = leaderboard["aggregate"]
-    complete = [e for e in agg if e["all_benchmarks_complete"]]
-    partial = [e for e in agg if not e["all_benchmarks_complete"]]
 
-    if complete:
-        lines.append("| Rank | Agent | Config | CCB Aggregate | Benchmarks | Tasks | Pass Rate |")
-        lines.append("|------|-------|--------|--------------|------------|-------|-----------|")
-        for i, entry in enumerate(complete, 1):
+    if agg:
+        lines.append("| Rank | Submission | CCB Aggregate | Judge Score | Benchmarks | Tasks | Pass Rate |")
+        lines.append("|------|-----------|--------------|-------------|------------|-------|-----------|")
+        for i, entry in enumerate(agg, 1):
+            judge_str = f"{entry['ccb_aggregate_judge_score']:.3f}" if entry.get('ccb_aggregate_judge_score') is not None else "---"
             lines.append(
-                f"| {i} | {entry['agent']} | {entry['config']} | "
+                f"| {i} | {entry['submission']} | "
                 f"{entry['ccb_aggregate_score']:.3f} | "
+                f"{judge_str} | "
                 f"{entry['benchmarks_completed']}/{entry['total_benchmarks']} | "
                 f"{entry['total_tasks']} | {entry['pass_rate']:.3f} |"
             )
+        lines.append("")
+        lines.append("*Aggregate score is the mean of per-benchmark mean rewards over qualifying (complete) benchmarks.*")
         lines.append("")
     else:
-        lines.append("*No entries with complete coverage of all 13 benchmarks.*")
-        lines.append("")
-
-    if partial:
-        lines.append("### Partial Coverage (not ranked in aggregate)")
-        lines.append("")
-        lines.append("| Agent | Config | Score (qualifying) | Benchmarks | Tasks | Pass Rate |")
-        lines.append("|-------|--------|--------------------|------------|-------|-----------|")
-        for entry in partial:
-            lines.append(
-                f"| {entry['agent']} | {entry['config']} | "
-                f"{entry['ccb_aggregate_score']:.3f} | "
-                f"{entry['benchmarks_completed']}/{entry['total_benchmarks']} | "
-                f"{entry['total_tasks']} | {entry['pass_rate']:.3f} |"
-            )
+        lines.append("*No submissions found.*")
         lines.append("")
 
     # Per-benchmark rankings
@@ -245,8 +274,8 @@ def generate_markdown(leaderboard: dict, benchmark_task_counts: dict) -> str:
         required = benchmark_task_counts.get(benchmark, "?")
         lines.append(f"### {benchmark} ({required} tasks)")
         lines.append("")
-        lines.append("| Rank | Agent | Config | Mean Reward | Pass Rate | Tasks | Complete |")
-        lines.append("|------|-------|--------|-------------|-----------|-------|----------|")
+        lines.append("| Rank | Submission | Verifier Score | Judge Score | Pass Rate | Tasks | Complete |")
+        lines.append("|------|-----------|----------------|-------------|-----------|-------|----------|")
 
         # Separate complete and incomplete
         complete_entries = [e for e in entries if e["is_complete"]]
@@ -254,16 +283,18 @@ def generate_markdown(leaderboard: dict, benchmark_task_counts: dict) -> str:
 
         rank = 1
         for entry in complete_entries:
+            judge_str = f"{entry['mean_judge_score']:.3f}" if entry.get('mean_judge_score') is not None else "---"
             lines.append(
-                f"| {rank} | {entry['agent']} | {entry['config']} | "
-                f"{entry['mean_reward']:.3f} | {entry['pass_rate']:.3f} | "
+                f"| {rank} | {entry['submission']} | "
+                f"{entry['mean_reward']:.3f} | {judge_str} | {entry['pass_rate']:.3f} | "
                 f"{entry['task_count']}/{entry['required_tasks']} | Yes |"
             )
             rank += 1
         for entry in incomplete_entries:
+            judge_str = f"{entry['mean_judge_score']:.3f}" if entry.get('mean_judge_score') is not None else "---"
             lines.append(
-                f"| - | {entry['agent']} | {entry['config']} | "
-                f"{entry['mean_reward']:.3f} | {entry['pass_rate']:.3f} | "
+                f"| - | {entry['submission']} | "
+                f"{entry['mean_reward']:.3f} | {judge_str} | {entry['pass_rate']:.3f} | "
                 f"{entry['task_count']}/{entry['required_tasks']} | No |"
             )
         lines.append("")
@@ -321,11 +352,10 @@ def main():
     print(f"Wrote {args.output_md}")
 
     # Summary
-    print(f"\nPer-benchmark entries: {len(leaderboard['per_benchmark'])}")
-    print(f"Aggregate entries: {len(leaderboard['aggregate'])}")
-    complete_agg = sum(1 for e in leaderboard["aggregate"] if e["all_benchmarks_complete"])
-    print(f"  Complete (all 13 benchmarks): {complete_agg}")
-    print(f"  Partial: {len(leaderboard['aggregate']) - complete_agg}")
+    print(f"\nSubmissions: {len(leaderboard['aggregate'])}")
+    print(f"Per-benchmark entries: {len(leaderboard['per_benchmark'])}")
+    for entry in leaderboard["aggregate"]:
+        print(f"  {entry['submission']}: {entry['ccb_aggregate_score']:.3f} ({entry['benchmarks_completed']}/{entry['total_benchmarks']} benchmarks)")
 
 
 if __name__ == "__main__":

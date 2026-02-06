@@ -14,7 +14,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "official"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+RUNS_DIR = PROJECT_ROOT / "runs" / "official"
 
 # Directories to skip entirely
 SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive"]
@@ -36,6 +37,21 @@ DIR_PREFIX_TO_SUITE = {
 }
 
 CONFIGS = ["baseline", "sourcegraph_base", "sourcegraph_full"]
+
+
+def load_judge_scores(path: Path) -> dict[str, dict]:
+    """Load centralized judge_scores.json.
+
+    Returns dict mapping 'benchmark/config/task_id' -> {judge_score, rubric, ...}.
+    Returns empty dict if file doesn't exist or is invalid.
+    """
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+        return data.get("scores", {})
+    except (json.JSONDecodeError, OSError):
+        return {}
 
 
 def should_skip(dirname: str) -> bool:
@@ -130,18 +146,43 @@ def extract_task_info(task_entry: dict) -> dict:
     agent_result = data.get("agent_result") or {}
     has_cost = bool(agent_result.get("n_input_tokens", 0) or agent_result.get("n_output_tokens", 0))
 
-    return {
+    info = {
         "status": status,
         "reward": round(reward_val, 4),
         "has_trajectory": has_trajectory,
         "has_cost": has_cost,
     }
 
+    # LLM Judge score from judge_result.json alongside result.json
+    judge_path = trial_dir / "judge_result.json"
+    if judge_path.is_file():
+        try:
+            jdata = json.loads(judge_path.read_text())
+            js = jdata.get("judge_score")
+            if js is not None:
+                info["judge_score"] = round(float(js), 4)
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            pass
+
+    return info
+
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate MANIFEST.json from on-disk run results.")
+    parser.add_argument(
+        "--judge-scores",
+        type=Path,
+        default=PROJECT_ROOT / "judge_scores.json",
+        help="Path to centralized judge_scores.json (default: ./judge_scores.json)",
+    )
+    cli_args = parser.parse_args()
+
     if not RUNS_DIR.exists():
         print(f"ERROR: Runs directory not found: {RUNS_DIR}", file=sys.stderr)
         sys.exit(1)
+
+    judge_scores = load_judge_scores(cli_args.judge_scores)
 
     # Collect all tasks grouped by (suite, config)
     # Structure: {(suite, config): {task_name: task_entry}}
@@ -182,8 +223,19 @@ def main():
         errored = 0
         total_reward = 0.0
 
+        judge_score_sum = 0.0
+        judge_count = 0
+
         for task_name in sorted(tasks.keys()):
             info = extract_task_info(tasks[task_name])
+
+            # Merge judge score from centralized index (if not already from judge_result.json)
+            if "judge_score" not in info:
+                judge_key = f"{suite}/{config}/{task_name}"
+                judge_entry = judge_scores.get(judge_key)
+                if judge_entry and "judge_score" in judge_entry:
+                    info["judge_score"] = round(float(judge_entry["judge_score"]), 4)
+
             task_infos[task_name] = info
             if info["status"] == "passed":
                 passed += 1
@@ -193,8 +245,13 @@ def main():
                 failed += 1
             total_reward += info["reward"]
 
+            if "judge_score" in info:
+                judge_score_sum += info["judge_score"]
+                judge_count += 1
+
         task_count = len(task_infos)
         mean_reward = round(total_reward / task_count, 3) if task_count > 0 else 0.0
+        mean_judge_score = round(judge_score_sum / judge_count, 3) if judge_count > 0 else None
 
         # Extract timestamp from first task's data
         first_task = next(iter(tasks.values()))
@@ -207,7 +264,7 @@ def main():
             except (ValueError, AttributeError):
                 pass
 
-        runs[manifest_key] = {
+        run_entry = {
             "run_id": manifest_key.replace("/", "_"),
             "model": "anthropic/claude-opus-4-5-20251101",
             "timestamp": timestamp,
@@ -218,6 +275,10 @@ def main():
             "mean_reward": mean_reward,
             "tasks": task_infos,
         }
+        if mean_judge_score is not None:
+            run_entry["mean_judge_score"] = mean_judge_score
+            run_entry["judge_count"] = judge_count
+        runs[manifest_key] = run_entry
         total_tasks += task_count
 
     manifest = {

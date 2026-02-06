@@ -22,6 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_PATH = PROJECT_ROOT / "schemas" / "result.schema.json"
 
 TRAJECTORY_FILES = {"trajectory.json", "trajectory.txt"}
+OPTIONAL_FILES = {"judge_result.json"}
 
 
 def load_schema() -> dict:

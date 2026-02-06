@@ -47,15 +47,19 @@ Each `result.json` must conform to [`schemas/result.schema.json`](../schemas/res
 | `started_at` | string | ISO 8601 timestamp (trial start) |
 | `finished_at` | string | ISO 8601 timestamp (trial end) |
 
-### Optional Fields
+### Recommended Fields
+
+These fields identify your submission on the leaderboard:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `agent_info.name` | string | Agent name (e.g., `claude-code`) |
+| `agent_info.name` | string | Agent name (e.g., `claude-code`, `codex`, `augment-code`) |
 | `agent_info.model_info.name` | string | Model identifier (e.g., `anthropic/claude-opus-4-5-20251101`) |
 | `agent_result.n_input_tokens` | integer or null | Total input tokens consumed |
 | `agent_result.n_output_tokens` | integer or null | Total output tokens produced |
 | `trajectory_path` | string or null | Relative path to the trajectory file |
+
+The `agent_info.model_info.name` and submission config label determine how your results appear on the leaderboard. Different tool configurations of the same agent (e.g., with or without an MCP server) should use different config labels.
 
 **Important:** The reward field is `verifier_result.rewards.reward` — not `rewards.score`. Submissions using `score` instead of `reward` will fail validation.
 
@@ -74,6 +78,12 @@ Each `result.json` must conform to [`schemas/result.schema.json`](../schemas/res
   "finished_at": "2026-02-06T10:15:00Z"
 }
 ```
+
+## LLM Judge Results (Optional)
+
+Submissions may optionally include a `judge_result.json` file alongside each task's `result.json`. This file contains the LLM judge's evaluation of the agent's performance. Judge results are **not required** for leaderboard qualification — they are a supplementary quality signal.
+
+If included, judge results must conform to [`schemas/judge_result.schema.json`](../schemas/judge_result.schema.json). See [LEADERBOARD.md](LEADERBOARD.md#llm-judge-score) for details on the rubric dimensions and how judge scores appear on the leaderboard.
 
 ## Trajectory Files
 
@@ -164,7 +174,7 @@ The script validates all `result.json` files and checks that each task has a tra
 
 See [LEADERBOARD.md](LEADERBOARD.md) for scoring rules. Key points:
 
-- **Per-benchmark leaderboard**: You must submit results for **all tasks** in a benchmark to appear on that benchmark's leaderboard.
-- **Aggregate leaderboard**: You must have complete results for **all 13 benchmarks** to appear on the aggregate leaderboard.
+- **Per-benchmark leaderboard**: You must submit results for **all tasks** in a benchmark to qualify for that benchmark's ranking.
+- **Aggregate score**: Computed as the mean of per-benchmark mean rewards across benchmarks where you have complete results. More complete benchmarks = higher ranking when scores are close.
 - Errored tasks (non-null `exception_info`) count as `reward=0.0` — they are not excluded.
-- Partial submissions appear on individual benchmark leaderboards where coverage is complete.
+- Partial submissions still appear on the leaderboard with their qualifying benchmark count shown.
