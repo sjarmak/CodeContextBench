@@ -71,6 +71,9 @@ def parse_task_toml_simple(path: Path) -> dict:
 # Task discovery
 # ---------------------------------------------------------------------------
 
+_SKIP_DIRS = {".", "_", "template", "templates", "_shared", "jobs"}
+
+
 def discover_tasks(suite: str) -> list[Path]:
     """Find all task directories for a benchmark suite."""
     suite_dir = BENCHMARKS_DIR / suite
@@ -78,9 +81,10 @@ def discover_tasks(suite: str) -> list[Path]:
         return []
     tasks = []
     for child in sorted(suite_dir.iterdir()):
-        if child.is_dir() and not child.name.startswith((".", "_")):
-            if (child / "task.toml").is_file() or (child / "instruction.md").is_file():
-                tasks.append(child)
+        if not child.is_dir() or child.name in _SKIP_DIRS or child.name.startswith((".", "_")):
+            continue
+        if (child / "task.toml").is_file() or (child / "instruction.md").is_file():
+            tasks.append(child)
     return tasks
 
 
@@ -197,9 +201,10 @@ def check_t4_git_sha(tasks: list[Path]) -> CriterionResult:
         if not git_clones:
             continue
 
-        # Check if there's a subsequent git checkout with a SHA
+        # Check if there's a subsequent git checkout with a SHA or version tag
         has_sha_checkout = bool(re.search(r"git\s+checkout\s+[0-9a-f]{7,40}", content))
-        has_tag_checkout = bool(re.search(r"git\s+checkout\s+(v\d|tags/)", content))
+        # Accept v1.0, tags/foo, or semver-like 1.96.0
+        has_tag_checkout = bool(re.search(r"git\s+checkout\s+(v\d|tags/|\d+\.\d+)", content))
 
         if not has_sha_checkout and not has_tag_checkout:
             for clone in git_clones:

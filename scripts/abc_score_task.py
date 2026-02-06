@@ -319,6 +319,9 @@ def score_task(task_dir: Path) -> TaskScore:
     return ts
 
 
+_SKIP_DIRS = {".", "_", "template", "templates", "_shared", "jobs"}
+
+
 def discover_tasks(suite: str) -> list[Path]:
     """Find all task directories for a benchmark suite."""
     suite_dir = BENCHMARKS_DIR / suite
@@ -326,10 +329,10 @@ def discover_tasks(suite: str) -> list[Path]:
         return []
     tasks = []
     for child in sorted(suite_dir.iterdir()):
-        if child.is_dir() and not child.name.startswith("."):
-            # Must have at least task.toml or instruction.md
-            if (child / "task.toml").is_file() or (child / "instruction.md").is_file():
-                tasks.append(child)
+        if not child.is_dir() or child.name in _SKIP_DIRS or child.name.startswith((".", "_")):
+            continue
+        if (child / "task.toml").is_file() or (child / "instruction.md").is_file():
+            tasks.append(child)
     return tasks
 
 

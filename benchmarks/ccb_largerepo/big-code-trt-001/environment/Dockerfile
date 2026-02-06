@@ -24,7 +24,7 @@ RUN git clone --filter=blob:none --no-checkout https://github.com/NVIDIA/TensorR
 # Install Python dependencies (basic setup only)
 # Full build may require CUDA and other deps, but we need the source files
 RUN pip install --upgrade pip && \
-    pip install pybind11 2>&1 || true
+    pip install pybind11==2.13.6 2>&1 || true
 
 # Task setup complete
 # Note: Both baseline and MCP agents now have access to the real TensorRT-LLM source.

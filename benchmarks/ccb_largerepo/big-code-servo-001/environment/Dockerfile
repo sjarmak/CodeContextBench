@@ -1,4 +1,4 @@
-FROM rust:bookworm
+FROM rust:1.83-bookworm
 
 WORKDIR /workspace
 
