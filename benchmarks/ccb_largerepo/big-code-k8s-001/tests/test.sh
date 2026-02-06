@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — weighted structure and correctness checks
 # Test script for Kubernetes NoScheduleNoTraffic taint effect
 # Verifies that:
 # 1. Taint effect constant is defined

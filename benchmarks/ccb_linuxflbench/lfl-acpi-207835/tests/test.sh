@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — fault localization accuracy rubric
 # Test script for lfl-acpi-207835: ACPI video backlight fault localization
 # Ground truth: drivers/acpi/video_detect.c :: video_detect_dmi_table
 

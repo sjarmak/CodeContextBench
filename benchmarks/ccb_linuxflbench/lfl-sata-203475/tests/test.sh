@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — fault localization accuracy rubric
 # Test script for lfl-sata-203475: Samsung 860 EVO queued TRIM fault localization
 # Ground truth: drivers/ata/libata-core.c :: ata_device_blacklist
 

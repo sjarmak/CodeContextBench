@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: binary (0.0-1.0) — dependency installation pass or fail
 # DI-Bench validator test for ccb_dibench-rust-rusticata-pcap-parser
 set -e
 

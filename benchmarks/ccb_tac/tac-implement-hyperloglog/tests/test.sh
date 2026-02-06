@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — task-specific evaluation criteria
 # TAC Task Verification: sde-implement-hyperloglog
 set -e
 

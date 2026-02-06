@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — weighted structure and correctness checks
 # Test script for TensorRT-LLM W4A8_MXFP4_INT8 quantization mode
 # Verifies that:
 # 1. W4A8_MXFP4_INT8 mode is defined in quantization enums

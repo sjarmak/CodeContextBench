@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: semantic_similarity (0.0-1.0) — embedding-based similarity to ground truth
 # LoCoBench-Agent Verification Script
 # Evaluates agent solution against ground truth using semantic similarity
 

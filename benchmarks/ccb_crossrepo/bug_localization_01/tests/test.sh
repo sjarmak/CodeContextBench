@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: semantic_similarity (0.0-1.0) — content, file references, and pattern matching
 # Harbor test script for bug_localization_01 — analysis document validation
 #
 # This is an ANALYSIS task, not a code modification task.

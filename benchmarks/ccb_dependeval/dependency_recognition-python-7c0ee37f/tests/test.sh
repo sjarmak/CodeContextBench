@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: binary (0.0-1.0) — dependency ordering correctness
 set -e
 
 # DependEval DR Test Script

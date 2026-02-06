@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: semantic_similarity (0.0-1.0) — content, file references, and pattern matching
 set -e
 
 REWARD_FILE="/logs/verifier/reward.txt"

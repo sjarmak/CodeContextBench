@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: test_ratio (0.0-1.0) — performance test pass rate
 # SWE-Perf Verification Script
 # Task: ccb_sweperf-001
 # Target: numpy.core.multiarray.array_sum
