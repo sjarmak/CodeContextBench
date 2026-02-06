@@ -1,0 +1,136 @@
+{
+  "project": "DependEval Benchmark Revival & Sourcegraph Indexing",
+  "branchName": "ralph/dependeval-revival",
+  "description": "Revive the archived DependEval benchmark by diagnosing failures, building a materialization pipeline to extract source code into indexable Git repos, selecting 24-32 representative ME+DR tasks across Python/JS/TS/Java, and integrating into the CCB 3-config pipeline.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Diagnose existing DependEval task failures",
+      "description": "As a benchmark developer, I want to understand why all 9 archived DependEval tasks scored 0.0 so that I can document root causes before scaling up.",
+      "acceptanceCriteria": [
+        "Read agent logs from runs/official/dependeval_opus_20260203_160607/ for at least 3 tasks (1 DR, 1 ME, 1 RC)",
+        "Read eval scripts in archive/ccb_dependeval/*/tests/eval_scripts/ and compare against ground_truth.json format",
+        "Read DependEval README and data format notes from archive/ccb_dependeval/README.md",
+        "Write diagnosis to docs/dependeval_diagnosis.md documenting: (a) per-task-type root cause, (b) whether agent produced output at all, (c) eval script vs ground truth format mismatch, (d) instruction clarity issues",
+        "Diagnosis doc identifies the DR eval mismatch: our tasks ask for dependency names but DependEval Task 2 ground truth is file ordering",
+        "Diagnosis doc identifies the ME eval format: DependEval uses modified_complete_code dict keyed by #file N"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Existing DR instruction says 'identify all dependencies' but ground_truth.json contains file ordering, not package names. ME eval may have string-similarity issues with the #file N dict format."
+    },
+    {
+      "id": "US-002",
+      "title": "Clone DependEval dataset and verify data files",
+      "description": "As a benchmark developer, I want local access to the full DependEval dataset so downstream scripts can select and materialize instances.",
+      "acceptanceCriteria": [
+        "git clone https://github.com/ink7-sudo/DependEval to vendor/DependEval/",
+        "Verify data files exist: vendor/DependEval/data/{python,java,javascript,typescript}/task1_*.json (ME) for all 4 languages",
+        "Verify data files exist: vendor/DependEval/data/{python,java,javascript,typescript}/task2_*_final.json (DR) for all 4 languages",
+        "Write a brief data_inventory.json to vendor/DependEval/ listing: per language/task counts of instances, average content length, example instance_id",
+        "Add vendor/DependEval/ to .gitignore if not already present"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "DependEval JSON files are ~58MB total across 8 languages. We only need Python, JavaScript, TypeScript, Java."
+    },
+    {
+      "id": "US-003",
+      "title": "Build task selection script",
+      "description": "As a benchmark developer, I want to select 24-32 representative instances from DependEval based on quality and diversity criteria.",
+      "acceptanceCriteria": [
+        "Script at scripts/select_dependeval_tasks.py",
+        "Script reads JSON data from vendor/DependEval/data/ for 4 languages (python, java, javascript, typescript)",
+        "Selection criteria implemented: (a) content length 2K-20K chars, (b) DR instances have 3+ files, (c) ME instances have non-empty modified_complete_code",
+        "Targets 4 languages x 2 task types x 4 instances = 32 tasks (configurable via CLI args)",
+        "Each instance gets a stable instance_id = first 8 chars of SHA256 of content field",
+        "Selection uses fixed random seed (42) for reproducibility",
+        "Outputs configs/dependeval_selected_instances.json mapping instance_id to {language, task_type, repo_name, content_length, file_count}",
+        "python3 scripts/select_dependeval_tasks.py --help exits with 0",
+        "python3 scripts/select_dependeval_tasks.py --dry-run prints summary without writing files"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Full dataset: ME has 177-217 instances per lang, DR has 180 per lang. We pick 4 per lang per task type = 32 total."
+    },
+    {
+      "id": "US-004",
+      "title": "Build code materialization script",
+      "description": "As a benchmark developer, I want to extract source code from DependEval content fields into proper file trees that can be committed as Git repos for Sourcegraph indexing.",
+      "acceptanceCriteria": [
+        "Script at scripts/materialize_dependeval_repos.py",
+        "Parses DependEval content format: splits on 'repo_name/path/to/file.ext' headers followed by newline+colon",
+        "Creates directory tree preserving original paths under a named output directory",
+        "Initializes a Git repo per instance with a single commit",
+        "Naming convention: dependeval-{lang}-{task_type}-{instance_id} (e.g., dependeval-python-me-a3f2c1b8)",
+        "Output directory configurable via --output-dir (default: vendor/dependeval_repos/)",
+        "Handles edge cases: empty file content logged as warning, non-UTF8 bytes replaced",
+        "--dry-run mode prints what would be created without writing to disk",
+        "python3 scripts/materialize_dependeval_repos.py --help exits with 0",
+        "Reads instance list from configs/dependeval_selected_instances.json (output of US-003)"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Content format is: 'repo_name/path/file.ext'\\n:import foo\\n...code... with the next file starting at the next 'repo/path' header."
+    },
+    {
+      "id": "US-005",
+      "title": "Write corrected DR and ME evaluation scripts",
+      "description": "As a benchmark developer, I want evaluation scripts that correctly score agent outputs against DependEval ground truth formats.",
+      "acceptanceCriteria": [
+        "DR eval at scripts/dependeval_eval_dr.py: scores file dependency ordering, NOT dependency name extraction",
+        "DR eval input: /workspace/submission.json containing a JSON array of file paths in dependency order (callee first)",
+        "DR eval ground truth: tests/ground_truth.json containing the correct ordered file list",
+        "DR eval metric: element-wise exact match averaged across positions, written to /logs/verifier/reward.txt",
+        "ME eval at scripts/dependeval_eval_me.py: scores multi-file code modifications",
+        "ME eval input: /workspace/submission.json containing a JSON dict mapping file paths to modified code strings",
+        "ME eval ground truth: tests/ground_truth.json containing expected modified_complete_code dict",
+        "ME eval metric: average string similarity (difflib.SequenceMatcher ratio) per file, written to /logs/verifier/reward.txt",
+        "Both evals handle gracefully: missing submission file (reward=0.0), malformed JSON (reward=0.0), partial outputs (score what exists)",
+        "Both evals include inline smoke test: python3 scripts/dependeval_eval_dr.py --test and python3 scripts/dependeval_eval_me.py --test run self-tests and exit 0"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "The critical fix: archived DR eval asked for package names but DependEval Task 2 is about file ordering. ME uses modified_complete_code dict keyed by '#file N' — eval must handle this mapping."
+    },
+    {
+      "id": "US-006",
+      "title": "Build Harbor task directory generator",
+      "description": "As a benchmark developer, I want a script that generates complete Harbor-compatible task directories for each selected DependEval instance.",
+      "acceptanceCriteria": [
+        "Script at scripts/generate_dependeval_tasks.py",
+        "Reads configs/dependeval_selected_instances.json for instance list",
+        "Reads source data from vendor/DependEval/data/ for each instance",
+        "For each instance generates benchmarks/ccb_dependeval/{task_name}/ with: task.toml, instruction.md, environment/Dockerfile, environment/code_content.txt, tests/test.sh, tests/ground_truth.json, tests/eval_scripts/{eval_dr.py or eval_me.py}, solution/solve.sh",
+        "task.toml includes: name, description, task_type, language, difficulty, time_limit_sec=600, source=DependEval, repo_name, instance_id, output_file=submission.json, reward_file=/logs/verifier/reward.txt",
+        "instruction.md is baseline-clean: NO references to MCP, Sourcegraph, code search, or Deep Search",
+        "DR instruction asks agent to determine correct dependency ordering of files and write ordered list to /workspace/submission.json",
+        "ME instruction asks agent to modify code across files per feature description and write modified files dict to /workspace/submission.json",
+        "Dockerfile uses pinned python:3.10.13-slim base image with networkx and difflib dependencies",
+        "test.sh runs the appropriate eval script and writes reward",
+        "python3 scripts/generate_dependeval_tasks.py --help exits with 0",
+        "grep -ri 'sourcegraph\\|mcp\\|deep.search' benchmarks/ccb_dependeval/*/instruction.md returns zero matches after generation"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Task naming: {task_type}-{language}-{instance_id} e.g. dependency_recognition-python-a3f2c1b8. Eval scripts are copied from scripts/dependeval_eval_{dr,me}.py into each task's eval_scripts/ dir."
+    },
+    {
+      "id": "US-007",
+      "title": "Update CCB config and selection files",
+      "description": "As a benchmark developer, I want DependEval integrated into the standard CCB configuration files so it can be included in 3-config pipeline runs.",
+      "acceptanceCriteria": [
+        "configs/selected_benchmark_tasks.json includes all generated DependEval tasks with correct benchmark (ccb_dependeval), task_name, repo, language fields",
+        "configs/dependeval_3config.sh exists (restore from archive and update): sources configs/_common.sh, uses --path mode, maps each task to its sg-benchmarks/dependeval-* repo",
+        "configs/instance_to_mirror.json includes all DependEval task -> sg-benchmarks/dependeval-{lang}-{task_type}-{instance_id} mappings",
+        "Config script includes ensure_fresh_token calls following _common.sh patterns",
+        "Config script sets BENCHMARK_DIR to benchmarks/ccb_dependeval",
+        "python3 -c \"import json; d=json.load(open('configs/selected_benchmark_tasks.json')); print(len([t for t in d if t.get('benchmark')=='ccb_dependeval']))\" prints a number between 24 and 32",
+        "python3 -c \"import json; d=json.load(open('configs/instance_to_mirror.json')); print(len([k for k in d if 'dependeval' in k]))\" prints a number between 24 and 32"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Restore archive/dependeval_3config.sh to configs/ and rewrite task-to-repo mappings. The config uses --path mode since these are custom tasks not in harbor's registry."
+    }
+  ]
+}
