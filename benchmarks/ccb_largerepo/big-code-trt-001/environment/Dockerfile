@@ -14,9 +14,10 @@ RUN apt-get update && apt-get install -y \
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-# Clone the actual TensorRT-LLM repository
+# Clone the actual TensorRT-LLM repository at pinned commit
 # This ensures BOTH baseline and MCP agents have identical file access
-RUN git clone --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git . && \
+RUN git clone --filter=blob:none --no-checkout https://github.com/NVIDIA/TensorRT-LLM.git . && \
+    git checkout b98f3fca2059f5403bee0966434578212bc92f32 && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 
