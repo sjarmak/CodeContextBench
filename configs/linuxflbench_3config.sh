@@ -145,11 +145,11 @@ for t in tasks:
 # Sourcegraph repo name mapping for LinuxFLBench tasks
 # All tasks use the Linux kernel — map to the Sourcegraph-indexed repo
 declare -A TASK_SG_REPO_NAMES=(
-    ["lfl-acpi-207835"]="github.com/torvalds/linux"
-    ["lfl-wifi-206661"]="github.com/torvalds/linux"
-    ["lfl-nfs-117651"]="github.com/torvalds/linux"
-    ["lfl-sata-203475"]="github.com/torvalds/linux"
-    ["lfl-sound-53441"]="github.com/torvalds/linux"
+    ["lfl-acpi-207835"]="github.com/sg-benchmarks/linux--55b2af1c"
+    ["lfl-wifi-206661"]="github.com/sg-benchmarks/linux--11a48a5a"
+    ["lfl-nfs-117651"]="github.com/sg-benchmarks/linux--07cc49f6"
+    ["lfl-sata-203475"]="github.com/sg-benchmarks/linux--fa5941f4"
+    ["lfl-sound-53441"]="github.com/sg-benchmarks/linux--07c4ee00"
 )
 
 # Derive short model name for run directory
