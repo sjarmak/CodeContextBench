@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: diff_similarity (0.0-1.0) — diff match to expected patch
 set -eo pipefail
 mkdir -p /logs/verifier
 cd /workspace

@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — fault localization accuracy rubric
 # Test script for lfl-wifi-206661: iwlwifi missing PCI subdevice entries fault localization
 # Ground truth: drivers/net/wireless/intel/iwlwifi/pcie/drv.c :: iwl_dev_info_table
 

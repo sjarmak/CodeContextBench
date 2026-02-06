@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: semantic_similarity (0.0-1.0) — content, file references, and pattern matching
 # Harbor test script for api_upgrade_01 — patch validation with fallback diff collection
 #
 # Primary (a): Check for explicit /logs/agent/patch.diff

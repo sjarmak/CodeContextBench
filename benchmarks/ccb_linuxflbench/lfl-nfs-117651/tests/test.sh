@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — fault localization accuracy rubric
 # Test script for lfl-nfs-117651: NFS mount disappears due to sunrpc fault
 # Ground truth: net/sunrpc/xprtsock.c :: xs_sock_set_reuseport
 

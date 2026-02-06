@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — F1 defect detection plus fix quality score
 # Test script for cr-aspnetcore-001: Review an ASP.NET Core PR for injected functional bugs and compliance violations
 
 set -e

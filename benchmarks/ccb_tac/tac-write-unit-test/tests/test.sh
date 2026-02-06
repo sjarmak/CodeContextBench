@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — task-specific evaluation criteria
 set -e
 
 TRAJECTORY_PATH="${TRAJECTORY_PATH:-/logs/trajectory.jsonl}"

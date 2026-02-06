@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — fault localization accuracy rubric
 # Test script for lfl-sound-53441: HDA Intel sound fails after suspend
 # Ground truth: sound/pci/hda/hda_intel.c :: DEFINE_PCI_DEVICE_TABLE
 

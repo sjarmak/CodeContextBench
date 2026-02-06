@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — weighted documentation file and pattern checks
 # Test script for fairqueuing-doc-001: Fair Queuing QueueSet Package Documentation
 # Signal 1: File-reference validation (harbor reward)
 

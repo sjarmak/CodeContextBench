@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — weighted structure and correctness checks
 # Test script for Servo scrollend event implementation
 # Verifies that:
 # 1. scrollend event is defined in DOM events

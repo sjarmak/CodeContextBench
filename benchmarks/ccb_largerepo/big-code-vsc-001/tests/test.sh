@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reward: checklist (0.0-1.0) — weighted structure and correctness checks
 # Test script for VS Code stale diagnostics after git branch switch
 # Verifies that:
 # 1. TypeScript code compiles (type-checks)
