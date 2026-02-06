@@ -52,6 +52,7 @@ DIR_PREFIX_TO_SUITE = {
     "crossrepo_": "ccb_crossrepo",
     "dibench_": "ccb_dibench",
     "k8s_docs_": "ccb_k8sdocs",
+    "linuxflbench_": "ccb_linuxflbench",
     "locobench_": "ccb_locobench",
     "pytorch_": "ccb_pytorch",
     "repoqa_": "ccb_repoqa",
