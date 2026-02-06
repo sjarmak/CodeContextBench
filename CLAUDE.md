@@ -36,7 +36,7 @@ docs/
   ERROR_CATALOG.md           # Known error fingerprints, causes, fixes
 ```
 
-## Benchmarks (11)
+## Benchmarks (12)
 
 | Benchmark | Tasks | Language(s) | Focus |
 |-----------|-------|-------------|-------|
@@ -51,6 +51,7 @@ docs/
 | DIBench | 8 | Mixed | Dependency installation |
 | SWE-Perf | 3 | Python | Performance optimization |
 | CodeReview | 3 | TS, C#, Mixed | AI code review: find & fix injected PR defects |
+| LinuxFLBench | 5 | C | Linux kernel fault localization |
 
 ## Running Tasks
 
@@ -182,6 +183,50 @@ Per-task features extracted from task.toml metadata, instruction.md, and config.
 | LoCoBench | task category | architectural=expert, others=hard |
 | RepoQA | source file count | <100=medium, 100+=hard |
 | CrossRepo | manual | easy to hard |
+
+## Task Tracking (Beads)
+
+Use `bd` (beads) for ALL task/issue tracking. Do NOT use TodoWrite, TaskCreate, or markdown task lists.
+
+```bash
+bd ready                    # Find available work (no blockers)
+bd create --title="..." --type=task --priority=2  # Create issue
+bd update <id> --status=in_progress               # Claim work
+bd close <id> --reason="done"                     # Mark complete
+bd sync                     # Sync with git (run at session end)
+```
+
+Priority: 0-4 (0=critical, 4=backlog). Never use "high"/"medium"/"low".
+
+**WARNING**: Do NOT use `bd edit` — it opens $EDITOR which blocks agents. Use `bd update` with flags.
+
+## Landing the Plane (Session Completion)
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File beads issues for remaining work** — `bd create` for anything that needs follow-up
+2. **Run quality gates** (if code changed) — tests, linters, builds; file P0 issues if broken
+3. **Update beads issues** — `bd close` finished work, update in-progress items
+4. **PUSH TO REMOTE (non-negotiable)**:
+   ```bash
+   git pull --rebase
+   # If conflicts in .beads/issues.jsonl: git checkout --theirs .beads/issues.jsonl && bd import
+   bd sync
+   git push
+   git status   # MUST show "up to date with origin"
+   ```
+5. **Clean up** — `git stash clear`, `git remote prune origin`
+6. **Verify** — all changes committed AND pushed, no untracked files
+7. **Hand off** — provide context for next session: summary of completed work, filed issues, recommended next prompt
+
+**CRITICAL RULES:**
+- The plane has NOT landed until `git push` completes successfully
+- NEVER stop before pushing — that leaves work stranded locally
+- NEVER say "ready to push when you are" — YOU must push, not the user
+- If push fails, resolve the issue and retry until it succeeds
+- The user manages multiple agents — unpushed work breaks coordination
 
 ## Progress Tracking
 

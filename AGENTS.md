@@ -25,7 +25,7 @@ Benchmark tasks are executed via **Harbor** (Docker container-based runner) with
 ./configs/swebenchpro_3config.sh --parallel 4
 ```
 
-All 10 benchmark config scripts accept the `--parallel` flag:
+All 11 benchmark config scripts accept the `--parallel` flag:
 - `swebenchpro_3config.sh` — SWE-bench Pro (36 tasks)
 - `pytorch_3config.sh` — PyTorch (12 tasks)
 - `locobench_3config.sh` — LoCoBench (25 tasks)
@@ -36,6 +36,7 @@ All 10 benchmark config scripts accept the `--parallel` flag:
 - `tac_3config.sh` — TAC (8 tasks)
 - `dibench_3config.sh` — DIBench (8 tasks)
 - `sweperf_3config.sh` — SWE-Perf (3 tasks)
+- `linuxflbench_3config.sh` — LinuxFLBench (5 tasks)
 
 ### Config Scripts Structure
 
@@ -206,3 +207,29 @@ python3 scripts/generate_report.py      # Aggregate results into report
 ```
 
 The MANIFEST tracks all runs, task counts, pass/fail rates, and mean rewards.
+
+## Landing the Plane (Session Completion)
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull --rebase
+   bd sync
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
