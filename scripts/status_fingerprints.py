@@ -95,6 +95,16 @@ ERROR_FINGERPRINTS = [
         "setup",
         "Check repository URL and network access. Verify git credentials if private repo.",
     ),
+    # NOTE: deep_search_polling_only matches trajectory/session content, not exception_info.
+    # The current fingerprint_error() function only checks exception_info from result.json.
+    # This fingerprint is included here for use by future trajectory-scanning tools.
+    (
+        "deep_search_polling_only",
+        re.compile(r"Poll for results using sg_deepsearch_read", re.IGNORECASE),
+        "Deep Search returned polling-only (no results)",
+        "warning",
+        "Deep Search did not return results within polling window. Run may have degraded to SG_base quality. Consider rerunning after preamble retry fix.",
+    ),
 ]
 
 
