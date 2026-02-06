@@ -1,23 +1,23 @@
-# Code Review: Ghost Comment Likes Feature
+# Code Review: cal.com Feature Opt-In Scope Configuration
 
-- **Repository**: TryGhost/Ghost
+- **Repository**: calcom/cal.com
 - **Difficulty**: hard
 - **Category**: code-review
 - **Task Type**: repo-clone
 
 ## Description
 
-You are reviewing a recently merged pull request that adds a "comment likes" feature to the Ghost blogging platform. The PR introduces a new API endpoint for browsing comment likes, along with supporting controller and service methods. However, several defects were introduced during the merge — both functional bugs and compliance violations.
+You are reviewing a recently merged pull request that adds scope configuration for the feature opt-in system. This PR allows features to be restricted to specific scopes (org, team, user) instead of being available at all levels. The changes span the service layer, configuration module, type definitions, and the tRPC router. However, several defects were introduced during the merge — both functional bugs and compliance violations.
 
 Your task is to **find the defects, fix them in the code, and produce a structured review report**.
 
 ## Context
 
-The comment likes feature spans three backend files:
+The feature opt-in scope configuration spans three key TypeScript source files:
 
-1. **`ghost/core/core/server/services/comments/comments-service.js`** — Service layer: `getCommentLikes()` method that queries the database for likes on a given comment.
-2. **`ghost/core/core/server/services/comments/comments-controller.js`** — Controller layer: `getCommentLikes()` method that extracts the comment ID from the request frame and delegates to the service.
-3. **`ghost/core/core/server/api/endpoints/comment-likes.js`** — API endpoint definition: `browse` action configuration including HTTP headers and query options.
+1. **`packages/features/feature-opt-in/services/FeatureOptInService.ts`** — Service class: resolves feature states across teams with precedence rules, lists features for user/team scopes, and validates scope before setting states.
+2. **`packages/features/feature-opt-in/config.ts`** — Configuration module: defines the opt-in feature allowlist with per-feature scope arrays, provides helper functions for scope filtering and validation.
+3. **`packages/trpc/server/routers/viewer/featureOptIn/_router.ts`** — tRPC router: exposes endpoints for listing and setting feature states at user/team/org levels, validates slugs against the allowlist before mutations.
 
 ## Task
 
@@ -25,8 +25,8 @@ YOU MUST IMPLEMENT CODE CHANGES to complete this task.
 
 Review the three files listed above for the following types of defects:
 
-- **Functional bugs**: Logic errors that cause incorrect behavior (e.g., missing error handling, wrong variable references, broken data loading).
-- **Compliance violations**: Deviations from Ghost's API conventions (e.g., incorrect cache control headers on read-only endpoints).
+- **Functional bugs**: Logic errors that cause incorrect behavior (e.g., inverted filter conditions, missing validation checks, ignored configuration).
+- **Compliance violations**: Deviations from the codebase's established patterns (e.g., hardcoded values where config should be used, missing scope validation).
 
 For each defect you find:
 
@@ -40,8 +40,8 @@ After completing your review, write a JSON file at `/workspace/review.json` cont
 ```json
 [
   {
-    "file": "ghost/core/core/server/services/comments/comments-service.js",
-    "line": 263,
+    "file": "packages/features/feature-opt-in/services/FeatureOptInService.ts",
+    "line": 160,
     "severity": "critical",
     "description": "Brief description of what is wrong and why",
     "fix_applied": true

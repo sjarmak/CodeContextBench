@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test script for cr-ghost-001: Review a Ghost PR for injected functional bugs and compliance violations
+# Test script for cr-aspnetcore-001: Review an ASP.NET Core PR for injected functional bugs and compliance violations
 
 set -e
 
@@ -108,54 +108,54 @@ print(f"Detection: precision={precision:.3f} recall={recall:.3f} F1={f1:.3f}", f
 # Check if agent's code changes contain the expected fix patterns
 fix_hits = 0
 
-# Defect 1: NotFoundError guard restored in comments-service.js
-svc_file = "ghost/core/core/server/services/comments/comments-service.js"
-if os.path.isfile(svc_file):
-    with open(svc_file) as f:
-        svc = f.read()
-    if "NotFoundError" in svc and "commentNotFound" in svc and "!comment" in svc:
+# Defect 1: DisplayAttribute checked before DisplayNameAttribute (correct precedence)
+accessor_file = "src/Components/Web/src/Forms/ExpressionMemberAccessor.cs"
+if os.path.isfile(accessor_file):
+    with open(accessor_file) as f:
+        accessor = f.read()
+    # Check that DisplayAttribute appears before DisplayNameAttribute in the method
+    display_idx = accessor.find("GetCustomAttribute<DisplayAttribute>")
+    displayname_idx = accessor.find("GetCustomAttribute<DisplayNameAttribute>")
+    if display_idx >= 0 and displayname_idx >= 0 and display_idx < displayname_idx:
         fix_hits += 1
-        print("Fix defect-1: PASS (NotFoundError guard restored)", file=sys.stderr)
+        print("Fix defect-1: PASS (DisplayAttribute checked before DisplayNameAttribute)", file=sys.stderr)
     else:
-        print("Fix defect-1: FAIL (NotFoundError guard not found)", file=sys.stderr)
+        print("Fix defect-1: FAIL (attribute precedence not restored)", file=sys.stderr)
 else:
-    print(f"Fix defect-1: FAIL ({svc_file} not found)", file=sys.stderr)
+    print(f"Fix defect-1: FAIL ({accessor_file} not found)", file=sys.stderr)
 
-# Defect 2: frame.options.id restored in comments-controller.js
-ctrl_file = "ghost/core/core/server/services/comments/comments-controller.js"
-if os.path.isfile(ctrl_file):
-    with open(ctrl_file) as f:
-        ctrl = f.read()
-    if "frame.options.id" in ctrl:
+# Defect 2: Null check for For parameter restored in DisplayName.cs
+dn_file = "src/Components/Web/src/Forms/DisplayName.cs"
+if os.path.isfile(dn_file):
+    with open(dn_file) as f:
+        dn = f.read()
+    if "For is null" in dn and "InvalidOperationException" in dn:
         fix_hits += 1
-        print("Fix defect-2: PASS (frame.options.id restored)", file=sys.stderr)
+        print("Fix defect-2: PASS (For null check restored)", file=sys.stderr)
     else:
-        print("Fix defect-2: FAIL (frame.options.id not found)", file=sys.stderr)
+        print("Fix defect-2: FAIL (For null check not found)", file=sys.stderr)
 else:
-    print(f"Fix defect-2: FAIL ({ctrl_file} not found)", file=sys.stderr)
+    print(f"Fix defect-2: FAIL ({dn_file} not found)", file=sys.stderr)
 
-# Defect 3: cacheInvalidate: false restored in comment-likes.js
-ep_file = "ghost/core/core/server/api/endpoints/comment-likes.js"
-if os.path.isfile(ep_file):
-    with open(ep_file) as f:
-        ep = f.read()
-    if "cacheInvalidate" in ep:
+# Defect 3: _displayNameCache.Clear() restored in ClearCache method
+if os.path.isfile(accessor_file):
+    if "_displayNameCache.Clear()" in accessor:
         fix_hits += 1
-        print("Fix defect-3: PASS (cacheInvalidate header restored)", file=sys.stderr)
+        print("Fix defect-3: PASS (_displayNameCache.Clear() restored)", file=sys.stderr)
     else:
-        print("Fix defect-3: FAIL (cacheInvalidate not found)", file=sys.stderr)
+        print("Fix defect-3: FAIL (_displayNameCache.Clear() not found)", file=sys.stderr)
 else:
-    print(f"Fix defect-3: FAIL ({ep_file} not found)", file=sys.stderr)
+    print(f"Fix defect-3: FAIL ({accessor_file} not found)", file=sys.stderr)
 
-# Defect 4: withRelated: ['member'] restored in comments-service.js
-if os.path.isfile(svc_file):
-    if "'member'" in svc or '"member"' in svc:
+# Defect 4: Expression equality check restored (render optimization)
+if os.path.isfile(dn_file):
+    if "_previousFieldAccessor" in dn and "!=" in dn:
         fix_hits += 1
-        print("Fix defect-4: PASS (member relation restored)", file=sys.stderr)
+        print("Fix defect-4: PASS (expression equality optimization restored)", file=sys.stderr)
     else:
-        print("Fix defect-4: FAIL (member relation not found in withRelated)", file=sys.stderr)
+        print("Fix defect-4: FAIL (expression equality check not found)", file=sys.stderr)
 else:
-    print(f"Fix defect-4: FAIL ({svc_file} not found)", file=sys.stderr)
+    print(f"Fix defect-4: FAIL ({dn_file} not found)", file=sys.stderr)
 
 fix_score = fix_hits / num_expected if num_expected > 0 else 0.0
 print(f"Fix score: {fix_hits}/{num_expected} = {fix_score:.3f}", file=sys.stderr)

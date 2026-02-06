@@ -1,6 +1,6 @@
 # CodeContextBench Task Catalog
 
-A detailed reference for every benchmark task in CodeContextBench. This document covers all 10 benchmark suites. The current evaluation selection contains 91 tasks from 7 benchmarks. Three additional benchmarks (CrossRepo, RepoQA, DIBench) have fully defined tasks with test scripts and scoring but have not yet been wired into the selection pipeline (`scripts/select_benchmark_tasks.py`).
+A detailed reference for every benchmark task in CodeContextBench. This document covers all 11 benchmark suites. The current evaluation selection contains 94 tasks from 8 benchmarks. Three additional benchmarks (CrossRepo, RepoQA, DIBench) have fully defined tasks with test scripts and scoring but have not yet been wired into the selection pipeline (`scripts/select_benchmark_tasks.py`).
 
 **Selection methodology:** Tasks were chosen via stratified sampling across benchmarks, covering all SDLC phases. Each task is scored for MCP benefit using a weighted combination of context complexity (0.25), cross-file dependencies (0.30), semantic search potential (0.20), and tool-chain weight (0.25). See `docs/TASK_SELECTION.md` for full scoring methodology.
 
@@ -18,6 +18,7 @@ A detailed reference for every benchmark task in CodeContextBench. This document
 8. [CrossRepo (5 tasks)](#8-crossrepo--cross-repository-reasoning) *(not yet in selection pipeline)*
 9. [RepoQA (10 tasks)](#9-repoqa--semantic-code-retrieval) *(not yet in selection pipeline)*
 10. [DIBench (8 tasks)](#10-dibench--dependency-installation) *(not yet in selection pipeline)*
+11. [CodeReview (3 tasks)](#11-codereview--ai-code-review)
 
 ---
 
@@ -540,6 +541,38 @@ Each task follows the same pattern: the agent must analyze the project's source 
 
 ---
 
+## 11. CodeReview -- AI Code Review
+
+**Focus:** Review real pull requests with injected defects -- find bugs, compliance violations, and fix them. Tests both detection accuracy and fix quality using hybrid scoring.
+**Languages:** JavaScript, C#, TypeScript | **Time Limit:** 20 min per task
+
+| Task | Difficulty | MCP Score |
+|------|-----------|-----------|
+| cr-ghost-001 | hard | 0.820 |
+| cr-aspnetcore-001 | hard | 0.840 |
+| cr-calcom-001 | hard | 0.830 |
+
+Each task clones a real open-source repository at a pinned PR merge commit, then injects 3-4 realistic defects (functional bugs and compliance violations) across multiple source files. The agent must:
+
+1. **Detect** defects by producing a structured `/workspace/review.json` with file, line, severity, and description for each finding
+2. **Fix** defects by committing corrected code to the workspace
+
+**Scoring:** Hybrid formula -- `0.5 * detection_F1 + 0.5 * fix_score`. Detection uses precision/recall against ground truth `expected_defects.json`. Fix scoring checks for defect-specific code patterns in modified files against `expected_patches/`.
+
+### cr-ghost-001
+
+Review Ghost PR #26260 (comment likes feature) targeting `TryGhost/Ghost` at merge commit `b43bfc85`. Four injected defects across 3 backend JavaScript files (`comments-service.js`, `comments-controller.js`, `comment-likes.js`): missing error guard for non-existent comments, incorrect parameter reference in frame options, missing cache invalidation after like creation, and missing member relation in like query. Three functional bugs (critical/high) and one compliance violation (medium).
+
+### cr-aspnetcore-001
+
+Review ASP.NET Core PR #64636 (Blazor DisplayName feature) targeting `dotnet/aspnetcore` at merge commit `8752557`. Four injected defects across 2 C# source files (`DisplayName.cs`, `ExpressionMemberAccessor.cs`): reversed attribute precedence (DisplayNameAttribute checked before DisplayAttribute), removed null check for the `For` parameter, broken cache invalidation that only clears one of two caches, and removed expression equality optimization causing unnecessary re-renders. Three functional bugs (critical/high) and one compliance violation (medium).
+
+### cr-calcom-001
+
+Review cal.com PR #26801 (feature opt-in scope configuration) targeting `calcom/cal.com` at merge commit `4b99072b`. Four injected defects across 3 TypeScript files (`FeatureOptInService.ts`, `config.ts`, `_router.ts`): inverted filter condition returning only disabled features, removed scope fallback rejecting all scoped features, removed allowlist validation accepting any feature slug, and hardcoded permissive policy ignoring feature config. Three functional bugs (critical/high) and one compliance violation (medium).
+
+---
+
 ## Appendix: Summary Statistics
 
 | Benchmark | Selected | Difficulty Range | Language(s) | Avg MCP Score |
@@ -554,10 +587,11 @@ Each task follows the same pattern: the agent must analyze the project's source 
 | CrossRepo | 5* | medium - hard | Go, Python | -- |
 | RepoQA | 10* | hard | C++, Java, Python, Rust, TS | -- |
 | DIBench | 8* | medium | C#, JS, Python, Rust | -- |
+| CodeReview | 3 | hard | JS, C#, TS | 0.830 |
 
 \* Not yet wired into the selection pipeline (`scripts/select_benchmark_tasks.py`). Tasks are fully defined with test scripts and scoring.
 
-**Total selected tasks:** 91
+**Total selected tasks:** 94
 **Total available tasks:** 826
 **Languages covered:** C, C++, C#, Go, Java, JavaScript, Python, Rust, TypeScript
 **SDLC phases covered:** Requirements & Discovery, Architecture & Design, Implementation (feature), Implementation (bug fix), Implementation (refactoring), Testing & QA, Documentation, Maintenance

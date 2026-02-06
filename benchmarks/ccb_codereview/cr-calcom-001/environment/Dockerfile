@@ -17,10 +17,10 @@ RUN if ! command -v node &> /dev/null; then \
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-# Clone TryGhost/Ghost at pinned commit (PR #26260 merge commit)
-RUN git clone --filter=blob:none --no-checkout https://github.com/TryGhost/Ghost.git /workspace && \
+# Clone calcom/cal.com at pinned commit (PR #26801 merge commit)
+RUN git clone --filter=blob:none --no-checkout https://github.com/calcom/cal.com.git /workspace && \
     cd /workspace && \
-    git checkout b43bfc85b719ab3971b83b5ef954601bf2d95fbf && \
+    git checkout 4b99072bcc01e7a252df828db71248a202cb65d1 && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 
