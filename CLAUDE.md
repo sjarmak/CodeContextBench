@@ -90,20 +90,25 @@ python3 scripts/generate_report.py
 python3 scripts/select_benchmark_tasks.py
 ```
 
-## Operational Skills (11)
+## Operational Skills (13)
 
 Slash commands for the full benchmark lifecycle. Use these in Claude Code sessions.
 
 ### Workflow by Phase
 
 ```
-PRE-RUN                DURING RUN           POST-RUN              ANALYSIS              MAINTENANCE
-───────                ──────────           ────────              ────────              ───────────
-/check-infra      -->  /run-status     -->  /watch-benchmarks --> /compare-configs  --> /sync-metadata
-/validate-tasks        (lightweight)        (full scan)           /cost-report          /archive-run
+PRE-RUN                DURING RUN           POST-RUN              ANALYSIS              QA
+───────                ──────────           ────────              ────────              ──
+/check-infra      -->  /run-status     -->  /watch-benchmarks --> /compare-configs  --> /benchmark-audit
+/validate-tasks        (lightweight)        (full scan)           /cost-report          /score-tasks
                                             /whats-next           /generate-report
                                             /triage-failure
                                             /quick-rerun
+
+MAINTENANCE
+───────────
+/sync-metadata
+/archive-run
 ```
 
 ### Pre-Run
@@ -135,6 +140,13 @@ PRE-RUN                DURING RUN           POST-RUN              ANALYSIS      
 | `/compare-configs` | `scripts/compare_configs.py` | Show divergent tasks across baseline/SG_base/SG_full, "MCP helps" vs "MCP hurts" |
 | `/cost-report` | `scripts/cost_report.py` | Token usage and estimated cost by suite/config, most expensive tasks |
 | `/generate-report` | `scripts/generate_report.py` | Aggregate CCB evaluation report from completed runs |
+
+### QA
+
+| Skill | Script | Purpose |
+|-------|--------|---------|
+| `/benchmark-audit` | `scripts/abc_audit.py` | Audit benchmark against ABC framework (Task/Outcome/Reporting validity) |
+| `/score-tasks` | `scripts/abc_score_task.py` | Score task quality (instruction clarity, verifier quality, reproducibility) |
 
 ### Maintenance
 
