@@ -17,7 +17,7 @@
 #   --baseline-only        Run only baseline (no MCP)
 #   --base-only            Run only MCP-Base (sourcegraph_base)
 #   --full-only            Run only MCP-Full (sourcegraph_full)
-#   --model MODEL          Override model (default: claude-opus-4-5-20251101)
+#   --model MODEL          Override model (default: claude-opus-4-6)
 #   --concurrency N        Concurrent tasks (default: 2)
 #   --category CATEGORY    Run category (default: official)
 #   --skip-completed       Skip tasks that already have result.json + task_metrics.json
@@ -47,7 +47,7 @@ SELECTION_FILE="$REPO_ROOT/configs/selected_benchmark_tasks.json"
 # PARSE ARGUMENTS
 # ============================================
 BENCHMARK_FILTER=""
-MODEL="${MODEL:-anthropic/claude-opus-4-5-20251101}"
+MODEL="${MODEL:-anthropic/claude-opus-4-6}"
 CONCURRENCY=2
 TIMEOUT_MULTIPLIER=10
 RUN_BASELINE=true

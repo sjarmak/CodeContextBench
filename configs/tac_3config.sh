@@ -13,7 +13,7 @@
 #   --baseline-only        Run only baseline (no MCP)
 #   --base-only   Run only MCP-Base
 #   --full-only            Run only MCP-Full (sourcegraph_full)
-#   --model MODEL          Override model (default: claude-opus-4-5-20251101)
+#   --model MODEL          Override model (default: claude-opus-4-6)
 #   --category CATEGORY    Run category (default: official)
 #   --parallel N           Number of parallel task subshells (default: 1)
 #   --skip-server-check    Skip TAC server health check
@@ -113,7 +113,7 @@ check_tac_server() {
 # ============================================
 TASKS_DIR="/home/stephanie_jarmak/CodeContextBench/benchmarks/ccb_tac"
 AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
-MODEL="${MODEL:-anthropic/claude-opus-4-5-20251101}"
+MODEL="${MODEL:-anthropic/claude-opus-4-6}"
 CONCURRENCY=2
 TIMEOUT_MULTIPLIER=10
 RUN_BASELINE=true
