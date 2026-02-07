@@ -7,7 +7,7 @@
 # ============================================
 # Set to "true" for Claude Max subscription (OAuth tokens), "false" for API key.
 # API mode uses ANTHROPIC_API_KEY from .env.local; subscription mode uses ~/.claude/.credentials.json.
-export USE_SUBSCRIPTION=${USE_SUBSCRIPTION:-false}
+export USE_SUBSCRIPTION=${USE_SUBSCRIPTION:-true}
 
 # ============================================
 # FAIL-FAST MODE

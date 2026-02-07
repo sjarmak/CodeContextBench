@@ -21,7 +21,7 @@
 #   --parallel N           Number of parallel task subshells (default: 1)
 #
 # Prerequisites:
-#   - ~/evals/.env.local with ANTHROPIC_API_KEY (required)
+#   - ~/evals/.env.local with USE_SUBSCRIPTION=true (default: 2-account Max subscription)
 #   - SOURCEGRAPH_ACCESS_TOKEN in .env.local (required for MCP modes)
 
 set -e
@@ -44,21 +44,21 @@ if [ -f ~/evals/.env.local ]; then
     source ~/evals/.env.local
 else
     echo "Warning: ~/evals/.env.local not found"
-    echo "Please create it with at minimum:"
-    echo "  export ANTHROPIC_API_KEY=\"your-api-key\""
     echo ""
 fi
 
-# Verify required credentials
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-    echo "ERROR: ANTHROPIC_API_KEY is not set"
-    echo ""
-    echo "Please set it in ~/evals/.env.local:"
-    echo "  export ANTHROPIC_API_KEY=\"your-api-key\""
-    exit 1
+# Verify required credentials based on auth mode
+if [ "$USE_SUBSCRIPTION" = "true" ]; then
+    echo "Auth mode: Claude Max subscription (2-account)"
+else
+    if [ -z "$ANTHROPIC_API_KEY" ]; then
+        echo "ERROR: ANTHROPIC_API_KEY not set and USE_SUBSCRIPTION is not true"
+        echo "Set USE_SUBSCRIPTION=true in ~/evals/.env.local for subscription mode,"
+        echo "or set ANTHROPIC_API_KEY for API mode."
+        exit 1
+    fi
+    echo "Auth mode: API key (ANTHROPIC_API_KEY: ${#ANTHROPIC_API_KEY} chars)"
 fi
-
-echo "ANTHROPIC_API_KEY: set (${#ANTHROPIC_API_KEY} chars)"
 if [ -n "$SOURCEGRAPH_ACCESS_TOKEN" ]; then
     echo "SOURCEGRAPH_ACCESS_TOKEN: set (${#SOURCEGRAPH_ACCESS_TOKEN} chars)"
 else

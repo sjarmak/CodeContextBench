@@ -21,7 +21,7 @@
 #   --category CATEGORY    Run category (default: official)
 #
 # Prerequisites:
-#   - ~/evals/.env.local with ANTHROPIC_API_KEY (required)
+#   - ~/evals/.env.local with USE_SUBSCRIPTION=true (default: 2-account Max subscription)
 #   - SOURCEGRAPH_ACCESS_TOKEN in .env.local (required for MCP modes)
 #
 # Note: Docker build is slow (~10min) due to Linux kernel partial clone (~2GB).
@@ -47,21 +47,21 @@ if [ -f ~/evals/.env.local ]; then
     source ~/evals/.env.local
 else
     echo "Warning: ~/evals/.env.local not found"
-    echo "Please create it with at minimum:"
-    echo "  export ANTHROPIC_API_KEY=\"your-api-key\""
     echo ""
 fi
 
-# Verify required credentials
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-    echo "ERROR: ANTHROPIC_API_KEY is not set"
-    echo ""
-    echo "Please set it in ~/evals/.env.local:"
-    echo "  export ANTHROPIC_API_KEY=\"your-api-key\""
-    exit 1
+# Verify required credentials based on auth mode
+if [ "$USE_SUBSCRIPTION" = "true" ]; then
+    echo "Auth mode: Claude Max subscription (2-account)"
+else
+    if [ -z "$ANTHROPIC_API_KEY" ]; then
+        echo "ERROR: ANTHROPIC_API_KEY not set and USE_SUBSCRIPTION is not true"
+        echo "Set USE_SUBSCRIPTION=true in ~/evals/.env.local for subscription mode,"
+        echo "or set ANTHROPIC_API_KEY for API mode."
+        exit 1
+    fi
+    echo "Auth mode: API key (ANTHROPIC_API_KEY: ${#ANTHROPIC_API_KEY} chars)"
 fi
-
-echo "ANTHROPIC_API_KEY: set (${#ANTHROPIC_API_KEY} chars)"
 if [ -n "$SOURCEGRAPH_ACCESS_TOKEN" ]; then
     echo "SOURCEGRAPH_ACCESS_TOKEN: set (${#SOURCEGRAPH_ACCESS_TOKEN} chars)"
 else
@@ -111,12 +111,19 @@ while [[ $# -gt 0 ]]; do
             CATEGORY="$2"
             shift 2
             ;;
+        --parallel)
+            PARALLEL_JOBS="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
             exit 1
             ;;
     esac
 done
+
+# Set up dual-account support (auto-detects second account)
+setup_dual_accounts
 
 # Check MCP credentials if MCP modes requested
 if { [ "$RUN_BASE" = true ] || [ "$RUN_FULL" = true ]; } && [ -z "$SOURCEGRAPH_ACCESS_TOKEN" ]; then
@@ -214,7 +221,7 @@ run_task_batch() {
     local mcp_type=$2
     local jobs_subdir="${JOBS_BASE}/${mode}"
 
-    ensure_fresh_token
+    ensure_fresh_token_all
 
     log_section "Running LinuxFLBench - Mode: $mode"
 
