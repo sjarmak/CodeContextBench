@@ -1,0 +1,202 @@
+{
+  "project": "Transcript Memory",
+  "branchName": "ralph/transcript-memory",
+  "description": "Build a zero-dependency Python utility that ingests Claude Code JSONL transcripts into SQLite with FTS5, enriches with session summaries and decision logs, and exposes both a Python API and CLI for search. Single file at ~/.claude/tom/transcript_memory.py.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "SQLite schema, DB init, and core TranscriptDB class",
+      "description": "Create the foundational database class with schema creation, WAL mode, and the ingest_state tracking table. This is the skeleton that all other stories build on.",
+      "acceptanceCriteria": [
+        "File exists at ~/.claude/tom/transcript_memory.py and is executable (chmod +x)",
+        "Running 'python3 ~/.claude/tom/transcript_memory.py stats' creates DB at ~/.claude/tom/transcript-memory.db and prints stats (0 sessions, 0 messages, etc.)",
+        "DB has tables: sessions, messages, tool_calls, session_summaries, decisions, ingest_state (verify with: sqlite3 ~/.claude/tom/transcript-memory.db '.tables')",
+        "DB has FTS5 virtual tables: tool_calls_fts, summaries_fts, decisions_fts (verify with: sqlite3 ~/.claude/tom/transcript-memory.db '.tables' | grep fts)",
+        "DB uses WAL journal mode (verify with: sqlite3 ~/.claude/tom/transcript-memory.db 'PRAGMA journal_mode')",
+        "Schema matches the SQL in the PRD Technical Considerations section at tasks/prd-transcript-memory.md",
+        "TranscriptDB class has __enter__/__exit__ for context manager usage",
+        "File has argparse CLI skeleton with subcommands: stats, ingest, search, sessions, decisions, tools, daemon, export-tom (even if most are stubs)"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "This story creates the file from scratch. All subsequent stories add to it. Read the full schema SQL from tasks/prd-transcript-memory.md lines 210-324. The file lives OUTSIDE the git repo at ~/.claude/tom/ but the PRD and progress files are in-repo. Commit the ralph-tm files to git."
+    },
+    {
+      "id": "US-002",
+      "title": "JSONL parser — messages, tool calls, and tool result matching",
+      "description": "Implement the core JSONL parsing logic that extracts messages and tool calls from transcript files, matches tool results to their calls via tool_use_id, and inserts into SQLite.",
+      "acceptanceCriteria": [
+        "parse_jsonl_file(path) function reads a .jsonl file line by line, handles malformed JSON gracefully (skip + warn)",
+        "Extracts 'user', 'assistant', 'progress' top-level types into messages table with uuid, session_id, parent_uuid, timestamp, type, cwd, git_branch, text_content, model, token counts",
+        "Extracts tool_use blocks from assistant content arrays (type=='tool_use') into tool_calls table with tool_use_id, tool_name, tool_input (full JSON), timestamp",
+        "Extracts tool_result blocks from user content arrays (type=='tool_result') and matches to tool_calls via tool_use_id field, populating tool_output and is_error",
+        "tool_input_summary field contains redacted first 1000 chars (14 secret regex patterns from ToM), tool_output_summary contains first 1000 chars of output",
+        "Extracts assistant text blocks (type=='text') and concatenates into messages.text_content",
+        "Running 'python3 ~/.claude/tom/transcript_memory.py ingest --no-incremental' ingests all JSONL files from ~/.claude/projects/ and prints count",
+        "After ingest, 'python3 ~/.claude/tom/transcript_memory.py stats' shows >200 sessions and >5000 tool calls"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "JSONL format: each line is JSON with top-level 'type' field ('user'|'assistant'|'progress'). Tool calls are in assistant message.content[] with type=='tool_use', id, name, input. Tool results are in user message.content[] with type=='tool_result', tool_use_id, content, is_error. Match them by tool_use_id. See transcript format docs in PRD. Secret patterns: sk-*, ghp_*, gho_*, ghs_*, github_pat_*, Bearer, Basic, token, xox*, AKIA*, eyJ*, password*, npm_*, pypi-*."
+    },
+    {
+      "id": "US-003",
+      "title": "Incremental ingestion with byte-offset tracking",
+      "description": "Make the ingestion system incremental: track file size/mtime/bytes_read per file, only read new bytes on re-run, detect truncation.",
+      "acceptanceCriteria": [
+        "ingest_state table populated during ingest with file_path, file_size, file_mtime, bytes_read, lines_read, last_ingested_at",
+        "Running 'python3 ~/.claude/tom/transcript_memory.py ingest' a second time completes in <5 seconds (skips already-ingested bytes)",
+        "If a JSONL file gets new lines appended, re-running ingest picks up only the new lines (verify by checking ingest_state.bytes_read increased)",
+        "If a file's size decreases (truncation), the file is re-ingested from the start",
+        "'python3 ~/.claude/tom/transcript_memory.py ingest --no-incremental' drops all data and re-ingests everything",
+        "Full ingest of all ~1276 JSONL files completes in <120 seconds"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Use file seek to bytes_read offset for incremental reads. Compare stat().st_size and stat().st_mtime. Batch inserts within a transaction per file for atomicity."
+    },
+    {
+      "id": "US-004",
+      "title": "Session metadata import and subagent discovery",
+      "description": "Import pre-computed session metadata from sessions-index.json files, discover and ingest subagent transcripts from session-uuid/subagents/ directories.",
+      "acceptanceCriteria": [
+        "Reads sessions-index.json from each project dir in ~/.claude/projects/ and upserts into sessions table (session_id, project_path, first_prompt, summary, message_count, created_at, modified_at, git_branch, pr_number, pr_url)",
+        "project_name derived from project_path (last component after splitting on /)",
+        "Discovers subagent transcripts at {session-uuid}/subagents/agent-*.jsonl and ingests them with is_subagent=TRUE and parent_session_id set",
+        "After ingest, 'python3 ~/.claude/tom/transcript_memory.py sessions --limit 5' shows 5 most recent sessions with project_name, summary, created_at, tool count",
+        "Subagent sessions visible in stats output as separate count"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "sessions-index.json has entries[].{sessionId, fullPath, firstPrompt, summary, messageCount, created, modified, gitBranch, prNumber, prUrl, projectPath}. Subagent JSONL files have agentId and isSidechain=true in their entries."
+    },
+    {
+      "id": "US-005",
+      "title": "Enriched session summaries",
+      "description": "After ingestion, compute per-session summaries: goal, outcome, files touched, tools used, errors, duration, tokens.",
+      "acceptanceCriteria": [
+        "Session summaries computed for all sessions after ingest (runs as post-processing step within the ingest command)",
+        "goal = first user message text (first 500 chars, system-reminder tags stripped via regex)",
+        "files_touched = JSON array of unique file paths from tool_calls.tool_input (extract file_path and path keys), sorted and deduped",
+        "tools_used = JSON object mapping tool_name to count from tool_calls table",
+        "errors = JSON array of {tool, message} for tool_calls where is_error=true (message = first 200 chars of tool_output)",
+        "outcome = last assistant text_content in session (first 500 chars)",
+        "duration_seconds = last message timestamp - first message timestamp",
+        "tokens_used = sum of input_tokens + output_tokens from assistant messages",
+        "FTS5 index (summaries_fts) populated — searching 'python3 ~/.claude/tom/transcript_memory.py search kubernetes' returns results"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Strip <system-reminder>...</system-reminder> tags from goal text. Use SQL aggregates where possible (GROUP BY session_id). Compute after all messages ingested, not during line-by-line parsing."
+    },
+    {
+      "id": "US-006",
+      "title": "Decision log extraction",
+      "description": "Extract decisions from tool calls and assistant text: file creations, config changes, architecture choices.",
+      "acceptanceCriteria": [
+        "File creation decisions: Write tool calls where subject (file_path) was not previously seen in that session → decision_type='file_created'",
+        "Config change decisions: Edit tool calls on files matching extensions .toml, .json, .yaml, .yml, .cfg, .conf, .sh, Dockerfile, Makefile → decision_type='config_changed'",
+        "Architecture choices: assistant text_content containing keywords (decided, chose, instead of, approach, strategy, because, trade-off, won't, should not) within 2 messages of a tool call → decision_type='architecture_choice'",
+        "Each decision has: session_id, timestamp, decision_type, subject (file path or extracted topic), context (surrounding assistant text 500 chars), tool_call_id",
+        "FTS5 index (decisions_fts) populated — 'python3 ~/.claude/tom/transcript_memory.py decisions \"verifier fix\"' returns results",
+        "After full ingest, 'python3 ~/.claude/tom/transcript_memory.py stats' shows >100 decisions extracted"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Run decision extraction as part of summary computation (same post-processing pass). For architecture_choice: extract subject from nearby tool call file paths or from quoted terms in the text. Keep the context window tight (2 messages before/after a tool call) to reduce noise."
+    },
+    {
+      "id": "US-007",
+      "title": "Full query interface — Python API and CLI",
+      "description": "Implement all search and query methods on TranscriptDB class, and wire them to CLI subcommands with human-readable and JSON output.",
+      "acceptanceCriteria": [
+        "db.search_sessions(query, limit=10) returns list of dicts with session_id, project_name, summary, goal snippet, created_at, tool_count — uses summaries_fts",
+        "db.search_decisions(query, limit=10) returns list of dicts with session_id, timestamp, decision_type, subject, context — uses decisions_fts",
+        "db.search_tool_calls(query, tool_name=None, limit=20) returns list of dicts with tool_use_id, session_id, tool_name, input_summary, output_summary — uses tool_calls_fts, optional WHERE tool_name filter",
+        "db.get_session(session_id) returns full session dict with summary fields",
+        "db.get_session_tool_calls(session_id) returns ordered list of tool calls",
+        "db.get_recent_sessions(project=None, limit=20) returns recent sessions, optional project filter",
+        "'python3 ~/.claude/tom/transcript_memory.py search \"harbor run\"' prints formatted results",
+        "'python3 ~/.claude/tom/transcript_memory.py sessions --project CodeContextBench --limit 5' prints 5 recent sessions",
+        "'python3 ~/.claude/tom/transcript_memory.py tools --name Bash --query \"git push\"' shows matching Bash tool calls",
+        "'python3 ~/.claude/tom/transcript_memory.py search \"harbor run\" --json' outputs valid JSON array",
+        "All CLI subcommands support --project filter and --json output flag"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "FTS5 query syntax: just pass the user query string directly to MATCH. For human output: print session_id (first 8 chars), project_name, date, then snippet. For JSON: full dict. All queries should open DB in read-only mode (?mode=ro URI)."
+    },
+    {
+      "id": "US-008",
+      "title": "Live daemon mode with polling",
+      "description": "Implement a polling daemon that watches for new/modified JSONL files every 2 seconds and ingests them incrementally.",
+      "acceptanceCriteria": [
+        "'python3 ~/.claude/tom/transcript_memory.py daemon' starts a polling loop that checks all project dirs every 2 seconds",
+        "Writes PID file to ~/.claude/tom/transcript-memory.pid on start, removes on clean exit",
+        "Graceful shutdown on SIGTERM and SIGINT (catches signal, logs, cleans PID file, exits 0)",
+        "Detects new JSONL files (not just modified existing ones) by scanning project directories",
+        "Detects new subagent transcript files in session-uuid/subagents/ directories",
+        "Logs ingestion events to stderr (file path + records ingested), quiet by default, verbose with -v",
+        "'python3 ~/.claude/tom/transcript_memory.py daemon --once' runs a single poll cycle then exits (for cron/hook use)",
+        "Idle CPU usage negligible (stat() calls only, no file reads when nothing changed)"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Use time.sleep(2) in a while loop. For each poll: stat() all known JSONL files + scan for new ones. Only read files where mtime or size changed. Reuse the incremental ingest logic from US-003. Signal handling via signal.signal(signal.SIGTERM, handler)."
+    },
+    {
+      "id": "US-009",
+      "title": "Session-end hook integration",
+      "description": "Create a stop hook that triggers transcript ingestion when a Claude Code session ends.",
+      "acceptanceCriteria": [
+        "If ~/.claude/hooks/stop.sh does not exist, create it with #!/bin/bash header and the ingest command",
+        "If ~/.claude/hooks/stop.sh exists, append the ingest command (don't overwrite existing hooks)",
+        "Hook runs: python3 ~/.claude/tom/transcript_memory.py ingest --session $CLAUDE_SESSION_ID in background (&)",
+        "The --session flag on ingest command limits ingestion to just that session's JSONL file (fast, <5 seconds)",
+        "Hook is non-blocking (backgrounded with &) so it doesn't delay Claude Code shutdown",
+        "Ingest with --session flag also runs summary and decision extraction for that session",
+        "If DB is locked (another process writing), retry once after 1 second, then skip silently"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "Claude Code sets CLAUDE_SESSION_ID env var in hooks. The session JSONL file is at ~/.claude/projects/{project}/{session_id}.jsonl — need to find which project dir contains it. The hook file must be chmod +x. Check if the ingest line already exists before appending (idempotent)."
+    },
+    {
+      "id": "US-010",
+      "title": "ToM-compatible export",
+      "description": "Generate ToM Tier 1/2/3 JSON files and BM25 index from the SQLite database for backward compatibility with the existing ToM plugin.",
+      "acceptanceCriteria": [
+        "'python3 ~/.claude/tom/transcript_memory.py export-tom' generates SessionLog JSON files in ~/.claude/tom/sessions/ matching ToM Tier 1 schema (sessionId, startedAt, endedAt, interactions[])",
+        "Each interaction has: toolName, parameterShape (redacted dict), outcomeSummary (first 200 chars), timestamp",
+        "Generates SessionModel JSON files in ~/.claude/tom/session-models/ matching Tier 2 schema (sessionId, intent, interactionPatterns, codingPreferences, satisfactionSignals)",
+        "SessionModel extraction uses same heuristics as ToM plugin: tool intent map, scope from interaction count, top-5 tool patterns, file extensions, frustration/satisfaction thresholds",
+        "Generates user-model.json matching Tier 3 schema with preference decay (30-day half-life), reinforcement (+0.1 per observation, cap 1.0), conflict resolution (latest wins per category::key)",
+        "Generates bm25-index.json with K1=1.2, B=0.75, tier weights (T1=1x, T2=2x, T3=3x)",
+        "Incremental: only exports sessions not already in ~/.claude/tom/sessions/",
+        "Runs in <30 seconds for all sessions"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "Can reuse logic from the existing bootstrap_tom.py (same file, same dir). The export reads from SQLite and writes the JSON files the ToM plugin expects. ToM schemas: SessionLog{sessionId,startedAt,endedAt,interactions[{toolName,parameterShape,outcomeSummary,timestamp}]}, SessionModel{sessionId,intent,interactionPatterns,codingPreferences,satisfactionSignals{frustration,satisfaction,urgency}}, UserModel{preferencesClusters[{category,key,value,confidence,lastUpdated,sessionCount}],interactionStyleSummary,codingStyleSummary,projectOverrides}."
+    },
+    {
+      "id": "US-011",
+      "title": "End-to-end verification and performance tuning",
+      "description": "Verify the full pipeline works end-to-end: ingest, enrich, search, daemon, hook, export. Tune for performance targets.",
+      "acceptanceCriteria": [
+        "Full ingest from scratch (--no-incremental) completes in <120 seconds for all 1276+ JSONL files",
+        "Incremental re-ingest (no new files) completes in <5 seconds",
+        "'python3 ~/.claude/tom/transcript_memory.py search \"kubernetes\"' returns results in <1 second",
+        "'python3 ~/.claude/tom/transcript_memory.py decisions \"verifier\"' returns results in <1 second",
+        "'python3 ~/.claude/tom/transcript_memory.py stats' shows complete counts: sessions > 200, tool_calls > 5000, decisions > 100",
+        "DB file size is <300MB (verify with: ls -lh ~/.claude/tom/transcript-memory.db)",
+        "daemon --once completes without errors",
+        "export-tom generates valid JSON (verify: python3 -m json.tool ~/.claude/tom/user-model.json)",
+        "All 3 FTS indexes return results for relevant queries (tool_calls_fts, summaries_fts, decisions_fts)"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "This is the integration test story. Run the full pipeline, check all numbers, fix any issues found. If performance targets are missed, add indexes or batch sizes. The main file is at ~/.claude/tom/transcript_memory.py — verify it's importable too: python3 -c 'import sys; sys.path.insert(0, str(__import__(\"pathlib\").Path.home()/\".claude\"/\"tom\")); from transcript_memory import TranscriptDB; print(\"OK\")'."
+    }
+  ]
+}
