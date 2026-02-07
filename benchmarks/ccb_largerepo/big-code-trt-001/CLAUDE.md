@@ -1,12 +1,6 @@
 # big-code-trt-001: W4A8_MXFP4_INT8 Quantization Mode Support
 
-This repository is large. If a search spans more than a narrow, well-defined set of directories, you **MUST** use Sourcegraph MCP search tools:
-
-- Use `sg_keyword_search`, `sg_nls_search`, or `sg_deepsearch` for broad architectural queries
-- Use MCP to find all references across the codebase quickly
-- Use MCP to understand patterns and conventions at scale
-- Do NOT use local `grep` or `rg` for cross-module searches
-- Do NOT use local tools except for narrow, single-directory scopes
+This repository is large. Use comprehensive search strategies for broad architectural queries rather than narrow, single-directory scopes.
 
 ## TensorRT-LLM Architecture Notes
 
@@ -19,4 +13,4 @@ The W4A8_MXFP4_INT8 quantization mode implementation requires understanding:
 5. **Validation & Constraints**: Where mode validation happens (attention backends, KV cache compatibility)
 6. **Tests**: How existing quantization mode tests are structured
 
-Use MCP to find `W4A8_MXFP4_FP8` references across the entire codebase—this tells you all locations where you need to add `W4A8_MXFP4_INT8` support. Local tools would require multiple targeted searches and might miss critical integration points.
+Find `W4A8_MXFP4_FP8` references across the entire codebase—this tells you all locations where you need to add `W4A8_MXFP4_INT8` support. Critical integration points are spread across Python, C++, and build system files.

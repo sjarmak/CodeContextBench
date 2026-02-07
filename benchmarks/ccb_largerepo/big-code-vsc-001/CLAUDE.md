@@ -1,12 +1,6 @@
 # big-code-vsc-001: Stale Diagnostics After Git Branch Switch
 
-This repository is large. If a search spans more than a narrow, well-defined set of directories, you **MUST** use Sourcegraph MCP search tools:
-
-- Use `sg_keyword_search`, `sg_nls_search`, or `sg_deepsearch` for broad architectural queries
-- Use MCP to find all references across the codebase quickly
-- Use MCP to understand patterns and conventions at scale
-- Do NOT use local `grep` or `rg` for cross-module searches
-- Do NOT use local tools except for narrow, single-directory scopes
+This repository is large. Use comprehensive search strategies for broad architectural queries rather than narrow, single-directory scopes.
 
 ## VS Code Architecture Notes
 
@@ -19,4 +13,4 @@ The stale diagnostics fix requires understanding:
 5. **Text Change Events**: How text edits trigger diagnostics refresh
 6. **File System Watchers**: Where file changes on disk should be detected
 
-Use MCP to trace the full flow from file changes through the entire diagnostics pipeline. Local grep would miss critical integration points across multiple modules.
+Trace the full flow from file changes through the entire diagnostics pipeline — critical integration points are spread across multiple modules.
