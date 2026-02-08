@@ -14,6 +14,10 @@ cd "$SCRIPT_DIR/.."
 
 AGENT_DIR="${AGENT_DIR:-$HOME/evals/custom_agents/agents/claudecode}"
 export PYTHONPATH="${AGENT_DIR}:$(pwd):$PYTHONPATH"
+
+# Override canary BEFORE sourcing _common.sh (which defaults to false)
+export CANARY_ENABLED=${CANARY_ENABLED:-true}
+
 source "$SCRIPT_DIR/_common.sh"
 
 if [ -f ~/evals/.env.local ]; then
@@ -27,9 +31,6 @@ AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
 MODEL="anthropic/claude-opus-4-6"
 TIMEOUT_MULTIPLIER=10
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-
-# Enable canary by default for targeted reruns
-CANARY_ENABLED=${CANARY_ENABLED:-true}
 
 setup_dual_accounts
 
@@ -88,72 +89,91 @@ SWEPRO_TASKS=(
     "instance_protonmail__webclients-caf10ba9ab2677761c88522d1ba8ad025779c492"
 )
 
-_swepro_run_single() {
-    local task_id=$1
-    local task_home=$2
-    local sg_repo="${SWEPRO_SG[$task_id]:-}"
-    if [ -n "$sg_repo" ]; then
-        export SOURCEGRAPH_REPO_NAME="$sg_repo"
-        echo "  [sourcegraph_full] ${task_id} -> ${sg_repo} [HOME=$task_home]"
-    fi
-    BASELINE_MCP_TYPE=sourcegraph_full harbor run \
-        --dataset swebenchpro \
-        -t "$task_id" \
-        --agent-import-path "$AGENT_PATH" \
-        --model "$MODEL" \
-        --jobs-dir "$SWEPRO_JOBS" \
-        -n 2 \
-        --timeout-multiplier $TIMEOUT_MULTIPLIER \
-        2>&1 | tee "${SWEPRO_JOBS}/${task_id}.log" || true
-}
-
-# Also run RepoQA alongside SWE-bench Pro
+# RepoQA setup (runs separately from SWE-Pro)
 REPOQA_JOBS="runs/official/repoqa_rerun_opus_${TIMESTAMP}/sourcegraph_full"
 mkdir -p "$REPOQA_JOBS"
 REPOQA_TASK="repoqa-cpp-skypjack-uvw-00"
 
-_repoqa_run() {
-    local task_id="$REPOQA_TASK"
-    local task_home=$2
-    local task_dir="benchmarks/ccb_repoqa/${task_id}"
-    echo "  [sourcegraph_full] RepoQA ${task_id} [HOME=$task_home]"
+# ---- Launch RepoQA in background (uses --path, no collision risk) ----
+echo "  Launching RepoQA ${REPOQA_TASK} in background..."
+(
+    export HOME="${CLAUDE_HOMES[0]}"
     BASELINE_MCP_TYPE=sourcegraph_full harbor run \
-        --path "$task_dir" \
+        --path "benchmarks/ccb_repoqa/tasks/${REPOQA_TASK}" \
         --agent-import-path "$AGENT_PATH" \
         --model "$MODEL" \
         --jobs-dir "$REPOQA_JOBS" \
         -n 2 \
         --timeout-multiplier 3 \
-        2>&1 | tee "${REPOQA_JOBS}/${task_id}.log" || true
-}
+        2>&1 | tee "${REPOQA_JOBS}/${REPOQA_TASK}.log" || true
+) &
+REPOQA_PID=$!
+echo "  RepoQA PID: $REPOQA_PID"
 
-# Combine SWE-bench Pro + RepoQA into one batch
-ALL_BATCH1_TASKS=("${SWEPRO_TASKS[@]}" "REPOQA_PLACEHOLDER")
+# ---- Run SWE-bench Pro tasks SEQUENTIALLY ----
+# Each harbor run --dataset swebenchpro creates a batch dir from timestamp.
+# Running them sequentially avoids the FileExistsError collision that occurs
+# when multiple harbor processes reach directory creation at the same moment
+# (registry download adds uniform latency that defeats the 2-second stagger).
+echo ""
+echo "Running ${#SWEPRO_TASKS[@]} SWE-bench Pro tasks sequentially..."
+echo ""
+account_idx=1  # start from account3 (account1 is running RepoQA)
+num_accounts=${#CLAUDE_HOMES[@]}
+swepro_failed=0
 
-_batch1_run_single() {
-    local task_id=$1
-    local task_home=$2
-    if [ "$task_id" = "REPOQA_PLACEHOLDER" ]; then
-        _repoqa_run "$task_id" "$task_home"
-    else
-        _swepro_run_single "$task_id" "$task_home"
+for task_id in "${SWEPRO_TASKS[@]}"; do
+    local_home="${CLAUDE_HOMES[$account_idx]}"
+    account_idx=$(( (account_idx + 1) % num_accounts ))
+
+    sg_repo="${SWEPRO_SG[$task_id]:-}"
+    echo "  [$(date +%H:%M:%S)] ${task_id}"
+    echo "    SG repo: ${sg_repo:-none}"
+    echo "    HOME: $local_home"
+
+    (
+        export HOME="$local_home"
+        if [ -n "$sg_repo" ]; then
+            export SOURCEGRAPH_REPO_NAME="$sg_repo"
+        fi
+        BASELINE_MCP_TYPE=sourcegraph_full harbor run \
+            --dataset swebenchpro \
+            -t "$task_id" \
+            --agent-import-path "$AGENT_PATH" \
+            --model "$MODEL" \
+            --jobs-dir "$SWEPRO_JOBS" \
+            -n 2 \
+            --timeout-multiplier $TIMEOUT_MULTIPLIER \
+            2>&1 | tee "${SWEPRO_JOBS}/${task_id}.log"
+    ) || {
+        echo "    WARNING: Task $task_id failed (exit $?)"
+        swepro_failed=$((swepro_failed + 1))
+    }
+
+    # Canary: validate first task, abort if systemic failure
+    if [ "$CANARY_ENABLED" = "true" ] && [ "$task_id" = "${SWEPRO_TASKS[0]}" ]; then
+        if ! validate_canary_result "$SWEPRO_JOBS" "sourcegraph_full"; then
+            echo ""
+            echo "CANARY BLOCKED: Systemic issue on first task — aborting SWE-Pro batch"
+            echo "Check: ${SWEPRO_JOBS}/canary_verdict.json"
+            BATCH_RESULTS+=("batch1:blocked")
+            # Kill RepoQA too
+            kill $REPOQA_PID 2>/dev/null || true
+            exit 1
+        fi
+        echo "    CANARY PASS — continuing batch"
     fi
-}
+done
 
-# Canary: first task probes infra, remaining 11 only run if it's clean
-run_canary_then_batch ALL_BATCH1_TASKS _batch1_run_single "$SWEPRO_JOBS" "sourcegraph_full"
-batch1_exit=$?
+# Wait for RepoQA to finish
+echo ""
+echo "Waiting for RepoQA to finish..."
+wait $REPOQA_PID 2>/dev/null || true
+echo "RepoQA complete."
 
-if [ $batch1_exit -ne 0 ] && [ "$CANARY_ENABLED" = "true" ]; then
-    echo "BATCH 1 BLOCKED by canary — stopping all batches"
-    BATCH_RESULTS+=("batch1:blocked")
-    echo ""
-    echo "=============================================="
-    echo "Targeted rerun ABORTED (canary stop signal)"
-    echo "=============================================="
-    echo "Check: ${SWEPRO_JOBS}/canary_verdict.json"
-    exit 1
-fi
+echo ""
+echo "SWE-bench Pro: ${#SWEPRO_TASKS[@]} tasks, $swepro_failed failed"
+batch1_exit=0
 
 BATCH_RESULTS+=("batch1:completed")
 echo ""

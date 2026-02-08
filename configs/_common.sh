@@ -12,6 +12,11 @@ export USE_SUBSCRIPTION=true
 # Guard function: call this in each 3config script instead of the old if/else auth block.
 enforce_subscription_mode() {
     echo "Auth mode: Claude Max subscription"
+    # Unset any stale API key — placeholder keys cause "Invalid API key" errors
+    # when the agent tries to use API-key auth instead of OAuth subscription
+    if [ "${ANTHROPIC_API_KEY:-}" = "placeholder-key" ] || [ "${ANTHROPIC_API_KEY:-}" = "" ]; then
+        unset ANTHROPIC_API_KEY 2>/dev/null || true
+    fi
 }
 
 # ============================================
