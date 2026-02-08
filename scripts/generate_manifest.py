@@ -69,6 +69,14 @@ def detect_suite(dirname: str) -> str | None:
     return None
 
 
+def _parse_started_at(data: dict) -> str:
+    """Extract started_at timestamp from result.json for ordering.
+
+    Returns ISO string or empty string if missing.
+    """
+    return data.get("started_at", "")
+
+
 def scan_config_dir(config_path: Path) -> dict[str, dict]:
     """Scan a config directory (e.g., baseline/) for task-level results.
 
@@ -206,8 +214,19 @@ def main():
 
             tasks = scan_config_dir(config_path)
             key = (suite, config)
-            # Merge: later run dirs overwrite earlier ones (sorted order)
-            all_tasks[key].update(tasks)
+            # Merge: for each task, keep the result with the latest started_at
+            # timestamp. This handles cases where run dir names don't sort
+            # chronologically (e.g., "rerun" < "selected" alphabetically but
+            # the rerun is actually newer).
+            for task_name, task_entry in tasks.items():
+                existing = all_tasks[key].get(task_name)
+                if existing is None:
+                    all_tasks[key][task_name] = task_entry
+                else:
+                    new_ts = _parse_started_at(task_entry["data"])
+                    old_ts = _parse_started_at(existing["data"])
+                    if new_ts >= old_ts:
+                        all_tasks[key][task_name] = task_entry
 
     # Build MANIFEST
     runs = {}
