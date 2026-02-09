@@ -258,6 +258,7 @@ run_task_batch() {
             --jobs-dir "$jobs_subdir" \
             -n $CONCURRENCY \
             --timeout-multiplier $TIMEOUT_MULTIPLIER \
+            --force-build \
             2>&1 | tee "${jobs_subdir}/${task_id}.log" \
             || {
                 echo "WARNING: Task $task_id failed (exit code: $?)"

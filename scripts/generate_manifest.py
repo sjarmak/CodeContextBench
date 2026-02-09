@@ -25,6 +25,7 @@ DIR_PREFIX_TO_SUITE = {
     "bigcode_mcp_": "ccb_largerepo",
     "codereview_": "ccb_codereview",
     "crossrepo_": "ccb_crossrepo",
+    "dependeval_": "ccb_dependeval",
     "dibench_": "ccb_dibench",
     "investigation_": "ccb_investigation",
     "k8s_docs_": "ccb_k8sdocs",
