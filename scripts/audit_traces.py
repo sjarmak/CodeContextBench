@@ -1009,6 +1009,7 @@ def format_summary(report: dict, verbose: bool = False) -> str:
             lines.append(f"  {short:18s}  tasks={info['task_count']:>4d}  "
                          f"avg_in={info['avg_input_tokens']:>10,}  "
                          f"avg_out={info['avg_output_tokens']:>8,}  "
+                         f"avg_task={info['avg_task_seconds']:>7.0f}s  "
                          f"avg_wall={info['avg_wall_seconds']:>7.0f}s")
     lines.append("")
 
@@ -1018,6 +1019,7 @@ def format_summary(report: dict, verbose: bool = False) -> str:
         lines.append(f"  {suite:25s}  tasks={info['task_count']:>4d}  "
                      f"avg_in={info['avg_input_tokens']:>10,}  "
                      f"avg_out={info['avg_output_tokens']:>8,}  "
+                     f"avg_task={info['avg_task_seconds']:>7.0f}s  "
                      f"avg_wall={info['avg_wall_seconds']:>7.0f}s")
     lines.append("")
 

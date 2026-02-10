@@ -269,15 +269,19 @@ Multi-file editing is where MCP shines (+16.7pp). Performance optimization is wh
 
 **SG_full delivers the best cost-per-reward for 5 of 8 suites** with meaningful cost variation.
 
-### Wall Clock Speed
+### Agent Task Time (coding + tool use, excludes Docker build & verification)
 
-| Suite | BL | SG_full | Delta | Direction |
-|---|---|---|---|---|
-| K8s Docs | 1,426s | **225s** | **-84%** | MCP dramatically faster |
-| DIBench | 275s | **171s** | -38% | MCP faster |
-| TAC | 1,483s | **1,087s** | -27% | MCP faster |
-| LoCoBench | 449s | 1,144s | +155% | MCP slower |
-| SWE-bench Pro | 575s | 2,457s | +47% | MCP slower |
+| Suite | BL | SG_base | SG_full | BL→SG_base | BL→SG_full | Direction |
+|---|---|---|---|---|---|---|
+| K8s Docs | 331s | **188s** | 233s | **-43%** | -30% | MCP faster |
+| LargeRepo | 997s | **631s** | 2,247s | **-37%** | +125% | SG_base faster |
+| DIBench | 168s | 163s | **135s** | -3% | **-19%** | SG_full faster |
+| LoCoBench | 407s | **314s** | 805s | **-23%** | +98% | SG_base faster |
+| PyTorch | 269s | **252s** | 685s | -6% | +155% | SG_base faster |
+| TAC | 620s | 639s | **614s** | +3% | -1% | Neutral |
+| SWE-bench Pro | 279s | 368s | 383s | +32% | +37% | BL faster |
+
+Note: Wall clock time (which includes Docker build and verifier execution) was previously used for efficiency comparisons but overstated MCP benefits. For example, K8s Docs showed -84% on wall clock but only -43% on task time. Agent task time is the correct metric for measuring search tool efficiency.
 
 ---
 
@@ -436,7 +440,7 @@ Interestingly, the "medium" predicted-benefit tasks show the largest actual impr
 
 6. **Cost-per-reward is better with SG_full for 5 of 8 suites** -- even though raw cost is 47% higher, the higher reward rate means you pay less per unit of success on search-heavy tasks.
 
-7. **K8s Docs is the efficiency showpiece**: 84% faster wall clock AND 31% lower cost with SG_full. The agent finds what it needs through search instead of exhaustively reading files.
+7. **K8s Docs is the efficiency showpiece**: 43% faster agent task time with SG_base (30% with SG_full). The agent finds what it needs through search instead of exhaustively reading files. Previous wall-clock metric (-84%) overstated the gain by including Docker/verification time.
 
 8. **Prompt engineering is infrastructure**: The preamble evolution from "polite suggestion" to "mandatory two-phase workflow with repo targeting" was as impactful as the tools themselves.
 
@@ -448,47 +452,49 @@ Interestingly, the "medium" predicted-benefit tasks show the largest actual impr
 
 ## Appendix A: Per-Benchmark Efficiency Data
 
-| Benchmark | Config | Mean Wall Clock (s) | Mean Cost (USD) | Mean MCP Ratio |
-|---|---|---|---|---|
-| ccb_codereview | baseline | 186 | $0.56 | 0.000 |
-| ccb_codereview | SG_base | 286 | $0.96 | 0.048 |
-| ccb_codereview | SG_full | 209 | $0.83 | 0.287 |
-| ccb_crossrepo | baseline | 585 | $2.69 | 0.000 |
-| ccb_crossrepo | SG_base | 604 | $2.64 | 0.042 |
-| ccb_crossrepo | SG_full | 620 | $3.90 | 0.018 |
-| ccb_dependeval | baseline | 99 | $0.28 | 0.000 |
-| ccb_dependeval | SG_base | 123 | $0.40 | 0.268 |
-| ccb_dependeval | SG_full | 98 | $0.40 | 0.281 |
-| ccb_dibench | baseline | 275 | $0.72 | 0.000 |
-| ccb_dibench | SG_base | 222 | $1.12 | 0.413 |
-| ccb_dibench | SG_full | 171 | $0.93 | 0.415 |
-| ccb_k8sdocs | baseline | 1,426 | $0.92 | 0.000 |
-| ccb_k8sdocs | SG_base | 651 | $0.72 | 0.628 |
-| ccb_k8sdocs | SG_full | 225 | $0.64 | 0.479 |
-| ccb_largerepo | baseline | 2,903 | $5.42 | 0.000 |
-| ccb_largerepo | SG_base | 1,187 | $4.74 | 0.232 |
-| ccb_largerepo | SG_full | 3,932 | $5.78 | 0.077 |
-| ccb_locobench | baseline | 449 | $3.84 | 0.000 |
-| ccb_locobench | SG_base | 300 | $1.97 | 0.292 |
-| ccb_locobench | SG_full | 1,144 | $7.98 | 0.272 |
-| ccb_pytorch | baseline | 1,106 | $2.14 | 0.000 |
-| ccb_pytorch | SG_base | 666 | $2.47 | 0.199 |
-| ccb_pytorch | SG_full | 2,716 | $2.58 | 0.169 |
-| ccb_repoqa | baseline | 165 | $0.17 | 0.000 |
-| ccb_repoqa | SG_base | 125 | $0.31 | 0.262 |
-| ccb_repoqa | SG_full | 307 | $0.24 | 0.680 |
-| ccb_swebenchpro | baseline | 575 | $1.52 | 0.000 |
-| ccb_swebenchpro | SG_base | 663 | $2.37 | 0.115 |
-| ccb_swebenchpro | SG_full | 2,457 | $2.06 | 0.135 |
-| ccb_sweperf | baseline | 796 | $3.82 | 0.000 |
-| ccb_sweperf | SG_base | 839 | $5.85 | 0.130 |
-| ccb_sweperf | SG_full | 1,388 | $8.57 | 0.058 |
-| ccb_tac | baseline | 1,483 | $2.55 | 0.000 |
-| ccb_tac | SG_base | 1,123 | $3.00 | 0.295 |
-| ccb_tac | SG_full | 1,087 | $2.48 | 0.172 |
-| linuxflbench | baseline | 568 | $1.04 | 0.000 |
-| linuxflbench | SG_base | 1,437 | $1.10 | 0.497 |
-| linuxflbench | SG_full | 414 | $1.37 | 0.434 |
+Task Time = agent execution (coding + tool use), excluding Docker build and verifier. Wall Clock = total end-to-end time.
+
+| Benchmark | Config | Mean Task Time (s) | Mean Wall Clock (s) | Mean Cost (USD) | Mean MCP Ratio |
+|---|---|---|---|---|---|
+| ccb_codereview | baseline | 90 | 186 | $0.56 | 0.000 |
+| ccb_codereview | SG_base | 132 | 286 | $0.96 | 0.048 |
+| ccb_codereview | SG_full | 116 | 209 | $0.83 | 0.287 |
+| ccb_crossrepo | baseline | 502 | 585 | $2.69 | 0.000 |
+| ccb_crossrepo | SG_base | 343 | 604 | $2.64 | 0.042 |
+| ccb_crossrepo | SG_full | 489 | 620 | $3.90 | 0.018 |
+| ccb_dependeval | baseline | 77 | 99 | $0.28 | 0.000 |
+| ccb_dependeval | SG_base | 100 | 123 | $0.40 | 0.268 |
+| ccb_dependeval | SG_full | 76 | 98 | $0.40 | 0.281 |
+| ccb_dibench | baseline | 168 | 275 | $0.72 | 0.000 |
+| ccb_dibench | SG_base | 163 | 222 | $1.12 | 0.413 |
+| ccb_dibench | SG_full | 135 | 171 | $0.93 | 0.415 |
+| ccb_k8sdocs | baseline | 331 | 535 | $0.69 | 0.000 |
+| ccb_k8sdocs | SG_base | 188 | 345 | $0.85 | 0.628 |
+| ccb_k8sdocs | SG_full | 233 | 383 | $0.86 | 0.479 |
+| ccb_largerepo | baseline | 997 | 2,903 | $5.42 | 0.000 |
+| ccb_largerepo | SG_base | 631 | 1,187 | $4.74 | 0.232 |
+| ccb_largerepo | SG_full | 2,247 | 3,932 | $5.78 | 0.077 |
+| ccb_locobench | baseline | 407 | 449 | $3.84 | 0.000 |
+| ccb_locobench | SG_base | 314 | 300 | $1.97 | 0.292 |
+| ccb_locobench | SG_full | 805 | 1,144 | $7.98 | 0.272 |
+| ccb_pytorch | baseline | 269 | 978 | $1.87 | 0.000 |
+| ccb_pytorch | SG_base | 252 | 591 | $2.17 | 0.199 |
+| ccb_pytorch | SG_full | 685 | 2,954 | $2.58 | 0.169 |
+| ccb_repoqa | baseline | 44 | 165 | $0.17 | 0.000 |
+| ccb_repoqa | SG_base | 47 | 125 | $0.31 | 0.262 |
+| ccb_repoqa | SG_full | 33 | 307 | $0.24 | 0.680 |
+| ccb_swebenchpro | baseline | 279 | 575 | $1.52 | 0.000 |
+| ccb_swebenchpro | SG_base | 368 | 663 | $2.37 | 0.115 |
+| ccb_swebenchpro | SG_full | 383 | 2,457 | $2.06 | 0.135 |
+| ccb_sweperf | baseline | 453 | 796 | $3.82 | 0.000 |
+| ccb_sweperf | SG_base | 750 | 839 | $5.85 | 0.130 |
+| ccb_sweperf | SG_full | 1,280 | 1,388 | $8.57 | 0.058 |
+| ccb_tac | baseline | 620 | 1,483 | $2.55 | 0.000 |
+| ccb_tac | SG_base | 639 | 1,123 | $3.00 | 0.295 |
+| ccb_tac | SG_full | 614 | 1,087 | $2.48 | 0.172 |
+| linuxflbench | baseline | 233 | 568 | $1.04 | 0.000 |
+| linuxflbench | SG_base | 333 | 1,437 | $1.10 | 0.497 |
+| linuxflbench | SG_full | 229 | 414 | $1.37 | 0.434 |
 
 ## Appendix B: Code Changes by Config
 

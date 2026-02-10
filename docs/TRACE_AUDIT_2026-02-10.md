@@ -398,7 +398,34 @@ Tasks where SG_base was neutral/negative but SG_full improved — indicating the
 - SG_full is **95% slower** on wall clock and **47% more expensive** per task
 - Total benchmark cost across all configs: ~$977
 
-### 9.2 Wall Clock by Suite (seconds, mean)
+### 9.2 Agent Task Time by Suite (seconds, mean)
+
+Primary efficiency metric: time the agent spends solving the task (coding + tool use), excluding Docker build and verifier execution.
+
+| Suite | BL | SG_b | SG_f | Δ SG_b | Δ SG_f |
+|-------|---:|-----:|-----:|-------:|-------:|
+| ccb_codereview | 90 | 132 | 116 | +47% | +29% |
+| ccb_crossrepo | 502 | 343 | 489 | **-32%** | -3% |
+| ccb_dependeval | 77 | 100 | 76 | +30% | -1% |
+| ccb_dibench | 168 | 163 | 135 | -3% | **-19%** |
+| ccb_k8sdocs | 331 | 188 | 233 | **-43%** | **-30%** |
+| ccb_largerepo | 997 | 631 | 2,247 | **-37%** | +125% |
+| ccb_linuxflbench | 233 | 333 | 229 | +43% | -2% |
+| ccb_locobench | 407 | 314 | 805 | **-23%** | +98% |
+| ccb_pytorch | 269 | 252 | 685 | -6% | +155% |
+| ccb_repoqa | 44 | 47 | 33 | +7% | **-25%** |
+| ccb_swebenchpro | 279 | 368 | 383 | +32% | +37% |
+| ccb_sweperf | 453 | 750 | 1,280 | +66% | +183% |
+| ccb_tac | 620 | 639 | 614 | +3% | -1% |
+
+**MCP Task Time Wins (SG_base)**: K8s Docs (-43%), LargeRepo (-37%), CrossRepo (-32%), LoCoBench (-23%)
+**MCP Task Time Wins (SG_full)**: K8s Docs (-30%), RepoQA (-25%), DIBench (-19%)
+**MCP Task Time Losses**: SWE-Perf (+66-183%), SWE-Pro (+32-37%), PyTorch SG_full (+155%), LargeRepo SG_full (+125%)
+
+Note: Wall clock time (previously used) overstated MCP gains because it includes Docker build and verifier execution time. For example, K8s Docs showed -84% on wall clock but only -43% on task time.
+
+<details>
+<summary>Wall Clock by Suite (for reference)</summary>
 
 | Suite | BL | SG_b | SG_f | Δ SG_b | Δ SG_f |
 |-------|---:|-----:|-----:|-------:|-------:|
@@ -406,7 +433,7 @@ Tasks where SG_base was neutral/negative but SG_full improved — indicating the
 | ccb_crossrepo | 533 | 528 | 610 | -1% | +14% |
 | ccb_dependeval | 341 | 374 | 380 | +10% | +11% |
 | ccb_dibench | 434 | 365 | 268 | -16% | -38% |
-| ccb_k8sdocs | 447 | 168 | 72 | -62% | **-84%** |
+| ccb_k8sdocs | 447 | 168 | 72 | -62% | -84% |
 | ccb_largerepo | 1,280 | 1,036 | 1,247 | -19% | -3% |
 | ccb_linuxflbench | 348 | 880 | 411 | +153% | +18% |
 | ccb_locobench | 599 | 641 | 1,528 | +7% | +155% |
@@ -414,10 +441,9 @@ Tasks where SG_base was neutral/negative but SG_full improved — indicating the
 | ccb_repoqa | 164 | 133 | 163 | -19% | -1% |
 | ccb_swebenchpro | 1,094 | 712 | 1,613 | -35% | +47% |
 | ccb_sweperf | 950 | 1,198 | 1,198 | +26% | +26% |
-| ccb_tac | 990 | 932 | 724 | -6% | **-27%** |
+| ccb_tac | 990 | 932 | 724 | -6% | -27% |
 
-**MCP Speed Wins**: K8s Docs (-84% SG_full), DIBench (-38%), TAC (-27%), RepoQA (-19%), LargeRepo (-19%)
-**MCP Speed Losses**: LoCoBench (+155% SG_full), LinuxFLBench (+153% SG_base), SWE-Pro (+47% SG_full)
+</details>
 
 ### 9.3 Cost-Effectiveness (Cost per Reward Point)
 
