@@ -214,6 +214,13 @@ def extract_result_info(result_path: Path) -> Optional[dict]:
     if wc is None:
         wc = wall_clock_seconds(started_at, finished_at)
 
+    # Agent execution time (task solving only, excludes build + verification)
+    agent_exec = data.get("agent_execution") or {}
+    agent_exec_secs = wall_clock_seconds(
+        agent_exec.get("started_at", ""),
+        agent_exec.get("finished_at", ""),
+    )
+
     task_name = data.get("task_name", "")
     # Fallback: derive from directory name
     if not task_name:
@@ -231,6 +238,7 @@ def extract_result_info(result_path: Path) -> Optional[dict]:
         "n_output_tokens": n_output_tokens,
         "n_cache_tokens": n_cache_tokens,
         "wall_clock_seconds": round(wc, 1) if wc is not None else None,
+        "agent_execution_seconds": round(agent_exec_secs, 1) if agent_exec_secs is not None else None,
         "started_at": started_at,
         "finished_at": finished_at,
     }
@@ -755,6 +763,7 @@ def generate_report(tasks: list[dict]) -> dict:
         buckets = defaultdict(lambda: {
             "count": 0, "total_input": 0, "total_output": 0, "total_cache": 0,
             "total_wall_seconds": 0.0, "wall_count": 0,
+            "total_task_seconds": 0.0, "task_count_timed": 0,
         })
         for t in tasks:
             gv = t[group_field]
@@ -769,6 +778,9 @@ def generate_report(tasks: list[dict]) -> dict:
             if t["wall_clock_seconds"] is not None:
                 b["total_wall_seconds"] += t["wall_clock_seconds"]
                 b["wall_count"] += 1
+            if t.get("agent_execution_seconds") is not None:
+                b["total_task_seconds"] += t["agent_execution_seconds"]
+                b["task_count_timed"] += 1
 
         for gv, b in buckets.items():
             token_stats[group_key][gv] = {
@@ -778,6 +790,7 @@ def generate_report(tasks: list[dict]) -> dict:
                 "total_cache_tokens": b["total_cache"],
                 "avg_input_tokens": round(b["total_input"] / b["count"]) if b["count"] else 0,
                 "avg_output_tokens": round(b["total_output"] / b["count"]) if b["count"] else 0,
+                "avg_task_seconds": round(b["total_task_seconds"] / b["task_count_timed"], 1) if b["task_count_timed"] else 0.0,
                 "avg_wall_seconds": round(b["total_wall_seconds"] / b["wall_count"], 1) if b["wall_count"] else 0.0,
             }
 
@@ -1012,17 +1025,18 @@ def format_summary(report: dict, verbose: bool = False) -> str:
     if verbose:
         lines.append("=" * 120)
         lines.append("PER-TASK DETAILS:")
-        lines.append(f"{'Suite':20s}  {'Config':18s}  {'Task':40s}  {'Status':8s}  {'Reward':>7s}  {'MCP':>5s}  {'DS':>3s}  {'Wall(s)':>8s}")
-        lines.append("-" * 120)
+        lines.append(f"{'Suite':20s}  {'Config':18s}  {'Task':40s}  {'Status':8s}  {'Reward':>7s}  {'MCP':>5s}  {'DS':>3s}  {'Task(s)':>8s}  {'Wall(s)':>8s}")
+        lines.append("-" * 130)
         for t in report["tasks"]:
             reward_str = f"{t['reward']:.3f}" if t["reward"] is not None else "  N/A"
             mcp_str = str(t["mcp_total_calls"])
             ds_str = "Y" if t["has_deepsearch"] else "N"
+            task_str = f"{t['agent_execution_seconds']:.0f}" if t.get("agent_execution_seconds") is not None else "N/A"
             wall_str = f"{t['wall_clock_seconds']:.0f}" if t["wall_clock_seconds"] is not None else "N/A"
             lines.append(
                 f"{t['suite']:20s}  {t['config']:18s}  "
                 f"{t['task_name'][:40]:40s}  {t['status']:8s}  "
-                f"{reward_str:>7s}  {mcp_str:>5s}  {ds_str:>3s}  {wall_str:>8s}"
+                f"{reward_str:>7s}  {mcp_str:>5s}  {ds_str:>3s}  {task_str:>8s}  {wall_str:>8s}"
             )
             # Show errors if any
             if verbose and t["has_exception"]:
