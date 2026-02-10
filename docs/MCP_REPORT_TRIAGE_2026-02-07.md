@@ -38,7 +38,7 @@ Post-archival MANIFEST: **215 tasks across 26 runs** (12 suites).
 
 ### Key Report Findings (for reference)
 - **MCP never flips outcomes**: 0 cases where failing baseline passes with MCP
-- **MCP value is efficiency**: K8s Docs (-54% wall), LargeRepo (-59% wall), PyTorch (-41% wall)
+- **MCP value is efficiency**: K8s Docs (-43% task time), LargeRepo SG_base (-37% task time), CrossRepo SG_base (-32% task time)
 - **MCP hurts when**: agent is distracted (TAC SG_base), wrong tools used (PyTorch), or infra broken
 - **Attribution**: 22 wins from MCP tool value, 10 losses from infrastructure, 24 losses from agent behavior
 - **Cleanest benchmarks**: RepoQA (no issues), K8s Docs (no issues)
