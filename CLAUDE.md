@@ -104,7 +104,7 @@ python3 scripts/generate_report.py
 python3 scripts/select_benchmark_tasks.py
 ```
 
-## Operational Skills (13)
+## Operational Skills (14)
 
 Slash commands for the full benchmark lifecycle. Use these in Claude Code sessions.
 
@@ -116,7 +116,7 @@ PRE-RUN                DURING RUN           POST-RUN              ANALYSIS      
 /check-infra      -->  /run-status     -->  /watch-benchmarks --> /compare-configs  --> /benchmark-audit
 /validate-tasks        (lightweight)        (full scan)           /cost-report          /score-tasks
                                             /whats-next           /generate-report
-                                            /triage-failure
+                                            /triage-failure        /evaluate-traces
                                             /quick-rerun
 
 MAINTENANCE
@@ -154,6 +154,7 @@ MAINTENANCE
 | `/compare-configs` | `scripts/compare_configs.py` | Show divergent tasks across baseline/SG_base/SG_full, "MCP helps" vs "MCP hurts" |
 | `/cost-report` | `scripts/cost_report.py` | Token usage and estimated cost by suite/config, most expensive tasks |
 | `/generate-report` | `scripts/generate_report.py` | Aggregate CCB evaluation report from completed runs |
+| `/evaluate-traces` | `scripts/audit_traces.py` | Comprehensive trace evaluation: data integrity, output quality, efficiency analysis |
 
 ### QA
 
