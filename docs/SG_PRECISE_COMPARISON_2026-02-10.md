@@ -14,16 +14,16 @@ We compared two Sourcegraph mirror indexing strategies on the same large-codebas
 - **kubernetes--latest**: Standard search-based indexing (trigram + zoekt)
 - **kubernetes--latest--precise**: scip-go precise code intelligence (compiler-level symbol resolution)
 
-**Result: Same score (0.700) across all 4 runs. Efficiency advantage inconclusive at n=2.**
+**Result: Same score (0.700) across all 4 runs. Agent coding time advantage inconclusive at n=2.**
+
+Primary metric is **agent coding time** — the time the agent spends reading, searching, and writing code. Verification time (Go compilation + test suite) is excluded since it reflects implementation scope, not agent efficiency. Docker build time is negligible (<11s in all runs).
 
 ### Run 1 (first comparison)
 
 | Metric | Standard (--latest) | Precise (--latest--precise) | Delta |
 |--------|--------------------|-----------------------------|-------|
 | **Reward** | 0.700 | 0.700 | 0 |
-| **Total wall time** | 70.2 min | 37.6 min | **-46%** |
 | **Agent coding time** | 16.8 min | 12.3 min | **-27%** |
-| **Verification time** | 44.1 min | 27.7 min | -37% |
 | **MCP tool calls** | 12 | 5 | **-58%** |
 | **Transcript lines** | 179 | 202 | +13% |
 
@@ -32,9 +32,7 @@ We compared two Sourcegraph mirror indexing strategies on the same large-codebas
 | Metric | Standard (--latest) | Precise (--latest--precise) | Delta |
 |--------|--------------------|-----------------------------|-------|
 | **Reward** | 0.700 | 0.700 | 0 |
-| **Total wall time** | 23.1 min | 35.8 min | **+55%** |
 | **Agent coding time** | 9.8 min | 24.9 min | **+154%** |
-| **Verification time** | 10.7 min | 8.1 min | -24% |
 | **Input tokens** | 5.8M | 9.8M | +69% |
 | **Transcript lines** | ~180 | 257 | +43% |
 
@@ -43,11 +41,9 @@ We compared two Sourcegraph mirror indexing strategies on the same large-codebas
 | Metric | Standard avg | Precise avg | Delta |
 |--------|-------------|-------------|-------|
 | **Reward** | 0.700 | 0.700 | 0 |
-| **Total wall time** | 46.7 min | 36.7 min | -21% |
-| **Agent coding** | 13.3 min | 18.6 min | +40% |
-| **Verification** | 27.4 min | 17.9 min | -35% |
+| **Agent coding time** | 13.3 min | 18.6 min | +40% |
 
-**Note:** The standard-indexed run showed enormous variance (70m vs 23m), likely due to Docker layer caching from the first run's container build. Precise was more consistent (38m vs 36m). The Run 1 efficiency advantage does not replicate in Run 2 — see Conclusions for updated interpretation.
+Run 1 shows precise 27% faster; Run 2 shows precise 154% slower. Agent non-determinism dominates — see Conclusions.
 
 ## Task Description
 
@@ -98,18 +94,29 @@ The precise-indexed agent exhibited a fundamentally different navigation strateg
 
 ## Timing Breakdown
 
+### Run 1
+
 ```
                 Standard (--latest)          Precise (--latest--precise)
                 =====================        ============================
 Env Setup       10.7s                        1.2s
 Agent Setup     159.1s (2.7m)                146.0s (2.4m)
 Agent Coding    1005s  (16.8m)               735s   (12.3m)    -27%
-Verification    2644s  (44.1m)               1661s  (27.7m)    -37%
-                -----------                  -----------
-TOTAL           4213s  (70.2m)               2256s  (37.6m)    -46%
+Verification*   2644s  (44.1m)               1661s  (27.7m)
 ```
 
-The verification time difference (44m vs 28m) reflects what the agent implemented: different code paths led to different Go compilation/test scopes. Run 2's more targeted implementation compiled faster.
+### Run 2 (account3)
+
+```
+                Standard (--latest)          Precise (--latest--precise)
+                =====================        ============================
+Env Setup       3s                           1s
+Agent Setup     160s   (2.7m)                168s   (2.8m)
+Agent Coding    587s   (9.8m)                1495s  (24.9m)    +154%
+Verification*   639s   (10.7m)               487s   (8.1m)
+```
+
+*Verification time excluded from efficiency comparison — it reflects Go compilation/test scope determined by the agent's implementation choices, not MCP indexing quality.
 
 ## Verifier Output Comparison
 
@@ -144,12 +151,9 @@ All 4 runs (2 per mirror) produced identical reward scores (0.700). The agent so
 
 ### 2. Efficiency advantage is inconclusive at n=2
 
-Run 1 showed precise indexing was 46% faster, but Run 2 showed the opposite — precise was 55% *slower*. The contradictory results demonstrate that **run-to-run variance dominates any indexing-quality signal** at this sample size.
+Using agent coding time (excluding verification and Docker build), Run 1 showed precise 27% faster (12.3m vs 16.8m), but Run 2 showed precise 154% *slower* (24.9m vs 9.8m). The contradictory results demonstrate that **agent non-determinism dominates any indexing-quality signal** at this sample size.
 
-Key confounds:
-- **Docker layer caching**: Run 2's standard-indexed run (23m) benefited from cached Docker layers from Run 1 (70m). This compressed the baseline, making precise look slower by comparison.
-- **Agent non-determinism**: The agent took fundamentally different coding paths (9.8m vs 24.9m coding time), independent of indexing strategy.
-- **Verification variance**: Go compilation/test scope varied by implementation (11m vs 8m in Run 2).
+The agent took fundamentally different problem-solving paths across runs — coding time ranged from 9.8m to 24.9m — independent of which index was available.
 
 ### 3. Agent strategy adapts to index quality (Run 1 only)
 
@@ -167,7 +171,7 @@ The most robust finding is that **precise indexing neither helps nor hurts task 
 
 1. **Precise indexing is not a priority** for the CCB evaluation. While it may provide efficiency gains in some runs, the effect is too noisy to measure reliably at n=2 and does not affect scores.
 
-2. **If pursuing further**: A sample of 5+ runs per mirror with cold Docker state would be needed to isolate the indexing effect from caching and agent non-determinism.
+2. **If pursuing further**: A sample of 5+ runs per mirror would be needed to isolate the indexing effect from agent non-determinism. Use agent coding time as the primary metric.
 
 3. **Consider expanding to other languages**: scip-java, scip-typescript, and scip-python could be tested on benchmarks with more tasks (e.g., SWE-bench Pro Go tasks) for better statistical power.
 
@@ -184,13 +188,13 @@ runs/official/bigcode_sgcompare_opus_20260210_110446/
       big-code-k8s-001__uvTGqib/
         agent/claude-code.txt    (179 lines, 1.7MB)
         verifier/test-stdout.txt
-        result.json              (reward: 0.700, total: 70.2m)
+        result.json              (reward: 0.700, coding: 16.8m)
   sourcegraph_base_precise/
     2026-02-10__12-15-17/
       big-code-k8s-001__cyFsCsg/
         agent/claude-code.txt    (202 lines, 1.7MB)
         verifier/test-stdout.txt
-        result.json              (reward: 0.700, total: 37.6m)
+        result.json              (reward: 0.700, coding: 12.3m)
 ```
 
 ### Run 2 (account3 rerun)
@@ -202,13 +206,13 @@ runs/official/bigcode_sgcompare_opus_20260210_164402/
       big-code-k8s-001__zUCNFrM/
         agent/claude-code.txt    (~180 lines)
         verifier/test-stdout.txt
-        result.json              (reward: 0.700, total: 23.1m)
+        result.json              (reward: 0.700, coding: 9.8m)
   sourcegraph_base_precise/
     2026-02-10__17-07-44/
       big-code-k8s-001__893V8bL/
         agent/claude-code.txt    (257 lines, 1.6MB)
         verifier/test-stdout.txt
-        result.json              (reward: 0.700, total: 35.8m)
+        result.json              (reward: 0.700, coding: 24.9m)
 ```
 
 Script: `configs/largerepo_sg_compare.sh`
