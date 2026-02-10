@@ -177,11 +177,17 @@ def _build_per_benchmark_breakdown(runs: list[RunMetrics]) -> tuple[list[str], l
 
 
 def _build_efficiency(runs: list[RunMetrics]) -> tuple[list[str], list[list[str]]]:
-    """Table 4: Efficiency metrics per config x benchmark."""
+    """Table 4: Efficiency metrics per config x benchmark.
+
+    Primary timing metric is Mean Task Time (agent execution seconds) —
+    the time the agent spends solving the task including tool use,
+    searching, and coding.  Excludes Docker build and verifier time.
+    Wall clock is retained for reference.
+    """
     headers = [
         "Benchmark", "Config",
         "Mean Input Tokens", "Mean Output Tokens", "Mean Cache Tokens",
-        "Mean Wall Clock (s)", "Mean Cost (USD)",
+        "Mean Task Time (s)", "Mean Wall Clock (s)", "Mean Cost (USD)",
     ]
     rows = []
     for r in sorted(runs, key=lambda x: (x.benchmark, x.config_name)):
@@ -198,6 +204,7 @@ def _build_efficiency(runs: list[RunMetrics]) -> tuple[list[str], list[list[str]
             _fmt_int(input_tok),
             _fmt_int(output_tok),
             _fmt_int(cache_tok),
+            _fmt(r.mean_agent_execution, 1),
             _fmt(r.mean_wall_clock, 1),
             _fmt_usd(_safe_mean([t.cost_usd for t in r.tasks])),
         ])

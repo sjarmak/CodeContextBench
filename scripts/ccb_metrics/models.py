@@ -171,6 +171,14 @@ class RunMetrics:
         return _safe_mean([t.wall_clock_seconds for t in self.tasks])
 
     @property
+    def mean_agent_execution(self) -> Optional[float]:
+        return _safe_mean([t.agent_execution_seconds for t in self.tasks])
+
+    @property
+    def mean_verifier(self) -> Optional[float]:
+        return _safe_mean([t.verifier_seconds for t in self.tasks])
+
+    @property
     def mean_mcp_ratio(self) -> Optional[float]:
         return _safe_mean([t.mcp_ratio for t in self.tasks])
 
@@ -245,6 +253,8 @@ class RunMetrics:
             "pass_rate": self.pass_rate,
             "mean_tokens": self.mean_tokens,
             "mean_wall_clock": self.mean_wall_clock,
+            "mean_agent_execution": self.mean_agent_execution,
+            "mean_verifier": self.mean_verifier,
             "mean_mcp_ratio": self.mean_mcp_ratio,
             "mean_deepsearch_keyword_ratio": self.mean_deepsearch_keyword_ratio,
             "mean_input_output_ratio": self.mean_input_output_ratio,
@@ -265,7 +275,9 @@ class RunMetrics:
         # Remove computed properties that may be in serialized form
         for key in ("mean_reward", "mean_partial_score", "mean_judge_score",
                      "judge_coverage", "pass_rate",
-                     "mean_tokens", "mean_wall_clock", "mean_mcp_ratio",
+                     "mean_tokens", "mean_wall_clock",
+                     "mean_agent_execution", "mean_verifier",
+                     "mean_mcp_ratio",
                      "mean_deepsearch_keyword_ratio", "mean_input_output_ratio",
                      "mean_cache_hit_rate", "mean_files_modified",
                      "error_rate", "mean_conversation_turns", "mean_tool_errors",
