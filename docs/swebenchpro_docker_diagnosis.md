@@ -1,0 +1,131 @@
+# SWE-bench Pro Docker Failure Diagnosis
+
+**Date**: 2026-02-11
+**Scope**: All SWE-bench Pro task runs across baseline, sourcegraph_base, sourcegraph_full configs
+
+## Executive Summary
+
+**42 infra failures** found across 21 unique tasks in 8 repos, in active (non-archived) runs.
+Root causes are primarily **rate limiting** and **Node.js version conflicts**, NOT Docker build failures.
+
+| Root Cause | Runs | Repos | Configs Affected |
+|---|---|---|---|
+| Rate limit ("hit your limit") | ~25 | qutebrowser, teleport, internetarchive, vuls, tutanota, element-hq, nodebb | BL, SG_base (Feb 8-9 runs) |
+| Node.js version conflict (Alpine Node 16 vs required 18+) | ~10 | protonmail | BL, SG_base, SG_full |
+| Agent setup timeout (chown on large workspace) | ~4 | protonmail (archive) | All configs |
+| Empty transcript (JS bundle corruption) | ~3 | internetarchive | SG_full |
+
+## Key Finding: NOT Docker Build Failures
+
+The PRD assumed these were Docker environment issues. In reality:
+- **Docker environments build and start successfully** in most cases (env_setup completes in 1-120s)
+- **Agent setup completes** (Claude Code installs, instruction is loaded)
+- The failures happen at **agent execution time** — either:
+  1. Claude Code gets rate limited on first API call (subscription limit hit)
+  2. Claude Code crashes on startup due to Node.js version mismatch (protonmail only)
+
+## Detailed Diagnosis by Repo Group
+
+### 1. protonmail/webclients (4 tasks × 3 configs = 10 active infra fails + 4 archived)
+
+**Root Cause**: Node.js version conflict on Alpine Linux
+
+The Docker image uses Alpine 3.18 which has Node.js 18.20.1 available via `apk add nodejs`, BUT the protonmail/webclients base image pre-installs Node 16.20.2. The install script's `apk add nodejs` doesn't upgrade the existing Node 16 installation, so Claude Code 2.1.38 (requires Node >= 18) crashes on startup with a minified JS dump.
+
+**Evidence** (from `agent/setup/stdout.txt`):
+```
+(3/4) Installing nodejs (18.20.1-r0)
+...
+npm WARN EBADENGINE   package: '@anthropic-ai/claude-code@2.1.38',
+npm WARN EBADENGINE   required: { node: '>=18.0.0' },
+npm WARN EBADENGINE   current: { node: 'v16.20.2', npm: '8.19.4' }
+```
+
+**Classification**: (a) Node.js version incompatibility
+**Shared across configs**: Yes — same Docker issue for all configs
+**Proposed fix**: Update install.sh to force Node 18+ on Alpine:
+```bash
+# Remove old Node first, then install Node 18
+apk del nodejs npm 2>/dev/null || true
+apk add --no-cache curl bash nodejs npm
+```
+Or use nvm/volta to install a specific Node version.
+
+### 2. qutebrowser (4 tasks × BL+SG_base = 6 infra fails; SG_full passes)
+
+**Root Cause**: Rate limit on Max subscription ("You've hit your limit · resets 4am (UTC)")
+
+**Evidence** (from `agent/claude-code.txt` JSONL):
+```json
+{"type":"assistant","message":{"content":[{"type":"text","text":"You've hit your limit · resets 4am (UTC)"}]}}
+{"type":"result","is_error":true,"result":"You've hit your limit · resets 4am (UTC)"}
+```
+
+**Classification**: (c) Rate limiting
+**Shared across configs**: BL and SG_base affected (ran during Feb 8-9 batch); SG_full ran later (Feb 10) and passed
+**Proposed fix**: Re-run during off-peak hours or with fresh subscription accounts. NOT a Docker issue.
+
+### 3. teleport/gravitational (4 tasks × BL+SG_base = 6 infra fails)
+
+**Root Cause**: Rate limit (same as qutebrowser)
+**Classification**: (c) Rate limiting
+**Shared across configs**: BL + SG_base from same batch
+**Note**: Also has 3 genuine failures (agent ran but didn't solve task) — those are real task difficulty, not infra.
+
+### 4. internetarchive/openlibrary (4 tasks × 3 configs = 13 infra fails)
+
+**Root Cause**: Mixed — rate limit (6), empty transcript/JS bundle corruption (6), agent setup timeout (1)
+**Classification**: Primarily (c) rate limiting + (e) transcript corruption
+**Note**: The 4 tasks have 12 passing runs in other batches, confirming Docker works fine.
+
+### 5. vuls/future-architect (2 tasks × BL+SG_base = 3 infra fails)
+
+**Root Cause**: Rate limit
+**Classification**: (c) Rate limiting
+**Note**: 5 passing runs exist, Docker works.
+
+### 6. tutanota/tutao (1 task × BL+SG_base = 2 infra fails)
+
+**Root Cause**: Rate limit
+**Classification**: (c) Rate limiting
+**Note**: SG_full passes. Docker works.
+
+### 7. element-hq (1 task × SG_base = 1 infra fail)
+
+**Root Cause**: Rate limit
+**Classification**: (c) Rate limiting
+**Note**: BL and SG_full pass. Docker works.
+
+### 8. nodebb (1 task × SG_base = 1 infra fail)
+
+**Root Cause**: Rate limit
+**Classification**: (c) Rate limiting
+**Note**: Other tasks pass, Docker works.
+
+## MANIFEST Impact
+
+Current MANIFEST (463 tasks, 39 runs) includes these infra-fail results as `reward=0.0`:
+
+| Config | Infra-Fail Tasks (0 reward, 0 tokens) | Real Missing |
+|---|---|---|
+| baseline | ~17 across multiple repos | 0 (all 36 tasks present) |
+| sourcegraph_base | ~20 across multiple repos | 0 (all 36 tasks present) |
+| sourcegraph_full | ~5 (protonmail + internetarchive) | 2 protonmail tasks missing |
+
+**The 42 infra failures inflate the failure rate**: tasks that never ran are scored as 0, bringing down config averages.
+
+## Recommended Actions
+
+1. **protonmail (Priority 1)**: Fix install.sh Node.js version handling for Alpine images. Then re-run all 4 tasks × 3 configs = 12 runs.
+
+2. **Rate-limited tasks (Priority 2)**: Simply re-run with fresh subscription sessions. No Docker fixes needed. Affects: qutebrowser (6), teleport (6), internetarchive (6), vuls (3), tutanota (2), element-hq (1), nodebb (1) = **25 re-runs**.
+
+3. **Transcript corruption (Priority 3)**: Re-run 3 internetarchive SG_full tasks. May be Harbor bug related to large workspaces.
+
+4. **Total re-runs needed**: 12 (protonmail fix) + 25 (rate-limit retry) + 3 (corruption) = **~40 task runs**.
+
+## Cross-Config Pattern
+
+The rate-limit failures cluster in **BL and SG_base configs from the Feb 8-9 batch** (`swebenchpro_gapfill_opus_20260208_235352` and `swebenchpro_gapfill_opus_20260209_023525`). These ran when the subscription was likely exhausted. SG_full runs from the Feb 10 batch (`swebenchpro_rerun_opus_20260210_163436`) generally succeeded, confirming these aren't Docker issues.
+
+The protonmail failure is Docker-related and affects ALL configs equally.
