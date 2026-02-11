@@ -21,7 +21,8 @@ fi
 enforce_subscription_mode
 ensure_fresh_token
 
-# Set up dual-account support
+# Use account1 only
+SKIP_ACCOUNTS="account2 account3"
 setup_dual_accounts
 
 TASKS_DIR="/home/stephanie_jarmak/CodeContextBench/benchmarks/ccb_locobench/tasks"
