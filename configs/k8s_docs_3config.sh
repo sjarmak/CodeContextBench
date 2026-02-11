@@ -220,7 +220,7 @@ if [ "$RUN_BASE" = true ]; then
     echo "[MCP-Base] Starting 5-task MCP-Base run..."
     echo ""
 
-    SOURCEGRAPH_REPO_NAME="sg-benchmarks/kubernetes--8c9c67c0" \
+    SOURCEGRAPH_REPO_NAME="sg-benchmarks/kubernetes--stripped" \
     BASELINE_MCP_TYPE=sourcegraph_base harbor run \
         --path "${TASKS_DIR}" \
         --task-name "*" \
@@ -244,7 +244,7 @@ if [ "$RUN_FULL" = true ]; then
     echo "[MCP-Full] Starting 5-task MCP-Full run..."
     echo ""
 
-    SOURCEGRAPH_REPO_NAME="sg-benchmarks/kubernetes--8c9c67c0" \
+    SOURCEGRAPH_REPO_NAME="sg-benchmarks/kubernetes--stripped" \
     BASELINE_MCP_TYPE=sourcegraph_full harbor run \
         --path "${TASKS_DIR}" \
         --task-name "*" \
