@@ -32,6 +32,12 @@ The GitHub-Mined benchmark contains 25 real-world pull request tasks mined from 
 - Agent performance on diverse task types (features, refactoring, perf optimization)
 - Whether baseline vs MCP comparison is fair (both agents have repo access, but different search strategies)
 
+## Excluded Tasks
+
+| Task | Reason | Status |
+|------|--------|--------|
+| sgt-025 | Docker build fails — `pre_fix_rev` commit `e8ca8cc3` is unreachable in the PyTorch repo. Two separate attempts both failed with `RuntimeError: Docker compose command failed`. This is an unresolvable infrastructure issue (commit was likely force-pushed away). | Permanently excluded from SG_full runs. Baseline and SG_base results exist but SG_full comparison is not possible. |
+
 ## Known Limitations
 
 1. **Single Repository Scope**
