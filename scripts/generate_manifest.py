@@ -38,7 +38,7 @@ DIR_PREFIX_TO_SUITE = {
     "tac_": "ccb_tac",
 }
 
-CONFIGS = ["baseline", "sourcegraph_base", "sourcegraph_full"]
+CONFIGS = ["baseline", "sourcegraph_base", "sourcegraph_full", "sourcegraph_isolated"]
 
 
 def load_judge_scores(path: Path) -> dict[str, dict]:
