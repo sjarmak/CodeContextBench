@@ -237,8 +237,9 @@ for task in selection["tasks"]:
 
     task_dir = task.get("task_dir", "")
     sg_repo = get_sg_repo(task)
+    sdlc_phase = task.get("sdlc_phase", "")
 
-    print(f"{tid}|{bench}|{task_dir}|{sg_repo}")
+    print(f"{tid}|{bench}|{task_dir}|{sg_repo}|{sdlc_phase}")
 PYEOF
 )
 
@@ -252,13 +253,15 @@ readarray -t ALL_TASK_IDS < <(echo "$TASK_LIST" | cut -d'|' -f1)
 readarray -t ALL_BENCHMARKS < <(echo "$TASK_LIST" | cut -d'|' -f2)
 readarray -t ALL_TASK_DIRS < <(echo "$TASK_LIST" | cut -d'|' -f3)
 readarray -t ALL_SG_REPOS < <(echo "$TASK_LIST" | cut -d'|' -f4)
+readarray -t ALL_SDLC_PHASES < <(echo "$TASK_LIST" | cut -d'|' -f5)
 
 # Build associative arrays for lookup
-declare -A TASK_BENCHMARK TASK_DIR TASK_SG_REPO
+declare -A TASK_BENCHMARK TASK_DIR TASK_SG_REPO TASK_SDLC_PHASE
 for i in "${!ALL_TASK_IDS[@]}"; do
     TASK_BENCHMARK["${ALL_TASK_IDS[$i]}"]="${ALL_BENCHMARKS[$i]}"
     TASK_DIR["${ALL_TASK_IDS[$i]}"]="${ALL_TASK_DIRS[$i]}"
     TASK_SG_REPO["${ALL_TASK_IDS[$i]}"]="${ALL_SG_REPOS[$i]}"
+    TASK_SDLC_PHASE["${ALL_TASK_IDS[$i]}"]="${ALL_SDLC_PHASES[$i]}"
 done
 
 # ============================================
@@ -305,7 +308,7 @@ echo ""
 if [ "$DRY_RUN" = true ]; then
     echo "DRY RUN — Task plan:"
     for i in "${!ALL_TASK_IDS[@]}"; do
-        echo "  ${ALL_TASK_IDS[$i]} | ${ALL_BENCHMARKS[$i]} | SG_REPO=${ALL_SG_REPOS[$i]:-none}"
+        echo "  ${ALL_TASK_IDS[$i]} | ${ALL_BENCHMARKS[$i]} | SG_REPO=${ALL_SG_REPOS[$i]:-none} | SDLC=${ALL_SDLC_PHASES[$i]:-?}"
     done
     echo ""
     echo "Would create: $JOBS_BASE/{baseline,sourcegraph_full}/"
@@ -330,6 +333,7 @@ _run_paired_task() {
     local task_dir="${TASK_DIR[$task_id]}"
     local sg_repo="${TASK_SG_REPO[$task_id]}"
     local benchmark="${TASK_BENCHMARK[$task_id]}"
+    local sdlc_phase="${TASK_SDLC_PHASE[$task_id]}"
     local task_path="benchmarks/$task_dir"
 
     if [ ! -d "$task_path" ]; then
@@ -369,7 +373,7 @@ _run_paired_task() {
     # Launch SG_full
     if [ "$RUN_FULL" = true ]; then
         (
-            BASELINE_MCP_TYPE=sourcegraph_full harbor run \
+            BASELINE_MCP_TYPE=sourcegraph_full TASK_SDLC_PHASE="$sdlc_phase" harbor run \
                 --path "$task_path" \
                 --agent-import-path "$AGENT_PATH" \
                 --model "$MODEL" \
