@@ -36,7 +36,7 @@ enforce_subscription_mode
 # Config
 MODEL="${MODEL:-anthropic/claude-opus-4-6}"
 CATEGORY="${CATEGORY:-preamble_test}"
-RUN_BASELINE=true
+RUN_BASELINE=false  # Default: only test the preamble (MCP version)
 RUN_FULL=true
 TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
 RUN_DIR="runs/official/preamble_test_v3_single_${TIMESTAMP}"
@@ -44,12 +44,8 @@ RUN_DIR="runs/official/preamble_test_v3_single_${TIMESTAMP}"
 # Parse args
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --baseline-only)
-            RUN_FULL=false
-            shift
-            ;;
-        --full-only)
-            RUN_BASELINE=false
+        --with-baseline)
+            RUN_BASELINE=true
             shift
             ;;
         --model)
@@ -58,7 +54,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: $0 [--baseline-only|--full-only] [--model MODEL]"
+            echo "Usage: $0 [--with-baseline] [--model MODEL]"
             exit 1
             ;;
     esac
@@ -82,6 +78,11 @@ echo "Benchmark: K8s Docs"
 echo "Model: $MODEL"
 echo "Preamble: V3 (balanced deepsearch guidance)"
 echo "Run directory: $RUN_DIR"
+if [ "$RUN_BASELINE" = true ]; then
+    echo "Configs: baseline + sourcegraph_full"
+else
+    echo "Configs: sourcegraph_full only (use --with-baseline to include baseline)"
+fi
 echo ""
 
 # Create run directory
@@ -135,6 +136,8 @@ echo ""
 echo "Next steps:"
 echo "1. Review MCP tool usage in: $RUN_DIR/sourcegraph_full/*/agent/trajectory.json"
 echo "2. Check deepsearch usage and polling success rate"
-echo "3. Compare task completion and efficiency vs baseline"
+echo "3. Verify agent follows preamble guidance (sync first, deepsearch when needed)"
 echo "4. If validated, expand to 5-task set, then full 14-task set"
+echo ""
+echo "To include baseline comparison next time: $0 --with-baseline"
 echo ""
