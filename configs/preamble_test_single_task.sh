@@ -98,10 +98,9 @@ if [ "$RUN_BASELINE" = true ]; then
 
     ensure_fresh_token
 
-    harbor run \
+    BASELINE_MCP_TYPE=none harbor run \
         --path "benchmarks/$TASK_DIR" \
         --agent-import-path "agents.claude_baseline_agent:BaselineClaudeCodeAgent" \
-        --agent-config-json '{"mcp_type": "none"}' \
         --model "$MODEL" \
         --category "$CATEGORY" \
         --runs-dir "$RUN_DIR/baseline" \
@@ -117,10 +116,9 @@ if [ "$RUN_FULL" = true ]; then
 
     ensure_fresh_token
 
-    harbor run \
+    BASELINE_MCP_TYPE=sourcegraph_full harbor run \
         --path "benchmarks/$TASK_DIR" \
         --agent-import-path "agents.claude_baseline_agent:BaselineClaudeCodeAgent" \
-        --agent-config-json '{"mcp_type": "sourcegraph_full"}' \
         --model "$MODEL" \
         --category "$CATEGORY" \
         --runs-dir "$RUN_DIR/sourcegraph_full" \
