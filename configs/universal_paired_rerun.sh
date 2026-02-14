@@ -134,14 +134,14 @@ fi
 
 # Build task list with metadata using Python
 # Output format: task_id|benchmark|task_dir|sg_repo_name (one per line)
-TASK_LIST=$(python3 << 'PYEOF'
-import json, sys
+TASK_LIST=$(BENCHMARK_FILTER="$BENCHMARK_FILTER" SKIP_TASKS="$SKIP_TASKS" python3 << 'PYEOF'
+import json, os
 
-selection = json.load(open(sys.argv[1] if len(sys.argv) > 1 else "configs/selected_benchmark_tasks.json"))
+selection = json.load(open("configs/selected_benchmark_tasks.json"))
 mirror_map = json.load(open("configs/instance_to_mirror.json"))
 
-benchmark_filter = "${BENCHMARK_FILTER}"
-skip_tasks = set("${SKIP_TASKS}".split())
+benchmark_filter = os.environ.get("BENCHMARK_FILTER", "")
+skip_tasks = set(os.environ.get("SKIP_TASKS", "").split())
 
 # PyTorch SG repo name mapping (commit-specific mirrors)
 pytorch_sg_repos = {
