@@ -161,9 +161,15 @@ CHANGED_FILES="$CHANGED_FILES
 $(git diff --name-only 2>/dev/null)
 $(git diff --cached --name-only 2>/dev/null)"
 
-if echo "$CHANGED_FILES" | grep -E "(diagnostics|extension)" | head -5; then
-    echo "[x] Diagnostics-related files modified"
+RELEVANT_FILES=$(echo "$CHANGED_FILES" | grep -E "(diagnostics|extension)" | sort -u)
+RELEVANT_COUNT=$(echo "$RELEVANT_FILES" | grep -c . 2>/dev/null || echo 0)
+if [ "$RELEVANT_COUNT" -ge 2 ]; then
+    echo "[x] Diagnostics-related files modified ($RELEVANT_COUNT files)"
+    echo "$RELEVANT_FILES" | head -5
     CHANGES_MADE=1
+elif [ "$RELEVANT_COUNT" -eq 1 ]; then
+    echo "NOTE: Only 1 diagnostics-related file changed (need >= 2 for cross-module fix)"
+    CHANGES_MADE=0
 else
     echo "NOTE: No diagnostics-related changes detected"
     CHANGES_MADE=0

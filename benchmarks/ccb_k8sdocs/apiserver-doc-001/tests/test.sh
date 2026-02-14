@@ -44,16 +44,27 @@ if [ "$UNSTAGED_COUNT" -eq 0 ] && [ "$STAGED_COUNT" -eq 0 ] && [ "$UNTRACKED_COU
     exit 0
 fi
 
+# Context-aware keyword check: matches keyword only in non-negated context
+# Finds lines containing the pattern, then excludes lines where it appears
+# after "not ", "no ", "isn't ", or "doesn't " — preventing false positives
+# from sentences like "X is not relevant" still matching on "X"
+# Usage: context_grep "pattern" "$CONTENT"
+context_grep() {
+    local pattern="$1"
+    local content="$2"
+    echo "$content" | grep -i "$pattern" | grep -ivq "not .*\($pattern\)\|no .*\($pattern\)\|isn't .*\($pattern\)\|doesn't .*\($pattern\)"
+}
+
 TARGET_FILE="staging/src/k8s.io/apiserver/doc.go"
 echo "Evaluating ${TARGET_FILE}..."
 
 SCORE=0
 MAX_SCORE=10
 
-# Check 1: File exists (2 points)
+# Check 1: File exists (1 point)
 if [ -f "$TARGET_FILE" ]; then
     echo "PASS: ${TARGET_FILE} exists"
-    SCORE=$((SCORE + 2))
+    SCORE=$((SCORE + 1))
 else
     echo "FAIL: ${TARGET_FILE} not found"
     echo "0.0" > /logs/verifier/reward.txt
@@ -64,6 +75,20 @@ fi
 
 DOC_CONTENT=$(cat "$TARGET_FILE")
 
+# Check 1b: Minimum content length gate (1 point)
+# Count words excluding the package declaration line
+WORD_COUNT=$(echo "$DOC_CONTENT" | grep -v '^package ' | wc -w)
+if [ "$WORD_COUNT" -ge 50 ]; then
+    echo "PASS: Document has $WORD_COUNT words of content (>= 50 minimum)"
+    SCORE=$((SCORE + 1))
+else
+    echo "FAIL: Document has only $WORD_COUNT words of content (< 50 minimum)"
+    echo "0.1" > /logs/verifier/reward.txt
+    echo ""
+    echo "Tests completed - Score: 0.1 (file exists but insufficient content)"
+    exit 0
+fi
+
 # Check 2: Valid Go package declaration (1 point)
 if echo "$DOC_CONTENT" | grep -q "^package apiserver"; then
     echo "PASS: Valid Go package declaration"
@@ -73,7 +98,7 @@ else
 fi
 
 # Check 3: References GenericAPIServer (1 point)
-if echo "$DOC_CONTENT" | grep -qi "GenericAPIServer"; then
+if context_grep "GenericAPIServer" "$DOC_CONTENT"; then
     echo "PASS: References GenericAPIServer"
     SCORE=$((SCORE + 1))
 else
@@ -81,7 +106,7 @@ else
 fi
 
 # Check 4: References admission control (1 point)
-if echo "$DOC_CONTENT" | grep -qi "admission"; then
+if context_grep "admission" "$DOC_CONTENT"; then
     echo "PASS: References admission control"
     SCORE=$((SCORE + 1))
 else
@@ -89,7 +114,7 @@ else
 fi
 
 # Check 5: References authentication/authorization (1 point)
-if echo "$DOC_CONTENT" | grep -qi "authentication\|authorization"; then
+if context_grep "authentication\|authorization" "$DOC_CONTENT"; then
     echo "PASS: References authentication/authorization"
     SCORE=$((SCORE + 1))
 else
@@ -97,7 +122,7 @@ else
 fi
 
 # Check 6: References API aggregation or extension (1 point)
-if echo "$DOC_CONTENT" | grep -qi "aggregat\|extension.*api.*server\|APIService"; then
+if context_grep "aggregat\|extension.*api.*server\|APIService" "$DOC_CONTENT"; then
     echo "PASS: References API aggregation/extension"
     SCORE=$((SCORE + 1))
 else
@@ -105,7 +130,7 @@ else
 fi
 
 # Check 7: References CRDs as preferred alternative (1 point)
-if echo "$DOC_CONTENT" | grep -qi "CustomResource\|CRD"; then
+if context_grep "CustomResource\|CRD" "$DOC_CONTENT"; then
     echo "PASS: References CRDs as preferred alternative"
     SCORE=$((SCORE + 1))
 else
@@ -116,7 +141,7 @@ fi
 REF_COUNT=0
 for subpkg in "pkg/server" "pkg/admission" "pkg/endpoints" "pkg/registry"; do
     full_path="staging/src/k8s.io/apiserver/${subpkg}"
-    if echo "$DOC_CONTENT" | grep -qi "$(basename $subpkg)" && [ -d "$full_path" ]; then
+    if echo "$DOC_CONTENT" | grep -qi "$subpkg" && [ -d "$full_path" ]; then
         REF_COUNT=$((REF_COUNT + 1))
     fi
 done

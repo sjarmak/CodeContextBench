@@ -32,9 +32,10 @@ fi
 SCORE=0
 MAX_SCORE=10
 
-# Ground truth (accept both the macro name and the actual table name)
-GT_FILE="sound/pci/hda/hda_intel.c"
-GT_METHODS=("DEFINE_PCI_DEVICE_TABLE" "azx_ids")
+# Load ground truth from JSON (accepts both the macro name and the actual table name)
+GT_FILE=$(python3 -c "import json; d=json.load(open('/tests/ground_truth.json')); print(d['buggy_files'][0])")
+GT_METHODS=($(python3 -c "import json; d=json.load(open('/tests/ground_truth.json')); print(' '.join(d['buggy_functions']))"))
+
 
 # Extract agent predictions
 PREDICTED_FILES=$(python3 -c "

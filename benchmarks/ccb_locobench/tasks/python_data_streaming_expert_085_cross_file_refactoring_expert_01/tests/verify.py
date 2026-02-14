@@ -2,15 +2,15 @@
 """
 LoCoBench-Agent Solution Verifier
 
-Evaluates agent solutions against ground truth using keyword matching
-and structural analysis. For more sophisticated evaluation, this can
-be extended to use LLM-based semantic similarity.
+Evaluates agent solutions against ground truth using keyword matching,
+bigram overlap, structural analysis, and evidence-based code block scoring.
 
-Scoring Weights (updated for better evaluation):
-- keyword_overlap: 0.35 (reduced from 0.5 - ground truth keywords can be overly specific)
-- file_references: 0.30 (increased from 0.2 - shows agent explored codebase)
-- code_blocks: 0.25 (increased from 0.2 - shows evidence-based analysis)
-- length_score: 0.10 (unchanged - basic sanity check)
+Scoring Weights:
+- keyword_overlap: 0.40 (unigram + bigram blend for coherence)
+- file_references: 0.25 (shows agent explored codebase)
+- code_blocks: 0.15 (reduced - code blocks alone are weak signal)
+- length_score: 0.10 (basic sanity check)
+- structural_coherence: 0.10 (architectural analysis should be structured)
 """
 
 import argparse
@@ -56,8 +56,35 @@ def extract_keywords(text: str) -> set[str]:
     return keywords
 
 
+def extract_bigrams(text: str) -> set[tuple[str, str]]:
+    """Extract 2-word sequences from text after normalization and stop-word removal."""
+    stop_words = {
+        'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+        'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
+        'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as',
+        'into', 'through', 'during', 'before', 'after', 'above', 'below',
+        'between', 'under', 'again', 'further', 'then', 'once', 'here',
+        'there', 'when', 'where', 'why', 'how', 'all', 'each', 'few', 'more',
+        'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own',
+        'same', 'so', 'than', 'too', 'very', 'just', 'and', 'but', 'if', 'or',
+        'because', 'until', 'while', 'this', 'that', 'these', 'those', 'it',
+        'its', 'you', 'your', 'they', 'them', 'their', 'we', 'our', 'i', 'me',
+    }
+    normalized = normalize_text(text)
+    words = normalized.split()
+    # Filter to content words (same criteria as unigrams)
+    content_words = [w for w in words if w not in stop_words and len(w) > 2]
+    # Build bigrams from consecutive content words
+    bigrams = set()
+    for i in range(len(content_words) - 1):
+        bigrams.add((content_words[i], content_words[i + 1]))
+    return bigrams
+
+
 def compute_keyword_overlap(solution: str, ground_truth: str) -> float:
-    """Compute keyword overlap score between solution and ground truth."""
+    """Compute keyword overlap score blending unigram and bigram F1."""
+    # --- Unigram overlap ---
     solution_keywords = extract_keywords(solution)
     truth_keywords = extract_keywords(ground_truth)
 
@@ -65,15 +92,33 @@ def compute_keyword_overlap(solution: str, ground_truth: str) -> float:
         return 0.0
 
     overlap = solution_keywords & truth_keywords
-    # Use F1-like score combining precision and recall
     precision = len(overlap) / len(solution_keywords) if solution_keywords else 0.0
     recall = len(overlap) / len(truth_keywords)
 
     if precision + recall == 0:
-        return 0.0
+        unigram_f1 = 0.0
+    else:
+        unigram_f1 = 2 * (precision * recall) / (precision + recall)
 
-    f1 = 2 * (precision * recall) / (precision + recall)
-    return f1
+    # --- Bigram overlap ---
+    solution_bigrams = extract_bigrams(solution)
+    truth_bigrams = extract_bigrams(ground_truth)
+
+    if not truth_bigrams:
+        # If ground truth has no bigrams, fall back to unigram only
+        return unigram_f1
+
+    bi_overlap = solution_bigrams & truth_bigrams
+    bi_precision = len(bi_overlap) / len(solution_bigrams) if solution_bigrams else 0.0
+    bi_recall = len(bi_overlap) / len(truth_bigrams)
+
+    if bi_precision + bi_recall == 0:
+        bigram_f1 = 0.0
+    else:
+        bigram_f1 = 2 * (bi_precision * bi_recall) / (bi_precision + bi_recall)
+
+    # Blend: 60% unigram + 40% bigram
+    return 0.6 * unigram_f1 + 0.4 * bigram_f1
 
 
 def check_file_references(solution: str, context_files: list[str]) -> float:
@@ -98,21 +143,71 @@ def check_file_references(solution: str, context_files: list[str]) -> float:
     return min(ratio * 2, 1.0)
 
 
-def check_code_blocks(solution: str) -> float:
-    """Check if solution contains code blocks (when appropriate)."""
-    # Look for markdown code blocks
-    code_blocks = re.findall(r'```[\w]*\n[\s\S]*?```', solution)
+def check_code_blocks(solution: str, ground_truth_text: str) -> float:
+    """Check if solution contains code blocks with relevant content.
 
-    # Having code blocks is a good sign for implementation tasks
-    if code_blocks:
+    Scores:
+    - 1.0: code blocks contain at least one ground-truth keyword or file reference
+    - 0.3: code blocks present but without relevant content
+    - 0.0: no code blocks at all
+    """
+    # Look for markdown code blocks
+    code_blocks = re.findall(r'```[\w]*\n([\s\S]*?)```', solution)
+
+    if not code_blocks:
+        # Check for inline code as a weaker signal
+        inline_code = re.findall(r'`([^`]+)`', solution)
+        if not inline_code:
+            return 0.0
+        # Treat inline code snippets as code block content
+        code_blocks = inline_code
+
+    # Extract ground-truth keywords and file references for relevance check
+    gt_keywords = extract_keywords(ground_truth_text)
+
+    # Combine all code block content
+    all_code_text = ' '.join(code_blocks)
+    code_keywords = extract_keywords(all_code_text)
+
+    # Check if any ground-truth keyword appears in code blocks
+    if gt_keywords & code_keywords:
         return 1.0
 
-    # Check for inline code
-    inline_code = re.findall(r'`[^`]+`', solution)
-    if inline_code:
-        return 0.5
+    # Code blocks exist but contain no relevant content
+    return 0.3
 
-    return 0.0
+
+def check_structural_coherence(solution: str) -> float:
+    """Check if solution has structural organization.
+
+    Architectural analysis should be well-structured with sections.
+
+    Scores:
+    - 1.0: more than 2 distinct sections
+    - 0.5: 1-2 sections
+    - 0.0: no discernible structure
+    """
+    section_count = 0
+
+    # Count markdown headers (# or ##, etc.)
+    headers = re.findall(r'^#{1,6}\s+.+', solution, re.MULTILINE)
+    section_count += len(headers)
+
+    # Count numbered list items (1., 2., 3., etc.) as section indicators
+    # Only count top-level numbered items (not sub-items)
+    numbered_items = re.findall(r'^\d+\.\s+', solution, re.MULTILINE)
+    section_count += len(numbered_items)
+
+    # Count bold section-like markers (**Section Name:**)
+    bold_sections = re.findall(r'^\*\*[^*]+\*\*[:\s]', solution, re.MULTILINE)
+    section_count += len(bold_sections)
+
+    if section_count > 2:
+        return 1.0
+    elif section_count >= 1:
+        return 0.5
+    else:
+        return 0.0
 
 
 def evaluate_solution(
@@ -134,22 +229,25 @@ def evaluate_solution(
     # Compute component scores
     keyword_score = compute_keyword_overlap(solution_text, truth_text)
     file_ref_score = check_file_references(solution_text, context_files or [])
-    code_block_score = check_code_blocks(solution_text)
+    code_block_score = check_code_blocks(solution_text, truth_text)
+    structural_score = check_structural_coherence(solution_text)
 
     # Check solution length (penalize very short solutions)
     solution_len = len(solution_text.split())
     length_score = min(solution_len / 100, 1.0)  # Full credit at 100+ words
 
-    # Weighted combination (updated weights for better evaluation)
-    # Keyword overlap reduced - ground truth keywords can be overly specific
-    # File references increased - shows agent explored the codebase correctly
-    # Code blocks increased - shows evidence-based analysis with code
-    # Length unchanged - basic sanity check
+    # Weighted combination
+    # keyword_overlap: 0.40 - primary semantic signal (unigram + bigram)
+    # file_references: 0.25 - shows agent explored the codebase correctly
+    # code_blocks: 0.15 - reduced; code blocks alone are a weak signal
+    # length_score: 0.10 - basic sanity check
+    # structural_coherence: 0.10 - architectural analysis should be structured
     final_score = (
-        0.35 * keyword_score +
-        0.30 * file_ref_score +
-        0.25 * code_block_score +
-        0.10 * length_score
+        0.40 * keyword_score +
+        0.25 * file_ref_score +
+        0.15 * code_block_score +
+        0.10 * length_score +
+        0.10 * structural_score
     )
 
     return {
@@ -159,6 +257,7 @@ def evaluate_solution(
             "file_references": round(file_ref_score, 4),
             "code_blocks": round(code_block_score, 4),
             "length_score": round(length_score, 4),
+            "structural_coherence": round(structural_score, 4),
         },
         "solution_words": solution_len,
     }

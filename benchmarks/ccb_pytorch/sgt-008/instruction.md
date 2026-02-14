@@ -8,28 +8,18 @@
 
 ## Description
 
-Same as https://github.com/pytorch/pytorch/pull/162493
-
-
-cc @jeffdaily @sunway513 @jithunnair-amd @pruthvistony @ROCmSupport @jataylo @hongxiayang @naromero77amd @pragupta @jerrymannil @xinyazhang
+This is the PyTorch 2.10 release branch CI/CD configuration update. It updates approximately 110 GitHub Actions workflow files under `.github/workflows/` to pin versions, update build matrix references, and adjust CI runner configurations for the 2.10 release branch. The changes are primarily mechanical: updating branch references, Docker image tags, and workflow trigger conditions. This also includes ROCm/HIP-related adjustments for AMD GPU support in the release. Release branch CI configuration must be precise: incorrect workflow pins or build matrix entries can cause nightly builds to fail, release binaries to be built against wrong CUDA/ROCm versions, or tests to run on incorrect infrastructure.
 
 ## Task
 
-Review the PR: [RELEASE 2.10] Release only changes
-
-Description: Same as https://github.com/pytorch/pytorch/pull/162493
-
-
-cc @jeffdaily @sunway513 @jithunnair-amd @pruthvistony @ROCmSupport @jataylo @hongxiayang @naromero77amd @pragupta @jerrymannil @xinyazhang
-
 Changes:
-- 110 files modified
+- 110 files modified (primarily `.github/workflows/*.yml`)
 - 345 additions, 463 deletions
 
 Tasks:
-1. Understand the issue being fixed
-2. Review the solution in the merged PR
-3. Implement the fix to pass all tests
+1. Understand the release branch CI configuration pattern (see PR #162493 for the 2.9 equivalent)
+2. Update workflow files with correct branch references and Docker image tags
+3. Adjust build matrix entries for CUDA and ROCm versions
 4. Verify: run "make test" successfully
 
 ## Success Criteria

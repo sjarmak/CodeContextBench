@@ -122,9 +122,27 @@ svc_file = "ghost/core/core/server/services/comments/comments-service.js"
 if os.path.isfile(svc_file):
     with open(svc_file) as f:
         svc = f.read()
-    if "NotFoundError" in svc and "commentNotFound" in svc and "!comment" in svc:
+    # Accept multiple guard patterns:
+    # (a) NotFoundError + commentNotFound + !comment — original exact match
+    # (b) NotFoundError with any error message + null/undefined check on comment
+    # (c) Different error class (e.g., errors.NotFoundError, GhostError) with comment guard
+    # (d) comment === null / comment === undefined / !comment / comment == null
+    has_error = bool(
+        re.search(r'NotFoundError|GhostError.*not\s*found', svc, re.IGNORECASE)
+    )
+    has_guard = bool(
+        re.search(r'!comment\b|comment\s*===?\s*(null|undefined)|comment\s*==\s*null', svc)
+    )
+    has_error_msg = bool(
+        re.search(r'commentNotFound|comment.*not\s*found|Comment\s*not\s*found', svc, re.IGNORECASE)
+    )
+    if has_error and has_guard:
         fix_hits += 1
         print("Fix defect-1: PASS (NotFoundError guard restored)", file=sys.stderr)
+    elif has_guard and has_error_msg:
+        # Guard exists with an error message but maybe different error class
+        fix_hits += 1
+        print("Fix defect-1: PASS (comment null guard with error restored)", file=sys.stderr)
     else:
         print("Fix defect-1: FAIL (NotFoundError guard not found)", file=sys.stderr)
 else:
@@ -135,7 +153,18 @@ ctrl_file = "ghost/core/core/server/services/comments/comments-controller.js"
 if os.path.isfile(ctrl_file):
     with open(ctrl_file) as f:
         ctrl = f.read()
-    if "frame.options.id" in ctrl:
+    # Accept multiple patterns for restoring the id from frame options:
+    # (a) frame.options.id — original exact match
+    # (b) frame.options?.id — optional chaining variant
+    # (c) frame.data.id or frame.params.id — alternative property paths
+    # (d) Destructured: { id } = frame.options or const id = frame.options.id
+    has_frame_id = bool(
+        re.search(r'frame\.options\.id|frame\.options\?\.\s*id', ctrl) or
+        re.search(r'frame\.(data|params)\.id', ctrl) or
+        re.search(r'\{\s*id\s*\}\s*=\s*frame\.options', ctrl) or
+        re.search(r'(?:const|let|var)\s+id\s*=\s*frame\.options\.id', ctrl)
+    )
+    if has_frame_id:
         fix_hits += 1
         print("Fix defect-2: PASS (frame.options.id restored)", file=sys.stderr)
     else:
@@ -148,7 +177,15 @@ ep_file = "ghost/core/core/server/api/endpoints/comment-likes.js"
 if os.path.isfile(ep_file):
     with open(ep_file) as f:
         ep = f.read()
-    if "cacheInvalidate" in ep:
+    # Accept multiple cache invalidation patterns:
+    # (a) cacheInvalidate — original (any reference to cache invalidation config)
+    # (b) cache_invalidate — snake_case variant
+    # (c) CacheInvalidate — PascalCase variant
+    # (d) cache-invalidate — kebab-case in string
+    has_cache_config = bool(
+        re.search(r'cacheInvalidate|cache_invalidate|CacheInvalidate|cache-invalidate', ep)
+    )
+    if has_cache_config:
         fix_hits += 1
         print("Fix defect-3: PASS (cacheInvalidate header restored)", file=sys.stderr)
     else:
@@ -158,7 +195,19 @@ else:
 
 # Defect 4: withRelated: ['member'] restored in comments-service.js
 if os.path.isfile(svc_file):
-    if "'member'" in svc or '"member"' in svc:
+    # Accept multiple patterns for member relation inclusion:
+    # (a) 'member' or "member" — original string literal check
+    # (b) withRelated containing member in any array syntax
+    # (c) Template literal `member`
+    # (d) Variable reference like MEMBER_RELATION or memberRelation
+    has_member = bool(
+        "'member'" in svc or
+        '"member"' in svc or
+        re.search(r'`member`', svc) or
+        re.search(r'withRelated.*member', svc, re.IGNORECASE) or
+        re.search(r'(MEMBER_RELATION|memberRelation)', svc)
+    )
+    if has_member:
         fix_hits += 1
         print("Fix defect-4: PASS (member relation restored)", file=sys.stderr)
     else:
@@ -167,6 +216,13 @@ else:
     print(f"Fix defect-4: FAIL ({svc_file} not found)", file=sys.stderr)
 
 fix_score = fix_hits / num_expected if num_expected > 0 else 0.0
+
+# Gate: review must have at least 1 reported defect with a 'file' field to earn fix points
+reported_with_file = [r for r in reported if r.get("file", "").strip()]
+if not reported_with_file:
+    fix_score = 0.0
+    print("Fix gate: FAIL (no defects with 'file' field in review.json — fix score zeroed)", file=sys.stderr)
+
 print(f"Fix score: {fix_hits}/{num_expected} = {fix_score:.3f}", file=sys.stderr)
 
 # ── Final score ──────────────────────────────────────────

@@ -18,9 +18,7 @@ This is a distinct effect from existing `NoSchedule` (which doesn't affect traff
 
 ## Task
 
-YOU MUST IMPLEMENT CODE CHANGES to add `NoScheduleNoTraffic` support.
-
-**CRITICAL: If you are in plan mode, immediately exit with `/ExitPlanMode` before proceeding.**
+This task requires implementing code changes to add `NoScheduleNoTraffic` support.
 
 ### Required Implementation
 
@@ -78,18 +76,6 @@ Find and modify code in these areas:
 [x] Existing pods on nodes with the taint are NOT evicted  
 [x] All Kubernetes tests pass  
 [x] Code follows Kubernetes conventions  
-
-## Critical Requirement
-
-**YOU MUST MAKE ACTUAL CODE CHANGES.** Do not plan or analyze. You must:
-
-- Add `NoScheduleNoTraffic` constant definition
-- Update scheduler/admission controller logic
-- Modify endpoint slice controller logic  
-- Update node controller as needed
-- Add or modify Go tests
-- Commit all changes to git
-- Verify tests pass
 
 ## Testing
 

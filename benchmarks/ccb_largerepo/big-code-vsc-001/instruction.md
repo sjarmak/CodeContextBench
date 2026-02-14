@@ -13,9 +13,7 @@ Users are seeing stale TypeScript diagnostics in the Problems panel after switch
 
 ## Task
 
-YOU MUST IMPLEMENT CODE CHANGES to fix stale diagnostics.
-
-**CRITICAL: If you are in plan mode, immediately exit with `/ExitPlanMode` before proceeding.**
+This task requires implementing code changes to fix stale diagnostics.
 
 ### Required Implementation
 
@@ -60,16 +58,6 @@ Check the full diagnostics flow from a text change through the extension host to
 [x] All tests pass: `npm test`  
 [x] No performance regression  
 [x] Code follows VS Code conventions and patterns  
-
-## Critical Requirement
-
-**YOU MUST MAKE ACTUAL CODE CHANGES.** Do not plan or analyze. You must:
-
-- Add file system change listeners to the diagnostics pipeline
-- Trigger diagnostics refresh on file changes
-- Clear stale diagnostics appropriately
-- Commit all changes to git
-- Verify tests pass
 
 ## Testing
 
