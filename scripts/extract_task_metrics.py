@@ -120,12 +120,14 @@ def process_task_dir(
         if partial is not None:
             tm.partial_score = partial
 
-    # Tool usage — prefer trajectory, fall back to transcript
+    # Tool usage — prefer transcript (includes subagent calls), fall back to trajectory
+    # Bug fix: trajectory.json only has main-agent calls; claude-code.txt has ALL calls
+    # including MCP calls made by Task subagents.
     trajectory_path = task_dir / "agent" / "trajectory.json"
     transcript_path = task_dir / "agent" / "claude-code.txt"
-    tool_usage = extract_tool_usage_from_trajectory(trajectory_path)
+    tool_usage = extract_tool_usage_from_transcript(transcript_path)
     if tool_usage.get("tool_calls_total") is None:
-        tool_usage = extract_tool_usage_from_transcript(transcript_path)
+        tool_usage = extract_tool_usage_from_trajectory(trajectory_path)
 
     if tool_usage.get("tool_calls_total") is not None:
         tm.tool_calls_total = tool_usage["tool_calls_total"]
