@@ -38,7 +38,7 @@ DIR_PREFIX_TO_SUITE = {
     "tac_": "ccb_tac",
 }
 
-CONFIGS = ["baseline", "sourcegraph_base", "sourcegraph_full"]
+CONFIGS = ["baseline", "sourcegraph_base", "sourcegraph_full", "sourcegraph_isolated"]
 
 
 def load_judge_scores(path: Path) -> dict[str, dict]:
@@ -91,10 +91,25 @@ def _has_agent_output(data: dict) -> bool:
     return n_input > 0 or n_output > 0
 
 
+def _extract_model_from_config(trial_dir: Path) -> str | None:
+    """Extract model name from config.json.
+
+    Returns model name (e.g., 'anthropic/claude-opus-4-6') or None if not found.
+    """
+    config_file = trial_dir / "config.json"
+    if not config_file.exists():
+        return None
+    try:
+        config_data = json.loads(config_file.read_text())
+        return config_data.get("agent", {}).get("model_name")
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 def scan_config_dir(config_path: Path) -> dict[str, dict]:
     """Scan a config directory (e.g., baseline/) for task-level results.
 
-    Returns dict mapping task_name -> {result_data, trial_dir, timestamp}.
+    Returns dict mapping task_name -> {result_data, trial_dir, timestamp, model}.
     """
     tasks = {}
     if not config_path.is_dir():
@@ -113,10 +128,12 @@ def scan_config_dir(config_path: Path) -> dict[str, dict]:
                     data = json.loads(result_file.read_text())
                     task_name = data.get("task_name", batch_dir.name.rsplit("__", 1)[0])
                     task_name = _normalize_task_name(task_name)
+                    model = _extract_model_from_config(batch_dir)
                     tasks[task_name] = {
                         "data": data,
                         "trial_dir": batch_dir,
                         "batch_dir": config_path,
+                        "model": model,
                     }
                 except (json.JSONDecodeError, KeyError):
                     pass
@@ -134,11 +151,13 @@ def scan_config_dir(config_path: Path) -> dict[str, dict]:
                         data = json.loads(result_file.read_text())
                         task_name = data.get("task_name", trial_dir.name.rsplit("__", 1)[0])
                         task_name = _normalize_task_name(task_name)
+                        model = _extract_model_from_config(trial_dir)
                         # Latest wins (sorted order = latest batch dir last)
                         tasks[task_name] = {
                             "data": data,
                             "trial_dir": trial_dir,
                             "batch_dir": batch_dir,
+                            "model": model,
                         }
                     except (json.JSONDecodeError, KeyError):
                         pass
@@ -429,7 +448,7 @@ def main():
         mean_reward = round(total_reward / scored_count, 3) if scored_count > 0 else 0.0
         mean_judge_score = round(judge_score_sum / judge_count, 3) if judge_count > 0 else None
 
-        # Extract timestamp from first task's data
+        # Extract timestamp and model from first task's data
         first_task = next(iter(tasks.values()))
         timestamp = first_task["data"].get("started_at", "")
         if timestamp:
@@ -440,9 +459,12 @@ def main():
             except (ValueError, AttributeError):
                 pass
 
+        # Extract model from first task (all tasks in a run should use same model)
+        model = first_task.get("model") or "anthropic/claude-opus-4-5-20251101"
+
         run_entry = {
             "run_id": manifest_key.replace("/", "_"),
-            "model": "anthropic/claude-opus-4-5-20251101",
+            "model": model,
             "timestamp": timestamp,
             "task_count": task_count,
             "passed": passed,

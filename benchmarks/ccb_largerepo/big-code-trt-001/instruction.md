@@ -17,9 +17,7 @@ Unsupported combinations (certain attention backends, incompatible KV cache sett
 
 ## Task
 
-YOU MUST IMPLEMENT CODE CHANGES to add W4A8_MXFP4_INT8 support.
-
-**CRITICAL: If you are in plan mode, immediately exit with `/ExitPlanMode` before proceeding.**
+This task requires implementing code changes to add W4A8_MXFP4_INT8 support.
 
 ### Required Implementation
 
@@ -102,18 +100,6 @@ Find and modify code in these areas:
 [x] All tests pass  
 [x] No regressions in existing quantization modes  
 [x] Code follows TensorRT-LLM conventions  
-
-## Critical Requirement
-
-**YOU MUST MAKE ACTUAL CODE CHANGES.** Do not plan or analyze. You must:
-
-- Add `W4A8_MXFP4_INT8` to Python and C++ quantization enums
-- Update kernel selection logic
-- Add validation for unsupported combinations
-- Update Python-C++ bindings
-- Add tests covering the new mode
-- Commit all changes to git
-- Verify tests pass
 
 ## Testing
 

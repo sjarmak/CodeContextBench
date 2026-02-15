@@ -32,9 +32,10 @@ fi
 SCORE=0
 MAX_SCORE=10
 
-# Ground truth
-GT_FILE="drivers/net/wireless/intel/iwlwifi/pcie/drv.c"
-GT_METHODS=("iwl_dev_info_table")
+# Load ground truth from JSON
+GT_FILE=$(python3 -c "import json; d=json.load(open('/tests/ground_truth.json')); print(d['buggy_files'][0])")
+GT_METHODS=($(python3 -c "import json; d=json.load(open('/tests/ground_truth.json')); print(' '.join(d['buggy_functions']))"))
+
 
 # Extract agent predictions
 PREDICTED_FILES=$(python3 -c "

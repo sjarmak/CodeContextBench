@@ -70,9 +70,9 @@ try:
     import re
     with open('/app/solution.json') as f:
         raw = f.read()
-    m = re.search(r'```(?:json)?\s*\n(.*?)```', raw, re.DOTALL)
-    if m:
-        raw = m.group(1).strip()
+    matches = re.findall(r'```(?:json)?\s*\n(.*?)```', raw, re.DOTALL)
+    if matches:
+        raw = matches[-1].strip()
     agent_output = json.loads(raw)
     
     # Verify

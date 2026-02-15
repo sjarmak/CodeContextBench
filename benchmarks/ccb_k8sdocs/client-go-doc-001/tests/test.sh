@@ -44,16 +44,27 @@ if [ "$UNSTAGED_COUNT" -eq 0 ] && [ "$STAGED_COUNT" -eq 0 ] && [ "$UNTRACKED_COU
     exit 0
 fi
 
+# Context-aware keyword check: matches keyword only in non-negated context
+# Finds lines containing the pattern, then excludes lines where it appears
+# after "not ", "no ", "isn't ", or "doesn't " — preventing false positives
+# from sentences like "X is not relevant" still matching on "X"
+# Usage: context_grep "pattern" "$CONTENT"
+context_grep() {
+    local pattern="$1"
+    local content="$2"
+    echo "$content" | grep -i "$pattern" | grep -ivq "not .*\($pattern\)\|no .*\($pattern\)\|isn't .*\($pattern\)\|doesn't .*\($pattern\)"
+}
+
 TARGET_FILE="staging/src/k8s.io/client-go/doc.go"
 echo "Evaluating ${TARGET_FILE}..."
 
 SCORE=0
 MAX_SCORE=10
 
-# Check 1: File exists (2 points)
+# Check 1: File exists (1 point)
 if [ -f "$TARGET_FILE" ]; then
     echo "PASS: ${TARGET_FILE} exists"
-    SCORE=$((SCORE + 2))
+    SCORE=$((SCORE + 1))
 else
     echo "FAIL: ${TARGET_FILE} not found"
     echo "0.0" > /logs/verifier/reward.txt
@@ -63,6 +74,20 @@ else
 fi
 
 DOC_CONTENT=$(cat "$TARGET_FILE")
+
+# Check 1b: Minimum content length gate (1 point)
+# Count words excluding the package declaration line
+WORD_COUNT=$(echo "$DOC_CONTENT" | grep -v '^package ' | wc -w)
+if [ "$WORD_COUNT" -ge 50 ]; then
+    echo "PASS: Document has $WORD_COUNT words of content (>= 50 minimum)"
+    SCORE=$((SCORE + 1))
+else
+    echo "FAIL: Document has only $WORD_COUNT words of content (< 50 minimum)"
+    echo "0.1" > /logs/verifier/reward.txt
+    echo ""
+    echo "Tests completed - Score: 0.1 (file exists but insufficient content)"
+    exit 0
+fi
 
 # Check 2: Valid Go package declaration (1 point)
 if echo "$DOC_CONTENT" | grep -q "^package clientgo"; then
@@ -76,18 +101,20 @@ fi
 REF_SCORE=0
 REF_MAX=5
 
-# Check referenced packages actually exist
+# Check referenced packages actually exist — use full subpackage path to avoid
+# generic-word false positives (e.g. "rest" or "cache" matching in any context)
 for pkg_path in "staging/src/k8s.io/client-go/kubernetes" \
                 "staging/src/k8s.io/client-go/dynamic" \
                 "staging/src/k8s.io/client-go/discovery" \
                 "staging/src/k8s.io/client-go/rest" \
                 "staging/src/k8s.io/client-go/tools/cache"; do
-    pkg_name=$(basename "$pkg_path")
-    if echo "$DOC_CONTENT" | grep -qi "$pkg_name" && [ -d "$pkg_path" ]; then
-        echo "PASS: References $pkg_name (verified: $pkg_path exists)"
+    # Extract the subpackage portion relative to client-go (e.g. "kubernetes", "tools/cache")
+    pkg_subpath=$(echo "$pkg_path" | sed 's|staging/src/k8s.io/client-go/||')
+    if echo "$DOC_CONTENT" | grep -qi "$pkg_subpath" && [ -d "$pkg_path" ]; then
+        echo "PASS: References $pkg_subpath (verified: $pkg_path exists)"
         REF_SCORE=$((REF_SCORE + 1))
     else
-        echo "WARN: Missing or unverifiable reference to $pkg_name"
+        echo "WARN: Missing or unverifiable reference to $pkg_subpath"
     fi
 done
 
@@ -95,7 +122,7 @@ done
 SCORE=$((SCORE + REF_SCORE))
 
 # Check 4: Mentions configuration patterns (1 point)
-if echo "$DOC_CONTENT" | grep -qi "InClusterConfig\|kubeconfig\|clientcmd"; then
+if context_grep "InClusterConfig\|kubeconfig\|clientcmd" "$DOC_CONTENT"; then
     echo "PASS: References configuration patterns"
     SCORE=$((SCORE + 1))
 else
@@ -103,7 +130,7 @@ else
 fi
 
 # Check 5: Mentions controller pattern (1 point)
-if echo "$DOC_CONTENT" | grep -qi "informer\|controller\|workqueue"; then
+if context_grep "informer\|controller\|workqueue" "$DOC_CONTENT"; then
     echo "PASS: References controller pattern"
     SCORE=$((SCORE + 1))
 else

@@ -1,118 +1,119 @@
+# Ralph Progress Log
+Started: Wed Feb 11 23:21:05 UTC 2026
+
 ## Codebase Patterns
-- instruction.md files are shared across all configs (baseline, SG_base, SG_full). MCP instructions are added via the SG preamble in claude_baseline_agent.py, NOT in instruction.md
-- __archived_invalid/ is the convention for moving invalid runs within their batch directory
-- runs/official/archive/ is for moving entire superseded batch directories
-- status_fingerprints.py FINGERPRINTS dict uses regex patterns; aggregate_status.py imports them
-- check_infra.py uses section-based checks with PASS/WARN/FAIL output
-- archive_run.py has dry-run by default, --execute to actually archive
-- generate_manifest.py scans runs/official/ for result.json, skips archive/ and __archived_invalid/
-- LargeRepo task.toml pre_fix_rev values: now pinned — k8s=v1.30.0, vsc=1.96.0, servo+trt=commit hashes. Dockerfiles use `--filter=blob:none --no-checkout` + `git checkout <rev>`
-- configs/instance_to_mirror.json maps task IDs to Sourcegraph mirror repo names with commit suffixes
-- RepoQA instructions at benchmarks/ccb_repoqa/tasks/*/instruction.md
-- TAC instructions at benchmarks/ccb_tac/*/instruction.md (6 active tasks)
-- LargeRepo instructions at benchmarks/ccb_largerepo/*/instruction.md (4 tasks)
-- SWE-bench Pro gap-fill instructions at benchmarks/ccb_swebenchpro/tasks/*/instruction.md
-- K8s Docs instructions at benchmarks/ccb_k8sdocs/*/instruction.md (5 tasks)
-- PyTorch instructions at benchmarks/ccb_pytorch/sgt-*/instruction.md (25 tasks)
-- SWE-bench Pro has 731+ generated task instruction.md files with baked-in SG preamble separate from the template
-- .gitignore has `tasks/` and `ralph/` patterns — benchmark task files and ralph/ files need `git add -f`
-- Edit tool edits can be silently reverted by linter hooks — always verify with `git diff --stat` and use Write (full overwrite) as fallback
-- Always verify current branch with `git branch --show-current` before committing — hooks/tools can switch branches
+- Result.json has TWO formats: (1) old format with `trials[]` array, (2) new flat format with `agent_execution`, `agent_result`, `verifier_result`, `exception_info` top-level keys
+- Agent infra failures = agent_exec < 10s AND 0 output tokens. Genuine failures have tokens > 0.
+- Rate limit errors show in claude-code.txt JSONL: `"text":"You've hit your limit · resets 4am (UTC)"` with `"error":"rate_limit"`
+- Node.js version conflicts on Alpine: `apk add nodejs` won't upgrade pre-installed Node. Need `apk del nodejs npm` first. Also rm /usr/local/bin/node which shadows /usr/bin/node.
+- Harbor `--path` mode uses local `environment/Dockerfile`; `--dataset` mode uses cached `~/.cache/harbor/tasks/*/environment/Dockerfile`. Fix BOTH for full coverage.
+- Base image git state is sufficient — cached Dockerfile's `git reset --hard` is belt-and-suspenders. Test patches are applied by test.sh, not Dockerfile.
+- Exception details live in `exception.txt` (not always present), `trial.log` (often empty), and `agent/claude-code.txt` (JSONL transcript — most reliable for error classification)
+- 65536-byte `claude-code.txt` files are corrupted — contain minified JS bundle, not JSONL. Harbor bug when Claude Code crashes on startup.
+- Infra failures cluster by batch timing (e.g., Feb 8-9 rate limits) not by task/repo.
+- MANIFEST includes infra-fail results as reward=0.0, inflating failure rates.
+- SWE-bench Pro Dockerfiles follow a standardized template: `FROM jefzda/sweap-images:{repo_tag}` + uv install + Harbor dirs. Environment issues are in base images, not Dockerfiles.
+- All 7 non-protonmail SWE-bench Pro repos have confirmed healthy Docker environments. Only protonmail needed a fix.
+- For re-runs, use `--single-account` when multi-account tokens are expired. Primary $HOME token lasts ~8h, enough for ~34 sequential tasks.
+- Always match the original run's model (opus) and config — don't use haiku or different environments for fill-in runs.
 
-## Progress
-
-- QA Audit completed 2026-02-06: 28 issues (9 critical, 5 high, 6 medium, 8 low) → docs/QA_AUDIT_2026-02-06.md
-- PRD created: tasks/prd-qa-audit-fixes.md (21 user stories) + ralph/prd.json (15 Ralph-executable stories)
-- C9 (Deep Search polling failure) documented; DS stories moved to ralph-ds/
-- US-001 through US-003 completed in prior iterations
-- US-004 completed: all remaining MCP contamination stripped
-- US-005 completed: LargeRepo Dockerfiles pinned to specific commits
-
-## 2026-02-06 - US-001
-- Stripped all MCP/Sourcegraph references from 10 RepoQA instruction.md files
-- Files changed: benchmarks/ccb_repoqa/tasks/*/instruction.md (all 10)
-- Per file: removed "Use Sourcegraph MCP semantic search" step, "Sourcegraph MCP Tools You Should Use" section, "Use Sourcegraph MCP liberally" closing line
-- Replaced step 2 with generic "Search the codebase" wording
-- **Learnings for future iterations:**
-  - The `tasks/` gitignore pattern matches at any depth — must use `git add -f` for benchmark task files
-  - All 10 RepoQA files use identical template structure; batch edits via Python script are most reliable
-  - The Edit tool can be fragile when making many parallel edits to files — Python scripts are more reliable for bulk changes
 ---
 
-## 2026-02-06 - US-002
-- Stripped all MCP/Sourcegraph references from 6 active TAC instruction.md files
-- Files changed: benchmarks/ccb_tac/{tac-buffer-pool-manager,tac-dependency-change,tac-find-in-codebase-1,tac-find-in-codebase-2,tac-implement-hyperloglog,tac-write-unit-test}/instruction.md
-- Per file: removed "**Why this benefits from MCP:**" bullet-list sections; removed MCP-advocacy Notes lines
-- tac-find-in-codebase-1: also cleaned "Sourcegraph MCP excels at" from Description text and "Deep Search understands semantic queries" from Notes
-- tac-find-in-codebase-2: also removed "Validates MCP advantage on git history search" note
-- tac-write-unit-test: also removed "MCP helps find existing test patterns" note
+## 2026-02-11 - US-001
+- Diagnosed all SWE-bench Pro errored task runs across 8 repos
+- Found 42 infra failures (not 29 as PRD estimated) across active non-archived runs
+- Root causes classified:
+  - 25 rate limit hits ("You've hit your limit · resets 4am (UTC)") — subscription exhausted during Feb 8-9 batch
+  - 10 Node.js version conflict (protonmail only) — Alpine base image has Node 16, Claude Code needs 18+
+  - 4 agent setup timeout (archived protonmail runs) — chown hangs on large workspace
+  - 3 transcript corruption (internetarchive SG_full) — 65KB minified JS dump instead of JSONL
+- Key finding: Most failures are NOT Docker build issues. Only protonmail needs a Docker fix.
+- Files changed: docs/swebenchpro_docker_diagnosis.md (new), ralph/prd.json, ralph/progress.txt
 - **Learnings for future iterations:**
-  - Edit tool changes can be silently reverted by linter hooks — always verify with `git diff` before committing. Use Write tool (full file overwrite) when Edit gets reverted.
-  - When switching branches, verify with `git branch --show-current` BEFORE committing — Write tool or hooks can silently switch branches
-  - TAC has 8 directories but only 6 are active tasks (tac-copilot-arena-endpoint and tac-troubleshoot-dev-setup are not in the active set)
+  - Don't assume errored tasks are Docker failures — always check claude-code.txt transcript for the real error
+  - Rate limit failures are batch-timing issues, not task-specific. Same tasks pass in different batches.
+  - The `result.json` error field is often empty for infra failures — need to read multiple log sources
+  - Two result.json formats exist (trials[] vs flat) depending on Harbor version
+  - `__archived_invalid` directories contain historical failures but most lack useful error detail
 ---
 
-## 2026-02-06 - US-003
-- Stripped all MCP/Sourcegraph references from 4 LargeRepo instruction.md files
-- Files changed: benchmarks/ccb_largerepo/{big-code-k8s-001,big-code-servo-001,big-code-trt-001,big-code-vsc-001}/instruction.md
-- Per file: removed "**Why this requires MCP:**" paragraph, "(use Sourcegraph MCP for broad search)" parenthetical from implementation steps, "**Why MCP Helps:**" footer line
-- All task requirements and context preserved
+## 2026-02-11 - US-002
+- Fixed protonmail Docker environment (Node.js v16→v18 upgrade)
+- Root cause: Base images (`jefzda/sweap-images:protonmail.webclients-*`) have Node 16 at `/usr/local/bin/node` which shadows Alpine's Node 18 at `/usr/bin/node`
+- Fix: `apk del nodejs nodejs-current npm` + `rm -f /usr/local/bin/node` + `apk add --no-cache nodejs npm`
+- Applied to 8 Dockerfiles: 4 local (`benchmarks/ccb_swebenchpro/tasks/instance_protonmail-webclients-*/environment/Dockerfile`) + 4 Harbor cached (`~/.cache/harbor/tasks/*/instance_protonmail__webclients-*/environment/Dockerfile`)
+- Verification: all 8 images build, Node v18.20.1 confirmed, Claude Code installs without EBADENGINE warnings
+- Files changed: 4 Harbor cached Dockerfiles (local Dockerfiles already had the fix from a prior session), docs/swebenchpro_docker_diagnosis.md (updated), ralph/prd.json, ralph/progress.txt
 - **Learnings for future iterations:**
-  - LargeRepo files all use the same 3-location pattern for MCP refs: description paragraph, implementation step 1, and footer metadata
-  - Branch switching can happen silently between `git branch --show-current` and `git commit` — always re-verify branch immediately before committing
-  - The stash-checkout-pop workflow is needed to move between ralph branches since they have divergent file trees
+  - Alpine Node.js PATH precedence: `/usr/local/bin` beats `/usr/bin`. Must remove old binaries explicitly.
+  - Harbor uses different Dockerfiles for `--path` vs `--dataset` mode. Always patch both.
+  - The `|| true` on curl for uv install is intentional — Alpine images lack curl; uv is optional.
+  - Test patches are applied by `test.sh` via `git apply`, NOT by the Dockerfile. The cached Dockerfile's `git checkout -- <files>` is for SWE-bench's own test setup (different mechanism).
 ---
 
-## 2026-02-06 - US-004
-- Stripped ALL remaining MCP/Sourcegraph references from instruction.md files across ALL benchmarks
-- Files changed (771 total):
-  - benchmarks/ccb_swebenchpro/template/instruction.md: removed "MCP Tools Available" section
-  - benchmarks/ccb_swebenchpro/tasks/*/instruction.md (731 files): removed full "CRITICAL: Use Sourcegraph MCP Tools" section with SG preamble, replaced MCP-contaminated Guidelines with clean version
-  - benchmarks/ccb_k8sdocs/pkg-doc-001/instruction.md: rewrote "Why this requires MCP" to "Why this requires cross-package context", removed Sourcegraph mention
-  - benchmarks/ccb_k8sdocs/client-go-doc-001/instruction.md: removed trailing "Sourcegraph search provides this cross-package context efficiently."
-  - benchmarks/ccb_pytorch/sgt-001/instruction.md: removed "(use Sourcegraph MCP if available)" from step 1
-  - benchmarks/ccb_locobench/templates/instruction.md: removed "Step 2: Use Deep Search MCP for Code Discovery" section, renumbered steps
-  - benchmarks/ccb_locobench/tasks/*/instruction.md (23 files): removed "Use MCP tools" instruction line, entire "MCP Search Instructions" section, renumbered remaining steps
-  - benchmarks/ccb_repoqa/tasks/*/instruction.md (10 files): replaced "Use Sourcegraph MCP semantic search" with "Search the codebase", removed "Sourcegraph MCP Tools You Should Use" section, removed "Use Sourcegraph MCP liberally" line
-  - benchmarks/ccb_tac/{tac-copilot-arena-endpoint,tac-troubleshoot-dev-setup}/instruction.md: cleaned 2 non-active TAC tasks
-- Final verification: grep -ri across all ccb_*/*/instruction.md AND ccb_*/tasks/*/instruction.md returns 0 matches
+## 2026-02-11 - US-003
+- Assessed all 7 non-protonmail repo Docker environments (qutebrowser, teleport, vuls, element-hq, tutanota, nodebb, internetarchive)
+- **Result: No Docker fixes needed.** All environments build and run correctly.
+- All 32 infra failures are OAuth rate-limit hits with identical signature: 0 output tokens, 0-8s agent execution, clustered in Feb 8-9 batch window
+- Per-repo Docker health confirmed:
+  - qutebrowser: 6 pass / 0 fail / 6 infra-error
+  - teleport: 5 pass / 3 fail / 6 infra-error (3 fails are genuine task difficulty)
+  - vuls: 5 pass / 3 fail / 3 infra-error
+  - element-hq: 5 pass / 0 fail / 1 infra-error
+  - tutanota: 1 pass / 0 fail / 2 infra-error
+  - nodebb: 8 pass / 4 fail / 1 infra-error
+  - internetarchive: 21 pass / 0 fail (archived) / 4 active infra-error
+- All Dockerfiles follow identical healthy template (jefzda/sweap-images base + uv install + Harbor dirs)
+- Generated re-run plan: ~33 rate-limit-recovery runs + 12 protonmail Docker-fix runs = ~45 total
+- Files changed: docs/swebenchpro_docker_diagnosis.md (updated with US-003 Assessment section), ralph/prd.json, ralph/progress.txt
 - **Learnings for future iterations:**
-  - SWE-bench Pro has 731+ generated task instruction.md files with baked-in SG preamble — these are separate from the template
-  - Python bulk-edit scripts are essential for changes spanning hundreds of files
-  - Branch switching between ralph branches can cause stash conflicts when both branches modified the same files
-  - The `git checkout --ours` approach works for resolving conflicts when the current branch already has the correct version
+  - SWE-bench Pro tasks use a standardized Dockerfile template — all environment issues are in the base images, not the Dockerfiles
+  - When PRD says "fix Docker environments", first verify Docker is actually broken — it's often auth/rate-limit instead
+  - infra failures cluster by batch timing, not by repo. If one task in a batch fails with 0 tokens, check siblings.
+  - "Unfixable" column in acceptance criteria is empty — all SWE-bench Pro environments are runnable
 ---
 
-## 2026-02-06 - US-005
-- Pinned all 4 LargeRepo Dockerfiles to specific commits instead of `--depth 1` (which fetches whatever HEAD is)
-- Files changed:
-  - benchmarks/ccb_largerepo/big-code-k8s-001/environment/Dockerfile: pinned to tag `v1.30.0`
-  - benchmarks/ccb_largerepo/big-code-servo-001/environment/Dockerfile: pinned to `be6a2f99a1e80060228f41280fd7d2178983e7ed` (main HEAD)
-  - benchmarks/ccb_largerepo/big-code-trt-001/environment/Dockerfile: pinned to `b98f3fca2059f5403bee0966434578212bc92f32` (main HEAD)
-  - benchmarks/ccb_largerepo/big-code-vsc-001/environment/Dockerfile: pinned to tag `1.96.0`
-  - benchmarks/ccb_largerepo/big-code-servo-001/task.toml: pre_fix_rev updated from "main" to commit hash
-  - benchmarks/ccb_largerepo/big-code-trt-001/task.toml: pre_fix_rev updated from "main" to commit hash
-- Pattern: `git clone --filter=blob:none --no-checkout <url> .` + `git checkout <rev>` (per AC)
+## 2026-02-12 - US-004
+- Re-ran 34 task-config pairs (13 BL + 16 SG_base + 5 SG_full) that previously had infra failures
+- Created `configs/swebenchpro_rerun_infra_failures.sh` — dedicated re-run script with --path/--dataset mode selection, SG repo mapping, single-account mode
+- Run dir: `runs/official/swebenchpro_rerun_opus_20260211_235834/`
+- Results:
+  - Baseline: 9/13 passed (69%), 4 genuine failures (teleport-7744, teleport-8302, openlibrary-92db, qutebrowser-394b)
+  - SG_base: 13/16 passed (81%), 2 genuine failures, 1 Docker error (nodebb-eb49a649)
+  - SG_full: 3/5 passed (60%), 1 genuine failure (openlibrary), 1 token refresh error (protonmail-8be4)
+  - Total: 25/34 passed (73.5%), 7 genuine failures, 2 remaining infra errors
+- MANIFEST scores improved dramatically:
+  - BL: 0.390 → 0.771 (was inflated by 13 zero-reward infra failures)
+  - SG_base: 0.317 → 0.765 (16 zeros removed)
+  - SG_full: 0.694 → 0.824 (5 zeros/missing removed)
+- All 4 protonmail tasks passed in baseline (100%) — Docker fix from US-002 confirmed working
+- Protonmail SG configs: 7/8 passed (1 token refresh 403 error in SG_full)
+- openlibrary-92db3454 confirmed as genuine hard failure (failed all 3 configs)
+- Two remaining errors need separate fix:
+  - nodebb-eb49a649 SG_base: Docker compose startup failure (may need Dockerfile investigation)
+  - protonmail-8be4 SG_full: token refresh 403 (auth timing issue, would succeed on rerun)
+- Files changed: configs/swebenchpro_rerun_infra_failures.sh (new), ralph/swebenchpro_rerun_plan.json (new), ralph/prd.json, ralph/progress.txt
 - **Learnings for future iterations:**
-  - `--filter=blob:none --no-checkout` + `git checkout <tag>` is the correct pattern for pinned, space-efficient clones
-  - Tags (v1.30.0, 1.96.0) are directly usable as checkout targets; branch names (main) must be resolved to commit hashes via `git ls-remote`
-  - When task.toml has `pre_fix_rev = "main"`, update it to the actual commit hash used in the Dockerfile for consistency
-  - instance_to_mirror.json was referenced in the PRD but doesn't exist on disk — SG mirror info lives in largerepo_3config.sh TASK_SG_REPO_NAMES
+  - Single-account mode works fine for sequential runs when multi-account tokens are expired
+  - The PRD assumed haiku model + daytona env, but the actual benchmark uses opus + default Docker — always match the original run config
+  - --path mode gap-fill tasks take longer (Docker build from scratch) vs --dataset (cached images)
+  - Token refresh 403 during a long run is recoverable — the agent re-reads the refreshed credentials file
+  - SG_base outperformed baseline on these reruns (81% vs 69%) — MCP particularly helped with qutebrowser and element-web tasks
 ---
 
-## 2026-02-06 - US-006
-- Pinned LargeRepo SG repo names from `--latest` to commit-hash-suffixed names in largerepo_3config.sh
-- Files changed:
-  - configs/largerepo_3config.sh: Updated all 4 TASK_SG_REPO_NAMES entries from `--latest` to pinned commits
-  - configs/sg_indexing_list.json: Added `largerepo` section with 4 repos, updated _total_repos from 18 to 22
-- Mapping:
-  - big-code-k8s-001: kubernetes--latest → kubernetes--7c48c2bd (v1.30.0, tag dereferenced to commit)
-  - big-code-servo-001: servo--latest → servo--be6a2f99
-  - big-code-trt-001: TensorRT-LLM--latest → TensorRT-LLM--b98f3fca
-  - big-code-vsc-001: vscode--latest → vscode--138f619c (1.96.0 tag)
-- **Learnings for future iterations:**
-  - Kubernetes tags are annotated — `git ls-remote --tags` gives the tag object hash, must dereference with `^{}` suffix to get actual commit
-  - VS Code tags are lightweight — commit hash comes directly from `git ls-remote`
-  - The `sg_indexing_list.json` is the canonical registry of all sg-benchmarks repos; add new repos there when pinning
-  - instance_to_mirror.json was created on a different branch (7cd5fdff) and never merged to this branch
+## 2026-02-12 - US-005 (In Progress)
+- Created `configs/swebenchpro_variance_trials.sh` — variance trial runner with --pilot, --divergent-only, --trial N, --single-account modes
+- Created `scripts/compute_swebenchpro_variance.py` — analysis with bootstrap 95% CIs, per-task variance, volatile task detection
+- Task set: 33 stable tasks (23 always-pass, 6 always-fail, 4 divergent), 3 excluded (infra errors)
+- Pilot trial 1 completed (5 tasks × 3 configs = 15 runs, 2h 23m):
+  - Baseline: 4/5 passed (0.800) — vuls-139f3a81 FLIPPED from official 0→1
+  - SG_base: 5/5 passed (1.000) — nodebb-76c6e302 and nodebb-f1a80d48 FLIPPED from official 0→1
+  - SG_full: 5/5 passed (1.000) — consistent with official
+- Variance analysis (trial 1 + official, 2 data points per task):
+  - SG_full - BL delta: +0.348 [+0.194, +0.500] — **SIGNIFICANT** (CI excludes 0)
+  - SG_base - BL delta: -0.055 [-0.186, +0.035] — NOT significant
+  - 2 volatile tasks: vuls-139f3a81 (BL, 50% pass), qutebrowser-394bfaed (SG_base, 50% pass)
+  - SG_full: 0 volatile tasks — all outcomes consistent
+- Trial 2 launched 2026-02-12 ~11:10 UTC
+- **Key finding so far:** The divergent tasks show real variance (Bernoulli p ≈ 0.5), confirming that some SWE-bench Pro results are genuinely non-deterministic. SG_full is the most stable config.
 ---

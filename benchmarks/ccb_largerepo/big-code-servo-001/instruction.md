@@ -15,9 +15,7 @@ The event should debounce properly—multiple rapid scroll inputs should result 
 
 ## Task
 
-YOU MUST IMPLEMENT CODE CHANGES to add scrollend event support.
-
-**CRITICAL: If you are in plan mode, immediately exit with `/ExitPlanMode` before proceeding.**
+This task requires implementing code changes to add scrollend event support.
 
 ### Required Implementation
 
@@ -85,16 +83,6 @@ The `scrollend` event must fire in these contexts:
 [x] All tests pass: `./mach test-servo`  
 [x] No performance regression  
 [x] Code follows Servo conventions and patterns  
-
-## Critical Requirement
-
-**YOU MUST MAKE ACTUAL CODE CHANGES.** Do not plan or analyze. You must:
-
-- Add scrollend event firing in scroll event handlers
-- Implement debouncing to prevent excessive events
-- Add tests covering wheel, keyboard, and programmatic scrolling
-- Commit all changes to git
-- Verify tests pass
 
 ## Testing
 

@@ -8,28 +8,20 @@
 
 ## Description
 
-Revert part of https://github.com/pytorch/pytorch/pull/161916 to continue building CUDA 12.9 nightly
+This task partially reverts PR #161916 (which removed CUDA 12.9 builds in favor of CUDA 13.0) to restore nightly CUDA 12.9 builds for internal PyTorch consumers who still depend on that CUDA version. Removing CUDA 12.9 prematurely would break internal CI pipelines and prevent teams from testing against that CUDA toolkit version during the transition period to CUDA 13.0.
 
-
-cc @albanD
+The fix re-adds the CUDA 12.9 entries to the binary build matrix in `.github/scripts/generate_binary_build_matrix.py` and regenerates the GitHub Actions workflow files for Linux manywheel, Linux aarch64, Linux libtorch, and Windows wheel/libtorch nightly builds. The large line count is because the generated workflow YAML files contain full build/test job definitions for each CUDA version.
 
 ## Task
 
-Review the PR: Continue to build nightly CUDA 12.9 for internal
-
-Description: Revert part of https://github.com/pytorch/pytorch/pull/161916 to continue building CUDA 12.9 nightly
-
-
-cc @albanD
-
 Changes:
-- 9 files modified
+- 9 files modified (generate_binary_build_matrix.py + generated workflow YAMLs)
 - 3525 additions, 501 deletions
 
 Tasks:
-1. Understand the issue being fixed
-2. Review the solution in the merged PR
-3. Implement the fix to pass all tests
+1. Re-add CUDA 12.9 entries to `.github/scripts/generate_binary_build_matrix.py`
+2. Regenerate affected workflow files (Linux manywheel, aarch64, libtorch, Windows)
+3. Verify CUDA 12.9 appears in nightly build matrix
 4. Verify: run "make test" successfully
 
 ## Success Criteria

@@ -125,9 +125,15 @@ fi
 CHANGED_FILES="$CHANGED_FILES
 $(git diff --name-only 2>/dev/null)
 $(git diff --cached --name-only 2>/dev/null)"
-if echo "$CHANGED_FILES" | grep -E "(taint|scheduler|kubelet|endpoint)" | head -5; then
-    echo "[x] Taint-related files modified"
+RELEVANT_FILES=$(echo "$CHANGED_FILES" | grep -E "(taint|scheduler|kubelet|endpoint)" | sort -u)
+RELEVANT_COUNT=$(echo "$RELEVANT_FILES" | grep -c . 2>/dev/null || echo 0)
+if [ "$RELEVANT_COUNT" -ge 2 ]; then
+    echo "[x] Taint-related files modified ($RELEVANT_COUNT files)"
+    echo "$RELEVANT_FILES" | head -5
     CHANGES_MADE=1
+elif [ "$RELEVANT_COUNT" -eq 1 ]; then
+    echo "NOTE: Only 1 taint-related file changed (need >= 2 for multi-module feature)"
+    CHANGES_MADE=0
 else
     echo "NOTE: No taint-related changes detected"
     CHANGES_MADE=0

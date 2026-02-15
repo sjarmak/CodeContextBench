@@ -44,16 +44,27 @@ if [ "$UNSTAGED_COUNT" -eq 0 ] && [ "$STAGED_COUNT" -eq 0 ] && [ "$UNTRACKED_COU
     exit 0
 fi
 
+# Context-aware keyword check: matches keyword only in non-negated context
+# Finds lines containing the pattern, then excludes lines where it appears
+# after "not ", "no ", "isn't ", or "doesn't " — preventing false positives
+# from sentences like "X is not relevant" still matching on "X"
+# Usage: context_grep "pattern" "$CONTENT"
+context_grep() {
+    local pattern="$1"
+    local content="$2"
+    echo "$content" | grep -i "$pattern" | grep -ivq "not .*\($pattern\)\|no .*\($pattern\)\|isn't .*\($pattern\)\|doesn't .*\($pattern\)"
+}
+
 TARGET_FILE="staging/src/k8s.io/apiserver/pkg/util/flowcontrol/fairqueuing/queueset/doc.go"
 echo "Evaluating ${TARGET_FILE}..."
 
 SCORE=0
 MAX_SCORE=10
 
-# Check 1: File exists (2 points)
+# Check 1: File exists (1 point)
 if [ -f "$TARGET_FILE" ]; then
     echo "PASS: ${TARGET_FILE} exists"
-    SCORE=$((SCORE + 2))
+    SCORE=$((SCORE + 1))
 else
     echo "FAIL: ${TARGET_FILE} not found"
     echo "0.0" > /logs/verifier/reward.txt
@@ -64,6 +75,20 @@ fi
 
 DOC_CONTENT=$(cat "$TARGET_FILE")
 
+# Check 1b: Minimum content length gate (1 point)
+# Count words excluding the package declaration line
+WORD_COUNT=$(echo "$DOC_CONTENT" | grep -v '^package ' | wc -w)
+if [ "$WORD_COUNT" -ge 50 ]; then
+    echo "PASS: Document has $WORD_COUNT words of content (>= 50 minimum)"
+    SCORE=$((SCORE + 1))
+else
+    echo "FAIL: Document has only $WORD_COUNT words of content (< 50 minimum)"
+    echo "0.1" > /logs/verifier/reward.txt
+    echo ""
+    echo "Tests completed - Score: 0.1 (file exists but insufficient content)"
+    exit 0
+fi
+
 # Check 2: Valid Go package declaration (1 point)
 if echo "$DOC_CONTENT" | grep -q "^package queueset"; then
     echo "PASS: Valid Go package declaration"
@@ -73,7 +98,7 @@ else
 fi
 
 # Check 3: Mentions fair queuing (1 point)
-if echo "$DOC_CONTENT" | grep -qi "fair queuing\|fair queueing"; then
+if context_grep "fair queuing\|fair queueing" "$DOC_CONTENT"; then
     echo "PASS: References fair queuing"
     SCORE=$((SCORE + 1))
 else
@@ -81,7 +106,7 @@ else
 fi
 
 # Check 4: Mentions virtual time (1 point)
-if echo "$DOC_CONTENT" | grep -qi "virtual time\|R(t)"; then
+if context_grep "virtual time\|R(t)" "$DOC_CONTENT"; then
     echo "PASS: References virtual time / R(t)"
     SCORE=$((SCORE + 1))
 else
@@ -89,7 +114,7 @@ else
 fi
 
 # Check 5: Mentions concurrency limit (1 point)
-if echo "$DOC_CONTENT" | grep -qi "concurrency\|concurrent"; then
+if context_grep "concurrency\|concurrent" "$DOC_CONTENT"; then
     echo "PASS: References concurrency"
     SCORE=$((SCORE + 1))
 else
@@ -97,7 +122,7 @@ else
 fi
 
 # Check 6: Mentions service time or duration (1 point)
-if echo "$DOC_CONTENT" | grep -qi "service time\|duration\|execution time"; then
+if context_grep "service time\|duration\|execution time" "$DOC_CONTENT"; then
     echo "PASS: References service time"
     SCORE=$((SCORE + 1))
 else
@@ -105,7 +130,7 @@ else
 fi
 
 # Check 7: Mentions queue management concepts (1 point)
-if echo "$DOC_CONTENT" | grep -qi "dispatch\|dequeue\|enqueue\|queue.*set\|QueueSet"; then
+if context_grep "dispatch\|dequeue\|enqueue\|queue.*set\|QueueSet" "$DOC_CONTENT"; then
     echo "PASS: References queue management"
     SCORE=$((SCORE + 1))
 else
@@ -113,7 +138,7 @@ else
 fi
 
 # Check 8: References networking origins or papers (1 point)
-if echo "$DOC_CONTENT" | grep -qi "network\|packet\|WFQ\|weighted fair\|paper\|acm.org\|wikipedia"; then
+if context_grep "network\|packet\|WFQ\|weighted fair\|paper\|acm.org\|wikipedia" "$DOC_CONTENT"; then
     echo "PASS: References networking origins"
     SCORE=$((SCORE + 1))
 else

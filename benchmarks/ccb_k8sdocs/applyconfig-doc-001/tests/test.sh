@@ -44,16 +44,27 @@ if [ "$UNSTAGED_COUNT" -eq 0 ] && [ "$STAGED_COUNT" -eq 0 ] && [ "$UNTRACKED_COU
     exit 0
 fi
 
+# Context-aware keyword check: matches keyword only in non-negated context
+# Finds lines containing the pattern, then excludes lines where it appears
+# after "not ", "no ", "isn't ", or "doesn't " — preventing false positives
+# from sentences like "X is not relevant" still matching on "X"
+# Usage: context_grep "pattern" "$CONTENT"
+context_grep() {
+    local pattern="$1"
+    local content="$2"
+    echo "$content" | grep -i "$pattern" | grep -ivq "not .*\($pattern\)\|no .*\($pattern\)\|isn't .*\($pattern\)\|doesn't .*\($pattern\)"
+}
+
 TARGET_FILE="staging/src/k8s.io/client-go/applyconfigurations/doc.go"
 echo "Evaluating ${TARGET_FILE}..."
 
 SCORE=0
 MAX_SCORE=10
 
-# Check 1: File exists (2 points)
+# Check 1: File exists (1 point)
 if [ -f "$TARGET_FILE" ]; then
     echo "PASS: ${TARGET_FILE} exists"
-    SCORE=$((SCORE + 2))
+    SCORE=$((SCORE + 1))
 else
     echo "FAIL: ${TARGET_FILE} not found"
     echo "0.0" > /logs/verifier/reward.txt
@@ -64,6 +75,20 @@ fi
 
 DOC_CONTENT=$(cat "$TARGET_FILE")
 
+# Check 1b: Minimum content length gate (1 point)
+# Count words excluding the package declaration line
+WORD_COUNT=$(echo "$DOC_CONTENT" | grep -v '^package ' | wc -w)
+if [ "$WORD_COUNT" -ge 50 ]; then
+    echo "PASS: Document has $WORD_COUNT words of content (>= 50 minimum)"
+    SCORE=$((SCORE + 1))
+else
+    echo "FAIL: Document has only $WORD_COUNT words of content (< 50 minimum)"
+    echo "0.1" > /logs/verifier/reward.txt
+    echo ""
+    echo "Tests completed - Score: 0.1 (file exists but insufficient content)"
+    exit 0
+fi
+
 # Check 2: Valid Go package declaration (1 point)
 if echo "$DOC_CONTENT" | grep -q "^package applyconfigurations"; then
     echo "PASS: Valid Go package declaration"
@@ -73,7 +98,7 @@ else
 fi
 
 # Check 3: Mentions Server-side Apply (1 point)
-if echo "$DOC_CONTENT" | grep -qi "Server-side Apply\|server.side apply\|SSA"; then
+if context_grep "Server-side Apply\|server.side apply\|SSA" "$DOC_CONTENT"; then
     echo "PASS: References Server-side Apply"
     SCORE=$((SCORE + 1))
 else
@@ -81,7 +106,7 @@ else
 fi
 
 # Check 4: Explains zero-value / pointer problem (1 point)
-if echo "$DOC_CONTENT" | grep -qi "pointer\|zero.value\|optional"; then
+if context_grep "pointer\|zero.value\|optional" "$DOC_CONTENT"; then
     echo "PASS: References pointer/zero-value problem"
     SCORE=$((SCORE + 1))
 else
@@ -89,7 +114,7 @@ else
 fi
 
 # Check 5: Mentions With functions (1 point)
-if echo "$DOC_CONTENT" | grep -qi "With.*function\|With.*method\|WithSpec\|WithName\|With<"; then
+if context_grep "With.*function\|With.*method\|WithSpec\|WithName\|With<" "$DOC_CONTENT"; then
     echo "PASS: References With builder functions"
     SCORE=$((SCORE + 1))
 else
@@ -97,7 +122,7 @@ else
 fi
 
 # Check 6: Mentions FieldManager (1 point)
-if echo "$DOC_CONTENT" | grep -qi "FieldManager\|field manager"; then
+if context_grep "FieldManager\|field manager" "$DOC_CONTENT"; then
     echo "PASS: References FieldManager"
     SCORE=$((SCORE + 1))
 else
@@ -105,7 +130,7 @@ else
 fi
 
 # Check 7: Mentions controller patterns (1 point)
-if echo "$DOC_CONTENT" | grep -qi "controller\|reconcil"; then
+if context_grep "controller\|reconcil" "$DOC_CONTENT"; then
     echo "PASS: References controller patterns"
     SCORE=$((SCORE + 1))
 else
@@ -113,7 +138,7 @@ else
 fi
 
 # Check 8: References to typed client packages exist in workspace (1 point)
-if echo "$DOC_CONTENT" | grep -qi "typed\|client-go/kubernetes" && [ -d "staging/src/k8s.io/client-go/kubernetes" ]; then
+if context_grep "typed\|client-go/kubernetes" "$DOC_CONTENT" && [ -d "staging/src/k8s.io/client-go/kubernetes" ]; then
     echo "PASS: References typed client (verified: package exists)"
     SCORE=$((SCORE + 1))
 else

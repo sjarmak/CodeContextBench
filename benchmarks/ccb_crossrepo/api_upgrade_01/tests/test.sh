@@ -38,9 +38,16 @@ else
             cd "$repo_dir"
             # Capture both staged and unstaged changes
             git diff HEAD -- . >> "$FALLBACK_PATCH" 2>/dev/null || true
-            # Also capture untracked files as diffs
+            # Also capture untracked files as diffs (only if they match expected file paths)
+            EXPECTED_FILE_LIST=$(python3 -c "import json; [print(p) for p in json.load(open('$EXPECTED_CHANGES')).get('expected_files',[])]" 2>/dev/null || true)
             git ls-files --others --exclude-standard | while read -r f; do
-                if [ -f "$f" ]; then
+                # Only include untracked files that match an expected file path
+                is_expected=false
+                for ef in $EXPECTED_FILE_LIST; do
+                    case "$ef" in *"$f"*) is_expected=true; break;; esac
+                    case "$f" in *"$ef"*) is_expected=true; break;; esac
+                done
+                if [ "$is_expected" = true ] && [ -f "$f" ]; then
                     echo "diff --git a/$f b/$f" >> "$FALLBACK_PATCH"
                     echo "new file mode 100644" >> "$FALLBACK_PATCH"
                     echo "--- /dev/null" >> "$FALLBACK_PATCH"

@@ -8,43 +8,36 @@
 
 ## Description
 
-Proper fix for #164048, fixes gather too, reverts #164049 Pull Request resolved: https://github.com/pytorch/pytorch/pull/166974 Approved by: https://github.com/eqy
+This task fixes a CUDA kernel launch bug where PyTorch's indexing operations on large tensors (e.g., boolean indexing on a 4D tensor with dimensions like 4x87x1056x736) produced an "invalid configuration argument" CUDA error. The grid configuration exceeded CUDA's maximum grid dimensions. The original fix in PR #164049 addressed only the `index` kernel but not `gather`, and its approach was incomplete.
 
-Fixes #164048
-
+This fix properly clamps grid dimensions to valid values in `aten/src/ATen/native/cuda/IndexKernelUtils.cu`, reverts the incomplete earlier fix from `IndexKernel.cu`, and removes an incorrect test while adding proper scatter/gather test coverage. The bug is a correctness issue that causes hard crashes on any sufficiently large tensor indexing operation on CUDA devices.
 
 ## Task
 
-Review the PR: don't produce invalid grid configs (#166973)
-
-Description: Proper fix for #164048, fixes gather too, reverts #164049 Pull Request resolved: https://github.com/pytorch/pytorch/pull/166974 Approved by: https://github.com/eqy
-
-Fixes #164048
-
-
 Changes:
-- 3 files modified
+- 3 files modified (IndexKernelUtils.cu, IndexKernel.cu, test files)
 - 15 additions, 10 deletions
 
 Tasks:
-1. Understand the issue being fixed
-2. Review the solution in the merged PR
-3. Implement the fix to pass all tests
-4. Verify: run "make test" successfully
+1. Fix grid dimension clamping in `aten/src/ATen/native/cuda/IndexKernelUtils.cu`
+2. Revert the incomplete earlier fix from IndexKernel.cu
+3. Update test coverage for scatter/gather on large tensors
+4. Verify your changes compile and match the expected fix
 
 ## Success Criteria
 
-All tests pass: run "make test" successfully.
+Code changes match the expected ground-truth fix.
 Code follows repository conventions.
 No regressions in existing functionality.
 All 3 modified files updated correctly.
 
 ## Testing
 
-Run the test command to verify your implementation:
+Your implementation will be automatically verified:
 
-```bash
-make test
+```
+The verifier will compare your code changes against the expected ground-truth diff.
+Score = 0.35 * file_recall + 0.45 * line_recall + 0.20 * line_precision
 ```
 
 **Time Limit:** 10 minutes  
