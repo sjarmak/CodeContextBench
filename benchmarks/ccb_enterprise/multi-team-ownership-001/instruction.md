@@ -1,4 +1,4 @@
-# Fix ModelChoiceField Value Display with Custom to_field
+# Fix Form Dropdown Showing Wrong Selection for Non-PK Foreign Keys
 
 **Repository:** django/django
 **Your Team:** Forms Team
@@ -8,40 +8,52 @@
 
 You are a developer on the Django Forms team. The ORM Team owns `django/db/models/` and `django/db/backends/`. Your team owns all form rendering, validation, and field logic in `django/forms/`.
 
-A user has reported a bug: when a `ModelChoiceField` is backed by a `ForeignKey` that uses a custom `to_field` (e.g., `to_field="slug"` instead of the default primary key), the initial value display in the rendered `<select>` widget is broken. The selected option shows the wrong item because `prepare_value()` falls back to `.pk` even when `to_field_name` is set.
+## Bug Report
 
-## Bug Details
+**Reported by:** Django Forum user
+**Severity:** High
+**Django version:** Current main branch
 
-When `ForeignKey(to_field="slug")` generates a form field via `formfield()`, it passes `to_field_name="slug"` to `ModelChoiceField`. The field stores this in `self.to_field_name`. However, when the form is rendered with an initial model instance value, the `prepare_value()` method in `ModelChoiceField` does not consistently use `to_field_name` for value extraction, causing a mismatch between the `<option value="...">` attributes and the selected value.
+When a model has a ForeignKey that references a non-primary-key field (using the `to_field` parameter), forms generated from that model display the wrong selected option in dropdown (`<select>`) widgets.
+
+**Steps to reproduce:**
+
+```python
+# Models
+class Country(models.Model):
+    code = models.CharField(max_length=2, unique=True)  # e.g., "US", "GB"
+    name = models.CharField(max_length=100)
+
+class City(models.Model):
+    name = models.CharField(max_length=100)
+    country = models.ForeignKey(Country, to_field="code", on_delete=models.CASCADE)
+
+# Form for City — the country dropdown shows wrong selection
+form = CityForm(instance=existing_city)
+```
+
+The `<option>` elements in the dropdown are generated with `value="US"`, `value="GB"`, etc. (using the `code` field as expected). But when rendering a form with an existing City instance, the initial selected value resolves to the Country's numeric primary key (integer ID) instead of the `code` value. This causes a mismatch — the form renders with no option selected, or the wrong option highlighted.
+
+**Expected behavior:** When a ForeignKey uses `to_field="code"`, the form field should use the `code` field consistently — both for generating `<option>` values AND for determining which option is currently selected.
+
+**Observed behavior:** Option values use `code`, but the selected value comparison uses the primary key, causing a mismatch.
 
 ## Task
 
-Fix `ModelChoiceField.prepare_value()` in `django/forms/models.py` so that when `to_field_name` is set, it correctly extracts the value using that field rather than defaulting to `.pk`.
+Find and fix the inconsistency in how Django's model-backed choice fields extract values when a non-default foreign key field is configured.
 
 **YOU MUST IMPLEMENT CODE CHANGES.**
 
 ### Requirements
 
-1. Read `django/forms/models.py` to find the `ModelChoiceField` class and its `prepare_value()` method
-2. Read `django/db/models/fields/related.py` to understand how `ForeignKey.formfield()` passes `to_field_name` to the form field — this tells you what the form field receives
-3. Trace how `ModelChoiceIterator` in `django/forms/models.py` generates `<option>` values — each option's value comes from `self.field.prepare_value(obj)`. The selected value must match one of these
-4. Fix `prepare_value()` to use `self.to_field_name` when available. Specifically:
-   - If the value is a model instance (has `_meta` attribute) and `self.to_field_name` is set, use `value.serializable_value(self.to_field_name)`
-   - If `self.to_field_name` is not set, fall back to `value.pk`
-5. Also check `_get_choices()` and the `ModelChoiceIterator.choice()` method to ensure option values are generated consistently with the fix
-6. Write a small test in `django/forms/models.py` or a standalone test file is NOT required — the verifier checks the fix directly
-
-### Hints
-
-- `ModelChoiceField` is defined around line 1400+ in `django/forms/models.py`
-- `prepare_value()` is a short method — look at what it does with `hasattr(value, '_meta')`
-- `ModelChoiceIterator.choice()` calls `self.field.prepare_value(obj)` to get each option's value
-- The `to_python()` method also uses `self.to_field_name` — compare its logic to `prepare_value()`
-- You need to understand 8+ files: `models.py` (forms), `related.py`, `fields/__init__.py` (models), `options.py`, `base.py` in models, plus the widget rendering chain
+1. The form field must consistently use the configured foreign key field (not the primary key) for value extraction
+2. The fix must be consistent with how the same field validates incoming submitted data
+3. All changes must be within `django/forms/` only
+4. Python syntax must be valid
 
 ## Success Criteria
 
-- `ModelChoiceField.prepare_value()` correctly uses `to_field_name` when set
-- The fix is consistent with how `to_python()` uses `to_field_name`
+- Form dropdowns correctly show the selected option for non-PK foreign keys
+- The fix is consistent with the field's existing validation logic
 - All changes are within `django/forms/` only
-- Python syntax is valid: `python3 -c "import ast; ast.parse(open('django/forms/models.py').read())"`
+- Python syntax is valid

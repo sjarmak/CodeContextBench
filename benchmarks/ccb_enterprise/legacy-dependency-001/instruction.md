@@ -1,69 +1,47 @@
-# Add Encoding-Aware HTML Escaping Function to Django
+# Add Encoding-Aware HTML Escaping for GIS Data Pipeline
 
 **Repository:** django/django
-**Access Scope:** You may modify `django/utils/html.py`. You may read any file to understand the legacy encoding chain.
+**Access Scope:** You may modify `django/utils/html.py`. You may read any file to understand existing patterns and utilities.
 
 ## Context
 
-Django's HTML escaping pipeline (`escape()`, `conditional_escape()`, `format_html()`) assumes all input is UTF-8. However, Django's GIS module processes data from GDAL sources that may use non-UTF-8 encodings. Currently, GIS code calls `force_str()` from `django/utils/encoding.py` to convert to Python strings before rendering, but there is no way to escape HTML while preserving encoding awareness.
+Django's GIS module processes geospatial data from external C libraries (like GDAL) that may return byte strings in non-UTF-8 encodings (Latin-1, Shift-JIS, etc.). When this data needs to be rendered in HTML templates, it must first be converted from its source encoding to a Python string, and then HTML-escaped to prevent XSS.
 
-The legacy encoding functions in `django/utils/encoding.py` have existed since early Django versions. They have **no type hints**, use old-style parameter conventions (`strings_only`, `errors` mode), and handle edge cases from the Python 2 → 3 transition. Understanding how they work requires reading the actual implementation — the naming and parameters are not self-documenting.
+Currently, developers must manually orchestrate two separate operations — encoding conversion and HTML escaping — in the correct order. Django has existing utility functions for both operations, but they aren't combined. The encoding conversion utilities date back to the Python 2 era and have legacy API conventions (no type hints, non-obvious parameter names, special handling for numeric types) that make them easy to misuse.
 
-## Task
+## Feature Request
 
-Add an `escape_with_encoding()` function to `django/utils/html.py` that combines encoding conversion and HTML escaping in a single operation, properly handling the legacy `force_str()` parameter conventions.
+**From:** GIS Team Lead
+**Priority:** P2
+
+We need a single utility function that combines encoding conversion and HTML escaping in one atomic operation. This prevents bugs where developers forget a step, apply them in the wrong order, or mishandle the legacy encoding API's special behaviors.
+
+### Deliverables
+
+Add an `escape_with_encoding()` function to `django/utils/html.py` that:
+
+1. Accepts text in any encoding and produces a safe, HTML-escaped string
+2. Supports the same parameters as Django's existing string-coercion utilities: encoding name, error handling mode, and the option to skip conversion for certain types
+3. When the "skip non-string types" option is enabled and the input is a numeric type (int, float, Decimal, datetime, etc.), returns the value as-is without conversion or escaping — this matches the existing encoding utilities' behavior for "protected types"
+4. For all other inputs, converts to a Python string using the specified encoding, then applies Django's standard conditional HTML escaping
+5. Handles lazy translation objects correctly (forces evaluation before escaping)
 
 **YOU MUST IMPLEMENT CODE CHANGES.**
 
 ### Requirements
 
-1. Read `django/utils/encoding.py` to understand the legacy encoding functions:
-   - `force_str(s, encoding='utf-8', strings_only=False, errors='strict')` — what does `strings_only` do? When is it `True`?
-   - `smart_str()` — how does it differ from `force_str()`? When would you use one vs the other?
-   - `is_protected_type()` — what types are "protected" and why?
-   - These functions have NO type hints — you must read the implementation to understand behavior
-
-2. Read `django/utils/html.py` to understand the existing escaping chain:
-   - `escape(text)` — how does it handle non-string inputs?
-   - `conditional_escape(text)` — what is the `__html__` convention? How does it handle `Promise` (lazy) objects?
-   - `format_html()` and `format_html_join()` — how do they use `conditional_escape()`?
-
-3. Trace real usage of the legacy encoding + escaping chain:
-   - `django/contrib/gis/gdal/feature.py` calls `force_str(name, self.encoding, strings_only=True)` — understand why all three parameters matter
-   - `django/template/base.py` `render_value_in_context()` calls `conditional_escape()` — trace the full path from value → escape → rendered string
-   - `django/forms/utils.py` `flatatt()` uses `format_html_join()` — understand how attribute values get escaped
-
-4. Add to `django/utils/html.py`:
-   ```python
-   def escape_with_encoding(text, encoding='utf-8', strings_only=False, errors='strict'):
-       """
-       Convert text to a string using the given encoding, then HTML-escape it.
-       Combines force_str() and conditional_escape() for encoding-aware escaping.
-       Respects the strings_only parameter: if True and text is a protected type
-       (int, float, datetime, etc.), returns it unconverted.
-       """
-   ```
-
-5. The function must:
-   - Call `force_str()` with all four parameters to convert input
-   - If `strings_only=True` and `force_str()` returns a non-string (protected type), return it as-is without escaping
-   - Otherwise, pass the result through `conditional_escape()`
-   - Handle `Promise` (lazy) objects correctly (force evaluation before escaping)
-   - Import `force_str` from `django.utils.encoding` and use existing `conditional_escape`
-
-### Hints
-
-- `force_str()` with `strings_only=True` returns the original value unchanged if it's a "protected type" (int, float, Decimal, datetime, etc.)
-- `conditional_escape()` handles `Promise` objects and `__html__` convention
-- The GIS feature.py example shows why encoding matters: GDAL C API returns bytes in datasource-specific encoding
-- Look at `is_protected_type()` in encoding.py to understand exactly which types are protected
-- `format_html()` at line ~135 in html.py shows how existing escaping wraps `conditional_escape`
+1. Function named `escape_with_encoding` in `django/utils/html.py`
+2. Must reuse Django's existing encoding conversion and HTML escaping utilities internally — read their source code to understand the legacy API conventions, as these functions predate type hints and have non-obvious parameter semantics
+3. Must correctly handle the "protected types" concept from Django's encoding system
+4. Must integrate with Django's existing HTML escaping pipeline (including support for objects that declare themselves as already-safe HTML)
+5. Valid Python syntax
+6. Changes limited to `django/utils/html.py`
 
 ## Success Criteria
 
 - `escape_with_encoding()` function exists in `django/utils/html.py`
-- Correctly imports and calls `force_str()` with encoding, strings_only, and errors parameters
-- Handles protected types (returns without escaping when strings_only=True)
-- Passes non-protected results through `conditional_escape()`
+- Correctly uses Django's existing encoding conversion with all its legacy parameters
+- Handles protected types (returns without escaping when configured)
+- Integrates with Django's existing conditional HTML escaping
 - Valid Python syntax
 - Changes limited to `django/utils/html.py`

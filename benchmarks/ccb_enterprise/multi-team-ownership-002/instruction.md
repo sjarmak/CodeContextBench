@@ -1,62 +1,49 @@
-# Add Evaluation Duration Tracking to Flipt
+# Add Evaluation Latency Tracking
 
 **Repository:** flipt-io/flipt
 **Your Team:** Evaluation Team
-**Access Scope:** You own `internal/server/evaluation/`. You may read `internal/storage/`, `internal/server/analytics/`, `internal/server/middleware/`, `rpc/flipt/evaluation/`, and `internal/config/` to understand contracts and patterns. All code changes must be in `internal/server/evaluation/`.
+**Access Scope:** You own `internal/server/evaluation/`. You may read other packages to understand codebase patterns and interfaces, but all code changes must stay within your package.
 
 ## Context
 
-You are a developer on the Flipt Evaluation Team. Your team owns the flag evaluation logic in `internal/server/evaluation/`. The Platform Team owns the storage layer (`internal/storage/`), analytics pipeline (`internal/server/analytics/`), and middleware (`internal/server/middleware/`).
+You are a developer on the Flipt Evaluation Team. Your team is responsible for the feature flag evaluation engine that determines flag variant assignments. Other teams own storage, analytics, middleware, transport, and configuration — you may read their code to understand patterns, but must not modify their packages.
 
-Operators need to understand evaluation performance. The evaluation server currently performs flag evaluations (boolean, variant, batch) but does not track how long each evaluation takes. The analytics and middleware teams have already built infrastructure for recording evaluation outcomes — you need to add duration tracking within your package.
+## Feature Request
 
-## Task
+**From:** VP Engineering
+**Priority:** P1
+**Context:** Preparing for SOC 2 compliance — we need observability into evaluation performance
 
-Add evaluation duration tracking to the evaluation server. Each `Boolean()`, `Variant()`, and `Batch()` call should record its wall-clock duration and expose per-flag timing statistics.
+We need to track how long feature flag evaluations take so we can set SLOs and identify performance regressions. Currently, we have no visibility into evaluation latency — when users report slow flag evaluations, we have no data to diagnose the issue.
+
+Add a duration tracking component to the evaluation engine that:
+- Records the wall-clock duration of each evaluation
+- Provides aggregate statistics: total count, average duration, and P99 latency
+- Is safe for concurrent use (our evaluation server handles many simultaneous gRPC requests)
+
+### Deliverables
+
+1. Create `internal/server/evaluation/duration.go` with a `DurationTracker` struct
+2. Integrate it into the evaluation server — each evaluation should record its duration
+3. All three evaluation paths (boolean, variant, and batch) must be instrumented
+4. The code must compile
 
 **YOU MUST IMPLEMENT CODE CHANGES.**
 
 ### Requirements
 
-1. Create a new file `internal/server/evaluation/duration.go` that defines:
-   - A `DurationTracker` struct that records evaluation durations per flag key
-   - Fields: a map from flag key to a slice of `time.Duration` values (or summary stats)
-   - `RecordDuration(flagKey string, d time.Duration)` method
-   - `GetStats(flagKey string) DurationStats` method returning `{Count int64, AvgMs float64, P99Ms float64}`
-   - Thread-safe via `sync.RWMutex`
-
-2. Integrate the tracker into the evaluation `Server` struct:
-   - Read `internal/server/evaluation/server.go` to understand the existing `Server` struct and its constructor (`New()`)
-   - Add a `durations *DurationTracker` field to `Server`
-   - Initialize it in the constructor
-
-3. Instrument the evaluation methods:
-   - Read `internal/server/evaluation/evaluation.go` to understand `Boolean()`, `Variant()`, and `Batch()` methods
-   - At the start of each method, record `start := time.Now()`
-   - Before returning, call `s.durations.RecordDuration(flagKey, time.Since(start))`
-   - For `Batch()`, record duration for each individual flag evaluation within the batch loop
-
-4. To understand the evaluation flow, you need to trace across packages:
-   - `internal/storage/storage.go` defines `EvaluationStore` interface — the `Server` calls methods on this interface
-   - `rpc/flipt/evaluation/` defines the protobuf request/response types
-   - `internal/server/middleware/grpc/middleware.go` shows how the middleware already instruments evaluations with OpenTelemetry — your duration tracking is complementary (server-side, not middleware-side)
-   - `internal/server/analytics/` shows the existing analytics pattern — follow its style for consistency
-
-### Hints
-
-- The `Server` struct in `server.go` is initialized with `New(logger, store)` — add the tracker there
-- `evaluation.go` methods like `Boolean()` already have deferred functions for tracing — add duration recording similarly
-- The `Batch()` method iterates over a list of requests — track per-flag durations inside the loop
-- Look at how `internal/server/analytics/sink.go` defines its interface pattern — follow a similar style for your `DurationTracker`
-- Use `sync.RWMutex` — write lock for `RecordDuration()`, read lock for `GetStats()`
-- For P99, keep a circular buffer or just track count/sum (full percentile tracking is optional)
+1. New file at `internal/server/evaluation/duration.go`
+2. `DurationTracker` struct with methods to record durations and retrieve statistics (count, average, P99)
+3. Thread-safe implementation
+4. Integrated into the evaluation server and wired into all evaluation methods
+5. All changes within `internal/server/evaluation/`
+6. Code compiles: `go build ./internal/server/evaluation/...`
 
 ## Success Criteria
 
-- New `duration.go` file exists in `internal/server/evaluation/`
-- `DurationTracker` struct with `RecordDuration()` and `GetStats()` methods
-- Thread-safe implementation using `sync.RWMutex`
-- Tracker integrated into `Server` struct and initialized in constructor
-- Evaluation methods (`Boolean`, `Variant`, `Batch`) record durations
-- Code compiles: `go build ./internal/server/evaluation/...`
-- All changes within `internal/server/evaluation/` only
+- `duration.go` exists with `DurationTracker` struct
+- Thread-safe implementation
+- Server struct integrates the tracker
+- Evaluation methods record durations
+- Go code compiles
+- No changes outside `internal/server/evaluation/`

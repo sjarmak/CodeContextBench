@@ -1,4 +1,4 @@
-# Fix Admin List Filter Display for Empty Querysets
+# Fix Admin Filter Sidebar Showing Empty Filters
 
 **Repository:** django/django
 **Your Team:** Admin UI Team
@@ -10,34 +10,40 @@ You are a developer on the Django Admin UI team. Your access is limited to the `
 
 ## Bug Report
 
-When a `ModelAdmin` uses `list_filter` with a `RelatedFieldListFilter` and the related model's queryset is empty, the filter sidebar still renders the filter widget with a "All" option but no other choices. This causes confusion because:
+**Reported by:** QA Team
+**Severity:** Medium
+**Environment:** Django admin site with models using ForeignKey relationships
 
-1. The filter title still appears in the sidebar even when there are no choices to filter by
-2. Clicking "All" triggers an unnecessary page reload
+When a model's admin page is configured to let users filter by a related model (via a ForeignKey), the filter widget appears in the sidebar even when there are zero related objects in the database. This creates a confusing user experience:
+
+1. The filter section title appears in the sidebar with no useful choices
+2. Only a generic "All" option is shown — no actual items to filter by
+3. Clicking "All" triggers an unnecessary page reload
+4. Users have filed support tickets asking why an empty filter exists
+
+**Steps to reproduce:**
+1. Register a `ModelAdmin` with `list_filter` set to include a ForeignKey field
+2. Ensure the related model's database table has no rows
+3. Visit the admin changelist page
+4. Observe the filter sidebar — the empty filter is still rendered
+
+**Expected behavior:** When there are no meaningful choices available for a filter, the filter should not appear in the sidebar at all.
 
 ## Task
 
-Fix the `RelatedFieldListFilter` in `django/contrib/admin/filters.py` so that when the related queryset has no items (empty choices), the filter's `has_output()` method returns `False`, hiding the filter from the sidebar entirely.
+Find the root cause in the admin's filter rendering pipeline and fix it so that filters backed by an empty set of choices are hidden from the sidebar entirely.
 
 **YOU MUST IMPLEMENT CODE CHANGES.**
 
 ### Requirements
 
-1. Modify `RelatedFieldListFilter.has_output()` in `django/contrib/admin/filters.py` to return `False` when choices (excluding the "All" option) are empty
-2. The fix must not break existing filter behavior when choices exist
-3. You may need to trace how `FieldListFilter` and its subclasses work — use search to find the class hierarchy and understand the `choices()` method contract
-4. The admin filter system uses lookups defined across multiple files (`filters.py`, `options.py`, `views/main.py`) — you'll need to understand how they connect
-
-### Hints
-
-- `RelatedFieldListFilter` is defined in `django/contrib/admin/filters.py`
-- The `has_output()` method on the base `ListFilter` class returns `True` by default
-- The `choices()` method yields dicts with display values — the first is always "All"
-- Understanding the `ChangeList` in `django/contrib/admin/views/main.py` helps understand how filters are rendered
-- The related field's queryset comes through Django's ORM — you need to check if `self.lookup_choices` is empty
+1. The fix should prevent empty related-field filters from rendering in the admin sidebar
+2. Filters that DO have choices must continue to display correctly
+3. All changes must be within `django/contrib/admin/`
 
 ## Success Criteria
 
-- `RelatedFieldListFilter.has_output()` returns `False` when no filter choices exist (beyond "All")
-- Existing filters with choices continue to display correctly
+- Empty related-field filters no longer appear in the admin sidebar
+- Filters with available choices continue to work normally
 - Changes are limited to `django/contrib/admin/` files only
+- Python syntax is valid
