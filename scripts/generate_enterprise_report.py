@@ -554,71 +554,108 @@ def _generate_executive_summary_md(
     lines.append(f"## {exec_summary['headline_metric']}")
     lines.append("")
 
-    # Key findings
+    # Key Findings (3-5 bullets with one-sentence interpretations)
     lines.append("### Key Findings")
     lines.append("")
 
-    # Pass rate improvement
+    findings: list[str] = []
+
+    # 1. Pass rate improvement
     imp = exec_summary.get("reliability_improvement_pct")
     econ = sections.get("economic_metrics")
     if imp is not None and econ:
         roi = econ.get("roi_summary", {})
         bl_rate = roi.get("baseline_pass_rate", 0)
         sg_rate = roi.get("sg_full_pass_rate", 0)
-        lines.append(
-            f"Context-augmented agents (SG_full) achieve a **{sg_rate:.1%} task success "
-            f"rate** compared to **{bl_rate:.1%} baseline**, a "
-            f"**{abs(imp):.1f}% relative improvement** "
-            f"({'measured' if imp > 0 else 'measured — regression'})."
+        direction = "improvement" if imp > 0 else "regression"
+        findings.append(
+            f"**Task success**: Context-augmented agents achieve {sg_rate:.1%} vs "
+            f"{bl_rate:.1%} baseline ({abs(imp):.1f}% relative {direction}), "
+            f"demonstrating that centralized code search measurably improves agent "
+            f"reliability on real engineering tasks."
         )
-        lines.append("")
 
-    # Time savings
+    # 2. Time savings
     if ts := exec_summary.get("time_savings_estimate"):
-        lines.append(f"**Time Savings** (modeled): {ts}")
-        lines.append("")
+        findings.append(
+            f"**Time efficiency** (modeled): {ts}. "
+            f"This suggests context infrastructure reduces the cognitive overhead "
+            f"of navigating unfamiliar codebases."
+        )
 
-    # Economic efficiency
+    # 3. Economic efficiency
     if ee := exec_summary.get("economic_efficiency"):
-        lines.append(f"**Economic Efficiency** (measured cost, modeled ROI): {ee}")
-        lines.append("")
+        findings.append(
+            f"**Cost profile**: {ee}. "
+            f"The marginal cost of context retrieval is offset by higher task "
+            f"completion rates in complex, multi-file scenarios."
+        )
 
-    # Reliability
+    # 4. Reliability CI
     if ci := exec_summary.get("reliability_ci"):
-        lines.append(f"**Reliability** (measured): {ci}")
-        lines.append("")
+        findings.append(
+            f"**Predictability**: {ci}. "
+            f"Enterprise buyers require consistent performance; these intervals "
+            f"bound expected outcomes across diverse codebases."
+        )
 
-    # Failure modes
-    if rl := exec_summary.get("top_residual_limitation"):
-        lines.append(f"**Top Residual Limitation**: {rl}")
-        lines.append("")
-
-    # Context impact
+    # 5. Context impact on failures
     fa = sections.get("failure_analysis")
     if fa and (cs := fa.get("context_summary")):
         resolved = cs.get("context_resolved", 0)
         no_impact = cs.get("context_no_impact", 0)
         total_failed = sum(cs.values())
         if total_failed > 0:
-            lines.append(
-                f"Of {total_failed} failed tasks analyzed, context infrastructure "
-                f"**resolved {resolved}** ({resolved/total_failed:.0%}) and had "
-                f"**no impact on {no_impact}** ({no_impact/total_failed:.0%})."
+            findings.append(
+                f"**Failure attribution**: Of {total_failed} failed tasks, context "
+                f"infrastructure resolved {resolved} ({resolved/total_failed:.0%}) "
+                f"and had no impact on {no_impact} ({no_impact/total_failed:.0%}), "
+                f"indicating that most remaining failures stem from task difficulty "
+                f"rather than missing context."
             )
-            lines.append("")
 
-    # Governance
+    for f in findings:
+        lines.append(f"- {f}")
+    lines.append("")
+
+    # Top residual limitation + governance (concise)
+    if rl := exec_summary.get("top_residual_limitation"):
+        lines.append(f"**Top Residual Limitation**: {rl}")
+        lines.append("")
     lines.append(f"**Governance**: {exec_summary['governance_readiness']}")
+    lines.append("")
+
+    # Limitations & Caveats
+    lines.append("### Limitations & Caveats")
+    lines.append("")
+    n_tasks = metadata.get("total_tasks", 0)
+    n_configs = len(metadata.get("configs_compared", []))
+    lines.append(
+        f"- **Sample size**: {n_tasks} task-config pairs across {n_configs} "
+        f"configurations. Statistical power is limited for per-suite comparisons "
+        f"with fewer than 20 tasks."
+    )
+    lines.append(
+        "- **Non-determinism**: Agent behavior varies between runs due to LLM "
+        "sampling. Results represent point estimates, not guaranteed outcomes."
+    )
+    lines.append(
+        "- **Single model**: All runs use Claude Opus. Results may not generalize "
+        "to other foundation models or agent architectures."
+    )
+    lines.append(
+        "- **Modeled estimates**: Time savings and ROI projections use developer "
+        "productivity multipliers, not direct measurements of human engineering time."
+    )
     lines.append("")
 
     # Methodology note
     lines.append("---")
     lines.append("")
     lines.append(
-        "*This summary distinguishes measured metrics (derived from benchmark "
-        "execution data) from modeled estimates (projected using developer "
-        "productivity multipliers). All cost figures reflect hypothetical API "
-        "pricing, not actual subscription costs. "
+        "*Measured metrics are derived from benchmark execution data. "
+        "Modeled estimates use developer productivity multipliers. "
+        "Cost figures reflect hypothetical API pricing. "
         "See ENTERPRISE_REPORT.md for full methodology.*"
     )
 

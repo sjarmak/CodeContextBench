@@ -180,7 +180,21 @@ def _build_comparison(task_matrix, suite_filter) -> dict:
     }
 
 
-def format_comparison_table(data: dict) -> str:
+TIER_LABELS = {
+    "baseline": "IDE-native",
+    "sourcegraph_base": "SG_base",
+    "sourcegraph_full": "Context infra",
+}
+
+
+def _config_label(config: str, use_labels: bool = False) -> str:
+    """Return display label for a config slug."""
+    if use_labels:
+        return TIER_LABELS.get(config, config.replace("sourcegraph_", "SG_"))
+    return config.replace("sourcegraph_", "SG_")
+
+
+def format_comparison_table(data: dict, use_labels: bool = False) -> str:
     """Format comparison as ASCII table."""
     lines = []
     lines.append(f"Config Comparison Report  (generated: {data['generated_at']})")
@@ -193,8 +207,8 @@ def format_comparison_table(data: dict) -> str:
         p = ct.get("pass", 0)
         t = ct.get("total", 0)
         rate = ct.get("pass_rate", 0)
-        short = config.replace("sourcegraph_", "SG_")
-        lines.append(f"  {short:18s}  {p:>3d}/{t:<3d}  ({rate:.0%})")
+        label = _config_label(config, use_labels)
+        lines.append(f"  {label:18s}  {p:>3d}/{t:<3d}  ({rate:.0%})")
     lines.append("")
 
     # Summary
@@ -203,8 +217,10 @@ def format_comparison_table(data: dict) -> str:
     lines.append(f"  All pass:           {s['all_pass']:>4d}")
     lines.append(f"  All fail:           {s['all_fail']:>4d}")
     lines.append(f"  Divergent:          {s['divergent_tasks']:>4d}")
-    lines.append(f"  Baseline only fail: {s['baseline_only_fail']:>4d}  (MCP tools help)")
-    lines.append(f"  MCP only fail:      {s['mcp_only_fail']:>4d}  (MCP tools hurt)")
+    bl_label = _config_label("baseline", use_labels)
+    sg_label = _config_label("sourcegraph_full", use_labels)
+    lines.append(f"  {bl_label} only fail: {s['baseline_only_fail']:>4d}  ({sg_label} helps)")
+    lines.append(f"  {sg_label} only fail: {s['mcp_only_fail']:>4d}  ({sg_label} hurts)")
     lines.append("")
 
     # Per-suite breakdown
@@ -212,8 +228,8 @@ def format_comparison_table(data: dict) -> str:
     if suite_stats:
         header = f"{'Suite':25s}"
         for cfg in CONFIGS:
-            short = cfg.replace("sourcegraph_", "SG_")
-            header += f" | {short:>12s}"
+            label = _config_label(cfg, use_labels)
+            header += f" | {label:>12s}"
         lines.append(header)
         lines.append("-" * len(header))
 
@@ -233,8 +249,8 @@ def format_comparison_table(data: dict) -> str:
         lines.append(f"DIVERGENT TASKS ({len(divergent)}):")
         header = f"  {'Suite':20s}  {'Task':30s}"
         for cfg in CONFIGS:
-            short = cfg.replace("sourcegraph_", "SG_")
-            header += f"  {short:>10s}"
+            label = _config_label(cfg, use_labels)
+            header += f"  {label:>12s}"
         header += "  Signal"
         lines.append(header)
         lines.append("  " + "-" * (len(header) - 2))
@@ -244,12 +260,12 @@ def format_comparison_table(data: dict) -> str:
             for cfg in CONFIGS:
                 c = t["configs"].get(cfg, {})
                 sym = _status_symbol(c.get("status", "missing"))
-                row += f"  {sym:>10s}"
+                row += f"  {sym:>12s}"
             signal = ""
             if t["baseline_only_fail"]:
-                signal = "MCP helps"
+                signal = f"{sg_label} helps"
             elif t["mcp_only_fail"]:
-                signal = "MCP hurts"
+                signal = f"{sg_label} hurts"
             row += f"  {signal}"
             lines.append(row)
         lines.append("")
@@ -260,7 +276,7 @@ def format_comparison_table(data: dict) -> str:
         lines.append(f"ALL-FAIL TASKS ({len(all_fail)}) — likely task/adapter issues:")
         for t in all_fail:
             configs_str = "  ".join(
-                f"{cfg.replace('sourcegraph_', 'SG_')}={_status_symbol(t['configs'].get(cfg, {}).get('status', 'missing'))}"
+                f"{_config_label(cfg, use_labels)}={_status_symbol(t['configs'].get(cfg, {}).get('status', 'missing'))}"
                 for cfg in CONFIGS
             )
             lines.append(f"  {t['suite']:20s}  {t['task_name']:30s}  {configs_str}")
@@ -367,6 +383,10 @@ def parse_args():
         "--with-stats", action="store_true",
         help="Add statistical significance tests (Welch's t, Cohen's d, McNemar, bootstrap CI)",
     )
+    parser.add_argument(
+        "--baseline-labels", action="store_true",
+        help="Use enterprise-friendly tier labels in table output (baseline -> 'IDE-native', SG_full -> 'Context infra')",
+    )
     return parser.parse_args()
 
 
@@ -384,7 +404,7 @@ def main():
         data["statistical_tests"] = _compute_statistical_tests(data)
 
     if args.format == "table":
-        output = format_comparison_table(data)
+        output = format_comparison_table(data, use_labels=args.baseline_labels)
         if args.with_stats:
             output += _format_stats_section(data["statistical_tests"])
         print(output)
