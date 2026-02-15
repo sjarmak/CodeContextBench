@@ -43,6 +43,7 @@ from ccb_metrics.ir_metrics import (
     compute_ir_scores,
     aggregate_ir_scores,
     extract_retrieved_files,
+    extract_time_to_context,
     IRScores,
 )
 
@@ -51,10 +52,10 @@ BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
 SELECTION_FILE = Path(__file__).resolve().parent.parent / "configs" / "selected_benchmark_tasks.json"
 GT_CACHE = Path(__file__).resolve().parent.parent / "configs" / "ground_truth_files.json"
 
-SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived"]
+SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived", "preamble_test_"]
 CONFIGS = ["baseline", "sourcegraph_full"]
-# Benchmarks dropped from evaluation — exclude from ground truth builds
-DROPPED_BENCHMARKS = {"ccb_dependeval"}
+# Benchmarks dropped from evaluation — exclude from ground truth builds and IR analysis
+DROPPED_BENCHMARKS = {"ccb_dependeval", "ccb_locobench"}
 
 DIR_PREFIX_TO_SUITE = {
     "bigcode_mcp_": "ccb_largerepo",
@@ -211,6 +212,37 @@ def _infer_suite(task_id: str) -> str | None:
         return "ccb_pytorch"
     if task_id.endswith("-doc-001"):
         return "ccb_k8sdocs"
+    if task_id.startswith("big-code-"):
+        return "ccb_largerepo"
+    if task_id.startswith("dibench-"):
+        return "ccb_dibench"
+    if task_id.startswith("cr-"):
+        return "ccb_codereview"
+    if task_id.startswith("lfl-"):
+        return "ccb_linuxflbench"
+    if task_id.startswith("tac-"):
+        return "ccb_tac"
+    if task_id.startswith("repoqa-"):
+        return "ccb_repoqa"
+    if task_id.startswith("sweperf-"):
+        return "ccb_sweperf"
+    if task_id.startswith(("bug_localization_", "refactor_rename_", "cross_file_reasoning_", "simple_test_")):
+        return "ccb_crossrepo"
+    if "_expert_" in task_id:
+        return "ccb_locobench"
+    if task_id.startswith(("multifile_editing-", "file_span_fix-", "dependency_recognition-")):
+        return "ccb_dependeval"
+    # Governance/enterprise/investigation task patterns
+    if any(task_id.startswith(p) for p in (
+        "repo-scoped-", "sensitive-file-", "credential-",
+        "multi-team-", "degraded-context-", "dep-",
+    )):
+        return "ccb_enterprise"
+    if any(task_id.startswith(p) for p in (
+        "license-", "deprecated-api-", "security-vuln-",
+        "code-quality-", "naming-convention-", "documentation-",
+    )):
+        return "ccb_governance"
     return None
 
 
@@ -224,6 +256,8 @@ def run_ir_analysis(
         return {"error": "No ground truth available. Run --build-ground-truth first."}
 
     tasks = _walk_task_dirs()
+    # Exclude dropped benchmarks
+    tasks = [t for t in tasks if t["suite"] not in DROPPED_BENCHMARKS]
     if suite_filter:
         tasks = [t for t in tasks if t["suite"] == suite_filter]
 
@@ -254,6 +288,23 @@ def run_ir_analysis(
             task_id=task_id,
             config_name=config,
         )
+
+        # Time-to-context from trajectory.json
+        task_dir_path = Path(task_info["task_dir"])
+        trajectory = task_dir_path / "agent" / "trajectory.json"
+        if not trajectory.is_file():
+            trajectory = task_dir_path / "trajectory.json"
+        ttc = extract_time_to_context(
+            trajectory_path=trajectory,
+            transcript_path=Path(task_info["transcript"]),
+            ground_truth_files=gt.files,
+        )
+        if ttc:
+            scores.ttfr = ttc.get("ttfr")
+            scores.ttfr_step = ttc.get("ttfr_step")
+            scores.tt_all_r = ttc.get("tt_all_r")
+            scores.n_steps_to_first = ttc.get("n_steps_to_first")
+
         all_scores.append(scores)
         by_suite_config[(suite, config)].append(scores)
 
@@ -297,7 +348,7 @@ def run_ir_analysis(
                 bl_mrrs = [bl_by_id[tid].mrr for tid in sorted(common)]
                 sg_mrrs = [sg_by_id[tid].mrr for tid in sorted(common)]
 
-                result["statistical_tests"] = {
+                stat_tests: dict = {
                     "n_paired": len(common),
                     "file_recall": {
                         "welchs_t": welchs_t_test(bl_recalls, sg_recalls),
@@ -314,6 +365,20 @@ def run_ir_analysis(
                         ),
                     },
                 }
+
+                # TTFR comparison (lower is better)
+                bl_ttfrs = [bl_by_id[tid].ttfr for tid in sorted(common) if bl_by_id[tid].ttfr is not None]
+                sg_ttfrs = [sg_by_id[tid].ttfr for tid in sorted(common) if sg_by_id[tid].ttfr is not None]
+                if len(bl_ttfrs) >= 5 and len(sg_ttfrs) >= 5:
+                    stat_tests["ttfr"] = {
+                        "welchs_t": welchs_t_test(bl_ttfrs, sg_ttfrs),
+                        "cohens_d": cohens_d(bl_ttfrs, sg_ttfrs),
+                        "bootstrap_ci_delta": bootstrap_ci(
+                            [s - b for b, s in zip(bl_ttfrs, sg_ttfrs)]
+                        ),
+                    }
+
+                result["statistical_tests"] = stat_tests
         except ImportError:
             pass
 
@@ -341,7 +406,7 @@ def format_table(data: dict) -> str:
     overall = data.get("overall_by_config", {})
     if overall:
         lines.append("OVERALL BY CONFIG:")
-        header = f"  {'Config':20s} {'MRR':>8s} {'MAP':>8s} {'F.Recall':>8s} {'Ctx.Eff':>8s} {'P@5':>8s} {'R@5':>8s} {'n':>5s}"
+        header = f"  {'Config':20s} {'MRR':>8s} {'MAP':>8s} {'F.Recall':>8s} {'Ctx.Eff':>8s} {'TTFR(s)':>8s} {'Steps':>6s} {'n':>5s}"
         lines.append(header)
         lines.append("  " + "-" * (len(header) - 2))
 
@@ -349,9 +414,13 @@ def format_table(data: dict) -> str:
             if not agg:
                 continue
             row = f"  {cfg:20s}"
-            for metric in ("mrr", "map_score", "file_recall", "context_efficiency", "precision@5", "recall@5"):
+            for metric in ("mrr", "map_score", "file_recall", "context_efficiency"):
                 val = agg.get(metric, {}).get("mean", 0.0)
                 row += f" {val:>8.3f}"
+            ttfr = agg.get("ttfr", {}).get("median")
+            steps = agg.get("n_steps_to_first", {}).get("median")
+            row += f" {ttfr:>8.1f}" if ttfr is not None else f" {'N/A':>8s}"
+            row += f" {steps:>6.0f}" if steps is not None else f" {'N/A':>6s}"
             n = agg.get("_totals", {}).get("n_tasks", 0)
             row += f" {n:>5d}"
             lines.append(row)
@@ -361,7 +430,7 @@ def format_table(data: dict) -> str:
     by_sc = data.get("by_suite_config", {})
     if by_sc:
         lines.append("BY SUITE x CONFIG:")
-        header = f"  {'Suite__Config':35s} {'MRR':>7s} {'MAP':>7s} {'F.Rec':>7s} {'n':>4s}"
+        header = f"  {'Suite__Config':35s} {'MRR':>7s} {'F.Rec':>7s} {'TTFR':>7s} {'Steps':>5s} {'n':>4s}"
         lines.append(header)
         lines.append("  " + "-" * (len(header) - 2))
 
@@ -369,10 +438,13 @@ def format_table(data: dict) -> str:
             if not agg:
                 continue
             mrr_m = agg.get("mrr", {}).get("mean", 0.0)
-            map_m = agg.get("map_score", {}).get("mean", 0.0)
             fr_m = agg.get("file_recall", {}).get("mean", 0.0)
+            ttfr_m = agg.get("ttfr", {}).get("median")
+            steps_m = agg.get("n_steps_to_first", {}).get("median")
             n = agg.get("_totals", {}).get("n_tasks", 0)
-            lines.append(f"  {key:35s} {mrr_m:>7.3f} {map_m:>7.3f} {fr_m:>7.3f} {n:>4d}")
+            ttfr_s = f"{ttfr_m:>7.1f}" if ttfr_m is not None else f"{'—':>7s}"
+            steps_s = f"{steps_m:>5.0f}" if steps_m is not None else f"{'—':>5s}"
+            lines.append(f"  {key:35s} {mrr_m:>7.3f} {fr_m:>7.3f} {ttfr_s} {steps_s} {n:>4d}")
         lines.append("")
 
     # Statistical tests

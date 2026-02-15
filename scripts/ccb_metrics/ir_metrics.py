@@ -163,6 +163,12 @@ class IRScores:
     n_ground_truth: int = 0
     n_overlap: int = 0
 
+    # Time-to-context metrics (seconds from session start)
+    ttfr: Optional[float] = None    # Time to First Relevant file
+    ttfr_step: Optional[int] = None # Step index of first relevant file
+    tt_all_r: Optional[float] = None  # Time to find ALL relevant files (None if not all found)
+    n_steps_to_first: Optional[int] = None  # Tool calls before first relevant file
+
     def to_dict(self) -> dict:
         return {
             "task_id": self.task_id,
@@ -178,6 +184,10 @@ class IRScores:
             "n_retrieved": self.n_retrieved,
             "n_ground_truth": self.n_ground_truth,
             "n_overlap": self.n_overlap,
+            "ttfr": self.ttfr,
+            "ttfr_step": self.ttfr_step,
+            "tt_all_r": self.tt_all_r,
+            "n_steps_to_first": self.n_steps_to_first,
         }
 
 
@@ -265,6 +275,23 @@ def aggregate_ir_scores(scores: list[IRScores]) -> dict:
             "std": round(statistics.stdev(values), 4) if len(values) > 1 else 0.0,
             "median": round(statistics.median(values), 4),
             "n": len(values),
+        }
+
+    # Time-to-context metrics (only for tasks that have them)
+    ttfr_values = [s.ttfr for s in scores if s.ttfr is not None]
+    if ttfr_values:
+        result["ttfr"] = {
+            "mean": round(statistics.mean(ttfr_values), 1),
+            "std": round(statistics.stdev(ttfr_values), 1) if len(ttfr_values) > 1 else 0.0,
+            "median": round(statistics.median(ttfr_values), 1),
+            "n": len(ttfr_values),
+        }
+    steps_values = [s.n_steps_to_first for s in scores if s.n_steps_to_first is not None]
+    if steps_values:
+        result["n_steps_to_first"] = {
+            "mean": round(statistics.mean(steps_values), 1),
+            "median": round(statistics.median(steps_values), 1),
+            "n": len(steps_values),
         }
 
     result["_totals"] = {
@@ -444,6 +471,163 @@ def extract_retrieved_files(transcript_path: Path) -> list[str]:
                 _process_tool_result(name, raw)
 
     return files
+
+
+_TOOL_EXEC_RE = re.compile(r"Executed (\S+) (toolu_\S+)")
+
+
+def extract_time_to_context(
+    trajectory_path: Path,
+    transcript_path: Path,
+    ground_truth_files: list[str],
+) -> dict:
+    """Compute time-to-context metrics from trajectory.json + claude-code.txt.
+
+    Uses trajectory.json for per-step timestamps and claude-code.txt for
+    file paths in tool results. Returns dict with ttfr, ttfr_step,
+    tt_all_r, n_steps_to_first.
+
+    Args:
+        trajectory_path: Path to agent/trajectory.json.
+        transcript_path: Path to agent/claude-code.txt.
+        ground_truth_files: Ground truth file paths.
+
+    Returns:
+        Dict with timing metrics, or empty dict if data unavailable.
+    """
+    if not trajectory_path.is_file() or not transcript_path.is_file():
+        return {}
+    if not ground_truth_files:
+        return {}
+
+    try:
+        traj = json.loads(trajectory_path.read_text(errors="replace"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+    steps = traj.get("steps", [])
+    if not steps:
+        return {}
+
+    # Parse timestamps from trajectory steps
+    from datetime import datetime, timezone
+
+    def _parse_ts(s: str) -> Optional[float]:
+        if not s:
+            return None
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            return dt.timestamp()
+        except (ValueError, TypeError):
+            return None
+
+    # Find session start time
+    start_ts = _parse_ts(steps[0].get("timestamp", ""))
+    if start_ts is None:
+        return {}
+
+    # Build tool_id -> (timestamp_epoch, step_index) from trajectory
+    tool_timestamps: dict[str, tuple[float, int]] = {}
+    step_idx = 0
+    for step in steps:
+        msg = step.get("message", "")
+        if not isinstance(msg, str):
+            continue
+        m = _TOOL_EXEC_RE.match(msg)
+        if m:
+            tool_id = m.group(2)
+            ts = _parse_ts(step.get("timestamp", ""))
+            if ts is not None:
+                tool_timestamps[tool_id] = (ts, step_idx)
+                step_idx += 1
+
+    if not tool_timestamps:
+        return {}
+
+    # Build tool_id -> file_paths from claude-code.txt
+    tool_files: dict[str, list[str]] = {}
+    tool_id_to_name: dict[str, str] = {}
+
+    for line in transcript_path.read_text(errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        msg_type = entry.get("type", "")
+
+        if msg_type == "assistant":
+            message = entry.get("message", entry)
+            for block in message.get("content", []):
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    tid = block.get("id", "")
+                    name = block.get("name", "")
+                    inp = block.get("input", {})
+                    if tid and name:
+                        tool_id_to_name[tid] = name
+                    if isinstance(inp, dict):
+                        fp = inp.get("file_path") or inp.get("path") or ""
+                        if fp and _looks_like_file(_normalize(fp)):
+                            tool_files.setdefault(tid, []).append(fp)
+
+        elif msg_type == "user":
+            message = entry.get("message", entry)
+            for block in message.get("content", []):
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    tid = block.get("tool_use_id", "")
+                    raw = block.get("content", "")
+                    if isinstance(raw, list):
+                        raw = " ".join(
+                            item.get("text", "") if isinstance(item, dict) else str(item)
+                            for item in raw
+                        )
+                    if isinstance(raw, str):
+                        for pm in _PATH_JSON_RE.finditer(raw):
+                            p = pm.group(1)
+                            if _looks_like_file(_normalize(p)):
+                                tool_files.setdefault(tid, []).append(p)
+
+    # Match tool files against ground truth
+    gt_normalized = {_normalize(f) for f in ground_truth_files}
+    gt_found: set[str] = set()
+    ttfr = None
+    ttfr_step = None
+    tt_all_r = None
+    n_steps_to_first = None
+
+    # Process tools in timestamp order
+    sorted_tools = sorted(
+        tool_timestamps.items(),
+        key=lambda x: x[1][0],
+    )
+
+    for tool_id, (ts, sidx) in sorted_tools:
+        files = tool_files.get(tool_id, [])
+        for f in files:
+            fn = _normalize(f)
+            if fn in gt_normalized:
+                gt_found.add(fn)
+                if ttfr is None:
+                    ttfr = ts - start_ts
+                    ttfr_step = sidx
+                    n_steps_to_first = sidx
+                if gt_found >= gt_normalized:
+                    tt_all_r = ts - start_ts
+                    break
+        if tt_all_r is not None:
+            break
+
+    result: dict = {}
+    if ttfr is not None:
+        result["ttfr"] = round(ttfr, 1)
+        result["ttfr_step"] = ttfr_step
+        result["n_steps_to_first"] = n_steps_to_first
+    if tt_all_r is not None:
+        result["tt_all_r"] = round(tt_all_r, 1)
+    return result
 
 
 def _looks_like_file(path: str) -> bool:

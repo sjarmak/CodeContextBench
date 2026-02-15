@@ -116,21 +116,83 @@ def _gt_pytorch(task_dir: Path) -> Optional[TaskGroundTruth]:
 
 
 def _gt_k8s_docs(task_dir: Path) -> Optional[TaskGroundTruth]:
-    """Read ground_truth/ directory listing for K8s Docs tasks."""
-    gt_dir = task_dir / "ground_truth"
-    if gt_dir.is_dir():
-        files = [
-            f.name for f in sorted(gt_dir.iterdir())
-            if f.is_file() and not f.name.startswith(".")
-        ]
-        if files:
-            return TaskGroundTruth(
-                task_id=task_dir.name,
-                benchmark="ccb_k8sdocs",
-                files=files,
-                source="ground_truth_dir",
-                confidence="high",
-            )
+    """Ground truth for K8s Docs tasks: source files the agent must consult.
+
+    K8s Docs tasks require writing doc.go by reading package source files.
+    The ground truth is the *input* files (source code to read), not the
+    output file (doc.go). Extracted from instruction analysis + test.sh
+    verification keywords.
+    """
+    task_name = task_dir.name
+
+    # Source files the agent needs to consult to write accurate documentation.
+    # Derived from instruction.md package references + test.sh keyword checks.
+    _K8S_DOCS_GROUND_TRUTH: dict[str, tuple[list[str], str]] = {
+        "apiserver-doc-001": (
+            [
+                "staging/src/k8s.io/apiserver/pkg/server/genericapiserver.go",
+                "staging/src/k8s.io/apiserver/pkg/admission/interfaces.go",
+                "staging/src/k8s.io/apiserver/pkg/endpoints/installer.go",
+                "staging/src/k8s.io/apiserver/pkg/registry/generic/registry.go",
+                "staging/src/k8s.io/apiserver/pkg/authentication/authenticator/interfaces.go",
+                "staging/src/k8s.io/apiserver/pkg/authorization/authorizer/interfaces.go",
+            ],
+            "high",
+        ),
+        "applyconfig-doc-001": (
+            [
+                "staging/src/k8s.io/client-go/applyconfigurations/core/v1/pod.go",
+                "staging/src/k8s.io/client-go/applyconfigurations/apps/v1/deployment.go",
+                "staging/src/k8s.io/client-go/applyconfigurations/internal/internal.go",
+                "staging/src/k8s.io/client-go/kubernetes/typed/core/v1/pod.go",
+            ],
+            "medium",  # Exact files may vary; pattern-based
+        ),
+        "client-go-doc-001": (
+            [
+                "staging/src/k8s.io/client-go/kubernetes/clientset.go",
+                "staging/src/k8s.io/client-go/dynamic/interface.go",
+                "staging/src/k8s.io/client-go/discovery/discovery_client.go",
+                "staging/src/k8s.io/client-go/rest/config.go",
+                "staging/src/k8s.io/client-go/tools/cache/shared_informer.go",
+                "staging/src/k8s.io/client-go/tools/clientcmd/client_config.go",
+                "staging/src/k8s.io/client-go/tools/leaderelection/leaderelection.go",
+            ],
+            "high",
+        ),
+        "fairqueuing-doc-001": (
+            [
+                "staging/src/k8s.io/apiserver/pkg/util/flowcontrol/fairqueuing/queueset/queueset.go",
+                "staging/src/k8s.io/apiserver/pkg/util/flowcontrol/fairqueuing/queueset/types.go",
+                "staging/src/k8s.io/apiserver/pkg/util/flowcontrol/fairqueuing/queueset/fifo_list.go",
+                "staging/src/k8s.io/apiserver/pkg/util/flowcontrol/fairqueuing/promise/promise.go",
+            ],
+            "high",
+        ),
+        "pkg-doc-001": (
+            [
+                "pkg/kubelet/cm/container_manager.go",
+                "pkg/kubelet/cm/container_manager_linux.go",
+                "pkg/kubelet/cm/container_manager_windows.go",
+                "pkg/kubelet/cm/types.go",
+                "pkg/kubelet/cm/cpumanager/cpu_manager.go",
+                "pkg/kubelet/cm/memorymanager/memory_manager.go",
+                "pkg/kubelet/cm/topologymanager/topology_manager.go",
+                "pkg/kubelet/cm/devicemanager/manager.go",
+            ],
+            "high",
+        ),
+    }
+
+    if task_name in _K8S_DOCS_GROUND_TRUTH:
+        files, confidence = _K8S_DOCS_GROUND_TRUTH[task_name]
+        return TaskGroundTruth(
+            task_id=task_name,
+            benchmark="ccb_k8sdocs",
+            files=files,
+            source="instruction_manual",
+            confidence=confidence,
+        )
     return None
 
 
