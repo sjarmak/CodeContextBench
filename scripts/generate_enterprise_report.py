@@ -133,13 +133,25 @@ def _run_failure_analysis() -> Optional[dict]:
 
 
 def _run_governance_report() -> Optional[dict]:
-    """Run governance evaluator if available."""
+    """Run governance evaluator and return compliance report."""
     try:
-        from governance_evaluator import main as gov_main  # noqa: F401
+        from governance_evaluator import (
+            find_governance_runs,
+            generate_report,
+            load_governance_tasks,
+        )
 
-        # governance_evaluator.py doesn't exist yet — this will ImportError
-        logger.info("governance_evaluator found — running")
-        return None  # placeholder
+        tasks_meta = load_governance_tasks()
+        if not tasks_meta:
+            logger.warning("governance_evaluator: no governance task definitions found")
+            return None
+        from governance_evaluator import RUNS_DIR as GOV_RUNS_DIR
+        runs = find_governance_runs(GOV_RUNS_DIR)
+        if not runs:
+            logger.warning("governance_evaluator: no governance runs found")
+            return None
+        report = generate_report(tasks_meta, runs)
+        return report
     except ImportError:
         logger.info("governance_evaluator not available — skipping")
         return None
@@ -320,8 +332,14 @@ def _compute_executive_summary(sections: dict[str, Optional[dict]]) -> dict[str,
 
     # --- Governance readiness ---
     gov = sections.get("governance_report")
-    if gov:
-        summary["governance_readiness"] = "Available — see governance report section"
+    if gov and (agg := gov.get("aggregate")):
+        rate = agg.get("compliance_rate", 0)
+        assessed = agg.get("tasks_assessed", 0)
+        compliant = agg.get("tasks_compliant", 0)
+        summary["governance_readiness"] = (
+            f"Assessed: {assessed} tasks, {compliant} compliant "
+            f"({rate:.0%} compliance rate)"
+        )
 
     return summary
 
@@ -469,6 +487,47 @@ def _generate_enterprise_report_md(
     else:
         lines.append("*Failure analysis data not available.*")
         lines.append("")
+
+    # Section 5: Governance Compliance
+    gov = sections.get("governance_report")
+    if gov:
+        lines.append("## 5. Governance Compliance")
+        lines.append("")
+        if agg := gov.get("aggregate"):
+            lines.append(f"**Compliance Rate:** {agg.get('compliance_rate', 0):.0%} "
+                         f"({agg.get('tasks_compliant', 0)}/{agg.get('tasks_assessed', 0)} tasks)")
+            lines.append("")
+            if viol := agg.get("violation_counts_by_type"):
+                lines.append("### Violations by Type")
+                lines.append("")
+                lines.append("| Violation Type | Count |")
+                lines.append("|---------------|-------|")
+                for vtype, count in sorted(viol.items(), key=lambda x: -x[1]):
+                    lines.append(f"| {vtype} | {count} |")
+                lines.append("")
+            else:
+                lines.append("No governance violations detected.")
+                lines.append("")
+
+        if per_task := gov.get("per_task"):
+            lines.append("### Per-Task Compliance")
+            lines.append("")
+            lines.append("| Task | Config | Compliant | Violations | Files Accessed | Reward |")
+            lines.append("|------|--------|-----------|------------|----------------|--------|")
+            for t in per_task:
+                status = "Yes" if t.get("compliant") else "No"
+                vc = t.get("violation_count", 0)
+                fa_count = t.get("files_accessed", 0)
+                reward = t.get("correctness", {}).get("reward", "-")
+                if isinstance(reward, float):
+                    reward = f"{reward:.2f}"
+                lines.append(f"| {t.get('task_id', '')} | {t.get('config', '')} | "
+                             f"{status} | {vc} | {fa_count} | {reward} |")
+            lines.append("")
+
+        if methodology := gov.get("methodology"):
+            lines.append(f"*{methodology}*")
+            lines.append("")
 
     lines.append("---")
     lines.append("")

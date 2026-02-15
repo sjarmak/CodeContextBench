@@ -271,6 +271,9 @@ def _path_matches(file_path: str, constraint_path: str) -> bool:
 def find_governance_runs(runs_dir: Path) -> list:
     """Find all governance task runs in runs/official/.
 
+    Directory hierarchy: runs_dir / run_batch / config / batch_ts / task__hash /
+    Example: runs/official/governance_opus_20260215_203421/baseline/2026-02-15__20-34-34/repo-scoped-access-001__BZ5jkjQ/
+
     Returns list of {config, task_id, run_dir, result_json, trajectory_json}
     """
     runs = []
@@ -280,15 +283,21 @@ def find_governance_runs(runs_dir: Path) -> list:
     # Resolve symlinks
     real_dir = runs_dir.resolve()
 
-    for config_dir in sorted(real_dir.iterdir()):
-        if not config_dir.is_dir():
+    for run_dir in sorted(real_dir.iterdir()):
+        if not run_dir.is_dir():
             continue
-        config_name = config_dir.name
-        if config_name in ("archive",):
+        if run_dir.name in ("archive",) or "__broken" in run_dir.name:
             continue
 
-        # Walk looking for governance task result.json files
-        _scan_config_dir(config_dir, config_name, runs)
+        # Inside each run batch, look for config dirs (baseline, sourcegraph_full)
+        for config_dir in sorted(run_dir.iterdir()):
+            if not config_dir.is_dir():
+                continue
+            config_name = config_dir.name
+            if config_name in ("archive",):
+                continue
+            # Walk config dir looking for governance task result.json files
+            _scan_config_dir(config_dir, config_name, runs)
 
     return runs
 
@@ -347,7 +356,10 @@ def _check_governance_task_dir(task_dir: Path, config_name: str, runs: list):
         except (json.JSONDecodeError, KeyError):
             return
 
-    trajectory_json = task_dir / "trajectory.json"
+    # trajectory.json may be at task_dir/trajectory.json or task_dir/agent/trajectory.json
+    trajectory_json = task_dir / "agent" / "trajectory.json"
+    if not trajectory_json.exists():
+        trajectory_json = task_dir / "trajectory.json"
     runs.append({
         "config": config_name,
         "task_id": normalized if normalized in governance_ids else task_name,
@@ -373,7 +385,7 @@ def extract_correctness(result_path: str) -> dict:
         reward = 0.0
 
     # Check for exceptions
-    exc = data.get("exception_info", {})
+    exc = data.get("exception_info") or {}
     has_error = bool(exc.get("exception_type") or exc.get("type"))
 
     return {
