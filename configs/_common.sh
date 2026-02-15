@@ -778,6 +778,61 @@ run_canary_then_batch() {
 }
 
 # ============================================
+# PAIRED CONFIG EXECUTION
+# ============================================
+# Runs baseline + SG_full for each task simultaneously (task-paired, not mode-sequential).
+#
+# Usage:
+#   run_paired_configs TASK_IDS _my_run_fn "$JOBS_BASE"
+#
+# The run function must accept: $1=task_id $2=task_home $3=config_mode $4=mcp_type $5=jobs_base
+# It is responsible for creating the jobs_subdir (e.g., baseline/ or sourcegraph_full/) and
+# launching harbor.
+#
+# This launches 2 containers per task (1 baseline + 1 MCP) simultaneously, so the total
+# concurrent containers is 2x the number of tasks. PARALLEL_JOBS limits total concurrent PIDs.
+run_paired_configs() {
+    local -n _paired_task_ids=$1
+    local run_fn=$2
+    local jobs_base=$3
+    local num_tasks=${#_paired_task_ids[@]}
+
+    ensure_fresh_token_all
+
+    echo ""
+    echo "========================================"
+    echo "Paired execution: $num_tasks tasks x 2 configs"
+    echo "========================================"
+    echo ""
+    echo "Each task launches baseline + sourcegraph_full simultaneously."
+    echo "Total concurrent containers: up to $((num_tasks * 2)) (limited by PARALLEL_JOBS=$PARALLEL_JOBS)"
+    echo ""
+
+    mkdir -p "${jobs_base}/baseline" "${jobs_base}/sourcegraph_full"
+
+    # Build paired task list: each task gets two entries
+    local paired_ids=()
+    for task_id in "${_paired_task_ids[@]}"; do
+        paired_ids+=("${task_id}|baseline|none")
+        paired_ids+=("${task_id}|sourcegraph_full|sourcegraph_full")
+    done
+
+    # Wrapper command function that splits the paired ID
+    _paired_dispatch() {
+        local composite_id=$1
+        local task_home=$2
+        local task_id="${composite_id%%|*}"
+        local remainder="${composite_id#*|}"
+        local config="${remainder%%|*}"
+        local mcp_type="${remainder##*|}"
+
+        $run_fn "$task_id" "$task_home" "$config" "$mcp_type" "$jobs_base"
+    }
+
+    run_tasks_parallel paired_ids _paired_dispatch || true
+}
+
+# ============================================
 # TOKEN HEALTH CHECK (for overnight orchestrator)
 # ============================================
 # Checks and refreshes tokens for all accounts. Returns 1 if unrecoverable.

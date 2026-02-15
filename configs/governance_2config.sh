@@ -181,67 +181,84 @@ extract_all_metrics() {
     done
 }
 
-run_task_batch() {
-    local mode=$1
-    local mcp_type=$2
-    local jobs_subdir="${JOBS_BASE}/${mode}"
-
-    ensure_fresh_token_all
-
-    log_section "Running Governance - Mode: $mode"
+# Per-task run function: handles a single (task, config) pair.
+# Called by both run_task_batch (sequential mode) and run_paired_configs (paired mode).
+_governance_run_single() {
+    local task_id=$1
+    local task_home=$2
+    local config=${3:-baseline}
+    local mcp_type=${4:-none}
+    local jobs_base=${5:-$JOBS_BASE}
+    local jobs_subdir="${jobs_base}/${config}"
+    local task_path="${TASKS_DIR}/${task_id}"
 
     mkdir -p "$jobs_subdir"
 
-    _governance_run_single() {
-        local task_id=$1
-        local task_home=$2
-        local task_path="${TASKS_DIR}/${task_id}"
+    if [ ! -d "$task_path" ]; then
+        echo "ERROR: Task directory not found: $task_path"
+        return 1
+    fi
 
-        if [ ! -d "$task_path" ]; then
-            echo "ERROR: Task directory not found: $task_path"
-            return 1
-        fi
+    echo "Running task: $task_id ($config) [HOME=$task_home]"
 
-        echo "Running task: $task_id ($mode) [HOME=$task_home]"
+    local sg_repo="${TASK_SG_REPO_NAMES[$task_id]:-}"
+    if [ -n "$sg_repo" ]; then
+        export SOURCEGRAPH_REPO_NAME="$sg_repo"
+    else
+        unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
+    fi
 
-        local sg_repo="${TASK_SG_REPO_NAMES[$task_id]:-}"
-        if [ -n "$sg_repo" ]; then
-            export SOURCEGRAPH_REPO_NAME="$sg_repo"
-        else
-            unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
-        fi
+    BASELINE_MCP_TYPE=$mcp_type harbor run \
+        --path "$task_path" \
+        --agent-import-path "$AGENT_PATH" \
+        --model "$MODEL" \
+        --jobs-dir "$jobs_subdir" \
+        -n $CONCURRENCY \
+        --timeout-multiplier $TIMEOUT_MULTIPLIER \
+        2>&1 | tee "${jobs_subdir}/${task_id}.log" \
+        || {
+            echo "WARNING: Task $task_id ($config) failed (exit code: $?)"
+        }
+}
 
-        BASELINE_MCP_TYPE=$mcp_type harbor run \
-            --path "$task_path" \
-            --agent-import-path "$AGENT_PATH" \
-            --model "$MODEL" \
-            --jobs-dir "$jobs_subdir" \
-            -n $CONCURRENCY \
-            --timeout-multiplier $TIMEOUT_MULTIPLIER \
-            2>&1 | tee "${jobs_subdir}/${task_id}.log" \
-            || {
-                echo "WARNING: Task $task_id failed (exit code: $?)"
-            }
+# Sequential mode: run all tasks for a single config (for --baseline-only / --full-only)
+run_task_batch() {
+    local mode=$1
+    local mcp_type=$2
+
+    ensure_fresh_token_all
+    log_section "Running Governance - Mode: $mode"
+
+    _seq_run() {
+        _governance_run_single "$1" "$2" "$mode" "$mcp_type" "$JOBS_BASE"
     }
+    run_canary_then_batch TASK_IDS _seq_run "${JOBS_BASE}/${mode}" "$mode"
 
-    run_canary_then_batch TASK_IDS _governance_run_single "$jobs_subdir" "$mode"
-
-    # Extract metrics for all completed tasks in this mode
-    extract_all_metrics "$jobs_subdir" "ccb_governance" "$mode"
-    validate_and_report "$jobs_subdir" "$mode"
-
+    extract_all_metrics "${JOBS_BASE}/${mode}" "ccb_governance" "$mode"
+    validate_and_report "${JOBS_BASE}/${mode}" "$mode"
     log_section "Completed Governance - Mode: $mode"
 }
 
 # ============================================
 # MAIN EXECUTION
 # ============================================
-if [ "$RUN_BASELINE" = true ]; then
+# Default: paired execution (baseline + SG_full run simultaneously for each task).
+# This halves total wall clock time and ensures identical system conditions for both configs.
+# Use --baseline-only or --full-only for single-config runs.
+if [ "$RUN_BASELINE" = true ] && [ "$RUN_FULL" = true ]; then
+    # Paired mode: both configs run at the same time per task
+    run_paired_configs TASK_IDS _governance_run_single "$JOBS_BASE"
+
+    # Post-run: extract metrics and validate for each config
+    for config in baseline sourcegraph_full; do
+        if [ -d "${JOBS_BASE}/${config}" ]; then
+            extract_all_metrics "${JOBS_BASE}/${config}" "ccb_governance" "$config"
+            validate_and_report "${JOBS_BASE}/${config}" "$config"
+        fi
+    done
+elif [ "$RUN_BASELINE" = true ]; then
     run_task_batch "baseline" "none"
-fi
-
-
-if [ "$RUN_FULL" = true ]; then
+elif [ "$RUN_FULL" = true ]; then
     run_task_batch "sourcegraph_full" "sourcegraph_full"
 fi
 
@@ -254,4 +271,4 @@ echo "=============================================="
 echo "Results saved to: ${JOBS_BASE}"
 echo ""
 echo "View results:"
-echo "  cat ${JOBS_BASE}/*/*/result.json | jq -r '.trials[].verifier_result.rewards.reward'"
+echo "  cat ${JOBS_BASE}/*/*/result.json | jq -r '.verifier_result.rewards.reward'"
