@@ -122,6 +122,8 @@ declare -A TASK_SG_REPO_NAMES=(
     ["cross-team-boundary-001"]="github.com/django/django"
     ["audit-trail-001"]="github.com/django/django"
     ["degraded-context-001"]="github.com/flipt-io/flipt"
+    ["role-based-access-001"]="github.com/django/django"
+    ["policy-enforcement-001"]="github.com/django/django"
 )
 
 # Derive short model name for run directory (matches V2 id_generator convention)

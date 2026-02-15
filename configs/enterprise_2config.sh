@@ -125,6 +125,9 @@ declare -A TASK_SG_REPO_NAMES=(
     ["dep-refactor-002"]="github.com/flipt-io/flipt"
     ["dep-discovery-001"]="github.com/flipt-io/flipt"
     ["dep-impact-001"]="github.com/django/django"
+    ["stale-architecture-001"]="github.com/django/django"
+    ["knowledge-fragmentation-001"]="github.com/django/django"
+    ["institutional-memory-001"]="github.com/django/django"
 )
 
 # Derive short model name for run directory (matches V2 id_generator convention)
