@@ -197,6 +197,173 @@ def _gt_sweperf(task_dir: Path) -> Optional[TaskGroundTruth]:
     return None
 
 
+def _gt_dibench(task_dir: Path) -> Optional[TaskGroundTruth]:
+    """Parse tests/instance.json for DIBench tasks (build file to edit)."""
+    instance = task_dir / "tests" / "instance.json"
+    if not instance.is_file():
+        return None
+    try:
+        data = json.loads(instance.read_text(errors="replace"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    build_files = data.get("build_files", [])
+    if build_files and isinstance(build_files, list):
+        files = [f for f in build_files if isinstance(f, str)]
+        if files:
+            return TaskGroundTruth(
+                task_id=task_dir.name,
+                benchmark="ccb_dibench",
+                files=files,
+                source="instance_json",
+                confidence="high",
+            )
+    return None
+
+
+def _gt_tac(task_dir: Path) -> Optional[TaskGroundTruth]:
+    """Extract ground truth from TAC task instructions.
+
+    TAC tasks have black-box evaluation inside Docker images, so we extract
+    target files from instruction.md. Different task types have different
+    approaches:
+    - Implementation tasks: explicit file paths in instruction
+    - Search tasks: no files to modify (returns None)
+    - Dependency tasks: pyproject.toml / myenv.txt
+    """
+    instruction = task_dir / "instruction.md"
+    if not instruction.is_file():
+        return None
+
+    text = instruction.read_text(errors="replace")
+    task_name = task_dir.name
+
+    # --- Hardcoded ground truth for known TAC tasks ---
+    # These are extracted from instruction.md analysis. TAC evaluators are
+    # encrypted inside Docker images so we can't auto-extract.
+    _TAC_GROUND_TRUTH: dict[str, tuple[list[str], str]] = {
+        # Implementation tasks: files explicitly listed in instruction
+        "tac-implement-hyperloglog": (
+            [
+                "src/include/primer/hyperloglog.h",
+                "src/include/primer/hyperloglog_presto.h",
+                "src/primer/hyperloglog.cpp",
+                "src/primer/hyperloglog_presto.cpp",
+                "src/include/common/util/hash_util.h",
+            ],
+            "high",
+        ),
+        # Buffer pool manager: issue-based, files not explicitly listed
+        "tac-buffer-pool-manager": (
+            [
+                "src/include/buffer/buffer_pool_manager.h",
+                "src/buffer/buffer_pool_manager.cpp",
+                "src/include/buffer/lru_k_replacer.h",
+                "src/buffer/lru_k_replacer.cpp",
+            ],
+            "medium",  # Inferred from bustub project structure
+        ),
+        # Unit test writing: single explicit target file
+        "tac-write-unit-test": (
+            ["tests/unit/test_agent_skill.py"],
+            "high",
+        ),
+        # Dependency change: explicit files
+        "tac-dependency-change": (
+            ["pyproject.toml", "poetry.lock"],
+            "high",
+        ),
+        # API endpoint: inferred from task pattern
+        "tac-copilot-arena-endpoint": (
+            ["app.py"],
+            "medium",
+        ),
+        # Troubleshooting: explicit file
+        "tac-troubleshoot-dev-setup": (
+            ["myenv.txt"],
+            "high",
+        ),
+        # Search/navigation tasks: no files to modify
+        # tac-find-in-codebase-1: RocketChat message only
+        # tac-find-in-codebase-2: RocketChat message only
+    }
+
+    if task_name in _TAC_GROUND_TRUTH:
+        files, confidence = _TAC_GROUND_TRUTH[task_name]
+        return TaskGroundTruth(
+            task_id=task_name,
+            benchmark="ccb_tac",
+            files=files,
+            source="instruction_manual",
+            confidence=confidence,
+        )
+    return None
+
+
+def _gt_largerepo(task_dir: Path) -> Optional[TaskGroundTruth]:
+    """Extract ground truth for LargeRepo tasks.
+
+    Uses instruction.md analysis + trajectory mining from passing agent runs.
+    LargeRepo tasks are open-ended feature implementations, so ground truth
+    is approximate — based on what areas of code need modification.
+    """
+    task_name = task_dir.name
+
+    # --- Ground truth mined from passing agent runs + instruction analysis ---
+    # big-code-trt-001: 2 passing runs (reward=1.0), files from git diff
+    # big-code-k8s-001: partial pass (reward=0.7), files from instruction + run
+    # big-code-servo-001: no passing runs, files from instruction analysis
+    # big-code-vsc-001: handled by fallback (test_script extraction)
+    _LARGEREPO_GROUND_TRUTH: dict[str, tuple[list[str], str, str]] = {
+        # TensorRT-LLM: mined from 2 passing runs (baseline + SG_full)
+        "big-code-trt-001": (
+            [
+                "cpp/include/tensorrt_llm/common/quantization.h",
+                "tensorrt_llm/quantization/mode.py",
+                "tensorrt_llm/_torch/modules/fused_moe/fused_moe_trtllm_gen.py",
+                "tensorrt_llm/_torch/modules/fused_moe/interface.py",
+                "tensorrt_llm/_torch/modules/fused_moe/fused_moe_cutlass.py",
+                "tensorrt_llm/quantization/utils/fp4_utils.py",
+            ],
+            "trajectory_mining",
+            "high",  # Common files across 2 independent passing runs
+        ),
+        # Kubernetes: from instruction + partial-pass run analysis
+        "big-code-k8s-001": (
+            [
+                "staging/src/k8s.io/api/core/v1/types.go",
+                "pkg/apis/core/types.go",
+                "pkg/scheduler/eventhandlers.go",
+                "pkg/controller/tainteviction/taint_eviction.go",
+                "staging/src/k8s.io/endpointslice/reconciler.go",
+            ],
+            "instruction_and_run",
+            "medium",  # Partial pass only; may need more files
+        ),
+        # Servo: from instruction analysis only (no passing runs)
+        "big-code-servo-001": (
+            [
+                "components/script/dom/document.rs",
+                "components/script/dom/window.rs",
+                "components/script/dom/element.rs",
+                "components/script/dom/event.rs",
+            ],
+            "instruction",
+            "low",  # No passing runs; inferred from scroll/DOM architecture
+        ),
+    }
+
+    if task_name in _LARGEREPO_GROUND_TRUTH:
+        files, source, confidence = _LARGEREPO_GROUND_TRUTH[task_name]
+        return TaskGroundTruth(
+            task_id=task_name,
+            benchmark="ccb_largerepo",
+            files=files,
+            source=source,
+            confidence=confidence,
+        )
+    return None
+
+
 # File-path regex: matches paths like src/foo/bar.py, lib/utils.ts, etc.
 _FILE_PATH_RE = re.compile(
     r"(?:^|[\s`\"'])("
@@ -297,6 +464,9 @@ _BENCHMARK_STRATEGIES = {
     "ccb_crossrepo": _gt_crossrepo,
     "ccb_repoqa": _gt_repoqa,
     "ccb_sweperf": _gt_sweperf,
+    "ccb_dibench": _gt_dibench,
+    "ccb_tac": _gt_tac,
+    "ccb_largerepo": _gt_largerepo,
 }
 
 
@@ -393,9 +563,21 @@ def _resolve_task_dir(
     norm = task_id.replace("__", "-")
     if norm != task_id:
         candidates.append(norm)
-    # Strip ccb_ prefix (repoqa/sweperf task_ids have ccb_ but dirs don't)
+    # Strip ccb_ prefix (repoqa/sweperf/dibench task_ids have ccb_ but dirs don't)
     if task_id.startswith("ccb_"):
         candidates.append(task_id[4:])
+    # Strip benchmark prefix from task_id (e.g. ccb_dibench-foo → dibench-foo)
+    for prefix in ("ccb_dibench-", "ccb_tac-", "ccb_largerepo-"):
+        if task_id.startswith(prefix):
+            stripped = task_id[len("ccb_"):]  # e.g. dibench-foo
+            if stripped not in candidates:
+                candidates.append(stripped)
+
+    # Try direct path with all candidates
+    for cand in candidates[1:]:  # skip first (already tried above)
+        direct_cand = benchmarks_dir / benchmark / cand
+        if direct_cand.is_dir():
+            return direct_cand
 
     # Benchmarks with tasks/ subdirectory (swebenchpro, repoqa, sweperf, etc.)
     tasks_subdir = benchmarks_dir / benchmark / "tasks"
