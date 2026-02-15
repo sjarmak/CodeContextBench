@@ -33,6 +33,8 @@ DIR_PREFIX_TO_SUITE = {
     "codereview_": "ccb_codereview",
     "crossrepo_": "ccb_crossrepo",
     "dibench_": "ccb_dibench",
+    "enterprise_": "ccb_enterprise",
+    "governance_": "ccb_governance",
     "investigation_": "ccb_investigation",
     "k8s_docs_": "ccb_k8sdocs",
     "linuxflbench_": "ccb_linuxflbench",
