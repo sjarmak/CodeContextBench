@@ -24,7 +24,7 @@ This PRD covers three workstreams: (1) analysis pipeline improvements to produce
 **Acceptance Criteria:**
 - [ ] New function `synthesize_trajectory(transcript_path: Path) -> dict` in `scripts/ccb_metrics/ir_metrics.py`
 - [ ] Parses claude-code.txt JSONL: extracts tool_use/tool_result blocks with tool_use_ids
-- [ ] Generates synthetic timestamps from message ordering (uses relative step indices when no real timestamps available)
+- [ ] Estimates real-second timestamps from token counts between steps (not just step indices), while also tracking step count
 - [ ] Falls back to real trajectory.json when it exists; only synthesizes when missing
 - [ ] Integration in `ir_analysis.py`: auto-synthesizes for runs missing trajectory.json
 - [ ] Test: run IR analysis and confirm "Skipped (no transcript)" drops to 0
@@ -58,11 +58,11 @@ This PRD covers three workstreams: (1) analysis pipeline improvements to produce
 
 **Acceptance Criteria:**
 - [ ] New dataclass `MCPValueScore` in `scripts/ccb_metrics/ir_metrics.py` with components:
-  - `retrieval_lift`: normalized MRR delta (SG_full - baseline) / max possible delta
-  - `outcome_lift`: reward delta (SG_full - baseline)
-  - `efficiency_lift`: normalized TTFR reduction (baseline - SG_full) / baseline
+  - `retrieval_lift`: z-score normalized MRR delta (SG_full - baseline) across benchmarks
+  - `outcome_lift`: z-score normalized reward delta (SG_full - baseline)
+  - `efficiency_lift`: z-score normalized TTFR reduction (baseline - SG_full) / baseline
   - `cost_ratio`: (SG_full tokens for retrieval) / (baseline tokens for retrieval)
-  - `composite`: weighted combination of above (weights configurable)
+  - `composite`: weighted combination of z-scored components (weights configurable)
 - [ ] New function `compute_mcp_value_scores()` that joins IR scores, MANIFEST rewards, and token data
 - [ ] Aggregation by suite in table output: mean composite score per benchmark
 - [ ] Tasks ranked by composite score in output (top 10 MCP-helped, top 10 MCP-hurt)
@@ -100,21 +100,38 @@ This PRD covers three workstreams: (1) analysis pipeline improvements to produce
 - [ ] Each redesigned instruction does NOT name specific files, line numbers, or struct/class names
 - [ ] Verifiers (test.sh) remain unchanged — they test the same behavior
 - [ ] Ground truth files updated if instruction changes affect expected file access patterns
+- [ ] Tasks replaced in-place (same task ID, not versioned)
+- [ ] Prior runs annotated in MANIFEST or run metadata as `instruction_version: "v1-hinted"` so they can be excluded from post-redesign analysis
 
 ### US-007: Add 15 new enterprise tasks with LOW hint levels
 
-**Description:** As a benchmark designer, I want 15+ new enterprise tasks that describe problems without revealing file locations, forcing the agent to use MCP for discovery.
+**Description:** As a benchmark designer, I want 15+ new enterprise tasks on capital-markets-relevant codebases that describe problems without revealing file locations, forcing the agent to use MCP for discovery.
+
+**Rationale:** Existing enterprise tasks use Django (Python web framework) and Flipt (Go feature flags). These are kept but are less representative of capital markets engineering. New tasks should use codebases that reflect what enterprise engineers actually navigate: Java service architectures, distributed systems, financial modeling, and typed backend frameworks.
+
+**Target Codebases (new, in addition to existing Django/Flipt):**
+
+| Codebase | Language | Enterprise Pattern | Sourcegraph Indexed |
+|----------|----------|-------------------|---------------------|
+| Spring Framework | Java | Service architecture, DI, security | Yes (github.com/spring-projects/spring-framework) |
+| Apache Kafka | Java/Scala | Event streaming, distributed systems | Yes (github.com/apache/kafka) |
+| Apache Flink | Java | Stream processing pipelines | Yes (github.com/apache/flink) |
+| QuantLib | C++ | Financial modeling library | Needs mirror |
+| NestJS | TypeScript | Enterprise backend framework | Yes (github.com/nestjs/nest) |
 
 **Acceptance Criteria:**
 - [ ] 15 new tasks across enterprise and governance suites
 - [ ] Each task has: task.toml, instruction.md, Dockerfile, tests/test.sh
 - [ ] All instructions are LOW_HINT: describe the bug/feature/change by behavior only, no file paths
+- [ ] At least 5 tasks on new codebases (Spring, Kafka, Flink, QuantLib, or NestJS)
+- [ ] Remaining tasks may use existing Django/Flipt environments
 - [ ] Task types cover enterprise scenarios: cross-repo dependency, multi-team ownership, large codebase navigation, API contract changes, security boundary enforcement
 - [ ] At least 5 tasks use multi-file ground truth (3+ files to find)
 - [ ] At least 3 tasks require cross-package or cross-module discovery
 - [ ] Ground truth files documented for each new task
 - [ ] All tasks pass preflight validation (`/validate-tasks`)
 - [ ] Tasks registered in `selected_benchmark_tasks.json`
+- [ ] New codebases indexed in Sourcegraph (create sg-benchmarks mirrors if needed)
 
 ### US-008: Stakeholder-ready report output
 
@@ -144,14 +161,14 @@ This PRD covers three workstreams: (1) analysis pipeline improvements to produce
 ## Functional Requirements
 
 - FR-1: `synthesize_trajectory()` must parse claude-code.txt JSONL and produce a dict compatible with `extract_time_to_context()` input format
-- FR-2: Synthetic trajectory must use monotonic step indices as timestamps when real timestamps unavailable
+- FR-2: Synthetic trajectory must estimate real-second timestamps from token generation rates between steps, and also track step counts for the Steps column
 - FR-3: The `_common.sh` post-run check must log a WARNING (not error) when trajectory.json is missing, to avoid blocking the run pipeline
 - FR-4: Retrieval-outcome correlation must use Spearman rank correlation (not Pearson) since rewards are ordinal (0/1 or 0-1 continuous)
 - FR-5: Composite MCP value score weights must be configurable via CLI args with sensible defaults
 - FR-6: Cost-efficiency metrics must use agent task time tokens (from task_metrics.json), not raw wall-clock token counts
 - FR-7: Redesigned task instructions must be reviewed to ensure verifiers still pass — the expected behavior must not change
 - FR-8: The `--report` flag must work with all existing filters (`--suite`, `--json`, etc.)
-- FR-9: New enterprise tasks must use existing Dockerfiles/environments (Django, Flipt) to avoid new infrastructure
+- FR-9: New enterprise tasks may introduce new codebases (Spring, Kafka, Flink, QuantLib, NestJS) with new Dockerfiles; at least 5 of 15 new tasks must use these capital-markets-relevant codebases
 - FR-10: Ground truth for new tasks must be added to `ground_truth.py` using the manual extraction pattern (like K8s Docs, TAC, LargeRepo)
 
 ## Non-Goals
@@ -169,7 +186,8 @@ This PRD covers three workstreams: (1) analysis pipeline improvements to produce
 - The H3 bug (subagent dirs confusing `_get_session_dir()`) is already fixed in `claude_baseline_agent.py` lines 160-201. US-002 verifies this fix is active and adds runtime warnings.
 - MANIFEST.json lives inside symlinked `runs/official/` — retrieval-outcome join must resolve through the symlink.
 - Token data comes from `task_metrics.json` (extracted by `reextract_all_metrics.py`), not from trajectory.json or MANIFEST.
-- Enterprise tasks use two codebases: Django (Python) and Flipt (Go). New tasks should reuse these to avoid Dockerfile proliferation.
+- Existing enterprise tasks use Django (Python) and Flipt (Go). New tasks expand to capital-markets-relevant codebases: Spring Framework (Java), Apache Kafka (Java/Scala), Apache Flink (Java), QuantLib (C++), NestJS (TypeScript). New Dockerfiles needed for each new codebase.
+- QuantLib may need an sg-benchmarks mirror for Sourcegraph indexing; Spring/Kafka/Flink/NestJS are already indexed on public GitHub.
 
 ## Success Metrics
 
@@ -179,9 +197,15 @@ This PRD covers three workstreams: (1) analysis pipeline improvements to produce
 - Zero "Skipped (no transcript)" in IR analysis output
 - Stakeholder report clearly demonstrates: MCP finds relevant files faster, in better order, and this translates to better task outcomes
 
+## Resolved Decisions
+
+1. **Composite score normalization**: Z-score across benchmarks to prevent large-reward suites from dominating.
+2. **Synthetic trajectory timestamps**: Estimate real seconds from token counts between steps. Also track step count for the Steps column.
+3. **Codebase selection**: Keep existing Django/Flipt tasks. Add new tasks on capital-markets-relevant codebases (Spring, Kafka, Flink, QuantLib, NestJS) — at least 5 of 15 new tasks.
+4. **Task versioning**: Replace in-place (same task ID). Annotate prior runs as `instruction_version: "v1-hinted"` so pre-redesign data can be filtered out of analysis.
+
 ## Open Questions
 
-- Should the composite MCP value score normalize across benchmarks (z-score) or use raw deltas? Z-scoring prevents large-reward benchmarks from dominating.
-- For synthetic trajectory timestamps: should we use step count (1, 2, 3...) or estimate real seconds from token counts? Step count is simpler but less comparable to real TTFR.
-- How many of the 15 new tasks should be Flipt (Go) vs Django (Python)? Current split is 7 Flipt / 13 Django.
-- Should redesigned tasks be versioned (dep-impact-001-v2) or replace in-place? In-place is cleaner but loses history.
+- What token-to-seconds conversion rate should be used for synthetic trajectory timestamps? Options: calibrate from runs that have both claude-code.txt and trajectory.json, or use a fixed estimate (e.g., ~50 tokens/second output rate).
+- Should QuantLib (C++) be prioritized given it requires a new sg-benchmarks mirror, or defer to codebases already indexed?
+- How should the `instruction_version` annotation be stored — in result.json metadata, a sidecar file, or MANIFEST.json field?
