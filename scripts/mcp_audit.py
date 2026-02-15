@@ -19,6 +19,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 RUNS_DIR = Path("/home/stephanie_jarmak/evals/custom_agents/agents/claudecode/runs/official")
 SELECTION_FILE = Path(__file__).resolve().parent.parent / "configs" / "selected_benchmark_tasks.json"
 
@@ -699,7 +701,44 @@ def _efficiency_analysis(paired: list[dict]) -> dict:
             },
         }
 
+        # Statistical tests when sample size is sufficient
+        if len(time_deltas) >= 5:
+            results[prefix]["statistical_tests"] = _stat_tests_on_deltas(
+                time_deltas, cost_deltas, label="efficiency"
+            )
+
     return results
+
+
+def _stat_tests_on_deltas(
+    primary_deltas: list[float],
+    secondary_deltas: list[float] | None = None,
+    label: str = "",
+) -> dict:
+    """Run statistical tests on delta lists (treatment - baseline).
+
+    Uses zero as baseline reference (testing whether deltas differ from 0).
+    """
+    try:
+        from ccb_metrics.statistics import welchs_t_test, cohens_d, bootstrap_ci
+    except ImportError:
+        return {"error": "ccb_metrics.statistics not importable"}
+
+    result: dict = {}
+    zeros = [0.0] * len(primary_deltas)
+
+    if len(primary_deltas) >= 2:
+        result["primary_t_test"] = welchs_t_test(zeros, primary_deltas)
+        result["primary_effect_size"] = cohens_d(zeros, primary_deltas)
+        result["primary_bootstrap_ci"] = bootstrap_ci(primary_deltas)
+        result["primary_label"] = f"{label}_time_delta" if label else "primary"
+
+    if secondary_deltas and len(secondary_deltas) >= 2:
+        result["secondary_t_test"] = welchs_t_test(zeros, secondary_deltas)
+        result["secondary_bootstrap_ci"] = bootstrap_ci(secondary_deltas)
+        result["secondary_label"] = f"{label}_cost_delta" if label else "secondary"
+
+    return result
 
 
 def _reward_analysis(paired: list[dict]) -> dict:
@@ -803,6 +842,34 @@ def _reward_analysis(paired: list[dict]) -> dict:
                 for k, v in sorted(by_mcp_score.items())
             },
         }
+
+        # Statistical tests on reward deltas when sample size is sufficient
+        if len(reward_deltas) >= 5:
+            try:
+                from ccb_metrics.statistics import (
+                    welchs_t_test, cohens_d, mcnemar_test, bootstrap_ci,
+                )
+                # Collect paired raw rewards (not deltas) for t-test
+                bl_vals = []
+                mcp_vals = []
+                pass_pairs = []
+                for task in paired:
+                    bl_r = task.get("baseline_reward")
+                    mcp_r = task.get(f"{cfg}_reward")
+                    if bl_r is not None and mcp_r is not None:
+                        bl_vals.append(bl_r)
+                        mcp_vals.append(mcp_r)
+                        pass_pairs.append((bl_r > 0, mcp_r > 0))
+
+                if len(bl_vals) >= 5:
+                    results[prefix]["statistical_tests"] = {
+                        "welchs_t": welchs_t_test(bl_vals, mcp_vals),
+                        "cohens_d": cohens_d(bl_vals, mcp_vals),
+                        "mcnemar": mcnemar_test(pass_pairs),
+                        "bootstrap_ci_delta": bootstrap_ci(reward_deltas),
+                    }
+            except ImportError:
+                pass
 
     return results
 
