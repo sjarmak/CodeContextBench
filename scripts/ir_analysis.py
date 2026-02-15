@@ -378,6 +378,26 @@ def run_ir_analysis(
                         ),
                     }
 
+                # TTAR: time to ALL relevant files (lower is better)
+                # Must be paired — both configs need tt_all_r for same task
+                paired_ttar = [
+                    (bl_by_id[tid].tt_all_r, sg_by_id[tid].tt_all_r)
+                    for tid in sorted(common)
+                    if bl_by_id[tid].tt_all_r is not None
+                    and sg_by_id[tid].tt_all_r is not None
+                ]
+                if len(paired_ttar) >= 5:
+                    bl_ttar = [p[0] for p in paired_ttar]
+                    sg_ttar = [p[1] for p in paired_ttar]
+                    stat_tests["tt_all_r"] = {
+                        "n_paired": len(paired_ttar),
+                        "welchs_t": welchs_t_test(bl_ttar, sg_ttar),
+                        "cohens_d": cohens_d(bl_ttar, sg_ttar),
+                        "bootstrap_ci_delta": bootstrap_ci(
+                            [s - b for b, s in zip(bl_ttar, sg_ttar)]
+                        ),
+                    }
+
                 result["statistical_tests"] = stat_tests
         except ImportError:
             pass
@@ -406,7 +426,7 @@ def format_table(data: dict) -> str:
     overall = data.get("overall_by_config", {})
     if overall:
         lines.append("OVERALL BY CONFIG:")
-        header = f"  {'Config':20s} {'MRR':>8s} {'MAP':>8s} {'F.Recall':>8s} {'Ctx.Eff':>8s} {'TTFR(s)':>8s} {'Steps':>6s} {'n':>5s}"
+        header = f"  {'Config':20s} {'MRR':>8s} {'MAP':>8s} {'F.Recall':>8s} {'Ctx.Eff':>8s} {'TTFR(s)':>8s} {'TTAR(s)':>8s} {'Steps':>6s} {'n':>5s}"
         lines.append(header)
         lines.append("  " + "-" * (len(header) - 2))
 
@@ -418,8 +438,10 @@ def format_table(data: dict) -> str:
                 val = agg.get(metric, {}).get("mean", 0.0)
                 row += f" {val:>8.3f}"
             ttfr = agg.get("ttfr", {}).get("median")
+            ttar = agg.get("tt_all_r", {}).get("median")
             steps = agg.get("n_steps_to_first", {}).get("median")
             row += f" {ttfr:>8.1f}" if ttfr is not None else f" {'N/A':>8s}"
+            row += f" {ttar:>8.1f}" if ttar is not None else f" {'N/A':>8s}"
             row += f" {steps:>6.0f}" if steps is not None else f" {'N/A':>6s}"
             n = agg.get("_totals", {}).get("n_tasks", 0)
             row += f" {n:>5d}"
@@ -430,7 +452,7 @@ def format_table(data: dict) -> str:
     by_sc = data.get("by_suite_config", {})
     if by_sc:
         lines.append("BY SUITE x CONFIG:")
-        header = f"  {'Suite__Config':35s} {'MRR':>7s} {'F.Rec':>7s} {'TTFR':>7s} {'Steps':>5s} {'n':>4s}"
+        header = f"  {'Suite__Config':35s} {'MRR':>7s} {'F.Rec':>7s} {'TTFR':>7s} {'TTAR':>7s} {'Steps':>5s} {'n':>4s}"
         lines.append(header)
         lines.append("  " + "-" * (len(header) - 2))
 
@@ -440,11 +462,13 @@ def format_table(data: dict) -> str:
             mrr_m = agg.get("mrr", {}).get("mean", 0.0)
             fr_m = agg.get("file_recall", {}).get("mean", 0.0)
             ttfr_m = agg.get("ttfr", {}).get("median")
+            ttar_m = agg.get("tt_all_r", {}).get("median")
             steps_m = agg.get("n_steps_to_first", {}).get("median")
             n = agg.get("_totals", {}).get("n_tasks", 0)
             ttfr_s = f"{ttfr_m:>7.1f}" if ttfr_m is not None else f"{'—':>7s}"
+            ttar_s = f"{ttar_m:>7.1f}" if ttar_m is not None else f"{'—':>7s}"
             steps_s = f"{steps_m:>5.0f}" if steps_m is not None else f"{'—':>5s}"
-            lines.append(f"  {key:35s} {mrr_m:>7.3f} {fr_m:>7.3f} {ttfr_s} {steps_s} {n:>4d}")
+            lines.append(f"  {key:35s} {mrr_m:>7.3f} {fr_m:>7.3f} {ttfr_s} {ttar_s} {steps_s} {n:>4d}")
         lines.append("")
 
     # Statistical tests
@@ -452,7 +476,7 @@ def format_table(data: dict) -> str:
     if stats:
         lines.append("STATISTICAL TESTS (baseline vs SG_full):")
         lines.append(f"  Paired tasks: {stats.get('n_paired', 0)}")
-        for metric_name in ("file_recall", "mrr"):
+        for metric_name in ("file_recall", "mrr", "ttfr", "tt_all_r"):
             ms = stats.get(metric_name, {})
             if not ms:
                 continue
@@ -460,12 +484,13 @@ def format_table(data: dict) -> str:
             d = ms.get("cohens_d", {})
             bci = ms.get("bootstrap_ci_delta", {})
             sig = "***" if t.get("is_significant") else "n.s."
+            n_note = f" (n={ms['n_paired']})" if "n_paired" in ms else ""
             lines.append(
                 f"  {metric_name}: t={t.get('t_stat', 'N/A')}, "
                 f"p={t.get('p_value', 'N/A')}, d={d.get('d', 'N/A')} "
                 f"({d.get('magnitude', '')}), "
                 f"delta CI=[{bci.get('ci_lower', 'N/A')}, {bci.get('ci_upper', 'N/A')}] "
-                f"{sig}"
+                f"{sig}{n_note}"
             )
         lines.append("")
 
