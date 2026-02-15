@@ -53,6 +53,8 @@ GT_CACHE = Path(__file__).resolve().parent.parent / "configs" / "ground_truth_fi
 
 SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived"]
 CONFIGS = ["baseline", "sourcegraph_full"]
+# Benchmarks dropped from evaluation — exclude from ground truth builds
+DROPPED_BENCHMARKS = {"ccb_dependeval"}
 
 DIR_PREFIX_TO_SUITE = {
     "bigcode_mcp_": "ccb_largerepo",
@@ -97,10 +99,12 @@ def _suite_from_run_dir(name: str) -> str | None:
 
 
 def _load_selected_tasks() -> list[dict]:
+    """Load selected tasks from config, excluding dropped benchmarks."""
     if not SELECTION_FILE.is_file():
         return []
     data = json.loads(SELECTION_FILE.read_text())
-    return data.get("tasks", [])
+    tasks = data.get("tasks", [])
+    return [t for t in tasks if t.get("benchmark", "") not in DROPPED_BENCHMARKS]
 
 
 def _ensure_ground_truth() -> dict[str, TaskGroundTruth]:

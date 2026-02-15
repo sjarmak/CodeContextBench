@@ -134,6 +134,69 @@ def _gt_k8s_docs(task_dir: Path) -> Optional[TaskGroundTruth]:
     return None
 
 
+def _gt_crossrepo(task_dir: Path) -> Optional[TaskGroundTruth]:
+    """Parse tests/expected_changes.json for CrossRepo tasks."""
+    ec = task_dir / "tests" / "expected_changes.json"
+    if not ec.is_file():
+        return None
+    try:
+        data = json.loads(ec.read_text(errors="replace"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    files = data.get("expected_files", [])
+    if files and isinstance(files, list):
+        return TaskGroundTruth(
+            task_id=task_dir.name,
+            benchmark="ccb_crossrepo",
+            files=[f for f in files if isinstance(f, str)],
+            source="expected_changes_json",
+            confidence="high",
+        )
+    return None
+
+
+def _gt_repoqa(task_dir: Path) -> Optional[TaskGroundTruth]:
+    """Parse tests/ground_truth.json for RepoQA tasks (single function target)."""
+    gt = task_dir / "tests" / "ground_truth.json"
+    if not gt.is_file():
+        return None
+    try:
+        data = json.loads(gt.read_text(errors="replace"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    canonical_path = data.get("canonical_path", "")
+    if canonical_path:
+        return TaskGroundTruth(
+            task_id=task_dir.name,
+            benchmark="ccb_repoqa",
+            files=[canonical_path],
+            source="ground_truth_json",
+            confidence="high",
+        )
+    return None
+
+
+def _gt_sweperf(task_dir: Path) -> Optional[TaskGroundTruth]:
+    """Parse tests/ground_truth.json for SWE-Perf tasks (target function file)."""
+    gt = task_dir / "tests" / "ground_truth.json"
+    if not gt.is_file():
+        return None
+    try:
+        data = json.loads(gt.read_text(errors="replace"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    file_path = data.get("file_path", "")
+    if file_path:
+        return TaskGroundTruth(
+            task_id=task_dir.name,
+            benchmark="ccb_sweperf",
+            files=[file_path],
+            source="ground_truth_json",
+            confidence="low",  # Agent may modify additional files beyond target
+        )
+    return None
+
+
 # File-path regex: matches paths like src/foo/bar.py, lib/utils.ts, etc.
 _FILE_PATH_RE = re.compile(
     r"(?:^|[\s`\"'])("
@@ -231,6 +294,9 @@ _BENCHMARK_STRATEGIES = {
     "ccb_swebenchpro": _gt_swebenchpro,
     "ccb_pytorch": _gt_pytorch,
     "ccb_k8sdocs": _gt_k8s_docs,
+    "ccb_crossrepo": _gt_crossrepo,
+    "ccb_repoqa": _gt_repoqa,
+    "ccb_sweperf": _gt_sweperf,
 }
 
 
@@ -321,13 +387,23 @@ def _resolve_task_dir(
     if direct.is_dir():
         return direct
 
-    # SWE-bench Pro: tasks/<instance_*>/
+    # Build list of candidate task_id variants to try
+    candidates = [task_id]
+    # __ → - normalization (swebenchpro task_ids use __ but dirs use -)
+    norm = task_id.replace("__", "-")
+    if norm != task_id:
+        candidates.append(norm)
+    # Strip ccb_ prefix (repoqa/sweperf task_ids have ccb_ but dirs don't)
+    if task_id.startswith("ccb_"):
+        candidates.append(task_id[4:])
+
+    # Benchmarks with tasks/ subdirectory (swebenchpro, repoqa, sweperf, etc.)
     tasks_subdir = benchmarks_dir / benchmark / "tasks"
     if tasks_subdir.is_dir():
-        # task_id may be a prefix of the directory name
-        for d in tasks_subdir.iterdir():
-            if d.is_dir() and (d.name == task_id or d.name.startswith(task_id)):
-                return d
+        for cand in candidates:
+            for d in tasks_subdir.iterdir():
+                if d.is_dir() and (d.name == cand or d.name.startswith(cand)):
+                    return d
 
     return None
 
