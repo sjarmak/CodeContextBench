@@ -268,6 +268,81 @@ def format_comparison_table(data: dict) -> str:
     return "\n".join(lines)
 
 
+def _compute_statistical_tests(data: dict) -> dict:
+    """Run statistical tests on paired baseline vs SG_full rewards.
+
+    Returns dict with welchs_t, cohens_d, mcnemar, bootstrap_ci keys.
+    """
+    from ccb_metrics.statistics import (
+        welchs_t_test, cohens_d, mcnemar_test, bootstrap_ci,
+    )
+
+    bl_rewards: list[float] = []
+    sg_rewards: list[float] = []
+    paired_pass: list[tuple[bool, bool]] = []
+
+    for task in data.get("tasks", []):
+        bl = task["configs"].get("baseline", {})
+        sg = task["configs"].get("sourcegraph_full", {})
+        bl_r = bl.get("reward")
+        sg_r = sg.get("reward")
+        if bl_r is not None and sg_r is not None:
+            bl_rewards.append(bl_r)
+            sg_rewards.append(sg_r)
+            paired_pass.append((bl_r > 0, sg_r > 0))
+
+    if len(bl_rewards) < 2:
+        return {"error": f"Too few paired tasks ({len(bl_rewards)}) for statistics"}
+
+    deltas = [sg - bl for bl, sg in zip(bl_rewards, sg_rewards)]
+
+    return {
+        "n_paired": len(bl_rewards),
+        "welchs_t": welchs_t_test(bl_rewards, sg_rewards),
+        "cohens_d": cohens_d(bl_rewards, sg_rewards),
+        "mcnemar": mcnemar_test(paired_pass),
+        "bootstrap_ci_delta": bootstrap_ci(deltas),
+    }
+
+
+def _format_stats_section(stats: dict) -> str:
+    """Format statistical tests as ASCII table section."""
+    lines = []
+    lines.append("")
+    lines.append("STATISTICAL TESTS (baseline vs SG_full):")
+
+    if "error" in stats:
+        lines.append(f"  {stats['error']}")
+        return "\n".join(lines)
+
+    lines.append(f"  Paired tasks: {stats['n_paired']}")
+    lines.append("")
+
+    t = stats.get("welchs_t", {})
+    lines.append(f"  Welch's t-test:")
+    lines.append(f"    t={t.get('t_stat', 'N/A')}, p={t.get('p_value', 'N/A')}, "
+                  f"df={t.get('df', 'N/A')}")
+    lines.append(f"    {'*** Significant ***' if t.get('is_significant') else 'Not significant'}")
+
+    d = stats.get("cohens_d", {})
+    lines.append(f"  Effect size (Cohen's d):")
+    lines.append(f"    d={d.get('d', 'N/A')} ({d.get('magnitude', 'N/A')})")
+    lines.append(f"    95% CI: [{d.get('ci_lower', 'N/A')}, {d.get('ci_upper', 'N/A')}]")
+
+    m = stats.get("mcnemar", {})
+    lines.append(f"  McNemar's test (pass/fail):")
+    lines.append(f"    chi2={m.get('chi2', 'N/A')}, p={m.get('p_value', 'N/A')}")
+    lines.append(f"    BL-fail→SG-pass: {m.get('b', 0)}, BL-pass→SG-fail: {m.get('c', 0)}")
+    lines.append(f"    {'*** Significant ***' if m.get('is_significant') else 'Not significant'}")
+
+    bci = stats.get("bootstrap_ci_delta", {})
+    lines.append(f"  Bootstrap CI (reward delta):")
+    lines.append(f"    estimate={bci.get('estimate', 'N/A')}")
+    lines.append(f"    95% CI: [{bci.get('ci_lower', 'N/A')}, {bci.get('ci_upper', 'N/A')}]")
+
+    return "\n".join(lines)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Compare benchmark results across agent configurations."
@@ -288,6 +363,10 @@ def parse_args():
         "--timeout-hours", type=float, default=4.0,
         help="Hours before marking as timeout (default: 4)",
     )
+    parser.add_argument(
+        "--with-stats", action="store_true",
+        help="Add statistical significance tests (Welch's t, Cohen's d, McNemar, bootstrap CI)",
+    )
     return parser.parse_args()
 
 
@@ -301,8 +380,14 @@ def main():
     if args.divergent_only:
         data["tasks"] = [t for t in data["tasks"] if t["divergent"]]
 
+    if args.with_stats:
+        data["statistical_tests"] = _compute_statistical_tests(data)
+
     if args.format == "table":
-        print(format_comparison_table(data))
+        output = format_comparison_table(data)
+        if args.with_stats:
+            output += _format_stats_section(data["statistical_tests"])
+        print(output)
     else:
         print(json.dumps(data, indent=2))
 

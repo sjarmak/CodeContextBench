@@ -815,11 +815,22 @@ def extract_code_changes_from_transcript(
     }
 
 
-# Opus 4.5 pricing (USD per million tokens)
-_OPUS_INPUT_PRICE = 15.0
-_OPUS_OUTPUT_PRICE = 75.0
-_OPUS_CACHE_WRITE_PRICE = 18.75
-_OPUS_CACHE_READ_PRICE = 1.50
+# Model pricing registry (USD per million tokens)
+MODEL_PRICING: dict[str, dict[str, float]] = {
+    # Claude 4.x family
+    "claude-opus-4-5-20250514":   {"input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50},
+    "claude-opus-4-6":            {"input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50},
+    "claude-sonnet-4-5-20250929": {"input": 3.0,  "output": 15.0, "cache_write": 3.75,  "cache_read": 0.30},
+    "claude-haiku-4-5-20251001":  {"input": 0.80, "output": 4.0,  "cache_write": 1.0,   "cache_read": 0.08},
+    # GPT family
+    "gpt-4o":      {"input": 2.50, "output": 10.0, "cache_write": 0, "cache_read": 0},
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60, "cache_write": 0, "cache_read": 0},
+    "o1":          {"input": 15.0, "output": 60.0, "cache_write": 0, "cache_read": 0},
+    # Gemini family
+    "gemini-2.0-flash": {"input": 0.10, "output": 0.40, "cache_write": 0, "cache_read": 0},
+    "gemini-1.5-pro":   {"input": 1.25, "output": 5.0,  "cache_write": 0, "cache_read": 0},
+}
+_DEFAULT_MODEL = "claude-opus-4-5-20250514"
 
 
 def calculate_cost_from_tokens(
@@ -827,14 +838,17 @@ def calculate_cost_from_tokens(
     output_tokens: Optional[int],
     cache_creation: Optional[int] = None,
     cache_read: Optional[int] = None,
+    model: str = _DEFAULT_MODEL,
 ) -> Optional[float]:
-    """Calculate USD cost from token counts using Opus 4.5 pricing.
+    """Calculate USD cost from token counts.
 
     Args:
         input_tokens: Number of input tokens (non-cache).
         output_tokens: Number of output tokens.
         cache_creation: Number of cache creation (write) tokens.
         cache_read: Number of cache read tokens.
+        model: Model identifier (key into MODEL_PRICING). Falls back to
+            default Opus 4.5 pricing for unknown models.
 
     Returns:
         Estimated cost in USD, or None if input/output tokens unavailable.
@@ -842,12 +856,14 @@ def calculate_cost_from_tokens(
     if input_tokens is None or output_tokens is None:
         return None
 
-    cost = (input_tokens / 1_000_000) * _OPUS_INPUT_PRICE
-    cost += (output_tokens / 1_000_000) * _OPUS_OUTPUT_PRICE
+    prices = MODEL_PRICING.get(model, MODEL_PRICING[_DEFAULT_MODEL])
+
+    cost = (input_tokens / 1_000_000) * prices["input"]
+    cost += (output_tokens / 1_000_000) * prices["output"]
     if cache_creation:
-        cost += (cache_creation / 1_000_000) * _OPUS_CACHE_WRITE_PRICE
+        cost += (cache_creation / 1_000_000) * prices["cache_write"]
     if cache_read:
-        cost += (cache_read / 1_000_000) * _OPUS_CACHE_READ_PRICE
+        cost += (cache_read / 1_000_000) * prices["cache_read"]
 
     return round(cost, 6)
 
