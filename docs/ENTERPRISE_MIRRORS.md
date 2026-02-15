@@ -9,6 +9,8 @@ Repos used by `ccb_enterprise` tasks, with commit SHAs and Sourcegraph indexing 
 | multi-team-ownership-001 | django/django | `674eda1c03a3187905f48afee0f15226aa62fdf3` | `sg-benchmarks/django--674eda1c` | Yes (shared with crossrepo, governance) |
 | conflicting-docs-001 | django/django | `674eda1c03a3187905f48afee0f15226aa62fdf3` | `sg-benchmarks/django--674eda1c` | Yes (shared with crossrepo, governance) |
 | multi-team-ownership-002 | flipt-io/flipt | `3d5a345f94c2adc8a0eaa102c189c08ad4c0f8e8` | `sg-benchmarks/flipt--3d5a345f` | Yes (shared with swebenchpro, governance) |
+| legacy-dependency-001 | django/django | `674eda1c03a3187905f48afee0f15226aa62fdf3` | `sg-benchmarks/django--674eda1c` | Yes (shared with crossrepo, governance) |
+| polyglot-ecosystem-001 | flipt-io/flipt | `3d5a345f94c2adc8a0eaa102c189c08ad4c0f8e8` | `sg-benchmarks/flipt--3d5a345f` | Yes (shared with swebenchpro, governance) |
 
 ## Notes
 
