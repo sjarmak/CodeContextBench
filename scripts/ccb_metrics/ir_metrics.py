@@ -286,6 +286,14 @@ def aggregate_ir_scores(scores: list[IRScores]) -> dict:
             "median": round(statistics.median(ttfr_values), 1),
             "n": len(ttfr_values),
         }
+    tt_all_values = [s.tt_all_r for s in scores if s.tt_all_r is not None]
+    if tt_all_values:
+        result["tt_all_r"] = {
+            "mean": round(statistics.mean(tt_all_values), 1),
+            "std": round(statistics.stdev(tt_all_values), 1) if len(tt_all_values) > 1 else 0.0,
+            "median": round(statistics.median(tt_all_values), 1),
+            "n": len(tt_all_values),
+        }
     steps_values = [s.n_steps_to_first for s in scores if s.n_steps_to_first is not None]
     if steps_values:
         result["n_steps_to_first"] = {
