@@ -3,7 +3,7 @@
 
 Reads selected instances from configs/dependeval_selected_instances.json,
 fetches source data from vendor/DependEval/data/, and generates complete
-Harbor task directories under benchmarks/ccb_dependeval/.
+Harbor task directories under benchmarks/archive/ccb_dependeval/.
 
 Each task directory contains:
   - task.toml          (Harbor task metadata)
@@ -34,7 +34,7 @@ from pathlib import Path
 
 DEFAULT_SELECTION = Path("configs/dependeval_selected_instances.json")
 DEFAULT_DATA_DIR = Path("vendor/DependEval/data")
-DEFAULT_OUTPUT_DIR = Path("benchmarks/ccb_dependeval")
+DEFAULT_OUTPUT_DIR = Path("benchmarks/archive/ccb_dependeval")
 DEFAULT_EVAL_DR = Path("scripts/dependeval_eval_dr.py")
 DEFAULT_EVAL_ME = Path("scripts/dependeval_eval_me.py")
 

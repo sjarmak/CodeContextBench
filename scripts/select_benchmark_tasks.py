@@ -27,6 +27,7 @@ except ModuleNotFoundError:
 # ---------------------------------------------------------------------------
 
 RANDOM_SEED = 42
+EXCLUDED_FROM_DEFAULT_SELECTION = {"ccb_dependeval"}
 
 # SWE-Bench Pro language corrections: repo slug -> correct language
 SWEBENCH_LANGUAGE_OVERRIDES: dict[str, str] = {
@@ -623,6 +624,7 @@ def select_tasks(all_tasks: dict[str, list[TaskRecord]], rng: Random) -> list[Ta
             selected.extend(select_all(all_tasks[bm], bm))
 
     # Stable sort by benchmark then task_id for deterministic output
+    selected = [t for t in selected if t.benchmark not in EXCLUDED_FROM_DEFAULT_SELECTION]
     selected.sort(key=lambda t: (t.benchmark, t.task_id))
     return selected
 

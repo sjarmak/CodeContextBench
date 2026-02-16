@@ -11,7 +11,6 @@ This repository contains **benchmark task definitions**, **evaluation configs**,
 | Suite | Tasks | Languages | Evaluation Method | SDLC Phase |
 |-------|------:|-----------|-------------------|------------|
 | `ccb_swebenchpro` | 36 | Go, TypeScript, Python | LLM judge + test suite | Bug fixing |
-| `ccb_dependeval` | 32 | Java, JavaScript, Python, TypeScript | Automated verification | Dependency ordering |
 | `ccb_locobench` | 25 | 9 languages | LLM judge + semantic similarity | Architecture, Refactoring |
 | `ccb_pytorch` | 12 | C++ | LLM judge + test suite | Bug fixing |
 | `ccb_repoqa` | 10 | Python, C++, Java, Rust, TypeScript | LLM judge + path/name matching | Code navigation |
@@ -24,6 +23,8 @@ This repository contains **benchmark task definitions**, **evaluation configs**,
 | `ccb_sweperf` | 3 | Python | LLM judge + test suite | Testing & QA |
 | `ccb_codereview` | 3 | JavaScript, C#, TypeScript | Hybrid detection + fix scoring | PR defect detection |
 | **Total** | **156** | | | |
+
+Archived from official consideration: `ccb_dependeval`, `ccb_locobench`, `ccb_repoqa`, and `ccb_k8sdocs` (superseded by `ccb_docgen`).
 
 ---
 
@@ -45,9 +46,9 @@ See [docs/CONFIGS.md](docs/CONFIGS.md) for the full tool-by-tool breakdown.
 
 ```
 benchmarks/              # Task definitions organized by benchmark suite
+  archive/               #   Archived suites (e.g., ccb_dependeval, ccb_locobench, ccb_repoqa)
   ccb_codereview/        #   AI code review: PR defect detection (3 tasks)
   ccb_crossrepo/         #   Enterprise codebase challenges (5 tasks)
-  ccb_dependeval/        #   Dependency ordering tasks (32 tasks)
   ccb_dibench/           #   Dependency inference tasks (8 tasks)
   ccb_k8sdocs/           #   K8s package documentation generation (5 tasks)
   ccb_largerepo/         #   Large-repo code navigation (4 tasks)
@@ -166,7 +167,7 @@ All runners support `--baseline-only` and `--full-only` flags.
 
 **LinuxFLBench note:** Docker image build is slow (~10 min) due to Linux kernel partial clone (~2GB). Pre-build images before running to save time.
 
-**DependEval note:** DependEval runs use local task directories and are handled by `configs/dependeval_2config.sh`.
+**DependEval note:** DependEval is archived from official reporting. Task files live under `benchmarks/archive/ccb_dependeval/` and can still be run via `configs/dependeval_2config.sh` when needed.
 
 Requires [Harbor](https://github.com/laude-institute/harbor/tree/main) installed and configured with a Claude API key.
 

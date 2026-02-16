@@ -59,7 +59,7 @@ ensure_fresh_token
 # ============================================
 # CONFIGURATION
 # ============================================
-TASKS_DIR="/home/stephanie_jarmak/CodeContextBench/benchmarks/ccb_dependeval"
+TASKS_DIR="/home/stephanie_jarmak/CodeContextBench/benchmarks/archive/ccb_dependeval"
 AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
 MODEL="${MODEL:-anthropic/claude-opus-4-6}"
 CONCURRENCY=2
