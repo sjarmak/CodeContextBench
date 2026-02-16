@@ -1,74 +1,81 @@
 #!/bin/bash
 # Reward: checklist (0.0-1.0) — weighted pattern matching against ground_truth.json
-# Verifier for investigation tasks: scores /logs/agent/investigation.md
-# against ground-truth findings, file references, causal chains, and negative checks.
-#
-# Scoring weights (from ground_truth.json):
-#   required_findings: 0.40
-#   file_references:   0.30
-#   causal_chain:      0.20
-#   negative_checks:   0.10
+# Shared checklist verifier with soft length scaling and optional canonical-SHA bypass.
 
 set -e
 
-REPORT="/logs/agent/investigation.md"
-GROUND_TRUTH="/tests/ground_truth.json"
+REPORT_PATH="${REPORT_PATH:-/logs/agent/investigation.md}"
+GROUND_TRUTH="${GROUND_TRUTH:-/tests/ground_truth.json}"
 REWARD_FILE="/logs/verifier/reward.txt"
+MIN_REPORT_BYTES="${MIN_REPORT_BYTES:-100}"
+# Below this, output is treated as effectively missing / unusable.
+MIN_ABS_BYTES="${MIN_ABS_BYTES:-24}"
 
 mkdir -p /logs/verifier
 
-# ── Check prerequisites ────────────────────────────────────────────────
 if [ ! -f "$GROUND_TRUTH" ]; then
     echo "ERROR: ground_truth.json not found at $GROUND_TRUTH"
     echo "0.0" > "$REWARD_FILE"
     exit 0
 fi
 
-if [ ! -f "$REPORT" ]; then
-    echo "No investigation report found at $REPORT"
-    echo "Agent did not produce the required output."
+if [ ! -f "$REPORT_PATH" ]; then
+    echo "No agent output found at $REPORT_PATH"
     echo "0.0" > "$REWARD_FILE"
     exit 0
 fi
 
-REPORT_SIZE=$(wc -c < "$REPORT")
-if [ "$REPORT_SIZE" -lt 100 ]; then
-    echo "Investigation report is too short (${REPORT_SIZE} bytes). Likely incomplete."
+REPORT_SIZE=$(wc -c < "$REPORT_PATH")
+if [ "$REPORT_SIZE" -lt "$MIN_ABS_BYTES" ]; then
+    echo "Agent output too small (${REPORT_SIZE} bytes, minimum usable ${MIN_ABS_BYTES})."
     echo "0.0" > "$REWARD_FILE"
     exit 0
 fi
 
-echo "Scoring investigation report ($REPORT_SIZE bytes)..."
+echo "Scoring agent output ($REPORT_SIZE bytes)..."
+echo "Report: $REPORT_PATH"
 echo "Ground truth: $GROUND_TRUTH"
 echo ""
 
-# ── Delegate scoring to Python (avoids shell escaping issues with regex) ─
-python3 << 'PYEOF'
-import json, re, sys
+REPORT_PATH="$REPORT_PATH" GROUND_TRUTH="$GROUND_TRUTH" REWARD_FILE="$REWARD_FILE" REPORT_SIZE="$REPORT_SIZE" MIN_REPORT_BYTES="$MIN_REPORT_BYTES" python3 << 'PYEOF'
+import hashlib
+import json
+import os
+import re
 
-REPORT_PATH = "/logs/agent/investigation.md"
-GT_PATH = "/tests/ground_truth.json"
-REWARD_PATH = "/logs/verifier/reward.txt"
+REPORT_PATH = os.environ["REPORT_PATH"]
+GT_PATH = os.environ["GROUND_TRUTH"]
+REWARD_PATH = os.environ["REWARD_FILE"]
+REPORT_SIZE = int(os.environ["REPORT_SIZE"])
+MIN_REPORT_BYTES = max(1, int(os.environ["MIN_REPORT_BYTES"]))
 
 with open(REPORT_PATH) as f:
     report = f.read()
 with open(GT_PATH) as f:
     gt = json.load(f)
 
+# Canonical source (when provided) should always score 1.0 if text is exact.
+doc_sha = hashlib.sha256(report.encode("utf-8")).hexdigest().lower()
+canonical_sha = ((((gt.get("ground_truth_provenance") or {}).get("canonical_source") or {}).get("sha256") or "").lower())
+if canonical_sha and doc_sha == canonical_sha:
+    print("Canonical source SHA match: awarding 1.0")
+    with open(REWARD_PATH, "w") as f:
+        f.write("1.00\n")
+    raise SystemExit(0)
+
+
 def check_any_pattern(patterns, text):
-    """Return True if at least one pattern matches (case-insensitive)."""
     for p in patterns:
         try:
             if re.search(p, text, re.IGNORECASE):
                 return True
         except re.error:
-            # Fall back to literal substring match if regex is invalid
             if p.lower() in text.lower():
                 return True
     return False
 
+
 def check_all_patterns(patterns, text):
-    """Return True if ALL patterns match (each represents a step in causal chain)."""
     for p in patterns:
         try:
             if not re.search(p, text, re.IGNORECASE):
@@ -78,81 +85,59 @@ def check_all_patterns(patterns, text):
                 return False
     return True
 
-# ── Score required_findings ──────────────────────────────────────────────
-print("=== Required Findings ===")
-f_score, f_total = 0.0, 0.0
-for item in gt["required_findings"]:
-    f_total += item["weight"]
-    if check_any_pattern(item["patterns"], report):
-        f_score += item["weight"]
-        print(f"  [x] {item['description']} (weight: {item['weight']})")
-    else:
-        print(f"  [ ] {item['description']} (weight: {item['weight']})")
-f_ratio = f_score / f_total if f_total > 0 else 0
-print(f"  Findings score: {f_score:.2f} / {f_total:.2f} = {f_ratio:.2f}")
-print()
 
-# ── Score file_references ────────────────────────────────────────────────
-print("=== File References ===")
-r_score, r_total = 0.0, 0.0
-for item in gt["file_references"]:
-    r_total += item["weight"]
-    if check_any_pattern(item["patterns"], report):
-        r_score += item["weight"]
-        print(f"  [x] {item['description']} (weight: {item['weight']})")
-    else:
-        print(f"  [ ] {item['description']} (weight: {item['weight']})")
-r_ratio = r_score / r_total if r_total > 0 else 0
-print(f"  File refs score: {r_score:.2f} / {r_total:.2f} = {r_ratio:.2f}")
-print()
+def score_category(items, label, use_all=False, negate=False):
+    print(f"=== {label} ===")
+    score = 0.0
+    total = 0.0
+    for item in items:
+        w = float(item["weight"])
+        total += w
+        matched = check_all_patterns(item["patterns"], report) if use_all else check_any_pattern(item["patterns"], report)
+        passed = (not matched) if negate else matched
+        if passed:
+            score += w
+            print(f"  [x] {item['description']} (weight: {w})")
+        else:
+            msg = " -- wrong conclusion found" if negate else ""
+            prefix = "FAIL: " if negate else ""
+            print(f"  [ ] {prefix}{item['description']} (weight: {w}){msg}")
+    ratio = score / total if total > 0 else (1.0 if negate else 0.0)
+    print(f"  Score: {score:.2f} / {total:.2f} = {ratio:.2f}")
+    print()
+    return ratio
 
-# ── Score causal_chain ───────────────────────────────────────────────────
-print("=== Causal Chain ===")
-c_score, c_total = 0.0, 0.0
-for item in gt["causal_chain"]:
-    c_total += item["weight"]
-    # All patterns must match (they represent steps in the causal chain)
-    if check_all_patterns(item["patterns"], report):
-        c_score += item["weight"]
-        print(f"  [x] {item['description']} (weight: {item['weight']})")
-    else:
-        print(f"  [ ] {item['description']} (weight: {item['weight']})")
-c_ratio = c_score / c_total if c_total > 0 else 0
-print(f"  Causal chain score: {c_score:.2f} / {c_total:.2f} = {c_ratio:.2f}")
-print()
 
-# ── Score negative_checks ────────────────────────────────────────────────
-print("=== Negative Checks ===")
-n_score, n_total = 0.0, 0.0
-for item in gt["negative_checks"]:
-    n_total += item["weight"]
-    # Negative checks PASS when the pattern is NOT found
-    if not check_any_pattern(item["patterns"], report):
-        n_score += item["weight"]
-        print(f"  [x] {item['description']} (weight: {item['weight']})")
-    else:
-        print(f"  [ ] FAIL: {item['description']} (weight: {item['weight']}) -- wrong conclusion found")
-n_ratio = n_score / n_total if n_total > 0 else 1.0
-print(f"  Negative checks score: {n_score:.2f} / {n_total:.2f} = {n_ratio:.2f}")
-print()
+f_ratio = score_category(gt.get("required_findings", []), "Required Findings")
+r_ratio = score_category(gt.get("file_references", []), "File References")
+c_ratio = score_category(gt.get("causal_chain", []), "Causal Chain", use_all=True)
+n_ratio = score_category(gt.get("negative_checks", []), "Negative Checks", negate=True)
 
-# ── Compute weighted total ───────────────────────────────────────────────
-w = gt["weights"]
-total = (f_ratio * w["required_findings"] +
-         r_ratio * w["file_references"] +
-         c_ratio * w["causal_chain"] +
-         n_ratio * w["negative_checks"])
+weights = gt.get("weights", {
+    "required_findings": 0.40,
+    "file_references": 0.30,
+    "causal_chain": 0.20,
+    "negative_checks": 0.10,
+})
+base = (
+    f_ratio * float(weights.get("required_findings", 0.40))
+    + r_ratio * float(weights.get("file_references", 0.30))
+    + c_ratio * float(weights.get("causal_chain", 0.20))
+    + n_ratio * float(weights.get("negative_checks", 0.10))
+)
+
+# Soft length scaling: avoid hard 0 for concise but correct outputs.
+length_factor = min(1.0, REPORT_SIZE / float(MIN_REPORT_BYTES))
+final = max(0.0, min(1.0, base * length_factor))
 
 print("=== Final Score ===")
-print(f"  Findings:  {f_ratio:.2f} * {w['required_findings']} = {f_ratio * w['required_findings']:.3f}")
-print(f"  File refs: {r_ratio:.2f} * {w['file_references']} = {r_ratio * w['file_references']:.3f}")
-print(f"  Causal:    {c_ratio:.2f} * {w['causal_chain']} = {c_ratio * w['causal_chain']:.3f}")
-print(f"  Negative:  {n_ratio:.2f} * {w['negative_checks']} = {n_ratio * w['negative_checks']:.3f}")
-print(f"  TOTAL:     {total:.2f}")
+print(f"  Base checklist: {base:.3f}")
+print(f"  Length factor:  min(1.0, {REPORT_SIZE}/{MIN_REPORT_BYTES}) = {length_factor:.3f}")
+print(f"  TOTAL:          {final:.2f}")
 
 with open(REWARD_PATH, "w") as f:
-    f.write(f"{total:.2f}\n")
+    f.write(f"{final:.2f}\n")
 
 print()
-print(f"Tests completed - Score: {total:.2f}")
+print(f"Tests completed - Score: {final:.2f}")
 PYEOF
