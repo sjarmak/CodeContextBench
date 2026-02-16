@@ -45,6 +45,7 @@ from ccb_metrics.ir_metrics import (
     extract_retrieved_files,
     extract_time_to_context,
     IRScores,
+    MCPValueScore,
 )
 
 RUNS_DIR = Path("/home/stephanie_jarmak/evals/custom_agents/agents/claudecode/runs/official")
@@ -247,6 +248,10 @@ def _infer_suite(task_id: str) -> str | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# US-003: Retrieval-to-outcome correlation
+# ---------------------------------------------------------------------------
+
 def _load_manifest_rewards() -> dict[tuple[str, str], float]:
     """Load (task_id, config) -> reward from MANIFEST.json."""
     if not MANIFEST_PATH.is_file():
@@ -256,8 +261,7 @@ def _load_manifest_rewards() -> dict[tuple[str, str], float]:
     except (json.JSONDecodeError, OSError):
         return {}
     rewards: dict[tuple[str, str], float] = {}
-    runs = manifest.get("runs", {})
-    for run_key, run_data in runs.items():
+    for run_key, run_data in manifest.get("runs", {}).items():
         parts = run_key.rsplit("/", 1)
         if len(parts) != 2:
             continue
@@ -289,16 +293,14 @@ def _manual_spearman(x: list[float], y: list[float]) -> tuple[float, float]:
             i = j + 1
         return ranks
 
-    rx = _rank(x)
-    ry = _rank(y)
+    rx, ry = _rank(x), _rank(y)
     d_sq = sum((a - b) ** 2 for a, b in zip(rx, ry))
     r = 1.0 - (6.0 * d_sq) / (n * (n * n - 1))
     import math
     if abs(r) >= 1.0:
-        p = 0.0
-    else:
-        t_stat = r * math.sqrt((n - 2) / (1 - r * r))
-        p = 2.0 * (1.0 - 0.5 * (1.0 + math.erf(abs(t_stat) / math.sqrt(2.0))))
+        return (round(r, 6), 0.0)
+    t_stat = r * math.sqrt((n - 2) / (1 - r * r))
+    p = 2.0 * (1.0 - 0.5 * (1.0 + math.erf(abs(t_stat) / math.sqrt(2.0))))
     return (round(r, 6), round(p, 6))
 
 
@@ -341,7 +343,7 @@ def compute_retrieval_outcome_correlation(ir_scores: list[IRScores]) -> dict | N
     except ImportError:
         corr, pval = _manual_spearman(paired_mrr, paired_reward)
 
-    common_tasks = set(bl_ir.keys()) & set(sg_ir.keys()) & set(bl_reward.keys()) & set(sg_reward.keys())
+    common_tasks = set(bl_ir) & set(sg_ir) & set(bl_reward) & set(sg_reward)
     scatter: list[dict] = []
     for task_id in sorted(common_tasks):
         suite = _infer_suite(task_id) or "unknown"
@@ -356,14 +358,7 @@ def compute_retrieval_outcome_correlation(ir_scores: list[IRScores]) -> dict | N
         })
 
     abs_r = abs(corr)
-    if abs_r >= 0.7:
-        strength = "strong"
-    elif abs_r >= 0.4:
-        strength = "moderate"
-    elif abs_r >= 0.2:
-        strength = "weak"
-    else:
-        strength = "negligible"
+    strength = "strong" if abs_r >= 0.7 else "moderate" if abs_r >= 0.4 else "weak" if abs_r >= 0.2 else "negligible"
     sig_text = "statistically significant (p<0.05)" if pval < 0.05 else "not statistically significant"
     direction = "positive" if corr > 0 else "negative"
     interpretation = (
@@ -383,9 +378,153 @@ def compute_retrieval_outcome_correlation(ir_scores: list[IRScores]) -> dict | N
     }
 
 
+# ---------------------------------------------------------------------------
+# US-004: Composite MCP value score with z-score normalization
+# ---------------------------------------------------------------------------
+
+def _load_task_metrics_tokens() -> dict[tuple[str, str], int]:
+    """Load (task_id, config) -> input_tokens from task_metrics.json files."""
+    tokens: dict[tuple[str, str], int] = {}
+    if not RUNS_DIR.exists():
+        return tokens
+    for run_dir in RUNS_DIR.iterdir():
+        if not run_dir.is_dir() or should_skip(run_dir.name):
+            continue
+        for config_dir in run_dir.iterdir():
+            if not config_dir.is_dir() or config_dir.name not in CONFIGS:
+                continue
+            config = config_dir.name
+            for batch_dir in config_dir.iterdir():
+                if not batch_dir.is_dir() or not _is_batch_timestamp(batch_dir.name):
+                    continue
+                for task_dir in batch_dir.iterdir():
+                    if not task_dir.is_dir():
+                        continue
+                    metrics_file = task_dir / "task_metrics.json"
+                    if not metrics_file.is_file():
+                        continue
+                    try:
+                        m = json.loads(metrics_file.read_text())
+                        task_id = m.get("task_id", "")
+                        inp = m.get("input_tokens")
+                        if task_id and inp is not None:
+                            key = (task_id, config)
+                            # Keep latest by not overwriting (first seen wins — sorted dirs)
+                            if key not in tokens:
+                                tokens[key] = int(inp)
+                    except (json.JSONDecodeError, OSError, ValueError):
+                        continue
+    return tokens
+
+
+def _zscore(values: list[float]) -> list[float]:
+    """Z-score normalize a list of values. Returns 0 for constant lists."""
+    if len(values) < 2:
+        return [0.0] * len(values)
+    mean = statistics.mean(values)
+    std = statistics.stdev(values)
+    if std < 1e-10:
+        return [0.0] * len(values)
+    return [(v - mean) / std for v in values]
+
+
+def compute_mcp_value_scores(
+    ir_scores: list[IRScores],
+    weights: tuple[float, float, float, float] = (0.3, 0.3, 0.25, 0.15),
+) -> list[MCPValueScore]:
+    """Compute composite MCP value scores for tasks with both configs.
+
+    Components (all computed as SG_full - baseline deltas):
+    - retrieval_lift: MRR delta
+    - outcome_lift: reward delta
+    - efficiency_lift: TTFR improvement ratio (negative = faster with MCP)
+    - cost_ratio: token cost ratio (SG_full / baseline - 1, negative = cheaper)
+
+    Each component is z-scored across all tasks before weighting.
+    """
+    manifest_rewards = _load_manifest_rewards()
+    token_data = _load_task_metrics_tokens()
+
+    # Build per-config lookups
+    bl_ir: dict[str, IRScores] = {}
+    sg_ir: dict[str, IRScores] = {}
+    for s in ir_scores:
+        if s.config_name == "baseline":
+            bl_ir[s.task_id] = s
+        elif s.config_name == "sourcegraph_full":
+            sg_ir[s.task_id] = s
+
+    common = set(bl_ir) & set(sg_ir)
+    if len(common) < 3:
+        return []
+
+    # Compute raw component values for each task
+    raw_scores: list[dict] = []
+    for task_id in sorted(common):
+        bl, sg = bl_ir[task_id], sg_ir[task_id]
+        suite = _infer_suite(task_id) or "unknown"
+
+        retrieval_lift = sg.mrr - bl.mrr
+        outcome_lift = 0.0
+        bl_r = manifest_rewards.get((task_id, "baseline"))
+        sg_r = manifest_rewards.get((task_id, "sourcegraph_full"))
+        if bl_r is not None and sg_r is not None:
+            outcome_lift = sg_r - bl_r
+
+        efficiency_lift = 0.0
+        if bl.ttfr is not None and sg.ttfr is not None and bl.ttfr > 0:
+            efficiency_lift = (bl.ttfr - sg.ttfr) / bl.ttfr  # positive = MCP faster
+
+        cost_ratio = 0.0
+        bl_tok = token_data.get((task_id, "baseline"))
+        sg_tok = token_data.get((task_id, "sourcegraph_full"))
+        if bl_tok and sg_tok and bl_tok > 0:
+            cost_ratio = -(sg_tok / bl_tok - 1)  # positive = MCP cheaper
+
+        raw_scores.append({
+            "task_id": task_id,
+            "suite": suite,
+            "retrieval_lift": retrieval_lift,
+            "outcome_lift": outcome_lift,
+            "efficiency_lift": efficiency_lift,
+            "cost_ratio": cost_ratio,
+        })
+
+    # Z-score each component
+    w_ret, w_out, w_eff, w_cost = weights
+    components = ["retrieval_lift", "outcome_lift", "efficiency_lift", "cost_ratio"]
+    comp_weights = [w_ret, w_out, w_eff, w_cost]
+
+    z_values: dict[str, list[float]] = {}
+    for comp in components:
+        vals = [r[comp] for r in raw_scores]
+        z_values[comp] = _zscore(vals)
+
+    # Build MCPValueScore objects
+    results: list[MCPValueScore] = []
+    for i, raw in enumerate(raw_scores):
+        # Compute weighted composite from z-scored components
+        composite = sum(
+            z_values[comp][i] * w
+            for comp, w in zip(components, comp_weights)
+        )
+        results.append(MCPValueScore(
+            task_id=raw["task_id"],
+            suite=raw["suite"],
+            retrieval_lift=raw["retrieval_lift"],
+            outcome_lift=raw["outcome_lift"],
+            efficiency_lift=raw["efficiency_lift"],
+            cost_ratio=raw["cost_ratio"],
+            composite=composite,
+        ))
+
+    return results
+
+
 def run_ir_analysis(
     suite_filter: str | None = None,
     per_task: bool = False,
+    value_weights: tuple[float, float, float, float] = (0.3, 0.3, 0.25, 0.15),
 ) -> dict:
     """Main analysis pipeline."""
     gt_registry = _ensure_ground_truth()
@@ -539,10 +678,28 @@ def run_ir_analysis(
         except ImportError:
             pass
 
-    # Retrieval-outcome correlation (US-003)
+    # US-003: Retrieval-outcome correlation
     corr = compute_retrieval_outcome_correlation(all_scores)
     if corr:
         result["retrieval_outcome_correlation"] = corr
+
+    # US-004: Composite MCP value scores
+    value_scores = compute_mcp_value_scores(all_scores, weights=value_weights)
+    if value_scores:
+        by_suite: dict[str, list[MCPValueScore]] = defaultdict(list)
+        for vs in value_scores:
+            by_suite[vs.suite].append(vs)
+        result["mcp_value_scores"] = {
+            "n_tasks": len(value_scores),
+            "weights": {"retrieval": value_weights[0], "outcome": value_weights[1],
+                        "efficiency": value_weights[2], "cost": value_weights[3]},
+            "per_suite_mean": {
+                suite: round(statistics.mean(v.composite for v in scores), 4)
+                for suite, scores in sorted(by_suite.items())
+            },
+            "top_helped": [v.to_dict() for v in sorted(value_scores, key=lambda v: -v.composite)[:10]],
+            "top_hurt": [v.to_dict() for v in sorted(value_scores, key=lambda v: v.composite)[:10]],
+        }
 
     if per_task:
         result["per_task"] = [s.to_dict() for s in all_scores]
@@ -640,8 +797,8 @@ def format_table(data: dict) -> str:
     corr = data.get("retrieval_outcome_correlation", {})
     if corr:
         lines.append("RETRIEVAL-OUTCOME CORRELATION:")
-        lines.append(f"  Paired (task, config) observations: {corr.get('n_paired', 0)}")
-        lines.append(f"  Tasks with both configs:            {corr.get('n_paired_both_configs', 0)}")
+        lines.append(f"  Paired observations: {corr.get('n_paired', 0)}")
+        lines.append(f"  Tasks with both configs: {corr.get('n_paired_both_configs', 0)}")
         lines.append(f"  Spearman r:  {corr.get('spearman_r', 'N/A')}")
         lines.append(f"  p-value:     {corr.get('spearman_p', 'N/A')}")
         lines.append(f"  {corr.get('interpretation', '')}")
@@ -653,13 +810,63 @@ def format_table(data: dict) -> str:
             lines.append(header)
             lines.append("    " + "-" * (len(header) - 4))
             for row in scatter:
-                mrr_d = row.get("mrr_delta", 0)
-                rew_d = row.get("reward_delta", 0)
                 lines.append(
                     f"    {row['task_id']:40s} {row['suite']:20s} "
-                    f"{mrr_d:>+7.3f} {rew_d:>+7.3f}"
+                    f"{row.get('mrr_delta', 0):>+7.3f} {row.get('reward_delta', 0):>+7.3f}"
                 )
         lines.append("")
+
+    # MCP Value Scores
+    mvs = data.get("mcp_value_scores", {})
+    if mvs:
+        lines.append("MCP VALUE SCORES (z-scored composite):")
+        w = mvs.get("weights", {})
+        lines.append(
+            f"  Weights: retrieval={w.get('retrieval', 0.3)}, "
+            f"outcome={w.get('outcome', 0.3)}, "
+            f"efficiency={w.get('efficiency', 0.25)}, "
+            f"cost={w.get('cost', 0.15)}"
+        )
+        lines.append(f"  Tasks scored: {mvs.get('n_tasks', 0)}")
+        lines.append("")
+
+        per_suite = mvs.get("per_suite_mean", {})
+        if per_suite:
+            lines.append("  Per-suite mean composite:")
+            for suite, mean in sorted(per_suite.items(), key=lambda x: -x[1]):
+                bar = "+" * max(0, int(mean * 5)) if mean > 0 else "-" * max(0, int(-mean * 5))
+                lines.append(f"    {suite:30s} {mean:>+7.3f}  {bar}")
+            lines.append("")
+
+        top_helped = mvs.get("top_helped", [])
+        if top_helped:
+            lines.append("  Top 10 MCP-helped tasks:")
+            header = f"    {'Task':40s} {'Suite':20s} {'Comp':>7s} {'Ret':>7s} {'Out':>7s} {'Eff':>7s} {'Cost':>7s}"
+            lines.append(header)
+            lines.append("    " + "-" * (len(header) - 4))
+            for t in top_helped:
+                lines.append(
+                    f"    {t['task_id']:40s} {t['suite']:20s} "
+                    f"{t['composite']:>+7.3f} {t['retrieval_lift']:>+7.3f} "
+                    f"{t['outcome_lift']:>+7.3f} {t['efficiency_lift']:>+7.3f} "
+                    f"{t['cost_ratio']:>+7.3f}"
+                )
+            lines.append("")
+
+        top_hurt = mvs.get("top_hurt", [])
+        if top_hurt:
+            lines.append("  Top 10 MCP-hurt tasks:")
+            header = f"    {'Task':40s} {'Suite':20s} {'Comp':>7s} {'Ret':>7s} {'Out':>7s} {'Eff':>7s} {'Cost':>7s}"
+            lines.append(header)
+            lines.append("    " + "-" * (len(header) - 4))
+            for t in top_hurt:
+                lines.append(
+                    f"    {t['task_id']:40s} {t['suite']:20s} "
+                    f"{t['composite']:>+7.3f} {t['retrieval_lift']:>+7.3f} "
+                    f"{t['outcome_lift']:>+7.3f} {t['efficiency_lift']:>+7.3f} "
+                    f"{t['cost_ratio']:>+7.3f}"
+                )
+            lines.append("")
 
     return "\n".join(lines)
 
@@ -683,6 +890,10 @@ def parse_args():
     parser.add_argument(
         "--per-task", action="store_true",
         help="Include per-task IR scores in output",
+    )
+    parser.add_argument(
+        "--value-weights", default="0.3,0.3,0.25,0.15",
+        help="Comma-separated weights for MCP value composite: retrieval,outcome,efficiency,cost",
     )
     return parser.parse_args()
 
@@ -708,9 +919,19 @@ def main():
         print(f"  By confidence:{dict(sorted(by_confidence.items()))}")
         return
 
+    # Parse value weights
+    try:
+        vw = tuple(float(x) for x in args.value_weights.split(","))
+        if len(vw) != 4:
+            raise ValueError
+    except ValueError:
+        print("ERROR: --value-weights must be 4 comma-separated floats", file=sys.stderr)
+        sys.exit(1)
+
     data = run_ir_analysis(
         suite_filter=args.suite,
         per_task=args.per_task,
+        value_weights=vw,
     )
 
     if args.json:
