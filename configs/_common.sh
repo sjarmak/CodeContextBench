@@ -118,7 +118,12 @@ PYEOF
 ensure_fresh_token() {
     if [ "$USE_SUBSCRIPTION" = "true" ]; then
         echo "Checking Claude subscription token..."
-        refresh_claude_token || echo "WARNING: Token refresh failed — runs may fail if token expires"
+        if ! refresh_claude_token; then
+            echo "ERROR: Token refresh failed — aborting to prevent wasted compute."
+            echo "  Fix: python3 scripts/headless_login.py --all-accounts"
+            echo "  Or:  python3 scripts/check_infra.py  (to diagnose)"
+            exit 1
+        fi
     fi
 }
 

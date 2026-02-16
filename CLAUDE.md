@@ -36,23 +36,31 @@ docs/
   ERROR_CATALOG.md           # Known error fingerprints, causes, fixes
 ```
 
-## Benchmarks (13)
+## Benchmarks (13 total, 11 active)
 
-| Benchmark | Tasks | Language(s) | Focus |
-|-----------|-------|-------------|-------|
-| SWE-bench Pro | 36 | Go, TS, Python | Real-world SWE across repos |
-| DependEval | 32 | Java, JS, Python, TS | Dependency ordering |
-| PyTorch | 12 | Python | PyTorch PR-level tasks |
-| LoCoBench | 25 | Mixed | Long-context understanding |
-| RepoQA | 10 | Mixed | Repository Q&A |
-| K8s Docs | 5 | Go | Kubernetes documentation |
-| CrossRepo | 4-5 | Mixed | Cross-repository reasoning |
-| LargeRepo | 4 | Go, Rust, Python, TS | Large codebase tasks |
-| TAC | 6 | Mixed | Tool-augmented coding |
-| DIBench | 8 | Mixed | Dependency installation |
-| SWE-Perf | 3 | Python | Performance optimization |
-| CodeReview | 3 | TS, C#, Mixed | AI code review: find & fix injected PR defects |
-| LinuxFLBench | 5 | C | Linux kernel fault localization |
+| Benchmark | Tasks | Language(s) | Focus | Status |
+|-----------|-------|-------------|-------|--------|
+| SWE-bench Pro | 36 | Go, TS, Python | Real-world SWE across repos | Active |
+| DependEval | 32 | Java, JS, Python, TS | Dependency ordering | Active |
+| PyTorch | 12 | Python | PyTorch PR-level tasks | Active |
+| K8s Docs | 5 | Go | Kubernetes documentation | Active |
+| CrossRepo | 4-5 | Mixed | Cross-repository reasoning | Active |
+| LargeRepo | 4 | Go, Rust, Python, TS | Large codebase tasks | Active |
+| TAC | 6 | Mixed | Tool-augmented coding | Active |
+| DIBench | 8 | Mixed | Dependency installation | Active |
+| SWE-Perf | 3 | Python | Performance optimization | Active |
+| CodeReview | 3 | TS, C#, Mixed | AI code review: find & fix injected PR defects | Active — harder variant planned |
+| LinuxFLBench | 5 | C | Linux kernel fault localization | Active — verifier needs hardening |
+| Investigation | 4 | Mixed | Codebase investigation tasks | Active — harder variant planned |
+| Enterprise | 6 | Mixed | Enterprise codebase tasks | Active |
+| Governance | 3 | Mixed | Code governance tasks | Active |
+| LoCoBench | 25 | Mixed | Long-context understanding | **ARCHIVED** |
+| RepoQA | 10 | Mixed | Repository Q&A | **ARCHIVED** — harder variant planned |
+
+### Archived Suites
+
+- **LoCoBench**: Runs archived to `runs/official/archive/`. Not included in MANIFEST or aggregate reports.
+- **RepoQA**: Runs archived. Was 100% pass rate — too easy. Harder variant in development.
 
 ## Running Tasks
 
@@ -75,6 +83,7 @@ Uses Claude Max subscription OAuth tokens (not API keys).
 
 - Credentials: `~/.claude/.credentials.json` (single account) or `~/.claude-homes/accountN/.claude/.credentials.json` (multi-account)
 - Auto-refresh: 30-minute margin before expiry via `refresh_claude_token()` in `_common.sh`
+- **MANDATORY pre-check**: `ensure_fresh_token()` now aborts the run if token refresh fails (prevents wasted compute). Always run `python3 scripts/check_infra.py` before launching benchmarks.
 - Multi-account: Round-robin distribution across Max-plan accounts for parallel runs
 
 ### Headless Token Refresh
@@ -192,7 +201,9 @@ MAINTENANCE
 - **SWE-Perf**: Scaffolding only. Dockerfiles create empty workspaces. Needs repo clones + benchmark infra.
 - **CrossRepo**: Verifier fixed but ~80% task failure rate due to task difficulty.
 - **K8s Docs SG_full**: API 500 error on applyconfig-doc-001 (not MCP-related).
-- **LoCoBench**: Template weights updated but 25 task verify.py files still reference old weights.
+- **LinuxFLBench**: Instructions leak ground truth file paths as "examples", inflating scores. Function-level matching (30% of score) is the only genuinely discriminating check. Needs instruction fixes.
+- **PyTorch**: Low pass rate (~15-23%). Errored runs in `pytorch_paired_opus_20260214` were caused by batch cancellation (Ctrl+C), not infra issues. Rerun captured valid results. Error fingerprinter misclassifies these as `unknown`/`timeout` — should be `batch_cancelled`.
+- **aggregate_status.py**: Counts `status=passed` (verifier ran) not `reward=1.0`. Suites with partial-credit scoring (linuxflbench, codereview) may show inflated pass rates.
 
 ## MCP Benefit Scoring
 
@@ -211,8 +222,6 @@ Per-task features extracted from task.toml metadata, instruction.md, and config.
 |-----------|--------|------------|
 | SWE-bench Pro | files_changed | 1-3=medium, 4-10=hard, 10+=very_hard |
 | PyTorch | LOC (additions+deletions) | <50=medium, 50-200=hard, >200=very_hard |
-| LoCoBench | task category | architectural=expert, others=hard |
-| RepoQA | source file count | <100=medium, 100+=hard |
 | CrossRepo | manual | easy to hard |
 
 ## Task Tracking (Beads)
