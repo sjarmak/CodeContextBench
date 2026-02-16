@@ -168,6 +168,7 @@ class IRScores:
     ttfr_step: Optional[int] = None # Step index of first relevant file
     tt_all_r: Optional[float] = None  # Time to find ALL relevant files (None if not all found)
     n_steps_to_first: Optional[int] = None  # Tool calls before first relevant file
+    tokens_before_first_relevant: Optional[int] = None  # Cumulative output tokens up to TTFR step
 
     def to_dict(self) -> dict:
         return {
@@ -188,6 +189,31 @@ class IRScores:
             "ttfr_step": self.ttfr_step,
             "tt_all_r": self.tt_all_r,
             "n_steps_to_first": self.n_steps_to_first,
+            "tokens_before_first_relevant": self.tokens_before_first_relevant,
+        }
+
+
+@dataclass
+class MCPValueScore:
+    """Composite MCP value score for a single task (SG_full vs baseline delta)."""
+
+    task_id: str
+    suite: str
+    retrieval_lift: float = 0.0
+    outcome_lift: float = 0.0
+    efficiency_lift: float = 0.0
+    cost_ratio: float = 0.0
+    composite: float = 0.0
+
+    def to_dict(self) -> dict:
+        return {
+            "task_id": self.task_id,
+            "suite": self.suite,
+            "retrieval_lift": round(self.retrieval_lift, 4),
+            "outcome_lift": round(self.outcome_lift, 4),
+            "efficiency_lift": round(self.efficiency_lift, 4),
+            "cost_ratio": round(self.cost_ratio, 4),
+            "composite": round(self.composite, 4),
         }
 
 
@@ -483,6 +509,82 @@ def extract_retrieved_files(transcript_path: Path) -> list[str]:
 
 _TOOL_EXEC_RE = re.compile(r"Executed (\S+) (toolu_\S+)")
 
+# Calibration: median seconds between consecutive tool steps.
+# Derived from 1347 intervals across 31 paired runs (trajectory.json + claude-code.txt).
+_CALIBRATION_SECS_PER_STEP = 2.6
+
+
+def synthesize_trajectory(transcript_path: Path) -> dict:
+    """Synthesize a trajectory dict from claude-code.txt when trajectory.json is missing.
+
+    Parses the JSONL transcript to extract tool_use blocks with their tool_use_ids,
+    then estimates timestamps using a calibrated seconds-per-step rate derived from
+    runs that have both trajectory.json and claude-code.txt.
+
+    Args:
+        transcript_path: Path to agent/claude-code.txt.
+
+    Returns:
+        Dict with "steps" list compatible with extract_time_to_context(), or empty
+        dict if the transcript cannot be parsed.
+    """
+    if not transcript_path.is_file():
+        return {}
+
+    from datetime import datetime, timedelta, timezone
+
+    anchor = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    steps: list[dict] = []
+    step_id = 0
+    cumulative_secs = 0.0
+
+    for line in transcript_path.read_text(errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        msg_type = entry.get("type", "")
+
+        if msg_type == "system" and step_id == 0:
+            step_id = 1
+            steps.append({
+                "step_id": step_id,
+                "timestamp": anchor.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                "source": "system",
+                "message": "Session start (synthesized)",
+            })
+            continue
+
+        if msg_type == "assistant":
+            message = entry.get("message", entry)
+            content_blocks = message.get("content", [])
+            if not isinstance(content_blocks, list):
+                continue
+            for block in content_blocks:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    tool_name = block.get("name", "")
+                    tool_id = block.get("id", "")
+                    if not tool_id:
+                        continue
+                    step_id += 1
+                    cumulative_secs += _CALIBRATION_SECS_PER_STEP
+                    ts = anchor + timedelta(seconds=cumulative_secs)
+                    steps.append({
+                        "step_id": step_id,
+                        "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%S.") + f"{ts.microsecond // 1000:03d}Z",
+                        "source": "agent",
+                        "message": f"Executed {tool_name} {tool_id}",
+                    })
+
+    if len(steps) < 2:
+        return {}
+
+    return {"schema_version": "synthesized-v1", "steps": steps}
+
 
 def extract_time_to_context(
     trajectory_path: Path,
@@ -503,15 +605,20 @@ def extract_time_to_context(
     Returns:
         Dict with timing metrics, or empty dict if data unavailable.
     """
-    if not trajectory_path.is_file() or not transcript_path.is_file():
+    if not transcript_path.is_file():
         return {}
     if not ground_truth_files:
         return {}
 
-    try:
-        traj = json.loads(trajectory_path.read_text(errors="replace"))
-    except (json.JSONDecodeError, OSError):
-        return {}
+    # Try real trajectory.json first, fall back to synthesis from transcript
+    traj = None
+    if trajectory_path.is_file():
+        try:
+            traj = json.loads(trajectory_path.read_text(errors="replace"))
+        except (json.JSONDecodeError, OSError):
+            traj = None
+    if not traj or not traj.get("steps"):
+        traj = synthesize_trajectory(transcript_path)
 
     steps = traj.get("steps", [])
     if not steps:
@@ -636,6 +743,58 @@ def extract_time_to_context(
     if tt_all_r is not None:
         result["tt_all_r"] = round(tt_all_r, 1)
     return result
+
+
+def extract_tokens_before_first_relevant(
+    transcript_path: Path,
+    n_steps_to_first: int | None,
+) -> int | None:
+    """Sum output tokens from claude-code.txt up to the TTFR step.
+
+    Counts cumulative output_tokens from assistant messages, tracking tool_use
+    blocks as steps. Returns the cumulative output tokens at the step where
+    the first relevant file was found, or None if data is unavailable.
+
+    Args:
+        transcript_path: Path to agent/claude-code.txt.
+        n_steps_to_first: Step index (0-based) of the first relevant file.
+
+    Returns:
+        Cumulative output tokens up to and including the TTFR step, or None.
+    """
+    if n_steps_to_first is None or not transcript_path.is_file():
+        return None
+
+    cumulative_output = 0
+    tool_step = 0
+
+    for line in transcript_path.read_text(errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        if entry.get("type") != "assistant":
+            continue
+
+        message = entry.get("message", entry)
+        usage = message.get("usage", {})
+        out_tok = usage.get("output_tokens", 0)
+        cumulative_output += out_tok
+
+        # Count tool_use blocks in this message as steps
+        content_blocks = message.get("content", [])
+        if isinstance(content_blocks, list):
+            for block in content_blocks:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    if tool_step >= n_steps_to_first:
+                        return cumulative_output
+                    tool_step += 1
+
+    return None
 
 
 def _looks_like_file(path: str) -> bool:
