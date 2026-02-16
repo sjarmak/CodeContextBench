@@ -9,17 +9,17 @@ WORKDIR /workspace
 # Clone istio/istio
 RUN git clone https://github.com/istio/istio.git istio && \
     cd istio && \
-    git checkout 1.24.1
+    git checkout 4c1f845d839e9086ee85ad9337f2647492322eb4
 
 # Clone envoyproxy/go-control-plane
 RUN git clone https://github.com/envoyproxy/go-control-plane.git go-control-plane && \
     cd go-control-plane && \
-    git checkout v0.13.3
+    git checkout 71637ad69bbc5f51fbb2562e612a4365292804a5
 
 # Clone envoyproxy/data-plane-api (protobuf definitions)
 RUN git clone https://github.com/envoyproxy/data-plane-api.git data-plane-api && \
     cd data-plane-api && \
-    git checkout v3.36.0
+    git checkout 84e84367f2560cdb47b9bb78fd3e615feb80c3e4
 
 # Verify repos exist
 RUN ls -la /workspace/ && \

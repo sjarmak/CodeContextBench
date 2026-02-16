@@ -9,17 +9,17 @@ WORKDIR /workspace
 # Clone kubernetes/kubernetes
 RUN git clone https://github.com/kubernetes/kubernetes.git kubernetes && \
     cd kubernetes && \
-    git checkout 31bf3ed00ec0abe1b64d662d2e07e23e08f7cce0
+    git checkout 31bf3ed48b91b67e5003d8df1b3bd0b918d1fb94
 
 # Clone kubernetes/api (synced from k/k staging)
 RUN git clone https://github.com/kubernetes/api.git api && \
     cd api && \
-    git checkout 40341bbc11e31a8e5926cffe1c7a84d28a9ca5cb
+    git checkout f32ed1d60cf0787a512bebd6c06a4b84ae0b7cc7
 
 # Clone kubernetes/apimachinery
 RUN git clone https://github.com/kubernetes/apimachinery.git apimachinery && \
     cd apimachinery && \
-    git checkout 4b5c7c1a95ffb9c8c70ea8098b7a03e9d1d6c8e0
+    git checkout b2e9f88ff6d4c50c13061a53b1239c7707354eda
 
 # Verify repos exist
 RUN ls -la /workspace/ && \
