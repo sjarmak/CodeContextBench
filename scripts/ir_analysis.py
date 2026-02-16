@@ -48,6 +48,7 @@ from ccb_metrics.ir_metrics import (
 )
 
 RUNS_DIR = Path("/home/stephanie_jarmak/evals/custom_agents/agents/claudecode/runs/official")
+MANIFEST_PATH = RUNS_DIR / "MANIFEST.json"
 BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
 SELECTION_FILE = Path(__file__).resolve().parent.parent / "configs" / "selected_benchmark_tasks.json"
 GT_CACHE = Path(__file__).resolve().parent.parent / "configs" / "ground_truth_files.json"
@@ -246,6 +247,142 @@ def _infer_suite(task_id: str) -> str | None:
     return None
 
 
+def _load_manifest_rewards() -> dict[tuple[str, str], float]:
+    """Load (task_id, config) -> reward from MANIFEST.json."""
+    if not MANIFEST_PATH.is_file():
+        return {}
+    try:
+        manifest = json.loads(MANIFEST_PATH.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+    rewards: dict[tuple[str, str], float] = {}
+    runs = manifest.get("runs", {})
+    for run_key, run_data in runs.items():
+        parts = run_key.rsplit("/", 1)
+        if len(parts) != 2:
+            continue
+        _suite, config = parts
+        for task_id, task_data in run_data.get("tasks", {}).items():
+            reward = task_data.get("reward")
+            if reward is not None:
+                rewards[(task_id, config)] = reward
+    return rewards
+
+
+def _manual_spearman(x: list[float], y: list[float]) -> tuple[float, float]:
+    """Spearman rank correlation without scipy. Returns (r, p_approx)."""
+    n = len(x)
+    if n < 3:
+        return (0.0, 1.0)
+
+    def _rank(vals: list[float]) -> list[float]:
+        indexed = sorted(enumerate(vals), key=lambda t: t[1])
+        ranks = [0.0] * n
+        i = 0
+        while i < n:
+            j = i
+            while j < n - 1 and indexed[j + 1][1] == indexed[j][1]:
+                j += 1
+            avg_rank = (i + j) / 2.0 + 1.0
+            for k in range(i, j + 1):
+                ranks[indexed[k][0]] = avg_rank
+            i = j + 1
+        return ranks
+
+    rx = _rank(x)
+    ry = _rank(y)
+    d_sq = sum((a - b) ** 2 for a, b in zip(rx, ry))
+    r = 1.0 - (6.0 * d_sq) / (n * (n * n - 1))
+    import math
+    if abs(r) >= 1.0:
+        p = 0.0
+    else:
+        t_stat = r * math.sqrt((n - 2) / (1 - r * r))
+        p = 2.0 * (1.0 - 0.5 * (1.0 + math.erf(abs(t_stat) / math.sqrt(2.0))))
+    return (round(r, 6), round(p, 6))
+
+
+def compute_retrieval_outcome_correlation(ir_scores: list[IRScores]) -> dict | None:
+    """Join IR scores with MANIFEST rewards and compute Spearman correlation."""
+    manifest_rewards = _load_manifest_rewards()
+    if not manifest_rewards:
+        return None
+
+    ir_by_key: dict[tuple[str, str], IRScores] = {}
+    for s in ir_scores:
+        ir_by_key[(s.task_id, s.config_name)] = s
+
+    paired_mrr: list[float] = []
+    paired_reward: list[float] = []
+    bl_ir: dict[str, IRScores] = {}
+    sg_ir: dict[str, IRScores] = {}
+    bl_reward: dict[str, float] = {}
+    sg_reward: dict[str, float] = {}
+
+    for (task_id, config), score in ir_by_key.items():
+        reward = manifest_rewards.get((task_id, config))
+        if reward is None:
+            continue
+        paired_mrr.append(score.mrr)
+        paired_reward.append(reward)
+        if config == "baseline":
+            bl_ir[task_id] = score
+            bl_reward[task_id] = reward
+        elif config == "sourcegraph_full":
+            sg_ir[task_id] = score
+            sg_reward[task_id] = reward
+
+    if len(paired_mrr) < 5:
+        return None
+
+    try:
+        from scipy.stats import spearmanr
+        corr, pval = spearmanr(paired_mrr, paired_reward)
+    except ImportError:
+        corr, pval = _manual_spearman(paired_mrr, paired_reward)
+
+    common_tasks = set(bl_ir.keys()) & set(sg_ir.keys()) & set(bl_reward.keys()) & set(sg_reward.keys())
+    scatter: list[dict] = []
+    for task_id in sorted(common_tasks):
+        suite = _infer_suite(task_id) or "unknown"
+        scatter.append({
+            "task_id": task_id, "suite": suite,
+            "mrr_bl": round(bl_ir[task_id].mrr, 4),
+            "mrr_sg": round(sg_ir[task_id].mrr, 4),
+            "reward_bl": round(bl_reward[task_id], 4),
+            "reward_sg": round(sg_reward[task_id], 4),
+            "mrr_delta": round(sg_ir[task_id].mrr - bl_ir[task_id].mrr, 4),
+            "reward_delta": round(sg_reward[task_id] - bl_reward[task_id], 4),
+        })
+
+    abs_r = abs(corr)
+    if abs_r >= 0.7:
+        strength = "strong"
+    elif abs_r >= 0.4:
+        strength = "moderate"
+    elif abs_r >= 0.2:
+        strength = "weak"
+    else:
+        strength = "negligible"
+    sig_text = "statistically significant (p<0.05)" if pval < 0.05 else "not statistically significant"
+    direction = "positive" if corr > 0 else "negative"
+    interpretation = (
+        f"There is a {strength} {direction} correlation (r={corr:.3f}) between "
+        f"retrieval quality (MRR) and task outcome (reward), {sig_text} (p={pval:.4f}). "
+        f"This {'supports' if corr > 0.2 else 'does not support'} the hypothesis that "
+        f"better context retrieval leads to better task outcomes."
+    )
+
+    return {
+        "n_paired": len(paired_mrr),
+        "n_paired_both_configs": len(scatter),
+        "spearman_r": round(corr, 4),
+        "spearman_p": round(pval, 6),
+        "interpretation": interpretation,
+        "scatter": scatter,
+    }
+
+
 def run_ir_analysis(
     suite_filter: str | None = None,
     per_task: bool = False,
@@ -402,6 +539,11 @@ def run_ir_analysis(
         except ImportError:
             pass
 
+    # Retrieval-outcome correlation (US-003)
+    corr = compute_retrieval_outcome_correlation(all_scores)
+    if corr:
+        result["retrieval_outcome_correlation"] = corr
+
     if per_task:
         result["per_task"] = [s.to_dict() for s in all_scores]
 
@@ -492,6 +634,31 @@ def format_table(data: dict) -> str:
                 f"delta CI=[{bci.get('ci_lower', 'N/A')}, {bci.get('ci_upper', 'N/A')}] "
                 f"{sig}{n_note}"
             )
+        lines.append("")
+
+    # Retrieval-outcome correlation
+    corr = data.get("retrieval_outcome_correlation", {})
+    if corr:
+        lines.append("RETRIEVAL-OUTCOME CORRELATION:")
+        lines.append(f"  Paired (task, config) observations: {corr.get('n_paired', 0)}")
+        lines.append(f"  Tasks with both configs:            {corr.get('n_paired_both_configs', 0)}")
+        lines.append(f"  Spearman r:  {corr.get('spearman_r', 'N/A')}")
+        lines.append(f"  p-value:     {corr.get('spearman_p', 'N/A')}")
+        lines.append(f"  {corr.get('interpretation', '')}")
+        scatter = corr.get("scatter", [])
+        if scatter:
+            lines.append("")
+            lines.append("  Per-task deltas (SG_full - baseline):")
+            header = f"    {'Task':40s} {'Suite':20s} {'MRR_d':>7s} {'Rew_d':>7s}"
+            lines.append(header)
+            lines.append("    " + "-" * (len(header) - 4))
+            for row in scatter:
+                mrr_d = row.get("mrr_delta", 0)
+                rew_d = row.get("reward_delta", 0)
+                lines.append(
+                    f"    {row['task_id']:40s} {row['suite']:20s} "
+                    f"{mrr_d:>+7.3f} {rew_d:>+7.3f}"
+                )
         lines.append("")
 
     return "\n".join(lines)
