@@ -5,7 +5,7 @@
 
 ## Context
 
-Django's admin framework allows customization via `ModelAdmin` subclasses. The method `get_list_filter()` in `django/contrib/admin/options.py` controls which filters appear in the admin list view. It is defined on the `ModelAdmin` class and can be overridden by subclasses.
+Django's admin framework allows customization via `ModelAdmin` subclasses. The method `get_list_filter()` controls which filters appear in the admin list view. It is defined on the `ModelAdmin` class and can be overridden by subclasses.
 
 A developer is planning to change the signature of `get_list_filter()` to accept an additional parameter. Before making this change, they need a complete impact analysis: which files in the Django codebase would be affected?
 
@@ -17,8 +17,8 @@ Identify all files in the Django repository that define, override, call, or refe
 
 ### Requirements
 
-1. **Find the definition** — Locate where `get_list_filter` is defined in `django/contrib/admin/options.py`
-2. **Find all overrides** — Search for classes that override `get_list_filter` (subclasses of `ModelAdmin` that define their own `get_list_filter` method)
+1. **Find the definition** — Locate where `get_list_filter` is defined in the Django admin codebase
+2. **Find all overrides** — Search for classes that override `get_list_filter` (subclasses of `ModelAdmin` that define their own version)
 3. **Find all callers** — Search for code that calls `get_list_filter()` or `.get_list_filter(`
 4. **Find documentation references** — Search docs/ for mentions of `get_list_filter`
 5. **Find test references** — Search tests/ for `get_list_filter` usage
@@ -29,20 +29,10 @@ Identify all files in the Django repository that define, override, call, or refe
 Create `/workspace/submission.json` with a JSON array of file paths:
 ```json
 [
-  "django/contrib/admin/options.py",
-  "tests/some_test/test_file.py",
-  "docs/some_doc.txt"
+  "path/to/affected/file.py",
+  "path/to/another/file.py"
 ]
 ```
-
-### Hints
-
-- `get_list_filter` is defined as a method on `ModelAdmin` in `django/contrib/admin/options.py`
-- There are test files in `tests/admin_changelist/` that test list filter behavior
-- Documentation files (`.txt` format in `docs/`) may reference `get_list_filter`
-- Use `find_references("get_list_filter")` for instant comprehensive results
-- Check both `.py` files (code) and `.txt` files (docs) in your search
-- The complete list has approximately 5 files
 
 ## Success Criteria
 
