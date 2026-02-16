@@ -749,23 +749,23 @@ def extract_tokens_before_first_relevant(
     transcript_path: Path,
     n_steps_to_first: int | None,
 ) -> int | None:
-    """Sum output tokens from claude-code.txt up to the TTFR step.
+    """Sum total tokens from claude-code.txt up to the TTFR step.
 
-    Counts cumulative output_tokens from assistant messages, tracking tool_use
-    blocks as steps. Returns the cumulative output tokens at the step where
-    the first relevant file was found, or None if data is unavailable.
+    Counts cumulative tokens (input + cache + output) from assistant messages,
+    tracking tool_use blocks as steps. Returns the cumulative total at the step
+    where the first relevant file was found, or None if data is unavailable.
 
     Args:
         transcript_path: Path to agent/claude-code.txt.
         n_steps_to_first: Step index (0-based) of the first relevant file.
 
     Returns:
-        Cumulative output tokens up to and including the TTFR step, or None.
+        Cumulative total tokens up to and including the TTFR step, or None.
     """
     if n_steps_to_first is None or not transcript_path.is_file():
         return None
 
-    cumulative_output = 0
+    cumulative_tokens = 0
     tool_step = 0
 
     for line in transcript_path.read_text(errors="replace").splitlines():
@@ -782,8 +782,13 @@ def extract_tokens_before_first_relevant(
 
         message = entry.get("message", entry)
         usage = message.get("usage", {})
-        out_tok = usage.get("output_tokens", 0)
-        cumulative_output += out_tok
+        # Sum all token types for total API consumption
+        cumulative_tokens += (
+            usage.get("input_tokens", 0)
+            + usage.get("cache_creation_input_tokens", 0)
+            + usage.get("cache_read_input_tokens", 0)
+            + usage.get("output_tokens", 0)
+        )
 
         # Count tool_use blocks in this message as steps
         content_blocks = message.get("content", [])
@@ -791,7 +796,7 @@ def extract_tokens_before_first_relevant(
             for block in content_blocks:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     if tool_step >= n_steps_to_first:
-                        return cumulative_output
+                        return cumulative_tokens
                     tool_step += 1
 
     return None

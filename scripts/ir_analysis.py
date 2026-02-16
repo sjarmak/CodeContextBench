@@ -384,7 +384,12 @@ def compute_retrieval_outcome_correlation(ir_scores: list[IRScores]) -> dict | N
 # ---------------------------------------------------------------------------
 
 def _load_task_metrics_tokens() -> dict[tuple[str, str], int]:
-    """Load (task_id, config) -> input_tokens from task_metrics.json files."""
+    """Load (task_id, config) -> total input tokens from task_metrics.json files.
+
+    Total input = input_tokens + cache_creation_tokens + cache_read_tokens.
+    Raw input_tokens alone is just the uncached portion (often <100) and not
+    meaningful for cost efficiency analysis.
+    """
     tokens: dict[tuple[str, str], int] = {}
     if not RUNS_DIR.exists():
         return tokens
@@ -407,8 +412,13 @@ def _load_task_metrics_tokens() -> dict[tuple[str, str], int]:
                     try:
                         m = json.loads(metrics_file.read_text())
                         task_id = m.get("task_id", "")
-                        inp = m.get("input_tokens")
-                        if task_id and inp is not None:
+                        # Sum all input token types for total input consumption
+                        inp = (
+                            (m.get("input_tokens") or 0)
+                            + (m.get("cache_creation_tokens") or 0)
+                            + (m.get("cache_read_tokens") or 0)
+                        )
+                        if task_id and inp > 0:
                             key = (task_id, config)
                             # Keep latest by not overwriting (first seen wins — sorted dirs)
                             if key not in tokens:
