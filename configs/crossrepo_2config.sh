@@ -127,6 +127,7 @@ declare -A TASK_SG_REPO_NAMES=(
     ["refactor_rename_01"]="sg-benchmarks/django--674eda1c"
     ["simple_test_01"]="sg-benchmarks/kubernetes--8c9c67c0"
     ["crossrepo-sym-001"]="github.com/envoyproxy/envoy"
+    ["crossrepo-sym-002"]="github.com/kubernetes/kubernetes"
 )
 
 # Derive short model name for run directory (matches V2 id_generator convention)
