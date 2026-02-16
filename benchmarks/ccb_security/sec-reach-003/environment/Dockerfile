@@ -1,4 +1,4 @@
-FROM openjdk:17-slim
+FROM eclipse-temurin:17-jdk-jammy
 
 # Install required tools for verification
 RUN apt-get update && apt-get install -y \
