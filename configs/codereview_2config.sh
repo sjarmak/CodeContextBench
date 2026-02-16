@@ -126,6 +126,7 @@ declare -A TASK_SG_REPO_NAMES=(
     ["cr-vscode-001"]="github.com/microsoft/vscode"
     ["cr-terraform-001"]="github.com/hashicorp/terraform"
     ["cr-security-001"]="github.com/curl/curl"
+    ["cr-security-002"]="github.com/apache/kafka"
 )
 
 # Derive short model name for run directory
