@@ -17,8 +17,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RUNS_DIR = PROJECT_ROOT / "runs" / "official"
 
-# Directories to skip entirely
-SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive"]
+# Directories to skip entirely.
+# __v1_hinted: old run dirs from before enterprise task de-hinting (US-001..US-003).
+# Appended to batch dir names after reruns complete so pre-redesign data is excluded.
+SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__v1_hinted"]
 
 # Map on-disk dir prefixes to MANIFEST suite names
 DIR_PREFIX_TO_SUITE = {
