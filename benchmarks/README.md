@@ -1,6 +1,6 @@
 # CodeContextBench Benchmarks
 
-This directory contains all benchmark task definitions for evaluating coding agents with and without Sourcegraph MCP. The canonical task selection is defined in [`selected_benchmark_tasks.json`](../configs/selected_benchmark_tasks.json) (116 tasks across 10 benchmarks).
+This directory contains all benchmark task definitions for evaluating coding agents with and without Sourcegraph MCP. The canonical task selection is defined in [`selected_benchmark_tasks.json`](../configs/selected_benchmark_tasks.json) (190 tasks across 14 benchmarks). Archived suites are in `archive/`.
 
 See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection methodology.
 
@@ -75,17 +75,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 8. [ccb_repoqa/](ccb_repoqa/) - Semantic Code Navigation
-**Tasks**: 10
-**Languages**: Python, C++, Java, Rust, TypeScript
-**SDLC Phase**: Requirements & Discovery
-**Focus**: Find a function by behavioral description (no name provided)
-**Repositories**: psf/black, python-poetry/poetry, google/gson, square/retrofit, and more
-**Task Format**: Harbor (via adapter, pre-generated)
-
----
-
-### 9. [ccb_crossrepo/](ccb_crossrepo/) - Enterprise Codebase Challenges
+### 8. [ccb_crossrepo/](ccb_crossrepo/) - Enterprise Codebase Challenges
 **Tasks**: 5
 **Languages**: Go
 **SDLC Phases**: Architecture & Design, Implementation (bug fix), Implementation (refactoring), Testing & QA
@@ -96,7 +86,7 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 
 ---
 
-### 10. [ccb_dibench/](ccb_dibench/) - Dependency Inference
+### 9. [ccb_dibench/](ccb_dibench/) - Dependency Inference
 **Tasks**: 8
 **Languages**: Python, Rust, JavaScript, C#
 **SDLC Phase**: Implementation (feature)
@@ -114,14 +104,22 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for the selection meth
 | ccb_swebenchpro | 36 | Go, TypeScript, Python | Bug fixing |
 | ccb_locobench | 25 | 9 languages | Architecture, Refactoring |
 | ccb_pytorch | 12 | C++ | Bug fixing |
-| ccb_repoqa | 10 | Python, C++, Java, Rust, TypeScript | Code navigation |
 | ccb_tac | 8 | C++, Python | Mixed (4 phases) |
 | ccb_dibench | 8 | Python, Rust, JavaScript, C# | Dependency inference |
 | ccb_k8sdocs | 5 | Go | Documentation |
 | ccb_largerepo | 4 | Go, Rust, C++, TypeScript | Feature implementation |
 | ccb_crossrepo | 5 | Go | Architecture, Bug fix, Refactoring, Testing |
 | ccb_sweperf | 3 | Python | Testing & QA |
-| **Total** | **116** | | |
+| **Total** | **106** | | |
+
+---
+
+## Archived Benchmarks
+
+### [archive/ccb_repoqa/](archive/ccb_repoqa/) - Semantic Code Navigation (ARCHIVED)
+**Reason**: Ceiling saturation — scores 1.000/1.000 on both baseline and SG_full configs, providing zero discriminative signal.
+**Tasks**: 10 | **Languages**: Python, C++, Java, Rust, TypeScript
+**Note**: Harder variant planned. See CLAUDE.md for details.
 
 ---
 
