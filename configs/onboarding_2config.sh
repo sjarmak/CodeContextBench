@@ -72,6 +72,7 @@ TASK_FILTER=""
 ALL_TASK_IDS=(
     "onboard-orient-001"
     "onboard-orient-002"
+    "onboard-orient-003"
 )
 
 # Parse arguments
@@ -129,6 +130,7 @@ setup_dual_accounts
 declare -A TASK_SG_REPO_NAMES=(
     ["onboard-orient-001"]="github.com/cilium/cilium"
     ["onboard-orient-002"]="github.com/argoproj/argo-cd"
+    ["onboard-orient-003"]="github.com/apache/kafka"
 )
 
 # Derive short model name for run directory
