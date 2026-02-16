@@ -10,49 +10,36 @@ You are a developer on the Flipt Evaluation Engine team. Your team owns the flag
 
 ## Problem Statement
 
-The evaluation server's `Boolean()` and `Variant()` methods in `evaluation.go` currently propagate all errors directly to the gRPC caller without wrapping them with evaluation-specific context. When the storage layer returns an error (e.g., `GetEvaluationRules` fails), the caller receives a raw storage error with no indication of which flag or namespace was being evaluated.
+The evaluation server currently propagates all errors directly to the gRPC caller without wrapping them with evaluation-specific context. When the storage layer returns an error, the caller receives a raw storage error with no indication of which flag or namespace was being evaluated, or which phase of evaluation failed.
 
 This makes debugging production issues extremely difficult — operators see errors like "sql: no rows in result set" without knowing which flag evaluation triggered it.
 
 ## Task
 
-Add error wrapping to the evaluation server so that storage and evaluation errors include the namespace key, flag key, and evaluation phase (rules fetch, distributions fetch, constraint matching) in the error message.
+Add error wrapping to the evaluation server so that storage and evaluation errors include the namespace key, flag key, and evaluation phase in the error message.
 
 **YOU MUST IMPLEMENT CODE CHANGES.**
 
 ### Requirements
 
-1. Create a new file `internal/server/evaluation/errors.go` that defines evaluation error types:
-   - An `EvalError` struct with fields: `NamespaceKey`, `FlagKey`, `Phase` (string: "rules", "distributions", "rollouts", "constraint_match"), and `Err` (wrapped error)
-   - `EvalError` must implement the `error` interface with a descriptive message format: `evaluation error [namespace=%s flag=%s phase=%s]: %v`
-   - `EvalError` must support `errors.Unwrap()` for error chain inspection
+1. Create a new error-handling file in the evaluation package with an evaluation error type that:
+   - Implements the `error` interface with a descriptive message including evaluation context
+   - Supports `errors.Unwrap()` for error chain inspection
+   - Carries enough context to identify which evaluation failed and at what phase
 
-2. Modify `evaluation.go` to wrap errors from storage calls with `EvalError`:
-   - Wrap errors from `GetEvaluationRules` with phase "rules"
-   - Wrap errors from `GetEvaluationDistributions` with phase "distributions"
-   - Wrap errors from `GetEvaluationRollouts` with phase "rollouts"
+2. Modify the evaluation server code to wrap storage errors with your error type:
+   - Identify all storage calls in the evaluation flow that can return errors
+   - Wrap each with appropriate phase context: "rules", "distributions", or "rollouts"
+   - Include the namespace and flag being evaluated in the error context
 
-3. You will need to understand the storage types your code depends on:
-   - The `Storer` interface in `server.go` defines `GetEvaluationRules`, `GetEvaluationDistributions`, `GetEvaluationRollouts`
-   - These methods use types like `storage.ResourceRequest`, `storage.IDRequest`, `storage.EvaluationRule`, `storage.EvaluationDistribution`, `storage.EvaluationRollout`
-   - The type definitions live in `internal/storage/storage.go` — this file may not be available locally. You can infer the types from how they're used in `evaluation.go`, or search for their definitions remotely
-   - RPC response types come from `rpc/flipt/evaluation/` — again, definitions may require remote search
+3. The evaluation server processes both boolean flags (via rollouts) and variant flags (via rules and distributions) — make sure you wrap errors in both evaluation flows
 
-4. The `Boolean()` method processes rollouts and the `Variant()` method processes rules+distributions — make sure you wrap errors in the correct evaluation flow
-
-### Hints
-
-- `evaluation.go` is the main file (~650 lines). `Boolean()` handles boolean flags via rollouts; `Variant()` handles variant flags via rules and distributions
-- The `Storer` interface in `server.go` shows exactly which storage methods exist and their signatures
-- `storage.ResourceRequest` has `NamespaceKey` and `Key` (flag key) fields — extract these for the error context
-- Look for `s.store.GetEvaluationRules(ctx, ...)` calls in `evaluation.go` — these are the error sites to wrap
-- The request type `evaluation.EvaluationRequest` has `NamespaceKey` and `FlagKey` fields — use these in your error wrapper
-- If storage type files aren't available locally, the usage patterns in `evaluation.go` tell you everything you need about the interfaces
+4. Some dependency type definitions may not be available locally — infer contracts from usage patterns in existing code, or search for definitions remotely
 
 ## Success Criteria
 
-- New `errors.go` file exists in `internal/server/evaluation/` with `EvalError` struct
-- `EvalError` implements `error` and `Unwrap()` interfaces
-- Storage errors in `Boolean()` and `Variant()` are wrapped with namespace, flag, and phase context
+- A new error-handling file exists in `internal/server/evaluation/` with an evaluation error type
+- Error type implements `error` and `Unwrap()` interfaces
+- Storage errors in both boolean and variant evaluation paths are wrapped with namespace, flag, and phase context
 - Code compiles: `go build ./internal/server/evaluation/...`
 - Changes are limited to `internal/server/evaluation/` files

@@ -21,28 +21,20 @@ Add a duration tracking component to the evaluation engine that:
 - Provides aggregate statistics: total count, average duration, and P99 latency
 - Is safe for concurrent use (our evaluation server handles many simultaneous gRPC requests)
 
-### Deliverables
-
-1. Create `internal/server/evaluation/duration.go` with a `DurationTracker` struct
-2. Integrate it into the evaluation server — each evaluation should record its duration
-3. All three evaluation paths (boolean, variant, and batch) must be instrumented
-4. The code must compile
-
 **YOU MUST IMPLEMENT CODE CHANGES.**
 
 ### Requirements
 
-1. New file at `internal/server/evaluation/duration.go`
-2. `DurationTracker` struct with methods to record durations and retrieve statistics (count, average, P99)
-3. Thread-safe implementation
-4. Integrated into the evaluation server and wired into all evaluation methods
-5. All changes within `internal/server/evaluation/`
-6. Code compiles: `go build ./internal/server/evaluation/...`
+1. Create a new file for duration tracking in the evaluation package with a struct that records durations and retrieves statistics (count, average, P99)
+2. Thread-safe implementation
+3. Integrate the tracker into the evaluation server — wire it into all evaluation methods (boolean, variant, and batch)
+4. All changes within `internal/server/evaluation/`
+5. Code compiles: `go build ./internal/server/evaluation/...`
 
 ## Success Criteria
 
-- `duration.go` exists with `DurationTracker` struct
-- Thread-safe implementation
+- A duration tracking file exists in the evaluation package
+- Thread-safe implementation using appropriate synchronization
 - Server struct integrates the tracker
 - Evaluation methods record durations
 - Go code compiles
