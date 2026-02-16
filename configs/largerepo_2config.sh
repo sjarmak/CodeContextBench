@@ -1,18 +1,18 @@
 #!/bin/bash
-# Large Repo 4-Task 2-Config Comparison Script
+# LargeRepo 2-Config Comparison Script
 #
-# Runs all 4 large repo tasks across 2 configurations:
+# Runs selected LargeRepo tasks (from selected_benchmark_tasks.json) across 2 configurations:
 #   1. Baseline (no MCP)
-#   2. MCP-Full (Sourcegraph MCP + deep search)
+#   2. MCP-Full (Sourcegraph + Deep Search hybrid)
 #
 # Usage:
-#   ./configs/largerepo_3config.sh [options]
+#   ./configs/largerepo_2config.sh [OPTIONS]
 #
 # Options:
 #   --baseline-only        Run only baseline (no MCP)
 #   --full-only            Run only MCP-Full (sourcegraph_full)
 #   --model MODEL          Override model (default: claude-opus-4-6)
-#   --category CATEGORY    Override run category (default: official)
+#   --category CATEGORY    Run category (default: official)
 #   --parallel N           Number of parallel task subshells (default: 1)
 #
 # Prerequisites:
@@ -59,7 +59,7 @@ ensure_fresh_token
 BENCHMARK_DIR="/home/stephanie_jarmak/CodeContextBench/benchmarks/ccb_largerepo"
 AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
 MODEL="${MODEL:-anthropic/claude-opus-4-6}"
-CONCURRENCY=1  # Big codebases - run serially
+CONCURRENCY=1  # Big codebases - run serially within each task
 TIMEOUT_MULTIPLIER=10  # 10x default timeout for large repos
 RUN_BASELINE=true
 RUN_FULL=true
@@ -108,7 +108,7 @@ if [ ! -f "$SELECTION_FILE" ]; then
     exit 1
 fi
 
-readarray -t TASK_DIRS < <(python3 -c "
+readarray -t TASK_IDS < <(python3 -c "
 import json
 tasks = json.load(open('$SELECTION_FILE'))['tasks']
 for t in tasks:
@@ -116,14 +116,18 @@ for t in tasks:
         print(t['task_id'])
 ")
 
-# Sourcegraph repo name mapping for Big Code tasks
+# Sourcegraph repo name mapping for LargeRepo tasks
 # These override SOURCEGRAPH_REPO_NAME so the agent searches the correct repo
+# Existing tasks use sg-benchmarks mirrors pinned to specific commits
 declare -A TASK_SG_REPO_NAMES=(
     ["big-code-k8s-001"]="sg-benchmarks/kubernetes--7c48c2bd"
     ["big-code-servo-001"]="sg-benchmarks/servo--be6a2f99"
     ["big-code-trt-001"]="sg-benchmarks/TensorRT-LLM--b98f3fca"
     ["big-code-vsc-001"]="sg-benchmarks/vscode--138f619c"
 )
+# New tasks (US-006+) use public repos indexed in Sourcegraph at pinned tags/commits.
+# The agent's CLAUDE.md lists the repo names; SOURCEGRAPH_REPO_NAME is unset for these
+# so the preamble-injected repo context is used instead.
 
 # Derive short model name for run directory (matches V2 id_generator convention)
 _model_lower=$(echo "$MODEL" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')
@@ -137,7 +141,21 @@ case "$_model_lower" in
 esac
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-JOBS_BASE="runs/${CATEGORY}/bigcode_mcp_${MODEL_SHORT}_${TIMESTAMP}"
+JOBS_BASE="runs/${CATEGORY}/largerepo_${MODEL_SHORT}_${TIMESTAMP}"
+
+echo "=============================================="
+echo "LargeRepo 2-Config Benchmark"
+echo "=============================================="
+echo "Model: ${MODEL}"
+echo "Tasks: ${#TASK_IDS[@]}"
+echo "Concurrency: ${CONCURRENCY}"
+echo "Parallel jobs: ${PARALLEL_JOBS}"
+echo "Jobs directory: ${JOBS_BASE}"
+echo "Run baseline: ${RUN_BASELINE}"
+echo "Run MCP-Full: ${RUN_FULL}"
+echo ""
+
+mkdir -p "${JOBS_BASE}"
 
 # ============================================
 # HELPER FUNCTIONS
@@ -175,34 +193,23 @@ run_task_batch() {
 
     ensure_fresh_token_all
 
-    log_section "Running Big Code MCP - Mode: $mode"
-
-    echo "Configuration:"
-    echo "  Mode: $mode"
-    echo "  MCP Type: $mcp_type"
-    echo "  Model: $MODEL"
-    echo "  Tasks: ${#TASK_DIRS[@]}"
-    echo "  Concurrency: $CONCURRENCY"
-    echo "  Parallel jobs: $PARALLEL_JOBS"
-    echo "  Timeout Multiplier: ${TIMEOUT_MULTIPLIER}x"
-    echo "  Jobs directory: $jobs_subdir"
-    echo ""
+    log_section "Running LargeRepo - Mode: $mode"
 
     mkdir -p "$jobs_subdir"
 
     _largerepo_run_single() {
-        local task_dir=$1
+        local task_id=$1
         local task_home=$2
-        local task_path="$BENCHMARK_DIR/$task_dir"
+        local task_path="$BENCHMARK_DIR/$task_id"
 
         if [ ! -d "$task_path" ]; then
             echo "ERROR: Task directory not found: $task_path"
             return 1
         fi
 
-        echo "Running task: $task_dir ($mode) [HOME=$task_home]"
+        echo "Running task: $task_id ($mode) [HOME=$task_home]"
 
-        local sg_repo="${TASK_SG_REPO_NAMES[$task_dir]:-}"
+        local sg_repo="${TASK_SG_REPO_NAMES[$task_id]:-}"
         if [ -n "$sg_repo" ]; then
             export SOURCEGRAPH_REPO_NAME="$sg_repo"
         else
@@ -216,72 +223,40 @@ run_task_batch() {
             --jobs-dir "$jobs_subdir" \
             -n $CONCURRENCY \
             --timeout-multiplier $TIMEOUT_MULTIPLIER \
-            2>&1 | tee "${jobs_subdir}/${task_dir}.log" \
+            2>&1 | tee "${jobs_subdir}/${task_id}.log" \
             || {
-                echo "WARNING: Task $task_dir failed (exit code: $?)"
+                echo "WARNING: Task $task_id failed (exit code: $?)"
             }
     }
 
-    run_canary_then_batch TASK_DIRS _largerepo_run_single "$jobs_subdir" "$mode"
+    run_canary_then_batch TASK_IDS _largerepo_run_single "$jobs_subdir" "$mode"
 
     # Extract metrics for all completed tasks in this mode
     extract_all_metrics "$jobs_subdir" "ccb_largerepo" "$mode"
     validate_and_report "$jobs_subdir" "$mode"
 
-    log_section "Completed Big Code MCP - Mode: $mode"
-    echo "Job results: $jobs_subdir"
-    echo ""
+    log_section "Completed LargeRepo - Mode: $mode"
 }
 
 # ============================================
 # MAIN EXECUTION
 # ============================================
-log_section "Big Code MCP 2-Config Benchmark Comparison"
-echo "Starting benchmark run..."
-echo "  Baseline: $RUN_BASELINE"
-echo "  MCP-Full: $RUN_FULL"
-echo "  Model: $MODEL"
-echo "  Benchmark Directory: $BENCHMARK_DIR"
-echo "  Jobs Base: $JOBS_BASE"
-echo ""
-
-# Create jobs base directory
-mkdir -p "$JOBS_BASE"
-
-# Run baseline (no MCP)
 if [ "$RUN_BASELINE" = true ]; then
     run_task_batch "baseline" "none"
 fi
 
-# Run MCP-Full (Sourcegraph MCP + deep search)
+
 if [ "$RUN_FULL" = true ]; then
     run_task_batch "sourcegraph_full" "sourcegraph_full"
 fi
 
-# ============================================
-# SUMMARY
-# ============================================
 print_validation_summary "$JOBS_BASE"
 
-log_section "Benchmark Complete"
-echo "Results saved to: $JOBS_BASE"
+echo ""
+echo "=============================================="
+echo "Benchmark Complete!"
+echo "=============================================="
+echo "Results saved to: ${JOBS_BASE}"
 echo ""
 echo "View results:"
-if [ "$RUN_BASELINE" = true ]; then
-    echo "  # Baseline summary"
-    echo "  ls -la $JOBS_BASE/baseline/"
-    echo ""
-fi
-if [ "$RUN_FULL" = true ]; then
-    echo "  # MCP-Full summary"
-    echo "  ls -la $JOBS_BASE/sourcegraph_full/"
-    echo ""
-fi
-echo ""
-echo "Analyze task results:"
-echo "  cat $JOBS_BASE/*/*/result.json | jq -r '.trials[].verifier_result.rewards.reward'"
-echo ""
-echo "Expected observations:"
-echo "  - Baseline: No MCP tools, relies on local search only"
-echo "  - MCP-Full: Sourcegraph MCP + deep search for codebase understanding"
-echo ""
+echo "  cat ${JOBS_BASE}/*/*/result.json | jq -r '.trials[].verifier_result.rewards.reward'"

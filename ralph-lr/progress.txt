@@ -1,0 +1,281 @@
+## Codebase Patterns
+
+### Project structure
+- Benchmarks live in benchmarks/ccb_{name}/{task_id}/ with: task.toml, instruction.md, CLAUDE.md, tests/test.sh, environment/Dockerfile
+- Task templates live in benchmarks/ccb_largerepo/templates/{category}/ — 5 categories: architectural_understanding, cross_file_refactoring, bug_investigation, security_analysis, feature_implementation
+- Shared verifier library: benchmarks/ccb_largerepo/templates/verifier_lib.sh — MUST be copied into each task's tests/ directory
+- Config scripts in configs/ follow _common.sh conventions (source it, load .env.local, use run_harbor_task function)
+- Task selection registry: configs/selected_benchmark_tasks.json (array of task objects)
+- Ground truth extraction: scripts/ccb_metrics/ground_truth.py — largerepo handler reads tests/ground_truth.json
+
+### Task naming conventions
+- Task IDs: big-code-{repo}-{category_abbrev}-{num} where abbrevs are: arch, refac, bug, sec, feat
+- Cross-repo: big-code-cross-{ecosystem}-{category_abbrev}-{num}
+- Repos abbreviated: k8s, django, pg, vsc, servo, trt, camel, flink, kafka, strata, quantlib, hazelcast, legend, linux, rust
+
+### Pinned commits (from configs/sg_indexing_list.json)
+- kubernetes/kubernetes: v1.30.0 (existing), also have new entry for v1.31.0
+- torvalds/linux: v6.19 (05f7e89ab9731565d8a62e3b5d1ec206485eeb0b)
+- rust-lang/rust: 1.93.1 (01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf)
+- postgres/postgres: REL_18_2 (5a461dc4dbf72a1ec281394a76eb36d68cbdd935)
+- django/django: 5.2 (9e7cc2b628fe8fd3895986af9b7fc9525034c1b0)
+- apache/camel: camel-4.18.0 (dd22f752e240bd1343af15c775ef02d754f6df38)
+- hazelcast/hazelcast: v5.6.0 (a9ce2a02ac17f88fcd38869ac698e56e613dc40c)
+- apache/flink: release-2.2.0 (5a336892424a9458653ead89610bf60d771ab8d7)
+- apache/kafka: 4.1.1 (be816b82d25370ceac697ccf7c88cea873e9b4e3)
+- finos/legend-engine: legend-engine-4.120.1 (20cca27326b19c265bb580e97659420bd33e1ac5)
+- OpenGamma/Strata: v2.12.65 (a608d3da56725bc089dfca50697e2c4426683021)
+- lballabio/QuantLib: v1.41 (367ce80ae4f285835ceb3bba97746bea239984ad)
+- microsoft/vscode: 1.91.1 (existing)
+
+### Scoring approach
+- Composite score: 0.4 * task_quality + 0.3 * file_recall + 0.2 * file_precision + 0.1 * dep_accuracy
+- test.sh writes score to /logs/verifier/reward.txt AND ir_metrics.json to /logs/verifier/ir_metrics.json
+- verifier_lib.sh handles: solution.md parsing, IR metrics computation, dep chain accuracy, root cause MRR
+- Avoid bc in bash — use awk for floating point
+
+### Dockerfile patterns
+- Use --filter=blob:none --no-checkout for shallow clone
+- Always set git config user.email/name
+- Always install npm and @anthropic-ai/claude-code
+- COPY tests/ into /workspace/tests/
+- Base images: golang:1.23-bookworm, eclipse-temurin:17-jdk, python:3.12-bookworm, rust:1.82-bookworm, gcc:14-bookworm, node:22-bookworm
+
+### Judge context
+- scripts/ccb_metrics/judge_context.py handles per-task context generation
+- benchmark=='bigcode' maps to ccb_largerepo directory
+- `_locobench_dimensions()` returns ACS, DTA, CFRD rubrics with 1-5 scale; called for bigcode tasks
+- Function reads ir_metrics.json from run dir + ground_truth.json from benchmarks dir
+
+### Run config patterns
+- Source _common.sh first
+- Load ~/evals/.env.local for credentials
+- Filter tasks from selected_benchmark_tasks.json by benchmark name
+- Support --parallel, --baseline-only, --full-only flags
+- Use run_harbor_task function from _common.sh
+
+### Build system per repo
+- Strata: Maven (`mvn compile -pl modules/product,...`), modules selected with `-pl`
+- Kafka: Gradle (`./gradlew clients:compileJava`), subprojects selected with `:` prefix
+- K8s: Go (`go build ./pkg/scheduler/...`)
+- Rust compiler: No compilation check (bootstrap too slow for 1200s)
+- Check the actual build system before writing COMPILE_CMD in test.sh
+
+### Stdlib-only constraint
+- ALL Python scripts must use stdlib only (no requests, no external packages)
+- Use urllib.request for HTTP, json for parsing, argparse for CLI
+
+## Completed Foundation (on main)
+- US-001: 11 repos pinned in configs/sg_indexing_list.json
+- US-002: Templates created for all 5 categories (instruction.md, task.toml, test.sh, CLAUDE.md)
+- US-004: verifier_lib.sh with IR metrics pipeline (precision/recall/F1/dep_accuracy/MRR)
+- US-012: ground_truth.json backfilled for 4 existing tasks, ground_truth.py updated to read them
+- US-015: ground_truth.py reads tests/ground_truth.json for ccb_largerepo tasks
+
+### GitHub API patterns
+- The issues endpoint (`/repos/{owner}/{repo}/issues`) returns BOTH issues and PRs. Filter by checking `"pull_request" in item`.
+- Many repos label PRs directly with `bug` instead of maintaining separate bug issues. Script must handle both patterns: (1) standalone issues → find linked PR, (2) PRs directly labeled as bugs.
+- Unauthenticated API gives only 60 req/hour. Set GITHUB_TOKEN for 5000/hour.
+- Issues endpoint `pull_request` sub-object includes `merged_at` when merged, avoiding an extra API call.
+
+## Progress
+
+## 2026-02-15 - US-017
+- Implemented `scripts/mine_bug_tasks.py` — mines candidate bug investigation tasks from GitHub
+- Handles two patterns: issues with linked PRs AND PRs directly labeled 'bug' (more common)
+- CLI flags: --repo (required), --min-files (5), --max-files (30), --limit (20)
+- Rate limiting with 3 retries and configurable sleep
+- Pagination via Link header parsing
+- Files changed: scripts/mine_bug_tasks.py (new)
+- **Learnings for future iterations:**
+  - Django and many repos label PRs (not issues) with `bug` — filtering out PRs from the issues endpoint drops all candidates
+  - GitHub issues endpoint returns PRs too — use `"pull_request" in item` to distinguish
+  - Timeline events API requires `Accept: application/vnd.github+json` header
+  - Without GITHUB_TOKEN, the API returns very few results per page due to rate limits
+---
+
+## 2026-02-15 - US-005
+- Added `_locobench_dimensions()` function to `scripts/ccb_metrics/judge_context.py`
+- Returns ACS (Architectural Coherence Score), DTA (Dependency Traversal Accuracy), CFRD (Cross-File Reasoning Depth) rubrics
+- Each rubric has dimension, definition, scoring_scale='1-5', observable_evidence list
+- Enriches evidence with IR metrics (precision/recall/f1/dep_accuracy) from run output and ground truth (files/dependency_chain) from benchmarks
+- Integrated into `generate_judge_contexts` — called for `benchmark=='bigcode'` tasks, output stored in `locobench_dimensions` key
+- Files changed: scripts/ccb_metrics/judge_context.py (modified)
+- **Learnings for future iterations:**
+  - IR metrics live at `task_dir / "verifier" / "ir_metrics.json"` in run output
+  - Ground truth for largerepo lives at `benchmarks/ccb_largerepo/{task_id}/tests/ground_truth.json`
+  - The `_locobench_dimensions` function signature accepts optional `benchmarks_dir` and `task_id` in addition to `task_dir` and `ir_metrics_path` since ground truth is in the benchmarks tree, not the run tree
+---
+
+## 2026-02-15 - US-016
+- Updated `configs/largerepo_2config.sh` to follow crossrepo_2config.sh conventions
+- Fixed stale header comments (was referencing `3config`)
+- Renamed `TASK_DIRS` → `TASK_IDS` for consistency across all 2config scripts
+- Changed JOBS_BASE prefix from `bigcode_mcp_` → `largerepo_` to match MANIFEST conventions
+- Cleaned up verbose summary section to match crossrepo's concise pattern
+- Added comments explaining new task SG repo name handling (public repos vs sg-benchmarks mirrors)
+- Files changed: configs/largerepo_2config.sh (modified)
+- **Learnings for future iterations:**
+  - The JOBS_BASE prefix matters for MANIFEST generation — `generate_manifest.py` uses `DIR_PREFIX_TO_SUITE` to map run dirs to benchmark suites. `largerepo_` prefix maps to `ccb_largerepo`.
+  - Existing 4 tasks use sg-benchmarks mirrors; new tasks will use public repos indexed in Sourcegraph. The preamble injection handles repo context for new tasks, so SOURCEGRAPH_REPO_NAME can be left unset.
+  - Use `TASK_IDS` (not `TASK_DIRS`) as the variable name for task ID arrays — this is the convention in crossrepo and other 2config scripts.
+---
+
+## 2026-02-15 - US-018
+- Created `benchmarks/ccb_largerepo/docs/LOCOBENCH_ADAPTATION.md` documenting the LoCoBench methodology adaptation
+- Created `benchmarks/ccb_largerepo/docs/REPO_SELECTION.md` with repo selection rationale
+- LOCOBENCH_ADAPTATION.md covers: adopted principles (5 task categories, SE metrics), adapted principles (codebase scale, IR metrics verifier, research-derived ground truth, multi-project diversity), excluded principles (synthetic code gen, context window stress testing, 3 categories)
+- Includes comparison table (LoCoBench original vs our adaptation across 12 dimensions)
+- Maps LCBS dimensions: SE→ACS/DTA/CFRD rubrics, FC→compilation+test verifiers, CQ→static analysis (planned), LCU→IR metrics
+- References arXiv:2509.09614
+- REPO_SELECTION.md covers: Tier A (8 systems infra repos) and Tier B (7 capital markets repos), LOC/language/domain/indexing status
+- Files changed: benchmarks/ccb_largerepo/docs/LOCOBENCH_ADAPTATION.md (new), benchmarks/ccb_largerepo/docs/REPO_SELECTION.md (new)
+- **Learnings for future iterations:**
+  - The LoCoBench paper (arXiv:2509.09614) defines 8 categories; we adopted 5 and excluded code_comprehension, integration_testing, and multi_session
+  - LCBS has 4 evaluation dimensions: SE, FC, CQ, LCU — all mapped to our implementation except CQ (static analysis, planned but not implemented)
+  - Tier B capital markets repos were selected to represent the trade lifecycle: Kafka (capture) → Flink (enrichment) → Strata/QuantLib (pricing) → Legend (governance)
+---
+
+## 2026-02-15 - US-006a
+- Scaffolded 3 architectural understanding tasks for Tier A repos:
+  - `big-code-k8s-arch-001`: K8s scheduler architecture (13 ground truth files in pkg/scheduler/, 7-file dep chain)
+  - `big-code-django-arch-001`: Django ORM query compilation pipeline (10 ground truth files across django/db/, 8-file dep chain)
+  - `big-code-pg-arch-001`: PostgreSQL query execution pipeline (15 ground truth files across src/backend/, 10-file dep chain)
+- Each task has: task.toml, instruction.md, CLAUDE.md, tests/test.sh, tests/ground_truth.json, tests/verifier_lib.sh, environment/Dockerfile
+- Ground truth researched via Sourcegraph MCP tools (keyword_search, list_files, read_file, nls_search)
+- Task-specific ARCH_KEYWORDS injected into each test.sh (K8s: ScheduleOne/schedulingCycle/bindingCycle etc., Django: QuerySet/SQLCompiler/as_sql etc., PG: raw_parser/planner/ExecutorRun etc.)
+- Files changed:
+  - benchmarks/ccb_largerepo/big-code-k8s-arch-001/ (7 files, new)
+  - benchmarks/ccb_largerepo/big-code-django-arch-001/ (7 files, new)
+  - benchmarks/ccb_largerepo/big-code-pg-arch-001/ (7 files, new)
+- **Learnings for future iterations:**
+  - Sourcegraph public repos (kubernetes/kubernetes, django/django, postgres/postgres) are all searchable without needing sg-benchmarks mirrors for architectural understanding tasks
+  - K8s scheduler has moved queue/cache to `pkg/scheduler/backend/` subpackage (not directly under pkg/scheduler/) — check for this when specifying ground truth paths
+  - Django ORM's `compile(node)` vendor dispatch is the key architectural insight — it enables `as_postgresql()` etc. without modifying core
+  - PostgreSQL follows a strict pipeline with clean data type transformations between stages (RawStmt → Query → PlannedStmt → tuples), making it ideal for dependency chain verification
+  - The Dockerfile `COPY tests/` line copies from build context (environment/ dir) but Harbor uploads tests/ at runtime — include COPY in Dockerfile for local testing, Harbor handles it for real runs
+---
+
+## 2026-02-15 - US-006b
+- Scaffolded 3 architectural understanding tasks for Tier B capital markets repos:
+  - `big-code-camel-arch-001`: Apache Camel message routing architecture — Component→Endpoint→Consumer→Processor→Producer hierarchy (15 ground truth files across core/camel-api, camel-support, camel-core-processor, camel-base-engine, 8-file dep chain)
+  - `big-code-flink-arch-001`: Flink checkpoint coordination architecture — trigger through barrier propagation to completion (15 ground truth files in flink-runtime checkpoint/streaming, 10-file dep chain)
+  - `big-code-quantlib-arch-001`: QuantLib barrier option pricing chain — instrument→pricing engine→term structure→stochastic process→path generator (16 ground truth files across ql/, 10-file dep chain)
+- Each task has: task.toml, instruction.md, CLAUDE.md, tests/test.sh, tests/ground_truth.json, tests/verifier_lib.sh, environment/Dockerfile
+- Ground truth files validated: Flink 15/15 confirmed via Sourcegraph; Camel and QuantLib core files confirmed via GitHub (repos not indexed in SG)
+- Task-specific ARCH_KEYWORDS in each test.sh: Camel (Component/Pipeline/SendProcessor/RouteReifier etc.), Flink (CheckpointCoordinator/CheckpointBarrier/PendingCheckpoint etc.), QuantLib (BarrierOption/PricingEngine/McSimulation/PathGenerator etc.)
+- Files changed:
+  - benchmarks/ccb_largerepo/big-code-camel-arch-001/ (7 files, new)
+  - benchmarks/ccb_largerepo/big-code-flink-arch-001/ (7 files, new)
+  - benchmarks/ccb_largerepo/big-code-quantlib-arch-001/ (7 files, new)
+- **Learnings for future iterations:**
+  - Apache Camel and QuantLib are NOT indexed in the current Sourcegraph instance — validate ground truth via GitHub web UI or git ls-tree instead
+  - Apache Flink IS indexed in Sourcegraph at release-2.2.0 — all checkpoint files confirmed at expected paths
+  - Camel's multi-module Maven structure means files are deeply nested: core/{module}/src/main/java/org/apache/camel/{package}/
+  - QuantLib uses gcc:14-bookworm base image and needs cmake + libboost-all-dev for C++ compilation support
+  - Camel and Flink both use eclipse-temurin:17-jdk as the base image (Java 17)
+---
+
+## 2026-02-15 - US-007a
+- Scaffolded 2 cross-file refactoring tasks for Tier A repos:
+  - `big-code-k8s-refac-001`: Rename `ScoreExtensions` interface to `ScoreNormalizer` in K8s scheduler framework (16 ground truth files across pkg/scheduler/framework/, plugins/, runtime/, testing/, metrics/)
+  - `big-code-rust-refac-001`: Rename `SubtypePredicate` to `SubtypeRelation` and fields `a`/`b` to `sub_ty`/`super_ty` in Rust compiler (19 ground truth files across 9 compiler crates)
+- Both tasks have: task.toml, instruction.md, CLAUDE.md, tests/test.sh, tests/ground_truth.json, tests/verifier_lib.sh, environment/Dockerfile
+- K8s task includes `go build ./pkg/scheduler/...` compilation check in test.sh
+- Rust task skips compilation check (full bootstrap too slow for 1200s time limit)
+- Ground truth researched via Sourcegraph MCP tools (find_references, keyword_search, list_files, read_file)
+- Files changed:
+  - benchmarks/ccb_largerepo/big-code-k8s-refac-001/ (7 files, new)
+  - benchmarks/ccb_largerepo/big-code-rust-refac-001/ (7 files, new)
+- **Learnings for future iterations:**
+  - K8s `ScoreExtensions` is a single-method interface (`NormalizeScore`) — ideal rename target because it's clearly misnamed yet broadly used (10 plugin implementors + runtime + tests)
+  - Rust compiler's `SubtypePredicate` spans 9 crates in a strict DAG: rustc_type_ir → rustc_middle → rustc_infer → rustc_trait_selection → rustc_hir_typeck. Changes must be applied bottom-up.
+  - The Rust compiler has a public API mirror (`rustc_public`) that duplicates type definitions — refactoring must update both internal and public-facing definitions
+  - Rust bootstrap is too slow to run as a compilation check within 1200s — skip COMPILE_CMD and give default 2 points for compilation
+  - K8s scheduler plugins have a consistent pattern: each implements `ScoreExtensions() framework.ScoreExtensions` — searching for this method signature is the fastest way to find all affected files
+---
+
+## 2026-02-15 - US-007b
+- Scaffolded 2 cross-file refactoring tasks for Tier B capital markets repos:
+  - `big-code-strata-refac-001`: Rename FxVanillaOption → FxEuropeanOption in OpenGamma Strata (21 ground truth files across 4 Maven modules: product, pricer, measure, loader)
+  - `big-code-kafka-refac-001`: Rename RecordAccumulator → BatchAccumulator in Apache Kafka producer (11 ground truth files in clients/ and jmh-benchmarks/)
+- Strata task exercises Joda-Beans code generation (70-83% auto-generated code per class), 4-level interface hierarchy, cross-module dependencies
+- Kafka task exercises inner class references (ReadyCheckResult, RecordAppendResult), producer pipeline architecture
+- Each task has: task.toml, instruction.md, CLAUDE.md, tests/test.sh, tests/ground_truth.json, tests/verifier_lib.sh, environment/Dockerfile
+- Strata uses Maven compilation check (`mvn compile -pl modules/product,modules/pricer,modules/measure,modules/loader -q -T 4`)
+- Kafka uses Gradle compilation check (`./gradlew clients:compileJava -q`)
+- Files changed:
+  - benchmarks/ccb_largerepo/big-code-strata-refac-001/ (7 files, new)
+  - benchmarks/ccb_largerepo/big-code-kafka-refac-001/ (7 files, new)
+- **Learnings for future iterations:**
+  - OpenGamma/Strata is NOT indexed in Sourcegraph — validate ground truth via GitHub API or git ls-tree instead
+  - Apache Kafka SG mirror (sourcegraph-testing/kafka) is at Confluent Platform 7.1.0 (~Kafka 3.1.x), significantly older than 4.1.1. Files like BuiltInPartitioner (Kafka 3.3+) and RecordAccumulatorFlushBenchmark won't be found in the indexed version
+  - Strata uses Joda-Beans `@BeanDefinition` annotation which triggers code generation for Meta/Builder inner classes — renaming a bean class means the auto-generated sections (70-83% of lines) also change
+  - Kafka has a `raft/src/main/java/.../raft/internals/BatchAccumulator.java` — a DIFFERENT class in the raft module. The rename target `RecordAccumulator` → `BatchAccumulator` would create a name collision; agents should discover this during search
+  - For Java repos, Maven uses `-pl` for module selection while Kafka uses Gradle `./gradlew` — always check the build system before writing COMPILE_CMD
+---
+
+## 2026-02-15 - US-008
+- Scaffolded 3 bug investigation tasks sourced from real closed issues/PRs:
+  - `big-code-django-bug-001`: Django select_for_update(of) crash with annotation expressions in values_list() (ticket #36301, fix commit 71a19a0e). Root cause in SQLCompiler.get_select() building incorrect klass_info['select_fields'] range. 9 ground truth files, 1 root cause file, 6-file dep chain.
+  - `big-code-kafka-bug-001`: Kafka producer BufferPool reuse race condition causing messages on wrong topic (KAFKA-19012, fix PR #21065). Root cause in Sender.failBatch() + RecordAccumulator.deallocate() returning ByteBuffer to pool while NetworkClient still writing. 9 ground truth files, 2 root cause files, 7-file dep chain.
+  - `big-code-k8s-bug-001`: K8s scheduler missing ResourceSlice event handler causing pods permanently stuck Unschedulable (PR #126807). Root cause in eventhandlers.go missing case + dynamicresources.go missing EventsToRegister + types.go missing GVK constant. 8 ground truth files, 3 root cause files, 6-file dep chain.
+- Each task has: task.toml, instruction.md, CLAUDE.md, tests/test.sh, tests/ground_truth.json, tests/verifier_lib.sh, environment/Dockerfile
+- Bug-specific keywords added to each test.sh for quality scoring beyond generic sections
+- All ground truth sourced from real GitHub issues/PRs with commit references in methodology field
+- Kafka satisfies capital markets repo requirement
+- Files changed:
+  - benchmarks/ccb_largerepo/big-code-django-bug-001/ (7 files, new)
+  - benchmarks/ccb_largerepo/big-code-kafka-bug-001/ (7 files, new)
+  - benchmarks/ccb_largerepo/big-code-k8s-bug-001/ (7 files, new)
+- **Learnings for future iterations:**
+  - Django bug #36301 is a two-hop regression: commit 65ad4ade changed values() field ordering, which broke select_for_update(of) table inference — good pattern for bugs where the root cause is in a DIFFERENT commit than the symptom
+  - Kafka KAFKA-19012 is a latent race condition exposed by a performance optimization (KAFKA-9628 removed a buffer copy) — the original bug existed since 0.x but was masked. Multi-year latent bugs make excellent investigation tasks.
+  - K8s ResourceSlice bug at v1.30.0 is confirmed: ResourceSlice GVK constant ABSENT from types.go, not in EventsToRegister(), not in addAllEventHandlers() switch. Bug present in the pinned commit.
+  - Sourcegraph verification critical: Kafka mirror (sourcegraph-testing/kafka) is at older Confluent Platform 7.1.0, not Kafka 4.1.1. Some newer files won't be found in SG. This doesn't affect the task (agent works on local clone) but affects MCP-assisted investigation.
+  - For bug investigation tasks, the BUG_KEYWORDS array in test.sh should include terms specific to the bug mechanism (not just file names) — e.g., "BufferPool", "deallocate", "in-flight" for the Kafka task
+---
+
+## 2026-02-16 - US-009
+- Scaffolded 3 security analysis tasks for tracing authentication and security data flows:
+  - `big-code-pg-sec-001`: PostgreSQL client authentication pipeline — connection acceptance through HBA matching, password/SCRAM-SHA-256 verification, to session establishment (16 ground truth files across src/backend/libpq/, src/backend/utils/init/, src/include/libpq/, src/include/catalog/)
+  - `big-code-kafka-sec-001`: Kafka SASL authentication flow — channel builders through mechanism negotiation (PLAIN/SCRAM/OAUTHBEARER/GSSAPI), principal extraction, to ACL authorization (15 ground truth files across clients/src/.../security/, .../network/)
+  - `big-code-django-sec-001`: Django CSRF protection and session handling — middleware pipeline through token masking/validation, session signing/decoding, to response cookie setting (15 ground truth files across django/middleware/, django/contrib/sessions/, django/utils/, django/core/, django/http/)
+- Each task has: task.toml, instruction.md, CLAUDE.md, tests/test.sh, tests/ground_truth.json, tests/verifier_lib.sh, environment/Dockerfile
+- All ground_truth.json files include entry_points and data_flow arrays (security-specific fields)
+- Task-specific SEC_KEYWORDS added to each test.sh for quality scoring beyond generic sections
+- Kafka satisfies capital markets repo requirement
+- Ground truth researched via Sourcegraph MCP tools (keyword_search, read_file, nls_search)
+- Files changed:
+  - benchmarks/ccb_largerepo/big-code-pg-sec-001/ (7 files, new)
+  - benchmarks/ccb_largerepo/big-code-kafka-sec-001/ (7 files, new)
+  - benchmarks/ccb_largerepo/big-code-django-sec-001/ (7 files, new)
+- **Learnings for future iterations:**
+  - Security analysis tasks use `entry_points` and `data_flow` arrays in ground_truth.json (loaded by verifier_lib.sh via `GT_ENTRY_POINTS` and `GT_DATA_FLOW` globals) — these are distinct from `root_cause_files` used by bug investigation
+  - PostgreSQL auth is cleanly layered: postmaster→backend_startup→postinit→hba→auth→crypt→auth-scram — each stage has a well-defined entry function making it ideal for dependency chain verification
+  - Kafka SASL architecture is stable across 3.1.x through 4.1.1 — the sourcegraph-testing/kafka mirror (Confluent 7.1.0) is usable for verifying core SASL file paths even though it's an older version
+  - Django's CSRF token uses a cipher-mask scheme (32-char secret + random mask = 64-char token) to prevent BREACH attacks against HTTPS — this is a key architectural insight agents should discover
+  - For security analysis test.sh, replaced the generic "word count for analysis depth" check with a SEC_KEYWORDS array (10 domain-specific terms per task) — provides more meaningful quality differentiation
+---
+
+## 2026-02-16 - US-010
+- Scaffolded 3 feature implementation tasks for capital markets repos:
+  - `big-code-strata-feat-001`: Implement CDS Tranche product in OpenGamma Strata — new product type spanning product/pricer/measure modules following Joda-Beans pattern (14 ground truth files across modules/product/credit, modules/pricer/credit, modules/measure/credit)
+  - `big-code-camel-feat-001`: Implement camel-fix component for FIX protocol in Apache Camel — new component module following DefaultComponent/DefaultEndpoint pattern (13 ground truth files from camel-kafka and camel-netty reference implementations)
+  - `big-code-flink-feat-001`: Implement PricingSessionWindow for trading sessions in Apache Flink — custom MergingWindowAssigner following EventTimeSessionWindows pattern (13 ground truth files across flink-runtime and flink-streaming-java)
+- Each task has: task.toml, instruction.md, CLAUDE.md, tests/test.sh, tests/ground_truth.json, tests/verifier_lib.sh, environment/Dockerfile
+- All use eclipse-temurin:17-jdk base image (Java 17)
+- Task-specific COMPILE_CMD and FEATURE_KEYWORDS in each test.sh
+- Ground truth researched via Sourcegraph MCP tools (keyword_search, read_file, nls_search, list_files) for Flink; GitHub API for Strata and Camel (not indexed in SG)
+- Files changed:
+  - benchmarks/ccb_largerepo/big-code-strata-feat-001/ (7 files, new)
+  - benchmarks/ccb_largerepo/big-code-camel-feat-001/ (7 files, new)
+  - benchmarks/ccb_largerepo/big-code-flink-feat-001/ (7 files, new)
+- **Learnings for future iterations:**
+  - Strata already has CDS and CDS Index at v2.12.65 — the PRD's "CreditDefaultSwap" task was pivoted to CDS Tranche (a legitimate feature gap) that builds on existing CDS infrastructure
+  - Flink 2.2.0 reorganized windowing: base classes (WindowAssigner, MergingWindowAssigner, TimeWindow) moved to flink-runtime, concrete assigners remain in flink-streaming-java. This differs from older Flink versions.
+  - Camel component architecture is highly standardized: Component→Endpoint→Consumer/Producer, with auto-generated configurers/URI factories via camel-package-maven-plugin. New components follow the exact same file structure.
+  - For feature implementation tasks, COMPILE_CMD should be conditional on the new module/files existing (Camel: check if `components/camel-fix/pom.xml` exists before compiling)
+  - Apache Camel and OpenGamma Strata are NOT indexed in the current Sourcegraph instance — use GitHub API or WebFetch for file validation
+---
+

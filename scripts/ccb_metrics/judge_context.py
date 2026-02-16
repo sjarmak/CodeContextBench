@@ -233,6 +233,137 @@ def _extract_code_changes(task_dir: Path) -> Optional[list[dict]]:
     return unique
 
 
+def _locobench_dimensions(
+    task_dir: Path,
+    ir_metrics_path: Optional[Path] = None,
+    benchmarks_dir: Optional[Path] = None,
+    task_id: Optional[str] = None,
+) -> dict:
+    """Return LoCoBench-inspired evaluation dimensions for ccb_largerepo tasks.
+
+    Dimensions:
+        ACS — Architectural Coherence Score: Does the agent understand the
+              system's high-level architecture and locate the right modules?
+        DTA — Dependency Traversal Accuracy: Can the agent trace dependency
+              chains across files and packages?
+        CFRD — Cross-File Reasoning Depth: How deeply does the agent reason
+               about relationships spanning multiple source files?
+
+    Each dimension is a rubric dict with keys:
+        dimension, definition, scoring_scale, observable_evidence
+
+    The function enriches evidence lists with data from ir_metrics.json (run
+    output) and tests/ground_truth.json (benchmark source) when available.
+    """
+    # Attempt to read IR metrics from the task run directory
+    ir_data: dict = {}
+    if ir_metrics_path and ir_metrics_path.is_file():
+        try:
+            ir_data = json.loads(ir_metrics_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    # Attempt to read ground truth from the benchmarks directory
+    gt_data: dict = {}
+    if benchmarks_dir and task_id:
+        gt_path = benchmarks_dir / "ccb_largerepo" / task_id / "tests" / "ground_truth.json"
+        if gt_path.is_file():
+            try:
+                gt_data = json.loads(gt_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                pass
+
+    # Build evidence from IR metrics
+    ir_evidence: list[str] = []
+    for key in ("precision", "recall", "f1", "dependency_accuracy"):
+        if key in ir_data:
+            ir_evidence.append(f"{key}={ir_data[key]}")
+
+    # Build evidence from ground truth
+    gt_evidence: list[str] = []
+    gt_files = gt_data.get("files") or []
+    gt_dep_chain = gt_data.get("dependency_chain") or []
+    if gt_files:
+        gt_evidence.append(f"ground_truth_file_count={len(gt_files)}")
+    if gt_dep_chain:
+        gt_evidence.append(f"dependency_chain_length={len(gt_dep_chain)}")
+
+    return {
+        "architectural_coherence_score": {
+            "dimension": "ACS",
+            "definition": (
+                "Measures whether the agent identifies the correct architectural "
+                "modules and understands how they fit together in the system's "
+                "overall design. A score of 5 means every relevant subsystem was "
+                "identified and correctly described."
+            ),
+            "scoring_scale": "1-5",
+            "observable_evidence": [
+                "Agent references correct top-level packages/modules",
+                "Agent identifies the right entry points for the task",
+                "Agent's file list overlaps with ground truth files",
+                *ir_evidence,
+                *gt_evidence,
+            ],
+        },
+        "dependency_traversal_accuracy": {
+            "dimension": "DTA",
+            "definition": (
+                "Measures whether the agent correctly traces dependency chains "
+                "across files — from API surface through internal layers to the "
+                "implementation leaf. A score of 5 means the full dependency "
+                "chain was traversed in the correct order."
+            ),
+            "scoring_scale": "1-5",
+            "observable_evidence": [
+                "Agent follows import/include chains accurately",
+                "Agent identifies transitive dependencies, not just direct ones",
+                "Agent's dependency ordering matches ground truth chain",
+                *(
+                    [f"ground_truth_dependency_chain={gt_dep_chain}"]
+                    if gt_dep_chain
+                    else []
+                ),
+                *(
+                    [f"dependency_accuracy={ir_data['dependency_accuracy']}"]
+                    if "dependency_accuracy" in ir_data
+                    else []
+                ),
+            ],
+        },
+        "cross_file_reasoning_depth": {
+            "dimension": "CFRD",
+            "definition": (
+                "Measures how deeply the agent reasons about relationships that "
+                "span multiple source files — type hierarchies, shared state, "
+                "callback registration, and cross-module contracts. A score of 5 "
+                "means the agent demonstrates deep multi-file reasoning."
+            ),
+            "scoring_scale": "1-5",
+            "observable_evidence": [
+                "Agent explains cross-file type relationships",
+                "Agent identifies shared state or callback patterns",
+                "Agent traces data flow across module boundaries",
+                *(
+                    [f"files_examined_count={ir_data['agent_file_count']}"]
+                    if "agent_file_count" in ir_data
+                    else []
+                ),
+                *(
+                    [f"file_recall={ir_data['recall']}"]
+                    if "recall" in ir_data
+                    else []
+                ),
+                *(
+                    [f"file_precision={ir_data['precision']}"]
+                    if "precision" in ir_data
+                    else []
+                ),
+            ],
+        },
+    }
+
+
 def _read_verifier_output(task_dir: Path) -> Optional[str]:
     """Read verifier output from test-stdout.txt or reward.txt."""
     test_stdout = task_dir / "verifier" / "test-stdout.txt"
@@ -390,6 +521,17 @@ def generate_judge_contexts(
         # Read verifier output
         verifier_output = _read_verifier_output(task_dir)
 
+        # LoCoBench dimensions for bigcode (ccb_largerepo) tasks
+        locobench_dims = None
+        if benchmark == "bigcode":
+            ir_metrics_path = task_dir / "verifier" / "ir_metrics.json"
+            locobench_dims = _locobench_dimensions(
+                task_dir,
+                ir_metrics_path=ir_metrics_path,
+                benchmarks_dir=benchmarks_dir,
+                task_id=task_id,
+            )
+
         # SWE-bench partial score
         partial_score = entry.get("partial_score")
         if "swebench" in benchmark.lower():
@@ -427,6 +569,7 @@ def generate_judge_contexts(
             "tool_usage_summary": tool_usage,
             "code_changes": code_changes,
             "verifier_output": verifier_output,
+            "locobench_dimensions": locobench_dims,
             "run_metadata": {
                 "model": entry["model"],
                 "config_name": config_name,

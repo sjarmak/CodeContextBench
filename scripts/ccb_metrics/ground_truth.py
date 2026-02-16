@@ -364,17 +364,32 @@ def _gt_tac(task_dir: Path) -> Optional[TaskGroundTruth]:
 def _gt_largerepo(task_dir: Path) -> Optional[TaskGroundTruth]:
     """Extract ground truth for LargeRepo tasks.
 
-    Uses instruction.md analysis + trajectory mining from passing agent runs.
-    LargeRepo tasks are open-ended feature implementations, so ground truth
-    is approximate — based on what areas of code need modification.
+    Reads tests/ground_truth.json if present (preferred), otherwise falls back
+    to hardcoded ground truth for legacy tasks.
     """
     task_name = task_dir.name
 
-    # --- Ground truth mined from passing agent runs + instruction analysis ---
-    # big-code-trt-001: 2 passing runs (reward=1.0), files from git diff
-    # big-code-k8s-001: partial pass (reward=0.7), files from instruction + run
-    # big-code-servo-001: no passing runs, files from instruction analysis
-    # big-code-vsc-001: handled by fallback (test_script extraction)
+    # --- Strategy 1: Read tests/ground_truth.json (new standard) ---
+    gt_file = task_dir / "tests" / "ground_truth.json"
+    if gt_file.is_file():
+        try:
+            data = json.loads(gt_file.read_text(errors="replace"))
+        except (json.JSONDecodeError, OSError):
+            pass
+        else:
+            files = data.get("files", [])
+            if files and isinstance(files, list):
+                confidence = data.get("confidence", "medium")
+                methodology = data.get("methodology", "ground_truth_json")
+                return TaskGroundTruth(
+                    task_id=task_name,
+                    benchmark="ccb_largerepo",
+                    files=[f for f in files if isinstance(f, str)],
+                    source=f"ground_truth_json ({methodology})",
+                    confidence=confidence,
+                )
+
+    # --- Strategy 2: Hardcoded fallback for legacy tasks without GT files ---
     _LARGEREPO_GROUND_TRUTH: dict[str, tuple[list[str], str, str]] = {
         # TensorRT-LLM: mined from 2 passing runs (baseline + SG_full)
         "big-code-trt-001": (
@@ -387,9 +402,8 @@ def _gt_largerepo(task_dir: Path) -> Optional[TaskGroundTruth]:
                 "tensorrt_llm/quantization/utils/fp4_utils.py",
             ],
             "trajectory_mining",
-            "high",  # Common files across 2 independent passing runs
+            "high",
         ),
-        # Kubernetes: from instruction + partial-pass run analysis
         "big-code-k8s-001": (
             [
                 "staging/src/k8s.io/api/core/v1/types.go",
@@ -399,9 +413,8 @@ def _gt_largerepo(task_dir: Path) -> Optional[TaskGroundTruth]:
                 "staging/src/k8s.io/endpointslice/reconciler.go",
             ],
             "instruction_and_run",
-            "medium",  # Partial pass only; may need more files
+            "medium",
         ),
-        # Servo: from instruction analysis only (no passing runs)
         "big-code-servo-001": (
             [
                 "components/script/dom/document.rs",
@@ -410,7 +423,7 @@ def _gt_largerepo(task_dir: Path) -> Optional[TaskGroundTruth]:
                 "components/script/dom/event.rs",
             ],
             "instruction",
-            "low",  # No passing runs; inferred from scroll/DOM architecture
+            "low",
         ),
     }
 
