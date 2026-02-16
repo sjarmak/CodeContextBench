@@ -36,7 +36,7 @@ docs/
   ERROR_CATALOG.md           # Known error fingerprints, causes, fixes
 ```
 
-## Benchmarks (13 total, 11 active)
+## Benchmarks (16 total, 14 active)
 
 | Benchmark | Tasks | Language(s) | Focus | Status |
 |-----------|-------|-------------|-------|--------|

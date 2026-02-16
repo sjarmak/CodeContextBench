@@ -68,12 +68,20 @@ RUN_FULL=true
 CATEGORY="${CATEGORY:-official}"
 TASK_FILTER=""
 
-# All investigation task IDs
+# All investigation task IDS
 ALL_TASK_IDS=(
     "inv-impact-001"
     "inv-regression-001"
     "inv-debug-001"
     "inv-migration-001"
+    "inv-deep-001"
+    "inv-deep-002"
+    "inv-deep-003"
+    "inv-interaction-001"
+    "inv-interaction-002"
+    "inv-interaction-003"
+    "inv-regression-001b"
+    "inv-regression-002"
 )
 
 # Parse arguments
@@ -129,6 +137,14 @@ declare -A TASK_SG_REPO_NAMES=(
     ["inv-regression-001"]="github.com/grafana/grafana"
     ["inv-debug-001"]="github.com/prometheus/prometheus"
     ["inv-migration-001"]="github.com/django/django"
+    ["inv-deep-001"]="github.com/envoyproxy/envoy"
+    ["inv-deep-002"]="github.com/istio/istio"
+    ["inv-deep-003"]="github.com/hashicorp/terraform"
+    ["inv-interaction-001"]="github.com/kubernetes/kubernetes"
+    ["inv-interaction-002"]="github.com/cilium/cilium"
+    ["inv-interaction-003"]="github.com/apache/kafka"
+    ["inv-regression-001b"]="github.com/prometheus/prometheus"
+    ["inv-regression-002"]="github.com/prometheus/prometheus"
 )
 
 # Derive short model name for run directory

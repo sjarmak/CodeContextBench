@@ -1,0 +1,204 @@
+## Codebase Patterns
+- Investigation tasks: benchmarks/ccb_investigation/{task_id}/ — existing suite, expand from 4 to 12 tasks
+- Existing tasks: inv-debug-001, inv-impact-001, inv-migration-001, inv-regression-001 (all score 0.9+)
+- New tasks must be SIGNIFICANTLY harder: target baseline 0.2-0.5 (not 0.9+)
+- Three new subtypes: deep_causal_chain (4-5 hops), multi_component_interaction (3+ components), regression_hunt (use commit history)
+- Output format: /logs/agent/investigation.md (same as existing)
+- Scoring: weighted checklist via ground_truth.json (same scorer as existing — test.sh is shared across suite)
+- ground_truth.json for harder tasks: 8-12 required_findings (vs 5-8), 4-5 hop causal_chains (vs 2-3), 2+ negative_checks (vs 1)
+- Deep causal: symptom in package A → root cause in package D/E, with 3+ intermediate packages
+- Multi-component: bug emerges from interaction between 3+ independent components under specific timing
+- Regression hunt: agent must find the COMMIT that introduced the regression (commit_search + diff_search essential)
+- Regression task naming: use inv-regression-001b (or inv-regression-002) to avoid conflict with existing inv-regression-001
+- Dockerfile: pin to commit where bug exists (pre-fix for investigations, post-regression for regression hunts)
+- MCP advantage: find_references for cross-package tracing, commit_search for regression hunts, diff_search for code changes
+- Config: investigation_2config.sh — add new task IDs to existing TASKS array AND TASK_SG_REPO_NAMES mapping
+- Repos not on Sourcegraph (Istio, Terraform core): use `gh` CLI to search GitHub issues/PRs instead
+- Scoring calibration: always test perfect (1.0), weak (~0.2), and medium (~0.5) reports before committing
+
+## Progress
+
+## 2026-02-16 - US-001
+- Implemented inv-deep-001: Deep causal chain investigation task for Envoy filter pipeline
+- Based on real Envoy bug (PR #40856/commit 25f893b): router double-processes response_headers_to_add for local replies
+- 5-hop causal chain: access log symptom → sendLocalReply double-calls finalizeResponseHeaders → modify_headers_ callback → header_parser.cc append/append_action parsing → proto default value trap (APPEND_IF_EXISTS_OR_ADD = enum 0)
+- Files created:
+  - benchmarks/ccb_investigation/inv-deep-001/task.toml (category=deep_causal_chain, language=cpp, difficulty=hard)
+  - benchmarks/ccb_investigation/inv-deep-001/instruction.md
+  - benchmarks/ccb_investigation/inv-deep-001/environment/Dockerfile (pins to 25f893b~1)
+  - benchmarks/ccb_investigation/inv-deep-001/tests/test.sh (identical scorer)
+  - benchmarks/ccb_investigation/inv-deep-001/tests/ground_truth.json (12 findings, 7 file refs, 3 chain entries, 2 neg checks)
+- Files modified:
+  - configs/investigation_2config.sh (added inv-deep-001 to TASKS and TASK_SG_REPO_NAMES)
+  - configs/selected_benchmark_tasks.json (added entry, updated count 171→172)
+- **Learnings for future iterations:**
+  - Sourcegraph commit_search is essential for finding real bugs to base tasks on — search for fix commits and work backward to pre-fix state
+  - The scorer test.sh is identical across all investigation tasks — just copy it
+  - ground_truth.json weights within each section (required_findings, file_references, etc.) must sum to 1.0
+  - Use `check_all_patterns` for causal_chain (ALL patterns must match) vs `check_any_pattern` for findings (any ONE pattern matches)
+  - Negative checks are critical for preventing false positives — pattern must NOT match for credit
+  - Dockerfile pattern: `git clone --filter=blob:none --no-checkout` then `git checkout <commit>` for specific state
+  - Envoy has rich header mutation bugs around the deprecated `append` BoolValue → `append_action` enum transition (commits 01b90ef, e7ebb02, 50ead8a/4c79c71)
+---
+
+## 2026-02-16 - US-002
+- Implemented inv-deep-002: Deep causal chain investigation task for Istio control plane
+- Based on real Istio bug (PR #38088/issue #38082): merged DestinationRules lose contributing DR metadata, causing xDS push to be silently skipped
+- 5-hop causal chain: mergeDestinationRule() merges DRs losing metadata → consolidatedDestRules stores only one config.Config → SidecarScope.AddConfigDependencies registers only surviving DR's ConfigKey → DependsOnConfig returns false for non-surviving DR → xDS push silently skipped → Envoy sidecar retains stale config
+- Files created:
+  - benchmarks/ccb_investigation/inv-deep-002/task.toml (category=deep_causal_chain, language=go, difficulty=hard)
+  - benchmarks/ccb_investigation/inv-deep-002/instruction.md
+  - benchmarks/ccb_investigation/inv-deep-002/environment/Dockerfile (pins to f8c9b973, parent of fix 9fcfe231)
+  - benchmarks/ccb_investigation/inv-deep-002/tests/test.sh (identical scorer)
+  - benchmarks/ccb_investigation/inv-deep-002/tests/ground_truth.json (12 findings, 6 file refs, 4 chain entries, 2 neg checks)
+- Files modified:
+  - configs/investigation_2config.sh (added inv-deep-002 to TASKS and TASK_SG_REPO_NAMES)
+  - configs/selected_benchmark_tasks.json (added entry, count now 202)
+- Scoring validation: perfect report → 1.0, weak baseline report → 0.24 (within target 0.2-0.4)
+- **Learnings for future iterations:**
+  - Istio repo not indexed on Sourcegraph instance — used GitHub API (gh) to research real bugs instead
+  - For dependency-tracking bugs, the causal chain pattern is: merge function loses identity → dependency tracker registers incomplete set → push filter skips valid updates → stale config
+  - Istio has multiple related bugs: PR #38088 (DR merge), PR #39730 (follow-up for RDS/CDS/EDS caches), PR #29193 (delegate VS), PR #29441 (root namespace sidecar)
+  - Key Istio xDS push pipeline: config change → PushContext → SidecarScope.DependsOnConfig() → push/skip decision
+  - When a repo isn't on Sourcegraph, the task still works — baseline agents investigate locally, SG_full agents can search related repos
+  - The `consolidatedDestRule.from` field (added by fix) is the key concept — tracks all contributing DRs' NamespacedNames
+---
+
+## 2026-02-16 - US-003
+- Implemented inv-deep-003: Deep causal chain investigation task for Terraform sensitive attribute handling
+- Based on real Terraform bug (PR #34567/issues #34144, #34323): schema-sensitive attributes not applied to provider responses, causing phantom plan diffs
+- 4-hop causal chain: ReadResource/PlanResourceChange returns value without marks → node_resource_abstract_instance.go re-applies only prior-state marks (missing schema marks) → state serialization stores incomplete AttrSensitivePaths → evaluate.go compensates by adding schema marks only during expression evaluation → asymmetry causes phantom diffs
+- Files created:
+  - benchmarks/ccb_investigation/inv-deep-003/task.toml (category=deep_causal_chain, language=go, difficulty=hard)
+  - benchmarks/ccb_investigation/inv-deep-003/instruction.md
+  - benchmarks/ccb_investigation/inv-deep-003/environment/Dockerfile (pins to 9658f9df, parent of fix c4a2f740)
+  - benchmarks/ccb_investigation/inv-deep-003/tests/test.sh (identical scorer)
+  - benchmarks/ccb_investigation/inv-deep-003/tests/ground_truth.json (11 findings, 6 file refs, 4 chain entries, 2 neg checks)
+- Files modified:
+  - configs/investigation_2config.sh (added inv-deep-003 to TASKS and TASK_SG_REPO_NAMES)
+  - configs/selected_benchmark_tasks.json (added entry, count now 203)
+- Scoring validation: perfect report → 1.0, weak baseline → 0.18, medium baseline → 0.61
+- **Learnings for future iterations:**
+  - hashicorp/terraform is NOT indexed on the Sourcegraph instance — only terraform-provider-google is. Used GitHub API (gh) for research.
+  - Terraform's sensitive value handling is a rich source of deep causal chain bugs — the cty marks system spans providers → graph nodes → state → evaluator → command output
+  - Key Terraform mark-handling files: marks.go (mark functions), node_resource_abstract_instance.go (provider response processing), evaluate.go (expression evaluation), instance_object.go (state serialization)
+  - PR #34567 by jbardin is the canonical fix for sensitive mark asymmetry — it applies schema marks to ReadResource and PlanResourceChange responses rather than only during evaluation
+  - Related bugs worth investigating for future tasks: PR #36465 (non-deterministic AttrSensitivePaths order), PR #35017 (51-file mark consistency overhaul), PR #28381 (double-marked crash), PR #32891 (module output mark coarsening)
+  - For scoring calibration: test with "perfect", "weak", and "medium" reports to verify the scoring range spans 0.0-1.0 with weak baseline in 0.2-0.4
+- Multi-component interaction tasks: instruction describes SYMPTOM only, not specific functions/packages; agent must discover all 3 interacting components
+- Multi-component negative checks: verify agent doesn't blame "innocent" components (e.g., kubelet, scheduler) that are involved but not the root cause
+- Multi-component causal chain: each step should name a component AND its specific role in the interaction, using check_all_patterns
+---
+
+## 2026-02-16 - US-004
+- Implemented inv-interaction-001: Multi-component interaction investigation task for Kubernetes delayed NoExecute taint
+- Based on real K8s bug (PR #120816/commit f718096): processTaintBaseEviction() receives stale observedReadyCondition instead of currentReadyCondition
+- 3-component interaction: (1) kubelet stops heartbeats → (2) node lifecycle controller detects but passes stale condition → processTaintBaseEviction sees ConditionTrue, skips NoExecute taint → (3) scheduler's TaintToleration plugin allows scheduling during delay window → taint eviction controller evicts after delayed NoExecute taint
+- Files created:
+  - benchmarks/ccb_investigation/inv-interaction-001/task.toml (category=multi_component_interaction, language=go, difficulty=hard)
+  - benchmarks/ccb_investigation/inv-interaction-001/instruction.md (describes symptom without naming specific functions or interacting components)
+  - benchmarks/ccb_investigation/inv-interaction-001/environment/Dockerfile (pins to f718096~1, parent of fix)
+  - benchmarks/ccb_investigation/inv-interaction-001/tests/test.sh (identical scorer)
+  - benchmarks/ccb_investigation/inv-interaction-001/tests/ground_truth.json (12 findings, 7 file refs, 4 chain entries, 2 neg checks)
+- Files modified:
+  - configs/investigation_2config.sh (added inv-interaction-001 to TASKS and TASK_SG_REPO_NAMES)
+  - configs/selected_benchmark_tasks.json (added entry, count now 204)
+- Scoring validation: perfect report → 1.0, weak baseline → 0.26 (within target 0.2-0.4), medium → 0.68
+- **Learnings for future iterations:**
+  - For multi-component interaction tasks, the instruction must describe the SYMPTOM without naming specific functions, packages, or interacting components
+  - K8s node lifecycle controller is in pkg/controller/nodelifecycle/ (not pkg/controller/node/) — naming changed over versions
+  - The taint eviction controller was moved from pkg/controller/nodelifecycle/ to pkg/controller/tainteviction/ in recent K8s versions
+  - tryUpdateNodeHealth returns two conditions: observedReadyCondition (previous cycle, stale) and currentReadyCondition (just computed) — this stale-vs-fresh data pattern is a great source of multi-component interaction bugs
+  - PR #120816 by tnqn is the fix — changes parameter from &observedReadyCondition to currentReadyCondition in the processTaintBaseEviction call
+  - For multi-component tasks, negative checks should verify the agent doesn't blame the "innocent" components (kubelet, scheduler) as root cause
+  - K8s repo IS indexed on Sourcegraph, making commit_search and find_references directly available for MCP agents
+---
+
+## 2026-02-16 - US-005
+- Implemented inv-interaction-002: Multi-component interaction investigation task for Cilium identity/SelectorCache/endpoint race
+- Based on real Cilium bug (PR #42049/commit 696017a): Identity allocator's OnListDone closes listDone channel before SelectorCache processes queued identity events, causing GetSelections() to return incomplete set during endpoint regeneration
+- 3-component interaction: (1) Identity allocator allocates identities, sends events to channel, closes listDone too early → (2) SelectorCache receives events asynchronously via UpdateIdentities, but events not yet processed → (3) Endpoint regeneration calls GetSelections() which returns incomplete identity set → eBPF policy maps miss allowed identities → packet drops
+- Files created:
+  - benchmarks/ccb_investigation/inv-interaction-002/task.toml (category=multi_component_interaction, language=go, difficulty=hard)
+  - benchmarks/ccb_investigation/inv-interaction-002/instruction.md (describes symptom without naming specific functions)
+  - benchmarks/ccb_investigation/inv-interaction-002/environment/Dockerfile (pins to 1ded914d, parent of fix 696017a)
+  - benchmarks/ccb_investigation/inv-interaction-002/tests/test.sh (identical scorer)
+  - benchmarks/ccb_investigation/inv-interaction-002/tests/ground_truth.json (12 findings, 7 file refs, 4 chain entries, 2 neg checks)
+- Files modified:
+  - configs/investigation_2config.sh (added inv-interaction-002 to TASKS and TASK_SG_REPO_NAMES)
+  - configs/selected_benchmark_tasks.json (added entry, count now 205)
+- Scoring validation: perfect report → 0.98, weak baseline → 0.30 (within target 0.2-0.4)
+- **Learnings for future iterations:**
+  - Cilium repo is NOT indexed on the Sourcegraph instance — used GitHub API (gh api) to search PRs and get commit details
+  - Cilium's identity → SelectorCache → endpoint pipeline is a rich source of race conditions: PR #42049 (identity/selector sync), PR #37910 (selectorPolicy orphaning), PR #42500 (FQDN correctness)
+  - The fix pattern "add a Done channel to synchronization events" is a common Go pattern for blocking until async consumers finish processing
+  - For Cilium tasks, the 3 components map roughly to: identity subsystem (pkg/identity/, pkg/allocator/) + policy subsystem (pkg/policy/) + endpoint subsystem (pkg/endpoint/)
+  - The "events channel" pattern (buffered channel between producer and consumer) is the common source of these async race conditions
+---
+
+## 2026-02-16 - US-006
+- Implemented inv-interaction-003: Multi-component interaction investigation task for Kafka consumer rebalance
+- Based on real Kafka bug (KAFKA-14024, PR #12349, commit d8541b20a106f22736947e0c2f293833f3c3873b): Consumer offset commit race during cooperative rebalance
+- 3-component interaction: (1) ConsumerCoordinator manages rebalancing and invokes onJoinPrepare before JoinGroup → (2) onJoinPrepare initiates async offset commit (changed from sync in KAFKA-13310) → (3) poll() loop calls onJoinPrepare repeatedly because completion flag never updated → consumer kicked out after rebalance timeout
+- Files created:
+  - benchmarks/ccb_investigation/inv-interaction-003/task.toml (category=multi_component_interaction, language=java, difficulty=hard)
+  - benchmarks/ccb_investigation/inv-interaction-003/instruction.md (describes symptom without naming specific components)
+  - benchmarks/ccb_investigation/inv-interaction-003/environment/Dockerfile (pins to d8541b20~1, parent of fix)
+  - benchmarks/ccb_investigation/inv-interaction-003/tests/test.sh (identical scorer)
+  - benchmarks/ccb_investigation/inv-interaction-003/tests/ground_truth.json (12 findings, 6 file refs, 4 chain entries, 2 neg checks)
+- Files modified:
+  - configs/investigation_2config.sh (added inv-interaction-003 to TASKS and TASK_SG_REPO_NAMES)
+  - configs/selected_benchmark_tasks.json (added entry, count now 206)
+- **Learnings for future iterations:**
+  - Apache Kafka repo is likely indexed on Sourcegraph, making commit_search and find_references available for MCP agents
+  - KAFKA-14024 is a perfect example of "fix the fix" bugs: KAFKA-13310 changed sync→async to avoid blocking poll(), but KAFKA-14024 discovered the async version never tracked completion
+  - The key Kafka consumer files: ConsumerCoordinator.java (rebalance + offset commit coordination), AbstractCoordinator.java (group management), KafkaConsumer.java (poll loop)
+  - The bug pattern "local future variable lost between function calls" is a classic async completion tracking bug in Java
+  - Fix pattern: promote local variable to instance variable (rebalanceAutoCommitFuture) so completion handler can update shared state across poll() calls
+  - For cooperative rebalancing bugs, the instruction should emphasize the difference from eager rebalancing (e.g., "only affects CooperativeStickyAssignor")
+  - Web search was essential since gh CLI wasn't authenticated — found KAFKA-14024 Jira issue, PR #12349, and commit hash d8541b20
+---
+
+## 2026-02-16 - US-007
+- Fixed inv-regression-001b: Updated from initial histogram scrape config regression to correct Prometheus recording rule performance regression
+- Based on real Prometheus bug (commit 52630ad): head posting optimization that caused 3-5x slowdown in recording rule evaluation
+- 4-hop causal chain: Select() optimization skipped sorting for single block → skipped SelectSorted, used direct iteration → full head scan before filtering instead of index pre-filtering → 3-5x slowdown for high-cardinality metrics (200s → 3000s)
+- Files updated:
+  - benchmarks/ccb_investigation/inv-regression-001b/task.toml (fixed structure: added metadata, verification, environment sections)
+  - benchmarks/ccb_investigation/inv-regression-001b/instruction.md (updated to recording rule performance regression symptom)
+  - benchmarks/ccb_investigation/inv-regression-001b/environment/Dockerfile (changed from histogram config commit to 52630ad)
+  - benchmarks/ccb_investigation/inv-regression-001b/tests/ground_truth.json (updated format to match other investigation tasks, 12 findings, 7 file refs, 4 chain entries)
+  - configs/selected_benchmark_tasks.json (updated selection_rationale and cross_file_deps)
+- **Learnings for future iterations:**
+  - The initial commit created the wrong regression (histogram scrape config) — needed to replace with the correct one (recording rule performance)
+  - Prometheus repo IS indexed on Sourcegraph, making commit 52630ad (the regressing commit) and 635fff9 (the revert) both discoverable via commit_search
+  - The bug pattern "optimization that removes pre-filtering in favor of post-filtering" is a classic performance regression in database-like systems
+  - For regression hunt tasks, the Dockerfile should pin to the regressing commit itself (not the fix), so agents can investigate the history leading to that point
+  - PR #7051 reverted commit 52630ad — this "revert optimization" pattern is common when well-intentioned optimizations have unexpected negative consequences
+  - Recording rule evaluation slowdown (200s → 3000s) is a dramatic regression magnitude that makes the task compelling
+  - Issues #6968 and #7048 reported the regression — these provide user-facing symptom descriptions that match the investigation task
+---
+## 2026-02-16 - US-008
+- Implemented inv-regression-002: Historical regression hunt task for Prometheus alert rule state loss on config reload
+- Based on real Prometheus bug (commit a48a01836, June 2017): inconsistent map key format between loadGroups and ApplyConfig
+- Root cause: loadGroups changed from using 'rg.Name' to 'rg.Name+";"+fn' to support same group name across different files, but ApplyConfig still used 'newg.name' (only the name, no filename), causing old group lookup to fail during config reload
+- 4-hop causal chain: commit changes map key in loadGroups → ApplyConfig not updated → lookup fails (key mismatch) → state copy skipped → alert 'for' state lost
+- Files created:
+  - benchmarks/ccb_investigation/inv-regression-002/task.toml (category=regression_hunt, language=go, difficulty=hard)
+  - benchmarks/ccb_investigation/inv-regression-002/instruction.md (2400+ chars, describes state loss symptom, hints at map key inconsistency)
+  - benchmarks/ccb_investigation/inv-regression-002/environment/Dockerfile (pins to a48a01836, the regressing commit)
+  - benchmarks/ccb_investigation/inv-regression-002/tests/test.sh (identical scorer)
+  - benchmarks/ccb_investigation/inv-regression-002/tests/ground_truth.json (12 findings, 6 file refs, 4 chain entries, 4 neg checks)
+- Files modified:
+  - configs/investigation_2config.sh (added inv-regression-002 to ALL_TASK_IDS and TASK_SG_REPO_NAMES)
+  - configs/selected_benchmark_tasks.json (added entry, count now 207)
+- **Learnings for future iterations:**
+  - git log --grep with --oneline is effective for finding regression fixes: `git log --grep="regression\|revert\|fix.*rule" -- rules/manager.go`
+  - Commit a48a01836 changed the key format in loadGroups but not in ApplyConfig, classic "update one call site, miss another" bug
+  - The fix (PR #3382, commit e86d82ad2, Nov 2017) introduced a groupKey() helper function to ensure both places use the same key format
+  - Web search for "Prometheus recording rule regression" finds issues but not always the fix commits — git log is more reliable
+  - git show and git blame are essential for understanding when a line was last changed and who introduced the current implementation
+  - For map key bugs, the pattern is: one function generates keys, another consumes them, mismatch causes silent failures (no error, just missing data)
+  - Alert rule state loss is a serious production issue: affects all alerts with "for" clauses, causes alerts to reset during config reloads
+  - The groupKey format "name;file" allows the same group name in different rule files, which is a valid Prometheus configuration pattern
+---
