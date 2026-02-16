@@ -24,9 +24,13 @@ DIR_PREFIX_TO_SUITE = {
     "bigcode": "ccb_largerepo",
     "tac": "ccb_tac",
     "dibench": "ccb_dibench",
+    "docgen": "ccb_docgen",
     "sweperf": "ccb_sweperf",
     "codereview": "ccb_codereview",
     "linuxflbench": "ccb_linuxflbench",
+    "nlqa": "ccb_nlqa",
+    "onboarding": "ccb_onboarding",
+    "security": "ccb_security",
 }
 
 def detect_suite(run_dir_name):
