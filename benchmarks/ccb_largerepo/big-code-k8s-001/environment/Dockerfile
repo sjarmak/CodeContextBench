@@ -16,7 +16,7 @@ RUN npm install -g @anthropic-ai/claude-code
 # Clone the actual Kubernetes repository at pinned commit (v1.30.0)
 # This ensures BOTH baseline and MCP agents have identical file access
 RUN git clone --filter=blob:none --no-checkout https://github.com/kubernetes/kubernetes.git . && \
-    git checkout v1.30.0 && \
+    git checkout 11602f083ca275dcfd4341641ae7fe338b7f6f69 && \  # v1.30.0
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

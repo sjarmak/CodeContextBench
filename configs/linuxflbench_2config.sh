@@ -189,68 +189,76 @@ extract_all_metrics() {
     done
 }
 
-run_task_batch() {
-    local mode=$1
-    local mcp_type=$2
-    local jobs_subdir="${JOBS_BASE}/${mode}"
-
-    ensure_fresh_token_all
-
-    log_section "Running LinuxFLBench - Mode: $mode"
+_linuxflbench_run_single() {
+    local task_id=$1
+    local task_home=$2
+    local config=${3:-baseline}
+    local mcp_type=${4:-none}
+    local jobs_base=${5:-$JOBS_BASE}
+    local jobs_subdir="${jobs_base}/${config}"
+    local task_path="${TASKS_DIR}/${task_id}"
 
     mkdir -p "$jobs_subdir"
 
-    for task_id in "${TASK_IDS[@]}"; do
-        local task_path="${TASKS_DIR}/${task_id}"
+    if [ ! -d "$task_path" ]; then
+        echo "ERROR: Task directory not found: $task_path"
+        return 1
+    fi
 
-        if [ ! -d "$task_path" ]; then
-            echo "ERROR: Task directory not found: $task_path"
-            continue
-        fi
+    echo "Running task: $task_id ($config) [HOME=$task_home]"
 
-        echo "Running task: $task_id ($mode)"
+    local sg_repo="${TASK_SG_REPO_NAMES[$task_id]:-}"
+    if [ -n "$sg_repo" ]; then
+        export SOURCEGRAPH_REPO_NAME="$sg_repo"
+    else
+        unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
+    fi
 
-        # Set Sourcegraph repo name override for this task
-        local sg_repo="${TASK_SG_REPO_NAMES[$task_id]:-}"
-        if [ -n "$sg_repo" ]; then
-            echo "  SOURCEGRAPH_REPO_NAME: $sg_repo"
-            export SOURCEGRAPH_REPO_NAME="$sg_repo"
-        else
-            unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
-        fi
+    BASELINE_MCP_TYPE=$mcp_type harbor run \
+        --path "$task_path" \
+        --agent-import-path "$AGENT_PATH" \
+        --model "$MODEL" \
+        --jobs-dir "$jobs_subdir" \
+        -n $CONCURRENCY \
+        --timeout-multiplier $TIMEOUT_MULTIPLIER \
+        2>&1 | tee "${jobs_subdir}/${task_id}.log" \
+        || {
+            echo "WARNING: Task $task_id ($config) failed (exit code: $?)"
+        }
+}
 
-        BASELINE_MCP_TYPE=$mcp_type harbor run \
-            --path "$task_path" \
-            --agent-import-path "$AGENT_PATH" \
-            --model "$MODEL" \
-            --jobs-dir "$jobs_subdir" \
-            -n $CONCURRENCY \
-            --timeout-multiplier $TIMEOUT_MULTIPLIER \
-            2>&1 | tee "${jobs_subdir}/${task_id}.log" \
-            || {
-                echo "WARNING: Task $task_id failed (exit code: $?)"
-                echo "Continuing with remaining tasks..."
-            }
+run_task_batch() {
+    local mode=$1
+    local mcp_type=$2
 
-        echo ""
-    done
+    ensure_fresh_token_all
+    log_section "Running LinuxFLBench - Mode: $mode"
 
-    # Extract metrics for all completed tasks in this mode
-    extract_all_metrics "$jobs_subdir" "${SUITE}" "$mode"
-    validate_and_report "$jobs_subdir" "$mode"
+    _seq_run() {
+        _linuxflbench_run_single "$1" "$2" "$mode" "$mcp_type" "$JOBS_BASE"
+    }
+    run_canary_then_batch TASK_IDS _seq_run "${JOBS_BASE}/${mode}" "$mode"
 
+    extract_all_metrics "${JOBS_BASE}/${mode}" "${SUITE}" "$mode"
+    validate_and_report "${JOBS_BASE}/${mode}" "$mode"
     log_section "Completed LinuxFLBench - Mode: $mode"
 }
 
 # ============================================
 # MAIN EXECUTION
 # ============================================
-if [ "$RUN_BASELINE" = true ]; then
+if [ "$RUN_BASELINE" = true ] && [ "$RUN_FULL" = true ]; then
+    run_paired_configs TASK_IDS _linuxflbench_run_single "$JOBS_BASE"
+
+    for config in baseline sourcegraph_full; do
+        if [ -d "${JOBS_BASE}/${config}" ]; then
+            extract_all_metrics "${JOBS_BASE}/${config}" "${SUITE}" "$config"
+            validate_and_report "${JOBS_BASE}/${config}" "$config"
+        fi
+    done
+elif [ "$RUN_BASELINE" = true ]; then
     run_task_batch "baseline" "none"
-fi
-
-
-if [ "$RUN_FULL" = true ]; then
+elif [ "$RUN_FULL" = true ]; then
     run_task_batch "sourcegraph_full" "sourcegraph_full"
 fi
 

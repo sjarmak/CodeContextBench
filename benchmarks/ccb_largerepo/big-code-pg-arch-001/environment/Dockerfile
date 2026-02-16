@@ -19,6 +19,6 @@ RUN npm install -g @anthropic-ai/claude-code
 
 # Clone PostgreSQL at pinned commit (REL_18_2)
 RUN git clone --filter=blob:none --no-checkout https://github.com/postgres/postgres.git . && \
-    git checkout REL_18_2 && \
+    git checkout 5a461dc4dbf72a1ec281394a76eb36d68cbdd935 && \  # REL_18_2
     git config user.email "agent@example.com" && \
     git config user.name "Agent"

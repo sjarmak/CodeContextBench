@@ -171,51 +171,75 @@ extract_all_metrics() {
     done
 }
 
-# ============================================
-# RUN BASELINE (no MCP)
-# ============================================
-if [ "$RUN_BASELINE" = true ]; then
+# Per-task run function: handles a single (task, config) pair.
+_k8sdocs_run_single() {
+    local task_id=$1
+    local task_home=$2
+    local config=${3:-baseline}
+    local mcp_type=${4:-none}
+    local jobs_base=${5:-$JOBS_BASE}
+    local jobs_subdir="${jobs_base}/${config}"
+    local task_path="${TASKS_DIR}/${task_id}"
+
+    mkdir -p "$jobs_subdir"
+
+    if [ ! -d "$task_path" ]; then
+        echo "ERROR: Task directory not found: $task_path"
+        return 1
+    fi
+
+    echo "Running task: $task_id ($config) [HOME=$task_home]"
+
+    if [ "$mcp_type" != "none" ]; then
+        export SOURCEGRAPH_REPO_NAME="sg-benchmarks/kubernetes--stripped"
+    else
+        unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
+    fi
+
+    BASELINE_MCP_TYPE=$mcp_type harbor run \
+        --path "$task_path" \
+        --agent-import-path "$AGENT_PATH" \
+        --model "$MODEL" \
+        --jobs-dir "$jobs_subdir" \
+        -n $CONCURRENCY \
+        --timeout-multiplier $TIMEOUT_MULTIPLIER \
+        2>&1 | tee "${jobs_subdir}/${task_id}.log" \
+        || {
+            echo "WARNING: Task $task_id ($config) failed (exit code: $?)"
+        }
+}
+
+run_task_batch() {
+    local mode=$1
+    local mcp_type=$2
+
     ensure_fresh_token_all
-    echo ""
-    echo "[BASELINE] Starting 5-task baseline run..."
-    echo ""
 
-    BASELINE_MCP_TYPE=none harbor run \
-        --path "${TASKS_DIR}" \
-        --task-name "*" \
-        --agent-import-path "${AGENT_PATH}" \
-        --model "${MODEL}" \
-        --jobs-dir "${JOBS_BASE}/baseline" \
-        -n ${CONCURRENCY} \
-        --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
-        2>&1 | tee "${JOBS_BASE}/baseline.log"
+    _seq_run() {
+        _k8sdocs_run_single "$1" "$2" "$mode" "$mcp_type" "$JOBS_BASE"
+    }
+    run_canary_then_batch TASK_IDS _seq_run "${JOBS_BASE}/${mode}" "$mode"
 
-    extract_all_metrics "${JOBS_BASE}/baseline" "ccb_k8sdocs" "baseline"
-    validate_and_report "${JOBS_BASE}/baseline" "baseline"
-fi
+    extract_all_metrics "${JOBS_BASE}/${mode}" "ccb_k8sdocs" "$mode"
+    validate_and_report "${JOBS_BASE}/${mode}" "$mode"
+}
 
 # ============================================
-# RUN MCP-Full (sourcegraph_full)
+# MAIN EXECUTION
 # ============================================
-if [ "$RUN_FULL" = true ]; then
-    ensure_fresh_token_all
-    echo ""
-    echo "[MCP-Full] Starting 5-task MCP-Full run..."
-    echo ""
+if [ "$RUN_BASELINE" = true ] && [ "$RUN_FULL" = true ]; then
+    run_paired_configs TASK_IDS _k8sdocs_run_single "$JOBS_BASE"
 
-    SOURCEGRAPH_REPO_NAME="sg-benchmarks/kubernetes--stripped" \
-    BASELINE_MCP_TYPE=sourcegraph_full harbor run \
-        --path "${TASKS_DIR}" \
-        --task-name "*" \
-        --agent-import-path "${AGENT_PATH}" \
-        --model "${MODEL}" \
-        --jobs-dir "${JOBS_BASE}/sourcegraph_full" \
-        -n ${CONCURRENCY} \
-        --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
-        2>&1 | tee "${JOBS_BASE}/sourcegraph_full.log"
-
-    extract_all_metrics "${JOBS_BASE}/sourcegraph_full" "ccb_k8sdocs" "sourcegraph_full"
-    validate_and_report "${JOBS_BASE}/sourcegraph_full" "sourcegraph_full"
+    for config in baseline sourcegraph_full; do
+        if [ -d "${JOBS_BASE}/${config}" ]; then
+            extract_all_metrics "${JOBS_BASE}/${config}" "ccb_k8sdocs" "$config"
+            validate_and_report "${JOBS_BASE}/${config}" "$config"
+        fi
+    done
+elif [ "$RUN_BASELINE" = true ]; then
+    run_task_batch "baseline" "none"
+elif [ "$RUN_FULL" = true ]; then
+    run_task_batch "sourcegraph_full" "sourcegraph_full"
 fi
 
 print_validation_summary "$JOBS_BASE"

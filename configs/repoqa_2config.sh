@@ -203,68 +203,77 @@ for (( _i=0; _i<${#TASK_IDS[@]}; _i++ )); do
     TASK_ID_TO_REL_DIR["${TASK_IDS[$_i]}"]="${TASK_REL_DIRS[$_i]}"
 done
 
-run_task_batch() {
-    local mode=$1
-    local mcp_type=$2
-    local jobs_subdir="${JOBS_BASE}/${mode}"
-
-    ensure_fresh_token_all
-
-    log_section "Running RepoQA - Mode: $mode"
+_repoqa_run_single() {
+    local task_id=$1
+    local task_home=$2
+    local config=${3:-baseline}
+    local mcp_type=${4:-none}
+    local jobs_base=${5:-$JOBS_BASE}
+    local jobs_subdir="${jobs_base}/${config}"
+    local rel_dir="${TASK_ID_TO_REL_DIR[$task_id]}"
+    local task_path="${TASKS_DIR}/${rel_dir}"
 
     mkdir -p "$jobs_subdir"
 
-    _repoqa_run_single() {
-        local task_id=$1
-        local task_home=$2
-        local rel_dir="${TASK_ID_TO_REL_DIR[$task_id]}"
-        local task_path="${TASKS_DIR}/${rel_dir}"
+    if [ ! -d "$task_path" ]; then
+        echo "ERROR: Task directory not found: $task_path"
+        return 1
+    fi
 
-        if [ ! -d "$task_path" ]; then
-            echo "ERROR: Task directory not found: $task_path"
-            return 1
-        fi
+    echo "Running task: $task_id ($config) [HOME=$task_home]"
 
-        echo "Running task: $task_id ($mode) [HOME=$task_home]"
+    local sg_repo="${TASK_SG_REPO_NAMES[$task_id]:-}"
+    if [ -n "$sg_repo" ]; then
+        export SOURCEGRAPH_REPO_NAME="$sg_repo"
+    else
+        unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
+    fi
 
-        local sg_repo="${TASK_SG_REPO_NAMES[$task_id]:-}"
-        if [ -n "$sg_repo" ]; then
-            export SOURCEGRAPH_REPO_NAME="$sg_repo"
-        else
-            unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
-        fi
+    BASELINE_MCP_TYPE=$mcp_type harbor run \
+        --path "$task_path" \
+        --agent-import-path "$AGENT_PATH" \
+        --model "$MODEL" \
+        --jobs-dir "$jobs_subdir" \
+        -n $CONCURRENCY \
+        --timeout-multiplier $TIMEOUT_MULTIPLIER \
+        2>&1 | tee "${jobs_subdir}/${task_id}.log" \
+        || {
+            echo "WARNING: Task $task_id ($config) failed (exit code: $?)"
+        }
+}
 
-        BASELINE_MCP_TYPE=$mcp_type harbor run \
-            --path "$task_path" \
-            --agent-import-path "$AGENT_PATH" \
-            --model "$MODEL" \
-            --jobs-dir "$jobs_subdir" \
-            -n $CONCURRENCY \
-            --timeout-multiplier $TIMEOUT_MULTIPLIER \
-            2>&1 | tee "${jobs_subdir}/${task_id}.log" \
-            || {
-                echo "WARNING: Task $task_id failed (exit code: $?)"
-            }
+run_task_batch() {
+    local mode=$1
+    local mcp_type=$2
+
+    ensure_fresh_token_all
+    log_section "Running RepoQA - Mode: $mode"
+
+    _seq_run() {
+        _repoqa_run_single "$1" "$2" "$mode" "$mcp_type" "$JOBS_BASE"
     }
+    run_canary_then_batch TASK_IDS _seq_run "${JOBS_BASE}/${mode}" "$mode"
 
-    run_canary_then_batch TASK_IDS _repoqa_run_single "$jobs_subdir" "$mode"
-
-    # Extract metrics for all completed tasks in this mode
-    extract_all_metrics "$jobs_subdir" "ccb_repoqa" "$mode"
-    validate_and_report "$jobs_subdir" "$mode"
-
+    extract_all_metrics "${JOBS_BASE}/${mode}" "ccb_repoqa" "$mode"
+    validate_and_report "${JOBS_BASE}/${mode}" "$mode"
     log_section "Completed RepoQA - Mode: $mode"
 }
 
 # ============================================
 # MAIN EXECUTION
 # ============================================
-if [ "$RUN_BASELINE" = true ]; then
+if [ "$RUN_BASELINE" = true ] && [ "$RUN_FULL" = true ]; then
+    run_paired_configs TASK_IDS _repoqa_run_single "$JOBS_BASE"
+
+    for config in baseline sourcegraph_full; do
+        if [ -d "${JOBS_BASE}/${config}" ]; then
+            extract_all_metrics "${JOBS_BASE}/${config}" "ccb_repoqa" "$config"
+            validate_and_report "${JOBS_BASE}/${config}" "$config"
+        fi
+    done
+elif [ "$RUN_BASELINE" = true ]; then
     run_task_batch "baseline" "none"
-fi
-
-
-if [ "$RUN_FULL" = true ]; then
+elif [ "$RUN_FULL" = true ]; then
     run_task_batch "sourcegraph_full" "sourcegraph_full"
 fi
 

@@ -185,87 +185,79 @@ get_sg_repo_name() {
     echo ""
 }
 
-# Run MCP mode tasks with parallel support; SOURCEGRAPH_REPO_NAME set per task
-run_mcp_task_batch() {
-    local mode=$1
-    local mcp_type=$2
-    local jobs_subdir="${JOBS_BASE}/${mode}"
-    ensure_fresh_token_all
+# Per-task run function: handles a single (task, config) pair.
+# Called by both run_task_batch (sequential mode) and run_paired_configs (paired mode).
+_locobench_run_single() {
+    local task_id=$1
+    local task_home=$2
+    local config=${3:-baseline}
+    local mcp_type=${4:-none}
+    local jobs_base=${5:-$JOBS_BASE}
+    local jobs_subdir="${jobs_base}/${config}"
+    local task_path="${TASKS_DIR}/${task_id}"
+
     mkdir -p "$jobs_subdir"
 
-    _locobench_mcp_run_single() {
-        local task_id=$1
-        local task_home=$2
-        local task_path="${TASKS_DIR}/${task_id}"
+    # Set SOURCEGRAPH_REPO_NAME for MCP configs
+    if [ "$mcp_type" != "none" ]; then
         local sg_repo=$(get_sg_repo_name "$task_path")
         if [ -n "$sg_repo" ]; then
             export SOURCEGRAPH_REPO_NAME="$sg_repo"
-            echo "  [${mode}] Task ${task_id} -> SOURCEGRAPH_REPO_NAME=${sg_repo} [HOME=$task_home]"
+            echo "  [${config}] Task ${task_id} -> SOURCEGRAPH_REPO_NAME=${sg_repo} [HOME=$task_home]"
         else
             unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
-            echo "  [${mode}] Task ${task_id} -> no SG repo mapping [HOME=$task_home]"
+            echo "  [${config}] Task ${task_id} -> no SG repo mapping [HOME=$task_home]"
         fi
-        BASELINE_MCP_TYPE=$mcp_type harbor run \
-            --path "$task_path" \
-            --agent-import-path "$AGENT_PATH" \
-            --model "$MODEL" \
-            --jobs-dir "$jobs_subdir" \
-            -n $CONCURRENCY \
-            --timeout-multiplier $TIMEOUT_MULTIPLIER \
-            --force-build \
-            2>&1 | tee "${jobs_subdir}/${task_id}.log" || true
+    else
+        unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
+        echo "  [${config}] Task ${task_id} [HOME=$task_home]"
+    fi
+
+    BASELINE_MCP_TYPE=$mcp_type harbor run \
+        --path "$task_path" \
+        --agent-import-path "$AGENT_PATH" \
+        --model "$MODEL" \
+        --jobs-dir "$jobs_subdir" \
+        -n $CONCURRENCY \
+        --timeout-multiplier $TIMEOUT_MULTIPLIER \
+        --force-build \
+        2>&1 | tee "${jobs_subdir}/${task_id}.log" || true
+}
+
+# Sequential mode: run all tasks for a single config (for --baseline-only / --full-only)
+run_task_batch() {
+    local mode=$1
+    local mcp_type=$2
+
+    ensure_fresh_token_all
+
+    _seq_run() {
+        _locobench_run_single "$1" "$2" "$mode" "$mcp_type" "$JOBS_BASE"
     }
+    run_canary_then_batch TASK_IDS _seq_run "${JOBS_BASE}/${mode}" "$mode"
 
-    run_canary_then_batch TASK_IDS _locobench_mcp_run_single "$jobs_subdir" "$mode"
-
-    extract_all_metrics "$jobs_subdir" "ccb_locobench" "$mode"
-    validate_and_report "$jobs_subdir" "$mode"
+    extract_all_metrics "${JOBS_BASE}/${mode}" "ccb_locobench" "$mode"
+    validate_and_report "${JOBS_BASE}/${mode}" "$mode"
 }
 
 # ============================================
-# RUN BASELINE (no MCP)
+# MAIN EXECUTION
 # ============================================
-if [ "$RUN_BASELINE" = true ]; then
-    echo ""
-    echo "[BASELINE] Starting selected-task baseline run..."
-    echo ""
+# Default: paired execution (baseline + SG_full run simultaneously for each task).
+# Use --baseline-only or --full-only for single-config runs.
+if [ "$RUN_BASELINE" = true ] && [ "$RUN_FULL" = true ]; then
+    run_paired_configs TASK_IDS _locobench_run_single "$JOBS_BASE"
 
-    BASELINE_JOBS="${JOBS_BASE}/baseline"
-    ensure_fresh_token_all
-    mkdir -p "$BASELINE_JOBS"
-
-    _locobench_baseline_run_single() {
-        local task_id=$1
-        local task_home=$2
-        local task_path="${TASKS_DIR}/${task_id}"
-        echo "  [baseline] Task ${task_id} [HOME=$task_home]"
-        BASELINE_MCP_TYPE=none harbor run \
-            --path "$task_path" \
-            --agent-import-path "${AGENT_PATH}" \
-            --model "${MODEL}" \
-            --jobs-dir "${BASELINE_JOBS}" \
-            -n ${CONCURRENCY} \
-            --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
-            --force-build \
-            2>&1 | tee "${BASELINE_JOBS}/${task_id}.log" || true
-    }
-
-    run_canary_then_batch TASK_IDS _locobench_baseline_run_single "$BASELINE_JOBS" "baseline"
-
-    extract_all_metrics "${BASELINE_JOBS}" "ccb_locobench" "baseline"
-    validate_and_report "${BASELINE_JOBS}" "baseline"
-fi
-
-# ============================================
-# RUN MCP-Full (sourcegraph_full)
-# Per-task iteration to set SOURCEGRAPH_REPO_NAME from docker-compose.yaml
-# ============================================
-if [ "$RUN_FULL" = true ]; then
-    echo ""
-    echo "[MCP-Full] Starting per-task MCP-Full run..."
-    echo ""
-
-    run_mcp_task_batch "sourcegraph_full" "sourcegraph_full"
+    for config in baseline sourcegraph_full; do
+        if [ -d "${JOBS_BASE}/${config}" ]; then
+            extract_all_metrics "${JOBS_BASE}/${config}" "ccb_locobench" "$config"
+            validate_and_report "${JOBS_BASE}/${config}" "$config"
+        fi
+    done
+elif [ "$RUN_BASELINE" = true ]; then
+    run_task_batch "baseline" "none"
+elif [ "$RUN_FULL" = true ]; then
+    run_task_batch "sourcegraph_full" "sourcegraph_full"
 fi
 
 print_validation_summary "$JOBS_BASE"

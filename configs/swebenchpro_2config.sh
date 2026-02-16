@@ -218,75 +218,78 @@ declare -A SWEBENCHPRO_SG=(
     ["instance_tutao__tutanota-f373ac3808deefce8183dad8d16729839cc330c1-v2939aa9f4356f0dc9f523ee5ce19d09e08ab979b"]="sg-benchmarks/tutanota--f373ac38"
 )
 
-# Run MCP mode tasks with parallel support; SOURCEGRAPH_REPO_NAME set per task
-run_swebench_mcp_task_batch() {
-    local mode=$1
-    local mcp_type=$2
-    local jobs_subdir="${JOBS_BASE}/${mode}"
-    ensure_fresh_token_all
+# Per-task run function: handles a single (task, config) pair.
+# Called by both run_task_batch (sequential mode) and run_paired_configs (paired mode).
+_swebench_run_single() {
+    local task_id=$1
+    local task_home=$2
+    local config=${3:-baseline}
+    local mcp_type=${4:-none}
+    local jobs_base=${5:-$JOBS_BASE}
+    local jobs_subdir="${jobs_base}/${config}"
+
     mkdir -p "$jobs_subdir"
 
-    _swebench_run_single() {
-        local task_id=$1
-        local task_home=$2
-
+    # Set SOURCEGRAPH_REPO_NAME for MCP configs
+    if [ "$mcp_type" != "none" ]; then
         local sg_repo="${SWEBENCHPRO_SG[$task_id]:-}"
         if [ -n "$sg_repo" ]; then
             export SOURCEGRAPH_REPO_NAME="$sg_repo"
-            echo "  [${mode}] Task ${task_id} -> SOURCEGRAPH_REPO_NAME=${sg_repo} [HOME=$task_home]"
+            echo "  [${config}] Task ${task_id} -> SOURCEGRAPH_REPO_NAME=${sg_repo} [HOME=$task_home]"
         else
             unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
-            echo "  [${mode}] Task ${task_id} -> no SG repo mapping [HOME=$task_home]"
+            echo "  [${config}] Task ${task_id} -> no SG repo mapping [HOME=$task_home]"
         fi
-        BASELINE_MCP_TYPE=$mcp_type harbor run \
-            --dataset swebenchpro \
-            -t "$task_id" \
-            --agent-import-path "$AGENT_PATH" \
-            --model "$MODEL" \
-            --jobs-dir "$jobs_subdir" \
-            -n $CONCURRENCY \
-            --timeout-multiplier $TIMEOUT_MULTIPLIER \
-            2>&1 | tee "${jobs_subdir}/${task_id}.log" || true
+    else
+        unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
+        echo "  [${config}] Task ${task_id} [HOME=$task_home]"
+    fi
+
+    BASELINE_MCP_TYPE=$mcp_type harbor run \
+        --dataset swebenchpro \
+        -t "$task_id" \
+        --agent-import-path "$AGENT_PATH" \
+        --model "$MODEL" \
+        --jobs-dir "$jobs_subdir" \
+        -n $CONCURRENCY \
+        --timeout-multiplier $TIMEOUT_MULTIPLIER \
+        2>&1 | tee "${jobs_subdir}/${task_id}.log" || true
+}
+
+# Sequential mode: run all tasks for a single config (for --baseline-only / --full-only)
+run_task_batch() {
+    local mode=$1
+    local mcp_type=$2
+
+    ensure_fresh_token_all
+
+    _seq_run() {
+        _swebench_run_single "$1" "$2" "$mode" "$mcp_type" "$JOBS_BASE"
     }
+    run_canary_then_batch TASK_IDS _seq_run "${JOBS_BASE}/${mode}" "$mode"
 
-    run_canary_then_batch TASK_IDS _swebench_run_single "$jobs_subdir" "$mode"
-
-    extract_all_metrics "$jobs_subdir" "ccb_swebenchpro" "$mode"
-    validate_and_report "$jobs_subdir" "$mode"
+    extract_all_metrics "${JOBS_BASE}/${mode}" "ccb_swebenchpro" "$mode"
+    validate_and_report "${JOBS_BASE}/${mode}" "$mode"
 }
 
 # ============================================
-# RUN BASELINE (no MCP)
+# MAIN EXECUTION
 # ============================================
-if [ "$RUN_BASELINE" = true ]; then
-    echo ""
-    echo "[BASELINE] Starting selected-task baseline run..."
-    echo ""
+# Default: paired execution (baseline + SG_full run simultaneously for each task).
+# Use --baseline-only or --full-only for single-config runs.
+if [ "$RUN_BASELINE" = true ] && [ "$RUN_FULL" = true ]; then
+    run_paired_configs TASK_IDS _swebench_run_single "$JOBS_BASE"
 
-    BASELINE_MCP_TYPE=none harbor run \
-        --dataset swebenchpro \
-        ${TASK_NAME_ARGS} \
-        --agent-import-path "${AGENT_PATH}" \
-        --model "${MODEL}" \
-        --jobs-dir "${JOBS_BASE}/baseline" \
-        -n ${CONCURRENCY} \
-        --timeout-multiplier ${TIMEOUT_MULTIPLIER} \
-        2>&1 | tee "${JOBS_BASE}/baseline.log"
-
-    extract_all_metrics "${JOBS_BASE}/baseline" "ccb_swebenchpro" "baseline"
-    validate_and_report "${JOBS_BASE}/baseline" "baseline"
-fi
-
-# ============================================
-# RUN MCP-Full (sourcegraph_full)
-# Per-task iteration to set SOURCEGRAPH_REPO_NAME for indexed repos
-# ============================================
-if [ "$RUN_FULL" = true ]; then
-    echo ""
-    echo "[MCP-Full] Starting per-task MCP-Full run..."
-    echo ""
-
-    run_swebench_mcp_task_batch "sourcegraph_full" "sourcegraph_full"
+    for config in baseline sourcegraph_full; do
+        if [ -d "${JOBS_BASE}/${config}" ]; then
+            extract_all_metrics "${JOBS_BASE}/${config}" "ccb_swebenchpro" "$config"
+            validate_and_report "${JOBS_BASE}/${config}" "$config"
+        fi
+    done
+elif [ "$RUN_BASELINE" = true ]; then
+    run_task_batch "baseline" "none"
+elif [ "$RUN_FULL" = true ]; then
+    run_task_batch "sourcegraph_full" "sourcegraph_full"
 fi
 
 print_validation_summary "$JOBS_BASE"
