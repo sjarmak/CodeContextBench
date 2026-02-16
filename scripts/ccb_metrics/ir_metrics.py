@@ -20,6 +20,15 @@ from typing import Optional
 
 
 # ---------------------------------------------------------------------------
+# Anthropic Claude pricing (per million tokens) — Opus 4, Feb 2026
+# ---------------------------------------------------------------------------
+_PRICE_PER_MTOK_INPUT = 15.0          # uncached input
+_PRICE_PER_MTOK_CACHE_CREATE = 3.75   # cache creation
+_PRICE_PER_MTOK_CACHE_READ = 0.30     # cache read (50x cheaper than input)
+_PRICE_PER_MTOK_OUTPUT = 75.0         # output / completion
+
+
+# ---------------------------------------------------------------------------
 # Core IR metric functions (pure math, stdlib only)
 # ---------------------------------------------------------------------------
 
@@ -168,7 +177,12 @@ class IRScores:
     ttfr_step: Optional[int] = None # Step index of first relevant file
     tt_all_r: Optional[float] = None  # Time to find ALL relevant files (None if not all found)
     n_steps_to_first: Optional[int] = None  # Tool calls before first relevant file
-    tokens_before_first_relevant: Optional[int] = None  # Cumulative output tokens up to TTFR step
+    tokens_before_first_relevant: Optional[int] = None  # Cumulative all tokens up to TTFR step
+
+    # Dollar-weighted cost metrics (added 2026-02-16)
+    cost_before_first_relevant: Optional[float] = None    # USD cost up to TTFR step
+    output_tokens_before_first_relevant: Optional[int] = None  # Output tokens only up to TTFR
+    agent_time_to_first_relevant: Optional[float] = None  # Seconds from first tool exec to TTFR
 
     def to_dict(self) -> dict:
         return {
@@ -190,6 +204,9 @@ class IRScores:
             "tt_all_r": self.tt_all_r,
             "n_steps_to_first": self.n_steps_to_first,
             "tokens_before_first_relevant": self.tokens_before_first_relevant,
+            "cost_before_first_relevant": self.cost_before_first_relevant,
+            "output_tokens_before_first_relevant": self.output_tokens_before_first_relevant,
+            "agent_time_to_first_relevant": self.agent_time_to_first_relevant,
         }
 
 
@@ -751,21 +768,38 @@ def extract_tokens_before_first_relevant(
 ) -> int | None:
     """Sum total tokens from claude-code.txt up to the TTFR step.
 
-    Counts cumulative tokens (input + cache + output) from assistant messages,
-    tracking tool_use blocks as steps. Returns the cumulative total at the step
-    where the first relevant file was found, or None if data is unavailable.
+    Backward-compatible wrapper around extract_cost_metrics_before_first_relevant.
+    """
+    metrics = extract_cost_metrics_before_first_relevant(transcript_path, n_steps_to_first)
+    return metrics.get("tokens_total") if metrics else None
 
-    Args:
-        transcript_path: Path to agent/claude-code.txt.
-        n_steps_to_first: Step index (0-based) of the first relevant file.
 
-    Returns:
-        Cumulative total tokens up to and including the TTFR step, or None.
+def extract_cost_metrics_before_first_relevant(
+    transcript_path: Path,
+    n_steps_to_first: int | None,
+) -> dict:
+    """Extract multiple cost metrics from claude-code.txt up to the TTFR step.
+
+    Tracks per-type token totals and computes dollar-weighted cost using
+    Anthropic pricing. Cache reads ($0.30/Mtok) are properly distinguished
+    from output tokens ($75/Mtok), fixing the measurement artifact where
+    all-token sums made SG_full appear 384% more expensive.
+
+    Returns dict with:
+        tokens_total: sum of all token types (backward compatible)
+        output_tokens: output tokens only (model reasoning work)
+        cost_usd: dollar-weighted cost using Anthropic pricing
+        input_tokens: uncached input tokens
+        cache_creation_tokens: cache creation tokens
+        cache_read_tokens: cache read tokens
     """
     if n_steps_to_first is None or not transcript_path.is_file():
-        return None
+        return {}
 
-    cumulative_tokens = 0
+    cum_input = 0
+    cum_cache_create = 0
+    cum_cache_read = 0
+    cum_output = 0
     tool_step = 0
 
     for line in transcript_path.read_text(errors="replace").splitlines():
@@ -782,13 +816,10 @@ def extract_tokens_before_first_relevant(
 
         message = entry.get("message", entry)
         usage = message.get("usage", {})
-        # Sum all token types for total API consumption
-        cumulative_tokens += (
-            usage.get("input_tokens", 0)
-            + usage.get("cache_creation_input_tokens", 0)
-            + usage.get("cache_read_input_tokens", 0)
-            + usage.get("output_tokens", 0)
-        )
+        cum_input += usage.get("input_tokens", 0)
+        cum_cache_create += usage.get("cache_creation_input_tokens", 0)
+        cum_cache_read += usage.get("cache_read_input_tokens", 0)
+        cum_output += usage.get("output_tokens", 0)
 
         # Count tool_use blocks in this message as steps
         content_blocks = message.get("content", [])
@@ -796,10 +827,83 @@ def extract_tokens_before_first_relevant(
             for block in content_blocks:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     if tool_step >= n_steps_to_first:
-                        return cumulative_tokens
+                        tokens_total = cum_input + cum_cache_create + cum_cache_read + cum_output
+                        cost_usd = (
+                            cum_input * _PRICE_PER_MTOK_INPUT
+                            + cum_cache_create * _PRICE_PER_MTOK_CACHE_CREATE
+                            + cum_cache_read * _PRICE_PER_MTOK_CACHE_READ
+                            + cum_output * _PRICE_PER_MTOK_OUTPUT
+                        ) / 1_000_000
+                        return {
+                            "tokens_total": tokens_total,
+                            "output_tokens": cum_output,
+                            "cost_usd": round(cost_usd, 6),
+                            "input_tokens": cum_input,
+                            "cache_creation_tokens": cum_cache_create,
+                            "cache_read_tokens": cum_cache_read,
+                        }
                     tool_step += 1
 
-    return None
+    return {}
+
+
+def extract_agent_time_to_first_relevant(
+    trajectory_path: Path,
+    n_steps_to_first: int | None,
+) -> float | None:
+    """Seconds from first agent tool execution to the TTFR step.
+
+    Unlike TTFR (measured from session start including Docker/setup), this
+    measures from the first tool execution, capturing only agent working time.
+
+    Args:
+        trajectory_path: Path to agent/trajectory.json.
+        n_steps_to_first: Step index (0-based) of the first relevant file.
+
+    Returns:
+        Seconds from first tool to TTFR tool, or None if unavailable.
+    """
+    if n_steps_to_first is None or not trajectory_path.is_file():
+        return None
+
+    try:
+        traj = json.loads(trajectory_path.read_text(errors="replace"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    steps = traj.get("steps", [])
+    if not steps:
+        return None
+
+    from datetime import datetime
+
+    def _parse_ts(s: str) -> float | None:
+        if not s:
+            return None
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            return dt.timestamp()
+        except (ValueError, TypeError):
+            return None
+
+    # Find tool execution steps via the "Executed <tool> <id>" pattern
+    tool_timestamps: list[float] = []
+    for step in steps:
+        msg = step.get("message", "")
+        if not isinstance(msg, str):
+            continue
+        if _TOOL_EXEC_RE.match(msg):
+            ts = _parse_ts(step.get("timestamp", ""))
+            if ts is not None:
+                tool_timestamps.append(ts)
+
+    if not tool_timestamps or n_steps_to_first >= len(tool_timestamps):
+        return None
+
+    first_tool_ts = tool_timestamps[0]
+    ttfr_tool_ts = tool_timestamps[n_steps_to_first]
+    delta = ttfr_tool_ts - first_tool_ts
+    return round(delta, 1) if delta >= 0 else None
 
 
 def _looks_like_file(path: str) -> bool:

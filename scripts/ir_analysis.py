@@ -45,6 +45,8 @@ from ccb_metrics.ir_metrics import (
     extract_retrieved_files,
     extract_time_to_context,
     extract_tokens_before_first_relevant,
+    extract_cost_metrics_before_first_relevant,
+    extract_agent_time_to_first_relevant,
     IRScores,
     MCPValueScore,
 )
@@ -443,17 +445,19 @@ def _zscore(values: list[float]) -> list[float]:
 
 def compute_mcp_value_scores(
     ir_scores: list[IRScores],
-    weights: tuple[float, float, float, float] = (0.3, 0.3, 0.25, 0.15),
+    weights: tuple[float, ...] = (0.25, 0.25, 0.20, 0.15, 0.15),
 ) -> list[MCPValueScore]:
     """Compute composite MCP value scores for tasks with both configs.
 
-    Components (all computed as SG_full - baseline deltas):
-    - retrieval_lift: MRR delta
-    - outcome_lift: reward delta
-    - efficiency_lift: TTFR improvement ratio (negative = faster with MCP)
-    - cost_ratio: token cost ratio (SG_full / baseline - 1, negative = cheaper)
+    5 components (all computed as SG_full - baseline deltas, positive = MCP helps):
+    - retrieval_lift (0.25): MRR delta
+    - outcome_lift (0.25): reward delta
+    - time_efficiency (0.20): agent_time_to_first_relevant improvement ratio
+    - cost_efficiency (0.15): dollar-cost-before-first-relevant improvement ratio
+    - token_efficiency (0.15): output-tokens-before-first-relevant improvement ratio
 
     Each component is z-scored across all tasks before weighting.
+    Efficiency is a first-class dimension with 3 sub-components (time, cost, token).
     """
     manifest_rewards = _load_manifest_rewards()
     token_data = _load_task_metrics_tokens()
@@ -484,29 +488,54 @@ def compute_mcp_value_scores(
         if bl_r is not None and sg_r is not None:
             outcome_lift = sg_r - bl_r
 
-        efficiency_lift = 0.0
-        if bl.ttfr is not None and sg.ttfr is not None and bl.ttfr > 0:
-            efficiency_lift = (bl.ttfr - sg.ttfr) / bl.ttfr  # positive = MCP faster
+        # Time efficiency: agent_time_to_first_relevant (positive = MCP faster)
+        time_efficiency = 0.0
+        bl_attfr = bl.agent_time_to_first_relevant
+        sg_attfr = sg.agent_time_to_first_relevant
+        if bl_attfr is not None and sg_attfr is not None and bl_attfr > 0:
+            time_efficiency = (bl_attfr - sg_attfr) / bl_attfr
+        elif bl.ttfr is not None and sg.ttfr is not None and bl.ttfr > 0:
+            # Fallback to session TTFR if agent_time unavailable
+            time_efficiency = (bl.ttfr - sg.ttfr) / bl.ttfr
 
-        cost_ratio = 0.0
-        bl_tok = token_data.get((task_id, "baseline"))
-        sg_tok = token_data.get((task_id, "sourcegraph_full"))
-        if bl_tok and sg_tok and bl_tok > 0:
-            cost_ratio = -(sg_tok / bl_tok - 1)  # positive = MCP cheaper
+        # Cost efficiency: dollar cost before first relevant (positive = MCP cheaper)
+        cost_efficiency_val = 0.0
+        bl_cost = bl.cost_before_first_relevant
+        sg_cost = sg.cost_before_first_relevant
+        if bl_cost is not None and sg_cost is not None and bl_cost > 0:
+            cost_efficiency_val = -(sg_cost / bl_cost - 1)
+        else:
+            # Fallback to total token ratio
+            bl_tok = token_data.get((task_id, "baseline"))
+            sg_tok = token_data.get((task_id, "sourcegraph_full"))
+            if bl_tok and sg_tok and bl_tok > 0:
+                cost_efficiency_val = -(sg_tok / bl_tok - 1)
+
+        # Token efficiency: output tokens before first relevant (positive = MCP fewer)
+        token_efficiency = 0.0
+        bl_out = bl.output_tokens_before_first_relevant
+        sg_out = sg.output_tokens_before_first_relevant
+        if bl_out is not None and sg_out is not None and bl_out > 0:
+            token_efficiency = -(sg_out / bl_out - 1)
 
         raw_scores.append({
             "task_id": task_id,
             "suite": suite,
             "retrieval_lift": retrieval_lift,
             "outcome_lift": outcome_lift,
-            "efficiency_lift": efficiency_lift,
-            "cost_ratio": cost_ratio,
+            "time_efficiency": time_efficiency,
+            "cost_efficiency": cost_efficiency_val,
+            "token_efficiency": token_efficiency,
         })
 
     # Z-score each component
-    w_ret, w_out, w_eff, w_cost = weights
-    components = ["retrieval_lift", "outcome_lift", "efficiency_lift", "cost_ratio"]
-    comp_weights = [w_ret, w_out, w_eff, w_cost]
+    components = ["retrieval_lift", "outcome_lift", "time_efficiency", "cost_efficiency", "token_efficiency"]
+    # Pad weights tuple if caller provides old 4-element tuple
+    if len(weights) == 4:
+        w_ret, w_out, w_eff_old, w_cost_old = weights
+        comp_weights = [w_ret, w_out, w_eff_old * 0.8, w_cost_old, w_eff_old * 0.2]
+    else:
+        comp_weights = list(weights[:5])
 
     z_values: dict[str, list[float]] = {}
     for comp in components:
@@ -521,13 +550,15 @@ def compute_mcp_value_scores(
             z_values[comp][i] * w
             for comp, w in zip(components, comp_weights)
         )
+        # For backward compat, pack time_efficiency into efficiency_lift
+        # and cost_efficiency into cost_ratio in the MCPValueScore dataclass
         results.append(MCPValueScore(
             task_id=raw["task_id"],
             suite=raw["suite"],
             retrieval_lift=raw["retrieval_lift"],
             outcome_lift=raw["outcome_lift"],
-            efficiency_lift=raw["efficiency_lift"],
-            cost_ratio=raw["cost_ratio"],
+            efficiency_lift=raw["time_efficiency"],
+            cost_ratio=raw["cost_efficiency"],
             composite=composite,
         ))
 
@@ -564,6 +595,9 @@ def compute_cost_efficiency(
             "n_overlap": s.n_overlap,
             "tokens_per_relevant_file": tokens_per_rel,
             "tokens_before_first_relevant": s.tokens_before_first_relevant,
+            "cost_before_first_relevant": s.cost_before_first_relevant,
+            "output_tokens_before_first_relevant": s.output_tokens_before_first_relevant,
+            "agent_time_to_first_relevant": s.agent_time_to_first_relevant,
             "ttfr_step": s.ttfr_step,
             "n_steps_to_first": s.n_steps_to_first,
         })
@@ -578,17 +612,26 @@ def compute_cost_efficiency(
         by_suite_config[(r["suite"], r["config"])].append(r)
         by_config[r["config"]].append(r)
 
+    def _safe_mean(vals: list) -> float | None:
+        return round(statistics.mean(vals), 4) if vals else None
+
     def _agg(recs: list[dict]) -> dict:
         tpr_vals = [r["tokens_per_relevant_file"] for r in recs if r["tokens_per_relevant_file"] is not None]
         tok_vals = [r["input_tokens"] for r in recs]
         overlap_vals = [r["n_overlap"] for r in recs]
         tbfr_vals = [r["tokens_before_first_relevant"] for r in recs if r["tokens_before_first_relevant"] is not None]
+        cost_vals = [r["cost_before_first_relevant"] for r in recs if r["cost_before_first_relevant"] is not None]
+        out_tok_vals = [r["output_tokens_before_first_relevant"] for r in recs if r["output_tokens_before_first_relevant"] is not None]
+        agent_ttfr_vals = [r["agent_time_to_first_relevant"] for r in recs if r["agent_time_to_first_relevant"] is not None]
         return {
             "n_tasks": len(recs),
             "mean_tokens_per_relevant_file": round(statistics.mean(tpr_vals), 0) if tpr_vals else None,
             "median_tokens_per_relevant_file": round(statistics.median(tpr_vals), 0) if tpr_vals else None,
             "mean_tokens_before_first_relevant": round(statistics.mean(tbfr_vals), 0) if tbfr_vals else None,
             "median_tokens_before_first_relevant": round(statistics.median(tbfr_vals), 0) if tbfr_vals else None,
+            "mean_cost_before_first_relevant": round(statistics.mean(cost_vals), 4) if cost_vals else None,
+            "mean_output_tokens_before_first_relevant": round(statistics.mean(out_tok_vals), 0) if out_tok_vals else None,
+            "mean_agent_time_to_first_relevant": round(statistics.mean(agent_ttfr_vals), 1) if agent_ttfr_vals else None,
             "mean_input_tokens": round(statistics.mean(tok_vals), 0) if tok_vals else None,
             "mean_overlap": round(statistics.mean(overlap_vals), 2) if overlap_vals else None,
             "n_with_tbfr": len(tbfr_vals),
@@ -604,14 +647,30 @@ def compute_cost_efficiency(
     bl = overall.get("baseline", {})
     sg = overall.get("sourcegraph_full", {})
     deltas = {}
-    for metric in ("mean_tokens_per_relevant_file", "mean_tokens_before_first_relevant", "mean_input_tokens"):
+    delta_metrics = (
+        "mean_tokens_per_relevant_file",
+        "mean_tokens_before_first_relevant",
+        "mean_cost_before_first_relevant",
+        "mean_output_tokens_before_first_relevant",
+        "mean_agent_time_to_first_relevant",
+        "mean_input_tokens",
+    )
+    for metric in delta_metrics:
         bl_val = bl.get(metric)
         sg_val = sg.get(metric)
         if bl_val and sg_val and bl_val > 0:
+            delta_val = sg_val - bl_val
+            # Round appropriately based on metric type
+            if "cost" in metric:
+                delta_val = round(delta_val, 4)
+            elif "time" in metric:
+                delta_val = round(delta_val, 1)
+            else:
+                delta_val = round(delta_val, 0)
             deltas[metric] = {
                 "baseline": bl_val,
                 "sourcegraph_full": sg_val,
-                "delta": round(sg_val - bl_val, 0),
+                "delta": delta_val,
                 "pct_change": round((sg_val - bl_val) / bl_val * 100, 1),
             }
 
@@ -625,7 +684,7 @@ def compute_cost_efficiency(
 def run_ir_analysis(
     suite_filter: str | None = None,
     per_task: bool = False,
-    value_weights: tuple[float, float, float, float] = (0.3, 0.3, 0.25, 0.15),
+    value_weights: tuple[float, ...] = (0.25, 0.25, 0.20, 0.15, 0.15),
 ) -> dict:
     """Main analysis pipeline."""
     gt_registry = _ensure_ground_truth()
@@ -681,9 +740,18 @@ def run_ir_analysis(
             scores.ttfr_step = ttc.get("ttfr_step")
             scores.tt_all_r = ttc.get("tt_all_r")
             scores.n_steps_to_first = ttc.get("n_steps_to_first")
-            # US-005: cumulative tokens before first relevant file
-            scores.tokens_before_first_relevant = extract_tokens_before_first_relevant(
+            # Cost metrics before first relevant file
+            cost_metrics = extract_cost_metrics_before_first_relevant(
                 transcript_path=Path(task_info["transcript"]),
+                n_steps_to_first=scores.n_steps_to_first,
+            )
+            if cost_metrics:
+                scores.tokens_before_first_relevant = cost_metrics.get("tokens_total")
+                scores.output_tokens_before_first_relevant = cost_metrics.get("output_tokens")
+                scores.cost_before_first_relevant = cost_metrics.get("cost_usd")
+            # Agent-time TTFR (excludes Docker/setup, measures from first tool exec)
+            scores.agent_time_to_first_relevant = extract_agent_time_to_first_relevant(
+                trajectory_path=trajectory,
                 n_steps_to_first=scores.n_steps_to_first,
             )
 
@@ -780,6 +848,63 @@ def run_ir_analysis(
                         ),
                     }
 
+                # Dollar-weighted cost before first relevant (lower is better)
+                paired_cost = [
+                    (bl_by_id[tid].cost_before_first_relevant, sg_by_id[tid].cost_before_first_relevant)
+                    for tid in sorted(common)
+                    if bl_by_id[tid].cost_before_first_relevant is not None
+                    and sg_by_id[tid].cost_before_first_relevant is not None
+                ]
+                if len(paired_cost) >= 5:
+                    bl_cost = [p[0] for p in paired_cost]
+                    sg_cost = [p[1] for p in paired_cost]
+                    stat_tests["cost_before_first_relevant"] = {
+                        "n_paired": len(paired_cost),
+                        "welchs_t": welchs_t_test(bl_cost, sg_cost),
+                        "cohens_d": cohens_d(bl_cost, sg_cost),
+                        "bootstrap_ci_delta": bootstrap_ci(
+                            [s - b for b, s in zip(bl_cost, sg_cost)]
+                        ),
+                    }
+
+                # Output tokens before first relevant (lower is better)
+                paired_out_tok = [
+                    (bl_by_id[tid].output_tokens_before_first_relevant, sg_by_id[tid].output_tokens_before_first_relevant)
+                    for tid in sorted(common)
+                    if bl_by_id[tid].output_tokens_before_first_relevant is not None
+                    and sg_by_id[tid].output_tokens_before_first_relevant is not None
+                ]
+                if len(paired_out_tok) >= 5:
+                    bl_out = [p[0] for p in paired_out_tok]
+                    sg_out = [p[1] for p in paired_out_tok]
+                    stat_tests["output_tokens_before_first_relevant"] = {
+                        "n_paired": len(paired_out_tok),
+                        "welchs_t": welchs_t_test(bl_out, sg_out),
+                        "cohens_d": cohens_d(bl_out, sg_out),
+                        "bootstrap_ci_delta": bootstrap_ci(
+                            [s - b for b, s in zip(bl_out, sg_out)]
+                        ),
+                    }
+
+                # Agent time to first relevant (lower is better)
+                paired_agent_ttfr = [
+                    (bl_by_id[tid].agent_time_to_first_relevant, sg_by_id[tid].agent_time_to_first_relevant)
+                    for tid in sorted(common)
+                    if bl_by_id[tid].agent_time_to_first_relevant is not None
+                    and sg_by_id[tid].agent_time_to_first_relevant is not None
+                ]
+                if len(paired_agent_ttfr) >= 5:
+                    bl_attfr = [p[0] for p in paired_agent_ttfr]
+                    sg_attfr = [p[1] for p in paired_agent_ttfr]
+                    stat_tests["agent_time_to_first_relevant"] = {
+                        "n_paired": len(paired_agent_ttfr),
+                        "welchs_t": welchs_t_test(bl_attfr, sg_attfr),
+                        "cohens_d": cohens_d(bl_attfr, sg_attfr),
+                        "bootstrap_ci_delta": bootstrap_ci(
+                            [s - b for b, s in zip(bl_attfr, sg_attfr)]
+                        ),
+                    }
+
                 result["statistical_tests"] = stat_tests
         except ImportError:
             pass
@@ -797,8 +922,13 @@ def run_ir_analysis(
             by_suite[vs.suite].append(vs)
         result["mcp_value_scores"] = {
             "n_tasks": len(value_scores),
-            "weights": {"retrieval": value_weights[0], "outcome": value_weights[1],
-                        "efficiency": value_weights[2], "cost": value_weights[3]},
+            "weights": {
+                "retrieval": value_weights[0],
+                "outcome": value_weights[1],
+                "time_efficiency": value_weights[2] if len(value_weights) > 2 else 0.20,
+                "cost_efficiency": value_weights[3] if len(value_weights) > 3 else 0.15,
+                "token_efficiency": value_weights[4] if len(value_weights) > 4 else 0.15,
+            },
             "per_suite_mean": {
                 suite: round(statistics.mean(v.composite for v in scores), 4)
                 for suite, scores in sorted(by_suite.items())
@@ -886,7 +1016,11 @@ def format_table(data: dict) -> str:
     if stats:
         lines.append("STATISTICAL TESTS (baseline vs SG_full):")
         lines.append(f"  Paired tasks: {stats.get('n_paired', 0)}")
-        for metric_name in ("file_recall", "mrr", "ttfr", "tt_all_r"):
+        for metric_name in (
+            "file_recall", "mrr", "ttfr", "tt_all_r",
+            "cost_before_first_relevant", "output_tokens_before_first_relevant",
+            "agent_time_to_first_relevant",
+        ):
             ms = stats.get(metric_name, {})
             if not ms:
                 continue
@@ -930,13 +1064,14 @@ def format_table(data: dict) -> str:
     # MCP Value Scores
     mvs = data.get("mcp_value_scores", {})
     if mvs:
-        lines.append("MCP VALUE SCORES (z-scored composite):")
+        lines.append("MCP VALUE SCORES (z-scored composite, 5 components):")
         w = mvs.get("weights", {})
         lines.append(
-            f"  Weights: retrieval={w.get('retrieval', 0.3)}, "
-            f"outcome={w.get('outcome', 0.3)}, "
-            f"efficiency={w.get('efficiency', 0.25)}, "
-            f"cost={w.get('cost', 0.15)}"
+            f"  Weights: retrieval={w.get('retrieval', 0.25)}, "
+            f"outcome={w.get('outcome', 0.25)}, "
+            f"time_eff={w.get('time_efficiency', 0.20)}, "
+            f"cost_eff={w.get('cost_efficiency', 0.15)}, "
+            f"tok_eff={w.get('token_efficiency', 0.15)}"
         )
         lines.append(f"  Tasks scored: {mvs.get('n_tasks', 0)}")
         lines.append("")
@@ -952,7 +1087,7 @@ def format_table(data: dict) -> str:
         top_helped = mvs.get("top_helped", [])
         if top_helped:
             lines.append("  Top 10 MCP-helped tasks:")
-            header = f"    {'Task':40s} {'Suite':20s} {'Comp':>7s} {'Ret':>7s} {'Out':>7s} {'Eff':>7s} {'Cost':>7s}"
+            header = f"    {'Task':40s} {'Suite':20s} {'Comp':>7s} {'Ret':>7s} {'Out':>7s} {'TimeE':>7s} {'CostE':>7s}"
             lines.append(header)
             lines.append("    " + "-" * (len(header) - 4))
             for t in top_helped:
@@ -967,7 +1102,7 @@ def format_table(data: dict) -> str:
         top_hurt = mvs.get("top_hurt", [])
         if top_hurt:
             lines.append("  Top 10 MCP-hurt tasks:")
-            header = f"    {'Task':40s} {'Suite':20s} {'Comp':>7s} {'Ret':>7s} {'Out':>7s} {'Eff':>7s} {'Cost':>7s}"
+            header = f"    {'Task':40s} {'Suite':20s} {'Comp':>7s} {'Ret':>7s} {'Out':>7s} {'TimeE':>7s} {'CostE':>7s}"
             lines.append(header)
             lines.append("    " + "-" * (len(header) - 4))
             for t in top_hurt:
@@ -985,20 +1120,33 @@ def format_table(data: dict) -> str:
         lines.append("COST EFFICIENCY:")
         overall = ce.get("overall", {})
         if overall:
-            header = f"  {'Config':20s} {'Tok/RelFile':>12s} {'TokBefore1st':>12s} {'MeanTokens':>12s} {'MeanOverlap':>12s} {'n':>5s}"
+            header = (
+                f"  {'Config':20s} {'Tok/RelFile':>12s} {'TokBefore1st':>12s} "
+                f"{'$Before1st':>10s} {'OutTokB1st':>12s} {'AgentTTFR':>10s} "
+                f"{'MeanTokens':>12s} {'MeanOverlap':>12s} {'n':>5s}"
+            )
             lines.append(header)
             lines.append("  " + "-" * (len(header) - 2))
             for cfg, agg in sorted(overall.items()):
                 tpr = agg.get("mean_tokens_per_relevant_file")
                 tbfr = agg.get("mean_tokens_before_first_relevant")
+                cost = agg.get("mean_cost_before_first_relevant")
+                out_tok = agg.get("mean_output_tokens_before_first_relevant")
+                agent_ttfr = agg.get("mean_agent_time_to_first_relevant")
                 tok = agg.get("mean_input_tokens")
                 ovl = agg.get("mean_overlap")
                 n = agg.get("n_tasks", 0)
                 tpr_s = f"{tpr:>12,.0f}" if tpr else f"{'N/A':>12s}"
                 tbfr_s = f"{tbfr:>12,.0f}" if tbfr else f"{'N/A':>12s}"
+                cost_s = f"${cost:>9.4f}" if cost else f"{'N/A':>10s}"
+                out_tok_s = f"{out_tok:>12,.0f}" if out_tok else f"{'N/A':>12s}"
+                attfr_s = f"{agent_ttfr:>9.1f}s" if agent_ttfr else f"{'N/A':>10s}"
                 tok_s = f"{tok:>12,.0f}" if tok else f"{'N/A':>12s}"
                 ovl_s = f"{ovl:>12.1f}" if ovl else f"{'N/A':>12s}"
-                lines.append(f"  {cfg:20s} {tpr_s} {tbfr_s} {tok_s} {ovl_s} {n:>5d}")
+                lines.append(
+                    f"  {cfg:20s} {tpr_s} {tbfr_s} {cost_s} "
+                    f"{out_tok_s} {attfr_s} {tok_s} {ovl_s} {n:>5d}"
+                )
             lines.append("")
 
         deltas = ce.get("deltas", {})
@@ -1006,11 +1154,29 @@ def format_table(data: dict) -> str:
             lines.append("  Baseline vs SG_full deltas:")
             for metric, d in sorted(deltas.items()):
                 label = metric.replace("mean_", "")
-                lines.append(
-                    f"    {label:30s} BL={d['baseline']:>12,.0f}  "
-                    f"SG={d['sourcegraph_full']:>12,.0f}  "
-                    f"delta={d['delta']:>+12,.0f}  ({d['pct_change']:>+.1f}%)"
-                )
+                bl_val = d['baseline']
+                sg_val = d['sourcegraph_full']
+                delta_val = d['delta']
+                pct = d['pct_change']
+                # Format based on metric type
+                if "cost" in metric:
+                    lines.append(
+                        f"    {label:35s} BL=${bl_val:>10.4f}  "
+                        f"SG=${sg_val:>10.4f}  "
+                        f"delta=${delta_val:>+10.4f}  ({pct:>+.1f}%)"
+                    )
+                elif "time" in metric:
+                    lines.append(
+                        f"    {label:35s} BL={bl_val:>10.1f}s  "
+                        f"SG={sg_val:>10.1f}s  "
+                        f"delta={delta_val:>+10.1f}s  ({pct:>+.1f}%)"
+                    )
+                else:
+                    lines.append(
+                        f"    {label:35s} BL={bl_val:>12,.0f}  "
+                        f"SG={sg_val:>12,.0f}  "
+                        f"delta={delta_val:>+12,.0f}  ({pct:>+.1f}%)"
+                    )
             lines.append("")
 
     return "\n".join(lines)
@@ -1195,10 +1361,11 @@ def format_report_markdown(data: dict) -> str:
         lines.append("")
         w = mvs.get("weights", {})
         lines.append(
-            f"*Composite score: weighted z-score of retrieval lift ({w.get('retrieval', 0.3)}), "
-            f"outcome lift ({w.get('outcome', 0.3)}), "
-            f"efficiency ({w.get('efficiency', 0.25)}), "
-            f"cost ({w.get('cost', 0.15)})*"
+            f"*Composite score: weighted z-score of retrieval lift ({w.get('retrieval', 0.25)}), "
+            f"outcome lift ({w.get('outcome', 0.25)}), "
+            f"time efficiency ({w.get('time_efficiency', 0.20)}), "
+            f"cost efficiency ({w.get('cost_efficiency', 0.15)}), "
+            f"token efficiency ({w.get('token_efficiency', 0.15)})*"
         )
         lines.append("")
 
@@ -1244,7 +1411,11 @@ def format_report_markdown(data: dict) -> str:
         lines.append("")
         lines.append("| Metric | t-stat | p-value | Cohen's d | Magnitude | Significant |")
         lines.append("|--------|--------|---------|-----------|-----------|-------------|")
-        for metric_name in ("file_recall", "mrr", "ttfr", "tt_all_r"):
+        for metric_name in (
+            "file_recall", "mrr", "ttfr", "tt_all_r",
+            "cost_before_first_relevant", "output_tokens_before_first_relevant",
+            "agent_time_to_first_relevant",
+        ):
             ms = stats.get(metric_name, {})
             if not ms:
                 continue
@@ -1282,8 +1453,8 @@ def parse_args():
         help="Include per-task IR scores in output",
     )
     parser.add_argument(
-        "--value-weights", default="0.3,0.3,0.25,0.15",
-        help="Comma-separated weights for MCP value composite: retrieval,outcome,efficiency,cost",
+        "--value-weights", default="0.25,0.25,0.20,0.15,0.15",
+        help="Comma-separated weights for MCP value composite: retrieval,outcome,time_eff,cost_eff,token_eff",
     )
     parser.add_argument(
         "--report", action="store_true",
@@ -1316,10 +1487,10 @@ def main():
     # Parse value weights
     try:
         vw = tuple(float(x) for x in args.value_weights.split(","))
-        if len(vw) != 4:
+        if len(vw) not in (4, 5):
             raise ValueError
     except ValueError:
-        print("ERROR: --value-weights must be 4 comma-separated floats", file=sys.stderr)
+        print("ERROR: --value-weights must be 4 or 5 comma-separated floats", file=sys.stderr)
         sys.exit(1)
 
     data = run_ir_analysis(
