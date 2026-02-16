@@ -70,6 +70,14 @@ TASK_FILTER=""
 
 # All nlqa task IDs — populated by task-creation Ralphs
 ALL_TASK_IDS=(
+    nlqa-arch-001
+    nlqa-arch-002
+    nlqa-arch-003
+    nlqa-flow-001
+    nlqa-flow-002
+    nlqa-flow-003
+    nlqa-debug-001
+    nlqa-debug-002
 )
 
 # Parse arguments
@@ -125,6 +133,14 @@ setup_dual_accounts
 # Sourcegraph repo name mapping for nlqa tasks
 # Populated by task-creation Ralphs alongside ALL_TASK_IDS
 declare -A TASK_SG_REPO_NAMES=(
+    [nlqa-arch-001]="github.com/envoyproxy/envoy"
+    [nlqa-arch-002]="github.com/istio/istio"
+    [nlqa-arch-003]="github.com/hashicorp/terraform"
+    [nlqa-flow-001]="github.com/apache/kafka"
+    [nlqa-flow-002]="github.com/envoyproxy/envoy"
+    [nlqa-flow-003]="github.com/argoproj/argo-cd"
+    [nlqa-debug-001]="github.com/microsoft/vscode"
+    [nlqa-debug-002]="github.com/cilium/cilium"
 )
 
 # Derive short model name for run directory
