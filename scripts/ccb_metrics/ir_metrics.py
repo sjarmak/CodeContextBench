@@ -483,6 +483,82 @@ def extract_retrieved_files(transcript_path: Path) -> list[str]:
 
 _TOOL_EXEC_RE = re.compile(r"Executed (\S+) (toolu_\S+)")
 
+# Calibration: median seconds between consecutive tool steps.
+# Derived from 1347 intervals across 31 paired runs (trajectory.json + claude-code.txt).
+_CALIBRATION_SECS_PER_STEP = 2.6
+
+
+def synthesize_trajectory(transcript_path: Path) -> dict:
+    """Synthesize a trajectory dict from claude-code.txt when trajectory.json is missing.
+
+    Parses the JSONL transcript to extract tool_use blocks with their tool_use_ids,
+    then estimates timestamps using a calibrated seconds-per-step rate derived from
+    runs that have both trajectory.json and claude-code.txt.
+
+    Args:
+        transcript_path: Path to agent/claude-code.txt.
+
+    Returns:
+        Dict with "steps" list compatible with extract_time_to_context(), or empty
+        dict if the transcript cannot be parsed.
+    """
+    if not transcript_path.is_file():
+        return {}
+
+    from datetime import datetime, timedelta, timezone
+
+    anchor = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    steps: list[dict] = []
+    step_id = 0
+    cumulative_secs = 0.0
+
+    for line in transcript_path.read_text(errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        msg_type = entry.get("type", "")
+
+        if msg_type == "system" and step_id == 0:
+            step_id = 1
+            steps.append({
+                "step_id": step_id,
+                "timestamp": anchor.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                "source": "system",
+                "message": "Session start (synthesized)",
+            })
+            continue
+
+        if msg_type == "assistant":
+            message = entry.get("message", entry)
+            content_blocks = message.get("content", [])
+            if not isinstance(content_blocks, list):
+                continue
+            for block in content_blocks:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    tool_name = block.get("name", "")
+                    tool_id = block.get("id", "")
+                    if not tool_id:
+                        continue
+                    step_id += 1
+                    cumulative_secs += _CALIBRATION_SECS_PER_STEP
+                    ts = anchor + timedelta(seconds=cumulative_secs)
+                    steps.append({
+                        "step_id": step_id,
+                        "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%S.") + f"{ts.microsecond // 1000:03d}Z",
+                        "source": "agent",
+                        "message": f"Executed {tool_name} {tool_id}",
+                    })
+
+    if len(steps) < 2:
+        return {}
+
+    return {"schema_version": "synthesized-v1", "steps": steps}
+
 
 def extract_time_to_context(
     trajectory_path: Path,
@@ -503,15 +579,20 @@ def extract_time_to_context(
     Returns:
         Dict with timing metrics, or empty dict if data unavailable.
     """
-    if not trajectory_path.is_file() or not transcript_path.is_file():
+    if not transcript_path.is_file():
         return {}
     if not ground_truth_files:
         return {}
 
-    try:
-        traj = json.loads(trajectory_path.read_text(errors="replace"))
-    except (json.JSONDecodeError, OSError):
-        return {}
+    # Try real trajectory.json first, fall back to synthesis from transcript
+    traj = None
+    if trajectory_path.is_file():
+        try:
+            traj = json.loads(trajectory_path.read_text(errors="replace"))
+        except (json.JSONDecodeError, OSError):
+            traj = None
+    if not traj or not traj.get("steps"):
+        traj = synthesize_trajectory(transcript_path)
 
     steps = traj.get("steps", [])
     if not steps:
