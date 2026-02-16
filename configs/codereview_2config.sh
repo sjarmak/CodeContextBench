@@ -122,6 +122,7 @@ declare -A TASK_SG_REPO_NAMES=(
     ["cr-aspnetcore-001"]="github.com/sg-benchmarks/aspnetcore--87525573"
     ["cr-calcom-001"]="github.com/sg-benchmarks/cal.com--4b99072b"
     ["cr-ghost-001"]="github.com/sg-benchmarks/Ghost--b43bfc85"
+    ["cr-envoy-001"]="github.com/envoyproxy/envoy"
 )
 
 # Derive short model name for run directory
