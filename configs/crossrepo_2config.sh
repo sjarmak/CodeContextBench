@@ -128,6 +128,7 @@ declare -A TASK_SG_REPO_NAMES=(
     ["simple_test_01"]="sg-benchmarks/kubernetes--8c9c67c0"
     ["crossrepo-sym-001"]="github.com/envoyproxy/envoy"
     ["crossrepo-sym-002"]="github.com/kubernetes/kubernetes"
+    ["crossrepo-sym-003"]="github.com/hashicorp/terraform"
 )
 
 # Derive short model name for run directory (matches V2 id_generator convention)
