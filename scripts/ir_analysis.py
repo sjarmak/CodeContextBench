@@ -44,10 +44,13 @@ from ccb_metrics.ir_metrics import (
     aggregate_ir_scores,
     extract_retrieved_files,
     extract_time_to_context,
+    extract_tokens_before_first_relevant,
     IRScores,
+    MCPValueScore,
 )
 
 RUNS_DIR = Path("/home/stephanie_jarmak/evals/custom_agents/agents/claudecode/runs/official")
+MANIFEST_PATH = RUNS_DIR / "MANIFEST.json"
 BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
 SELECTION_FILE = Path(__file__).resolve().parent.parent / "configs" / "selected_benchmark_tasks.json"
 GT_CACHE = Path(__file__).resolve().parent.parent / "configs" / "ground_truth_files.json"
@@ -246,9 +249,371 @@ def _infer_suite(task_id: str) -> str | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# US-003: Retrieval-to-outcome correlation
+# ---------------------------------------------------------------------------
+
+def _load_manifest_rewards() -> dict[tuple[str, str], float]:
+    """Load (task_id, config) -> reward from MANIFEST.json."""
+    if not MANIFEST_PATH.is_file():
+        return {}
+    try:
+        manifest = json.loads(MANIFEST_PATH.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+    rewards: dict[tuple[str, str], float] = {}
+    for run_key, run_data in manifest.get("runs", {}).items():
+        parts = run_key.rsplit("/", 1)
+        if len(parts) != 2:
+            continue
+        _suite, config = parts
+        for task_id, task_data in run_data.get("tasks", {}).items():
+            reward = task_data.get("reward")
+            if reward is not None:
+                rewards[(task_id, config)] = reward
+    return rewards
+
+
+def _manual_spearman(x: list[float], y: list[float]) -> tuple[float, float]:
+    """Spearman rank correlation without scipy. Returns (r, p_approx)."""
+    n = len(x)
+    if n < 3:
+        return (0.0, 1.0)
+
+    def _rank(vals: list[float]) -> list[float]:
+        indexed = sorted(enumerate(vals), key=lambda t: t[1])
+        ranks = [0.0] * n
+        i = 0
+        while i < n:
+            j = i
+            while j < n - 1 and indexed[j + 1][1] == indexed[j][1]:
+                j += 1
+            avg_rank = (i + j) / 2.0 + 1.0
+            for k in range(i, j + 1):
+                ranks[indexed[k][0]] = avg_rank
+            i = j + 1
+        return ranks
+
+    rx, ry = _rank(x), _rank(y)
+    d_sq = sum((a - b) ** 2 for a, b in zip(rx, ry))
+    r = 1.0 - (6.0 * d_sq) / (n * (n * n - 1))
+    import math
+    if abs(r) >= 1.0:
+        return (round(r, 6), 0.0)
+    t_stat = r * math.sqrt((n - 2) / (1 - r * r))
+    p = 2.0 * (1.0 - 0.5 * (1.0 + math.erf(abs(t_stat) / math.sqrt(2.0))))
+    return (round(r, 6), round(p, 6))
+
+
+def compute_retrieval_outcome_correlation(ir_scores: list[IRScores]) -> dict | None:
+    """Join IR scores with MANIFEST rewards and compute Spearman correlation."""
+    manifest_rewards = _load_manifest_rewards()
+    if not manifest_rewards:
+        return None
+
+    ir_by_key: dict[tuple[str, str], IRScores] = {}
+    for s in ir_scores:
+        ir_by_key[(s.task_id, s.config_name)] = s
+
+    paired_mrr: list[float] = []
+    paired_reward: list[float] = []
+    bl_ir: dict[str, IRScores] = {}
+    sg_ir: dict[str, IRScores] = {}
+    bl_reward: dict[str, float] = {}
+    sg_reward: dict[str, float] = {}
+
+    for (task_id, config), score in ir_by_key.items():
+        reward = manifest_rewards.get((task_id, config))
+        if reward is None:
+            continue
+        paired_mrr.append(score.mrr)
+        paired_reward.append(reward)
+        if config == "baseline":
+            bl_ir[task_id] = score
+            bl_reward[task_id] = reward
+        elif config == "sourcegraph_full":
+            sg_ir[task_id] = score
+            sg_reward[task_id] = reward
+
+    if len(paired_mrr) < 5:
+        return None
+
+    try:
+        from scipy.stats import spearmanr
+        corr, pval = spearmanr(paired_mrr, paired_reward)
+    except ImportError:
+        corr, pval = _manual_spearman(paired_mrr, paired_reward)
+
+    common_tasks = set(bl_ir) & set(sg_ir) & set(bl_reward) & set(sg_reward)
+    scatter: list[dict] = []
+    for task_id in sorted(common_tasks):
+        suite = _infer_suite(task_id) or "unknown"
+        scatter.append({
+            "task_id": task_id, "suite": suite,
+            "mrr_bl": round(bl_ir[task_id].mrr, 4),
+            "mrr_sg": round(sg_ir[task_id].mrr, 4),
+            "reward_bl": round(bl_reward[task_id], 4),
+            "reward_sg": round(sg_reward[task_id], 4),
+            "mrr_delta": round(sg_ir[task_id].mrr - bl_ir[task_id].mrr, 4),
+            "reward_delta": round(sg_reward[task_id] - bl_reward[task_id], 4),
+        })
+
+    abs_r = abs(corr)
+    strength = "strong" if abs_r >= 0.7 else "moderate" if abs_r >= 0.4 else "weak" if abs_r >= 0.2 else "negligible"
+    sig_text = "statistically significant (p<0.05)" if pval < 0.05 else "not statistically significant"
+    direction = "positive" if corr > 0 else "negative"
+    interpretation = (
+        f"There is a {strength} {direction} correlation (r={corr:.3f}) between "
+        f"retrieval quality (MRR) and task outcome (reward), {sig_text} (p={pval:.4f}). "
+        f"This {'supports' if corr > 0.2 else 'does not support'} the hypothesis that "
+        f"better context retrieval leads to better task outcomes."
+    )
+
+    return {
+        "n_paired": len(paired_mrr),
+        "n_paired_both_configs": len(scatter),
+        "spearman_r": round(corr, 4),
+        "spearman_p": round(pval, 6),
+        "interpretation": interpretation,
+        "scatter": scatter,
+    }
+
+
+# ---------------------------------------------------------------------------
+# US-004: Composite MCP value score with z-score normalization
+# ---------------------------------------------------------------------------
+
+def _load_task_metrics_tokens() -> dict[tuple[str, str], int]:
+    """Load (task_id, config) -> input_tokens from task_metrics.json files."""
+    tokens: dict[tuple[str, str], int] = {}
+    if not RUNS_DIR.exists():
+        return tokens
+    for run_dir in RUNS_DIR.iterdir():
+        if not run_dir.is_dir() or should_skip(run_dir.name):
+            continue
+        for config_dir in run_dir.iterdir():
+            if not config_dir.is_dir() or config_dir.name not in CONFIGS:
+                continue
+            config = config_dir.name
+            for batch_dir in config_dir.iterdir():
+                if not batch_dir.is_dir() or not _is_batch_timestamp(batch_dir.name):
+                    continue
+                for task_dir in batch_dir.iterdir():
+                    if not task_dir.is_dir():
+                        continue
+                    metrics_file = task_dir / "task_metrics.json"
+                    if not metrics_file.is_file():
+                        continue
+                    try:
+                        m = json.loads(metrics_file.read_text())
+                        task_id = m.get("task_id", "")
+                        inp = m.get("input_tokens")
+                        if task_id and inp is not None:
+                            key = (task_id, config)
+                            # Keep latest by not overwriting (first seen wins — sorted dirs)
+                            if key not in tokens:
+                                tokens[key] = int(inp)
+                    except (json.JSONDecodeError, OSError, ValueError):
+                        continue
+    return tokens
+
+
+def _zscore(values: list[float]) -> list[float]:
+    """Z-score normalize a list of values. Returns 0 for constant lists."""
+    if len(values) < 2:
+        return [0.0] * len(values)
+    mean = statistics.mean(values)
+    std = statistics.stdev(values)
+    if std < 1e-10:
+        return [0.0] * len(values)
+    return [(v - mean) / std for v in values]
+
+
+def compute_mcp_value_scores(
+    ir_scores: list[IRScores],
+    weights: tuple[float, float, float, float] = (0.3, 0.3, 0.25, 0.15),
+) -> list[MCPValueScore]:
+    """Compute composite MCP value scores for tasks with both configs.
+
+    Components (all computed as SG_full - baseline deltas):
+    - retrieval_lift: MRR delta
+    - outcome_lift: reward delta
+    - efficiency_lift: TTFR improvement ratio (negative = faster with MCP)
+    - cost_ratio: token cost ratio (SG_full / baseline - 1, negative = cheaper)
+
+    Each component is z-scored across all tasks before weighting.
+    """
+    manifest_rewards = _load_manifest_rewards()
+    token_data = _load_task_metrics_tokens()
+
+    # Build per-config lookups
+    bl_ir: dict[str, IRScores] = {}
+    sg_ir: dict[str, IRScores] = {}
+    for s in ir_scores:
+        if s.config_name == "baseline":
+            bl_ir[s.task_id] = s
+        elif s.config_name == "sourcegraph_full":
+            sg_ir[s.task_id] = s
+
+    common = set(bl_ir) & set(sg_ir)
+    if len(common) < 3:
+        return []
+
+    # Compute raw component values for each task
+    raw_scores: list[dict] = []
+    for task_id in sorted(common):
+        bl, sg = bl_ir[task_id], sg_ir[task_id]
+        suite = _infer_suite(task_id) or "unknown"
+
+        retrieval_lift = sg.mrr - bl.mrr
+        outcome_lift = 0.0
+        bl_r = manifest_rewards.get((task_id, "baseline"))
+        sg_r = manifest_rewards.get((task_id, "sourcegraph_full"))
+        if bl_r is not None and sg_r is not None:
+            outcome_lift = sg_r - bl_r
+
+        efficiency_lift = 0.0
+        if bl.ttfr is not None and sg.ttfr is not None and bl.ttfr > 0:
+            efficiency_lift = (bl.ttfr - sg.ttfr) / bl.ttfr  # positive = MCP faster
+
+        cost_ratio = 0.0
+        bl_tok = token_data.get((task_id, "baseline"))
+        sg_tok = token_data.get((task_id, "sourcegraph_full"))
+        if bl_tok and sg_tok and bl_tok > 0:
+            cost_ratio = -(sg_tok / bl_tok - 1)  # positive = MCP cheaper
+
+        raw_scores.append({
+            "task_id": task_id,
+            "suite": suite,
+            "retrieval_lift": retrieval_lift,
+            "outcome_lift": outcome_lift,
+            "efficiency_lift": efficiency_lift,
+            "cost_ratio": cost_ratio,
+        })
+
+    # Z-score each component
+    w_ret, w_out, w_eff, w_cost = weights
+    components = ["retrieval_lift", "outcome_lift", "efficiency_lift", "cost_ratio"]
+    comp_weights = [w_ret, w_out, w_eff, w_cost]
+
+    z_values: dict[str, list[float]] = {}
+    for comp in components:
+        vals = [r[comp] for r in raw_scores]
+        z_values[comp] = _zscore(vals)
+
+    # Build MCPValueScore objects
+    results: list[MCPValueScore] = []
+    for i, raw in enumerate(raw_scores):
+        # Compute weighted composite from z-scored components
+        composite = sum(
+            z_values[comp][i] * w
+            for comp, w in zip(components, comp_weights)
+        )
+        results.append(MCPValueScore(
+            task_id=raw["task_id"],
+            suite=raw["suite"],
+            retrieval_lift=raw["retrieval_lift"],
+            outcome_lift=raw["outcome_lift"],
+            efficiency_lift=raw["efficiency_lift"],
+            cost_ratio=raw["cost_ratio"],
+            composite=composite,
+        ))
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# US-005: Cost-efficiency metrics
+# ---------------------------------------------------------------------------
+
+def compute_cost_efficiency(
+    ir_scores: list[IRScores],
+) -> dict | None:
+    """Compute cost-efficiency metrics: tokens per relevant file found.
+
+    Returns per-config and per-suite aggregates with deltas.
+    """
+    token_data = _load_task_metrics_tokens()
+    if not token_data:
+        return None
+
+    # Build per-task data
+    records: list[dict] = []
+    for s in ir_scores:
+        inp_tok = token_data.get((s.task_id, s.config_name))
+        if inp_tok is None or inp_tok == 0:
+            continue
+        tokens_per_rel = inp_tok / s.n_overlap if s.n_overlap > 0 else None
+        records.append({
+            "task_id": s.task_id,
+            "config": s.config_name,
+            "suite": _infer_suite(s.task_id) or "unknown",
+            "input_tokens": inp_tok,
+            "n_overlap": s.n_overlap,
+            "tokens_per_relevant_file": tokens_per_rel,
+            "tokens_before_first_relevant": s.tokens_before_first_relevant,
+            "ttfr_step": s.ttfr_step,
+            "n_steps_to_first": s.n_steps_to_first,
+        })
+
+    if not records:
+        return None
+
+    # Aggregate by (suite, config)
+    by_suite_config: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    by_config: dict[str, list[dict]] = defaultdict(list)
+    for r in records:
+        by_suite_config[(r["suite"], r["config"])].append(r)
+        by_config[r["config"]].append(r)
+
+    def _agg(recs: list[dict]) -> dict:
+        tpr_vals = [r["tokens_per_relevant_file"] for r in recs if r["tokens_per_relevant_file"] is not None]
+        tok_vals = [r["input_tokens"] for r in recs]
+        overlap_vals = [r["n_overlap"] for r in recs]
+        tbfr_vals = [r["tokens_before_first_relevant"] for r in recs if r["tokens_before_first_relevant"] is not None]
+        return {
+            "n_tasks": len(recs),
+            "mean_tokens_per_relevant_file": round(statistics.mean(tpr_vals), 0) if tpr_vals else None,
+            "median_tokens_per_relevant_file": round(statistics.median(tpr_vals), 0) if tpr_vals else None,
+            "mean_tokens_before_first_relevant": round(statistics.mean(tbfr_vals), 0) if tbfr_vals else None,
+            "median_tokens_before_first_relevant": round(statistics.median(tbfr_vals), 0) if tbfr_vals else None,
+            "mean_input_tokens": round(statistics.mean(tok_vals), 0) if tok_vals else None,
+            "mean_overlap": round(statistics.mean(overlap_vals), 2) if overlap_vals else None,
+            "n_with_tbfr": len(tbfr_vals),
+        }
+
+    overall = {cfg: _agg(recs) for cfg, recs in sorted(by_config.items())}
+    per_suite = {
+        f"{suite}__{cfg}": _agg(recs)
+        for (suite, cfg), recs in sorted(by_suite_config.items())
+    }
+
+    # Compute deltas (baseline vs SG_full)
+    bl = overall.get("baseline", {})
+    sg = overall.get("sourcegraph_full", {})
+    deltas = {}
+    for metric in ("mean_tokens_per_relevant_file", "mean_tokens_before_first_relevant", "mean_input_tokens"):
+        bl_val = bl.get(metric)
+        sg_val = sg.get(metric)
+        if bl_val and sg_val and bl_val > 0:
+            deltas[metric] = {
+                "baseline": bl_val,
+                "sourcegraph_full": sg_val,
+                "delta": round(sg_val - bl_val, 0),
+                "pct_change": round((sg_val - bl_val) / bl_val * 100, 1),
+            }
+
+    return {
+        "overall": overall,
+        "per_suite": per_suite,
+        "deltas": deltas,
+    }
+
+
 def run_ir_analysis(
     suite_filter: str | None = None,
     per_task: bool = False,
+    value_weights: tuple[float, float, float, float] = (0.3, 0.3, 0.25, 0.15),
 ) -> dict:
     """Main analysis pipeline."""
     gt_registry = _ensure_ground_truth()
@@ -304,6 +669,11 @@ def run_ir_analysis(
             scores.ttfr_step = ttc.get("ttfr_step")
             scores.tt_all_r = ttc.get("tt_all_r")
             scores.n_steps_to_first = ttc.get("n_steps_to_first")
+            # US-005: cumulative tokens before first relevant file
+            scores.tokens_before_first_relevant = extract_tokens_before_first_relevant(
+                transcript_path=Path(task_info["transcript"]),
+                n_steps_to_first=scores.n_steps_to_first,
+            )
 
         all_scores.append(scores)
         by_suite_config[(suite, config)].append(scores)
@@ -402,6 +772,34 @@ def run_ir_analysis(
         except ImportError:
             pass
 
+    # US-003: Retrieval-outcome correlation
+    corr = compute_retrieval_outcome_correlation(all_scores)
+    if corr:
+        result["retrieval_outcome_correlation"] = corr
+
+    # US-004: Composite MCP value scores
+    value_scores = compute_mcp_value_scores(all_scores, weights=value_weights)
+    if value_scores:
+        by_suite: dict[str, list[MCPValueScore]] = defaultdict(list)
+        for vs in value_scores:
+            by_suite[vs.suite].append(vs)
+        result["mcp_value_scores"] = {
+            "n_tasks": len(value_scores),
+            "weights": {"retrieval": value_weights[0], "outcome": value_weights[1],
+                        "efficiency": value_weights[2], "cost": value_weights[3]},
+            "per_suite_mean": {
+                suite: round(statistics.mean(v.composite for v in scores), 4)
+                for suite, scores in sorted(by_suite.items())
+            },
+            "top_helped": [v.to_dict() for v in sorted(value_scores, key=lambda v: -v.composite)[:10]],
+            "top_hurt": [v.to_dict() for v in sorted(value_scores, key=lambda v: v.composite)[:10]],
+        }
+
+    # US-005: Cost-efficiency metrics
+    cost_eff = compute_cost_efficiency(all_scores)
+    if cost_eff:
+        result["cost_efficiency"] = cost_eff
+
     if per_task:
         result["per_task"] = [s.to_dict() for s in all_scores]
 
@@ -494,6 +892,356 @@ def format_table(data: dict) -> str:
             )
         lines.append("")
 
+    # Retrieval-outcome correlation
+    corr = data.get("retrieval_outcome_correlation", {})
+    if corr:
+        lines.append("RETRIEVAL-OUTCOME CORRELATION:")
+        lines.append(f"  Paired observations: {corr.get('n_paired', 0)}")
+        lines.append(f"  Tasks with both configs: {corr.get('n_paired_both_configs', 0)}")
+        lines.append(f"  Spearman r:  {corr.get('spearman_r', 'N/A')}")
+        lines.append(f"  p-value:     {corr.get('spearman_p', 'N/A')}")
+        lines.append(f"  {corr.get('interpretation', '')}")
+        scatter = corr.get("scatter", [])
+        if scatter:
+            lines.append("")
+            lines.append("  Per-task deltas (SG_full - baseline):")
+            header = f"    {'Task':40s} {'Suite':20s} {'MRR_d':>7s} {'Rew_d':>7s}"
+            lines.append(header)
+            lines.append("    " + "-" * (len(header) - 4))
+            for row in scatter:
+                lines.append(
+                    f"    {row['task_id']:40s} {row['suite']:20s} "
+                    f"{row.get('mrr_delta', 0):>+7.3f} {row.get('reward_delta', 0):>+7.3f}"
+                )
+        lines.append("")
+
+    # MCP Value Scores
+    mvs = data.get("mcp_value_scores", {})
+    if mvs:
+        lines.append("MCP VALUE SCORES (z-scored composite):")
+        w = mvs.get("weights", {})
+        lines.append(
+            f"  Weights: retrieval={w.get('retrieval', 0.3)}, "
+            f"outcome={w.get('outcome', 0.3)}, "
+            f"efficiency={w.get('efficiency', 0.25)}, "
+            f"cost={w.get('cost', 0.15)}"
+        )
+        lines.append(f"  Tasks scored: {mvs.get('n_tasks', 0)}")
+        lines.append("")
+
+        per_suite = mvs.get("per_suite_mean", {})
+        if per_suite:
+            lines.append("  Per-suite mean composite:")
+            for suite, mean in sorted(per_suite.items(), key=lambda x: -x[1]):
+                bar = "+" * max(0, int(mean * 5)) if mean > 0 else "-" * max(0, int(-mean * 5))
+                lines.append(f"    {suite:30s} {mean:>+7.3f}  {bar}")
+            lines.append("")
+
+        top_helped = mvs.get("top_helped", [])
+        if top_helped:
+            lines.append("  Top 10 MCP-helped tasks:")
+            header = f"    {'Task':40s} {'Suite':20s} {'Comp':>7s} {'Ret':>7s} {'Out':>7s} {'Eff':>7s} {'Cost':>7s}"
+            lines.append(header)
+            lines.append("    " + "-" * (len(header) - 4))
+            for t in top_helped:
+                lines.append(
+                    f"    {t['task_id']:40s} {t['suite']:20s} "
+                    f"{t['composite']:>+7.3f} {t['retrieval_lift']:>+7.3f} "
+                    f"{t['outcome_lift']:>+7.3f} {t['efficiency_lift']:>+7.3f} "
+                    f"{t['cost_ratio']:>+7.3f}"
+                )
+            lines.append("")
+
+        top_hurt = mvs.get("top_hurt", [])
+        if top_hurt:
+            lines.append("  Top 10 MCP-hurt tasks:")
+            header = f"    {'Task':40s} {'Suite':20s} {'Comp':>7s} {'Ret':>7s} {'Out':>7s} {'Eff':>7s} {'Cost':>7s}"
+            lines.append(header)
+            lines.append("    " + "-" * (len(header) - 4))
+            for t in top_hurt:
+                lines.append(
+                    f"    {t['task_id']:40s} {t['suite']:20s} "
+                    f"{t['composite']:>+7.3f} {t['retrieval_lift']:>+7.3f} "
+                    f"{t['outcome_lift']:>+7.3f} {t['efficiency_lift']:>+7.3f} "
+                    f"{t['cost_ratio']:>+7.3f}"
+                )
+            lines.append("")
+
+    # Cost efficiency
+    ce = data.get("cost_efficiency", {})
+    if ce:
+        lines.append("COST EFFICIENCY:")
+        overall = ce.get("overall", {})
+        if overall:
+            header = f"  {'Config':20s} {'Tok/RelFile':>12s} {'MeanTokens':>12s} {'MeanOverlap':>12s} {'n':>5s}"
+            lines.append(header)
+            lines.append("  " + "-" * (len(header) - 2))
+            for cfg, agg in sorted(overall.items()):
+                tpr = agg.get("mean_tokens_per_relevant_file")
+                tok = agg.get("mean_input_tokens")
+                ovl = agg.get("mean_overlap")
+                n = agg.get("n_tasks", 0)
+                tpr_s = f"{tpr:>12,.0f}" if tpr else f"{'N/A':>12s}"
+                tok_s = f"{tok:>12,.0f}" if tok else f"{'N/A':>12s}"
+                ovl_s = f"{ovl:>12.1f}" if ovl else f"{'N/A':>12s}"
+                lines.append(f"  {cfg:20s} {tpr_s} {tok_s} {ovl_s} {n:>5d}")
+            lines.append("")
+
+        deltas = ce.get("deltas", {})
+        if deltas:
+            lines.append("  Baseline vs SG_full deltas:")
+            for metric, d in sorted(deltas.items()):
+                label = metric.replace("mean_", "")
+                lines.append(
+                    f"    {label:30s} BL={d['baseline']:>12,.0f}  "
+                    f"SG={d['sourcegraph_full']:>12,.0f}  "
+                    f"delta={d['delta']:>+12,.0f}  ({d['pct_change']:>+.1f}%)"
+                )
+            lines.append("")
+
+    return "\n".join(lines)
+
+
+REPORT_PATH = Path(__file__).resolve().parent.parent / "docs" / "ir_analysis_report.md"
+
+FRIENDLY_LABELS = {
+    "baseline": "IDE-native",
+    "sourcegraph_full": "Context infrastructure",
+}
+
+
+def _fl(config: str) -> str:
+    """Friendly label for config name."""
+    return FRIENDLY_LABELS.get(config, config)
+
+
+def format_report_markdown(data: dict) -> str:
+    """Generate stakeholder-ready markdown report from IR analysis data."""
+    lines: list[str] = []
+    lines.append("# IR Analysis Report: Context Infrastructure Impact")
+    lines.append("")
+    lines.append("*Auto-generated by CodeContextBench IR analysis pipeline*")
+    lines.append("")
+
+    # --- Executive Summary ---
+    lines.append("## Executive Summary")
+    lines.append("")
+    overall = data.get("overall_by_config", {})
+    bl = overall.get("baseline", {})
+    sg = overall.get("sourcegraph_full", {})
+    bl_mrr = bl.get("mrr", {}).get("mean", 0) if bl else 0
+    sg_mrr = sg.get("mrr", {}).get("mean", 0) if sg else 0
+    mrr_pct = ((sg_mrr - bl_mrr) / bl_mrr * 100) if bl_mrr > 0 else 0
+
+    corr = data.get("retrieval_outcome_correlation", {})
+    ce = data.get("cost_efficiency", {})
+    ce_deltas = ce.get("deltas", {}) if ce else {}
+    tpr_delta = ce_deltas.get("tokens_per_relevant_file", {})
+
+    stats = data.get("statistical_tests", {})
+    mrr_stat = stats.get("mrr", {})
+    mrr_t = mrr_stat.get("welchs_t", {})
+    mrr_sig = "p<0.05" if mrr_t.get("is_significant") else f"p={mrr_t.get('p_value', 'N/A')}"
+
+    bullets = [
+        f"Context infrastructure improves retrieval quality (MRR) by **{mrr_pct:+.0f}%** "
+        f"({_fl('baseline')}: {bl_mrr:.3f} vs {_fl('sourcegraph_full')}: {sg_mrr:.3f}), "
+        f"{mrr_sig}.",
+    ]
+    if tpr_delta:
+        bullets.append(
+            f"Cost per relevant file found drops **{tpr_delta.get('pct_change', 0):.0f}%** "
+            f"({_fl('baseline')}: {tpr_delta.get('baseline', 0):,.0f} tokens vs "
+            f"{_fl('sourcegraph_full')}: {tpr_delta.get('sourcegraph_full', 0):,.0f} tokens)."
+        )
+    if corr:
+        bullets.append(
+            f"Retrieval-outcome correlation: Spearman r={corr.get('spearman_r', 0):.3f} "
+            f"(p={corr.get('spearman_p', 1):.4f})."
+        )
+
+    s = data.get("summary", {})
+    bullets.append(
+        f"Analysis covers **{s.get('total_runs_analyzed', 0)}** task runs "
+        f"across {len(data.get('by_suite_config', {}))} suite-config pairs."
+    )
+
+    for b in bullets:
+        lines.append(f"- {b}")
+    lines.append("")
+
+    # --- Retrieval Quality ---
+    lines.append("## Retrieval Quality")
+    lines.append("")
+    if overall:
+        lines.append("| Config | MRR | MAP | File Recall | Context Efficiency | n |")
+        lines.append("|--------|-----|-----|-------------|-------------------|---|")
+        for cfg, agg in sorted(overall.items()):
+            if not agg:
+                continue
+            n = agg.get("_totals", {}).get("n_tasks", 0)
+            lines.append(
+                f"| {_fl(cfg)} | "
+                f"{agg.get('mrr', {}).get('mean', 0):.3f} | "
+                f"{agg.get('map_score', {}).get('mean', 0):.3f} | "
+                f"{agg.get('file_recall', {}).get('mean', 0):.3f} | "
+                f"{agg.get('context_efficiency', {}).get('mean', 0):.3f} | "
+                f"{n} |"
+            )
+        lines.append("")
+
+    by_sc = data.get("by_suite_config", {})
+    if by_sc:
+        lines.append("### Per-Suite Breakdown")
+        lines.append("")
+        lines.append("| Suite | Config | MRR | File Recall | n |")
+        lines.append("|-------|--------|-----|-------------|---|")
+        for key, agg in sorted(by_sc.items()):
+            if not agg:
+                continue
+            parts = key.split("__", 1)
+            suite = parts[0] if parts else key
+            cfg = _fl(parts[1]) if len(parts) > 1 else ""
+            n = agg.get("_totals", {}).get("n_tasks", 0)
+            lines.append(
+                f"| {suite} | {cfg} | "
+                f"{agg.get('mrr', {}).get('mean', 0):.3f} | "
+                f"{agg.get('file_recall', {}).get('mean', 0):.3f} | "
+                f"{n} |"
+            )
+        lines.append("")
+
+    # --- Time-to-Context ---
+    lines.append("## Time-to-Context")
+    lines.append("")
+    if overall:
+        lines.append("| Config | TTFR (s) | TTAR (s) | Steps to First |")
+        lines.append("|--------|----------|----------|----------------|")
+        for cfg, agg in sorted(overall.items()):
+            if not agg:
+                continue
+            ttfr = agg.get("ttfr", {}).get("median")
+            ttar = agg.get("tt_all_r", {}).get("median")
+            steps = agg.get("n_steps_to_first", {}).get("median")
+            lines.append(
+                f"| {_fl(cfg)} | "
+                f"{ttfr:.1f}" if ttfr is not None else f"| {_fl(cfg)} | N/A"
+            )
+            # Rebuild properly
+        # Redo as clean loop
+        lines = lines[:-len(list(overall.items()))]  # remove bad rows
+        for cfg, agg in sorted(overall.items()):
+            if not agg:
+                continue
+            ttfr = agg.get("ttfr", {}).get("median")
+            ttar = agg.get("tt_all_r", {}).get("median")
+            steps = agg.get("n_steps_to_first", {}).get("median")
+            ttfr_s = f"{ttfr:.1f}" if ttfr is not None else "N/A"
+            ttar_s = f"{ttar:.1f}" if ttar is not None else "N/A"
+            steps_s = f"{steps:.0f}" if steps is not None else "N/A"
+            lines.append(f"| {_fl(cfg)} | {ttfr_s} | {ttar_s} | {steps_s} |")
+        lines.append("")
+
+    # --- Cost Efficiency ---
+    lines.append("## Cost Efficiency")
+    lines.append("")
+    if ce:
+        ce_overall = ce.get("overall", {})
+        if ce_overall:
+            lines.append("| Config | Tokens/Relevant File | Mean Input Tokens | Mean Files Found | n |")
+            lines.append("|--------|---------------------|-------------------|-----------------|---|")
+            for cfg, agg in sorted(ce_overall.items()):
+                tpr = agg.get("mean_tokens_per_relevant_file")
+                tok = agg.get("mean_input_tokens")
+                ovl = agg.get("mean_overlap")
+                n = agg.get("n_tasks", 0)
+                tpr_s = f"{tpr:,.0f}" if tpr else "N/A"
+                tok_s = f"{tok:,.0f}" if tok else "N/A"
+                ovl_s = f"{ovl:.1f}" if ovl else "N/A"
+                lines.append(f"| {_fl(cfg)} | {tpr_s} | {tok_s} | {ovl_s} | {n} |")
+            lines.append("")
+
+        if ce_deltas:
+            lines.append("**Delta summary:**")
+            lines.append("")
+            for metric, d in sorted(ce_deltas.items()):
+                label = metric.replace("mean_", "").replace("_", " ").title()
+                lines.append(
+                    f"- {label}: {_fl('sourcegraph_full')} uses "
+                    f"**{d['pct_change']:+.1f}%** vs {_fl('baseline')}"
+                )
+            lines.append("")
+
+    # --- MCP Value Rankings ---
+    mvs = data.get("mcp_value_scores", {})
+    if mvs:
+        lines.append("## MCP Value Rankings")
+        lines.append("")
+        w = mvs.get("weights", {})
+        lines.append(
+            f"*Composite score: weighted z-score of retrieval lift ({w.get('retrieval', 0.3)}), "
+            f"outcome lift ({w.get('outcome', 0.3)}), "
+            f"efficiency ({w.get('efficiency', 0.25)}), "
+            f"cost ({w.get('cost', 0.15)})*"
+        )
+        lines.append("")
+
+        per_suite = mvs.get("per_suite_mean", {})
+        if per_suite:
+            lines.append("### Per-Suite Mean Composite")
+            lines.append("")
+            lines.append("| Suite | Mean Composite |")
+            lines.append("|-------|---------------|")
+            for suite, mean in sorted(per_suite.items(), key=lambda x: -x[1]):
+                lines.append(f"| {suite} | {mean:+.3f} |")
+            lines.append("")
+
+        top_helped = mvs.get("top_helped", [])
+        if top_helped:
+            lines.append("### Top 10 Tasks Where Context Infrastructure Helps Most")
+            lines.append("")
+            lines.append("| Task | Suite | Composite | Retrieval | Outcome | Efficiency | Cost |")
+            lines.append("|------|-------|-----------|-----------|---------|------------|------|")
+            for t in top_helped:
+                lines.append(
+                    f"| {t['task_id'][:40]} | {t['suite']} | "
+                    f"{t['composite']:+.3f} | {t['retrieval_lift']:+.3f} | "
+                    f"{t['outcome_lift']:+.3f} | {t['efficiency_lift']:+.3f} | "
+                    f"{t['cost_ratio']:+.3f} |"
+                )
+            lines.append("")
+
+    # --- Statistical Methodology ---
+    lines.append("## Statistical Methodology")
+    lines.append("")
+    lines.append("- **Retrieval metrics**: MRR, MAP, file recall computed against ground-truth files")
+    lines.append("- **Time-to-context**: TTFR/TTAR from trajectory.json (synthesized from transcript when missing)")
+    lines.append("- **Statistical tests**: Welch's t-test, Cohen's d effect size, bootstrap 95% CI")
+    lines.append("- **Correlation**: Spearman rank correlation between MRR and task reward")
+    lines.append("- **MCP value composite**: Z-score normalized weighted sum across retrieval, outcome, efficiency, cost")
+    lines.append("- **Cost efficiency**: Input tokens per relevant file found from task_metrics.json")
+    lines.append("")
+    if stats:
+        lines.append("### Statistical Test Results")
+        lines.append("")
+        lines.append(f"Paired tasks: {stats.get('n_paired', 0)}")
+        lines.append("")
+        lines.append("| Metric | t-stat | p-value | Cohen's d | Magnitude | Significant |")
+        lines.append("|--------|--------|---------|-----------|-----------|-------------|")
+        for metric_name in ("file_recall", "mrr", "ttfr", "tt_all_r"):
+            ms = stats.get(metric_name, {})
+            if not ms:
+                continue
+            t = ms.get("welchs_t", {})
+            d = ms.get("cohens_d", {})
+            sig = "Yes" if t.get("is_significant") else "No"
+            lines.append(
+                f"| {metric_name} | {t.get('t_stat', 'N/A')} | "
+                f"{t.get('p_value', 'N/A')} | {d.get('d', 'N/A')} | "
+                f"{d.get('magnitude', '')} | {sig} |"
+            )
+        lines.append("")
+
     return "\n".join(lines)
 
 
@@ -516,6 +1264,14 @@ def parse_args():
     parser.add_argument(
         "--per-task", action="store_true",
         help="Include per-task IR scores in output",
+    )
+    parser.add_argument(
+        "--value-weights", default="0.3,0.3,0.25,0.15",
+        help="Comma-separated weights for MCP value composite: retrieval,outcome,efficiency,cost",
+    )
+    parser.add_argument(
+        "--report", action="store_true",
+        help="Generate stakeholder-ready markdown report to docs/ir_analysis_report.md",
     )
     return parser.parse_args()
 
@@ -541,12 +1297,27 @@ def main():
         print(f"  By confidence:{dict(sorted(by_confidence.items()))}")
         return
 
+    # Parse value weights
+    try:
+        vw = tuple(float(x) for x in args.value_weights.split(","))
+        if len(vw) != 4:
+            raise ValueError
+    except ValueError:
+        print("ERROR: --value-weights must be 4 comma-separated floats", file=sys.stderr)
+        sys.exit(1)
+
     data = run_ir_analysis(
         suite_filter=args.suite,
         per_task=args.per_task,
+        value_weights=vw,
     )
 
-    if args.json:
+    if args.report:
+        report = format_report_markdown(data)
+        REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        REPORT_PATH.write_text(report)
+        print(f"Report written to {REPORT_PATH}")
+    elif args.json:
         print(json.dumps(data, indent=2))
     else:
         print(format_table(data))

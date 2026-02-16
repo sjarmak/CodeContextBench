@@ -137,6 +137,79 @@ validate_and_report() {
         --jobs-dir "$jobs_dir" --config "$mode" 2>&1) || true
     echo "$_val_output"
     VALIDATION_LOG+="$_val_output"$'\n'
+    # Check trajectory.json coverage after validation
+    check_trajectory_coverage "$jobs_dir"
+}
+
+# Check trajectory.json for a single task after it completes.
+# Non-blocking: logs WARNING but does not fail the pipeline.
+# Args: $1 = task_id (plain or composite "task_id|config|mcp_type" from paired mode)
+#        $2 = jobs_dir (jobs_subdir for plain mode, or jobs_base for paired mode)
+# Searches for task output directories matching the task_id pattern.
+_check_task_trajectory() {
+    local raw_id=$1
+    local jobs_dir=$2
+
+    [ -n "$jobs_dir" ] && [ -d "$jobs_dir" ] || return 0
+
+    # Handle composite IDs from run_paired_configs: "task_id|config|mcp_type"
+    local task_id config_subdir
+    if [[ "$raw_id" == *"|"* ]]; then
+        task_id="${raw_id%%|*}"
+        local remainder="${raw_id#*|}"
+        config_subdir="${remainder%%|*}"
+        jobs_dir="${jobs_dir}/${config_subdir}"
+    else
+        task_id="$raw_id"
+    fi
+
+    [ -d "$jobs_dir" ] || return 0
+
+    # Task output dirs match: {batch_timestamp}/{task_id}__{hash}/agent/
+    local found=false
+    for agent_dir in "$jobs_dir"/*/"${task_id}"__*/agent/; do
+        [ -d "$agent_dir" ] || continue
+        found=true
+        if [ ! -f "$agent_dir/trajectory.json" ]; then
+            echo "WARNING: trajectory.json missing for $task_id (dir: $agent_dir)"
+            echo "  → TTFR/TTAR metrics will use synthesized estimates. See AGENTS.md 'Trajectory Generation'."
+        fi
+    done
+
+    # If no matching task dir found yet (task may still be writing), skip silently
+    if [ "$found" = false ]; then
+        return 0
+    fi
+}
+
+# Check for missing trajectory.json across all tasks in a jobs directory.
+# Non-blocking: logs WARNING but does not fail the pipeline.
+# Args: $1 = jobs_subdir (e.g., runs/official/pytorch_opus_ts/baseline)
+check_trajectory_coverage() {
+    local jobs_dir=$1
+    local missing=0
+    local checked=0
+
+    for task_dir in "$jobs_dir"/*/*/; do
+        [ -d "$task_dir" ] || continue
+        local agent_dir="$task_dir/agent"
+        [ -d "$agent_dir" ] || continue
+        checked=$((checked + 1))
+        if [ ! -f "$agent_dir/trajectory.json" ]; then
+            local task_name
+            task_name=$(basename "$(dirname "$agent_dir")")
+            echo "WARNING: trajectory.json missing for $task_name (dir: $agent_dir)"
+            missing=$((missing + 1))
+        fi
+    done
+
+    if [ "$missing" -gt 0 ]; then
+        echo "TRAJECTORY CHECK: $missing/$checked tasks missing trajectory.json in $jobs_dir"
+        echo "  → TTFR/TTAR metrics will use synthesized estimates for these tasks."
+        echo "  → See AGENTS.md 'Trajectory Generation' for troubleshooting."
+    elif [ "$checked" -gt 0 ]; then
+        echo "TRAJECTORY CHECK: All $checked tasks have trajectory.json"
+    fi
 }
 
 # ============================================
@@ -470,6 +543,9 @@ run_tasks_parallel() {
                             return
                         fi
                     fi
+                else
+                    # Task succeeded — check trajectory.json coverage
+                    _check_task_trajectory "$_task" "$_log_dir"
                 fi
 
                 unset 'pids[i]'

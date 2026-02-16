@@ -4,7 +4,8 @@
 - IRScores dataclass holds per-task metrics: mrr, map_score, file_recall, context_efficiency, ttfr, tt_all_r, n_steps_to_first, plus @k dicts (precision, recall, f1, ndcg)
 - compute_ir_scores() takes (retrieved, ground_truth_files, task_id, config_name) → IRScores
 - aggregate_ir_scores() takes list[IRScores] → dict with mean/std/median/n for each metric
-- extract_time_to_context() joins trajectory.json timestamps with claude-code.txt file paths via tool_use_id
+- extract_time_to_context() joins trajectory.json timestamps with claude-code.txt file paths via tool_use_id; falls back to synthesize_trajectory() when trajectory.json missing
+- synthesize_trajectory() parses claude-code.txt JSONL, extracts tool_use blocks, estimates timestamps at _CALIBRATION_SECS_PER_STEP=2.6s/step
 - _normalize() strips leading slashes, /workspace/ prefix for path comparison
 - Trajectory regex: _TOOL_EXEC_RE = re.compile(r"Executed (\S+) (toolu_\S+)")
 
@@ -42,5 +43,86 @@
 ### Config Labels (from compare_configs.py)
 - TIER_LABELS = {"baseline": "IDE-native", "sourcegraph_base": "SG_base", "sourcegraph_full": "Context infra"}
 
+### Post-Task Hooks in _common.sh
+- `_reap_one()` is the per-task completion handler inside `run_tasks_parallel`
+- In paired mode (run_paired_configs), `_task` is composite: "task_id|config|mcp_type" — must parse with `${raw_id%%|*}`
+- `_log_dir` = `jobs_subdir` variable from caller scope; for paired mode = `jobs_base` (parent of baseline/sourcegraph_full)
+- Task output glob pattern: `{jobs_dir}/*/${task_id}__*/agent/`
+
 ## Progress
 
+## 2026-02-16 - US-001
+- Implemented `synthesize_trajectory()` in scripts/ccb_metrics/ir_metrics.py
+- Modified `extract_time_to_context()` to fall back to synthesis when trajectory.json is missing or empty
+- Calibration: median 2.6s/step from 1347 intervals across 31 paired runs
+- Coverage: 753 real trajectory.json, 4 newly synthesized, 9 no usable data (empty transcripts)
+- Files changed: scripts/ccb_metrics/ir_metrics.py
+- **Learnings for future iterations:**
+  - claude-code.txt JSONL has `type` field: system, assistant, user. Tool uses are in assistant message.content blocks with type=tool_use
+  - trajectory.json uses _TOOL_EXEC_RE pattern "Executed ToolName toolu_xxx" in step messages — synthesized steps must match this format exactly
+  - Protonmail/internetarchive tasks have empty/corrupt transcripts (65KB but only 1 line) — these are legitimate "no data" cases, not synthesis failures
+  - `datetime.timedelta` is more reliable than manual string formatting for ISO timestamps
+  - The 27 missing trajectory.json cases (3.4% of 798) are concentrated in SWE-bench Pro gapfill, PyTorch paired, and LinuxFLBench runs
+---
+
+## 2026-02-16 - US-002
+- Added `_check_task_trajectory()` function to configs/_common.sh — checks per-task trajectory.json presence
+- Handles both plain task IDs and composite paired IDs ("task_id|config|mcp_type")
+- Integrated into `_reap_one()` success branch so each completed task gets checked immediately
+- Existing `check_trajectory_coverage()` (batch-level) was already in place from US-001
+- Updated AGENTS.md with "Runtime Detection" subsection documenting both per-task and per-batch checks
+- Files changed: configs/_common.sh, AGENTS.md
+- **Learnings for future iterations:**
+  - `_reap_one()` in `run_tasks_parallel` is the right hook for per-task post-completion actions
+  - In paired mode, `_task` in `_reap_one` is a composite "task_id|config|mcp_type" string — any per-task hook must parse this
+  - `_log_dir` comes from `jobs_subdir` variable in the calling scope (captured at `run_tasks_parallel` entry); for paired mode this is the `jobs_base`, not a config-specific subdir
+  - Task output dir pattern: `{jobs_dir}/{batch_timestamp}/{task_id}__{hash}/agent/` — glob with `/*/${task_id}__*/agent/`
+---
+
+## 2026-02-16 - US-003
+- Verified `compute_retrieval_outcome_correlation()` implementation in scripts/ir_analysis.py (already committed in 54bba7bc)
+- Validated all 6 acceptance criteria: MANIFEST join, Spearman correlation, scatter data, table output
+- Results: n_paired=179, Spearman r=0.0875 (negligible, p=0.244), 89 paired BL/SG_full tasks
+- Set passes=true in prd.json
+- Files changed: ralph-ir-pipeline/prd.json (PRD update only — code was already committed)
+- **Learnings for future iterations:**
+  - MANIFEST.json keys are `suite/config` (e.g. "ccb_codereview/baseline"), each containing a tasks dict with task_id -> {status, reward, ...}
+  - runs/official/MANIFEST.json is inside the symlinked directory, use RUNS_DIR / "MANIFEST.json" not a relative path
+  - Merge conflicts from `git stash pop` can leave conflict markers in source files — always check with `grep -c "^<<<<<<" file` before running
+  - The correlation result (negligible r=0.087) is scientifically valid but shows MRR doesn't strongly predict task reward — this matches the known finding that MCP value is efficiency, not capability
+---
+
+## 2026-02-16 - US-004
+- Added MCPValueScore dataclass to ir_metrics.py with fields: task_id, suite, retrieval_lift, outcome_lift, efficiency_lift, cost_ratio, composite
+- Implemented compute_mcp_value_scores() with z-score normalization across 4 components
+- Added _load_task_metrics_tokens() to read input_tokens from task_metrics.json files
+- Added --value-weights CLI arg for configurable weighting
+- Results: 89 tasks scored, largerepo benefits most (+0.674), crossrepo hurt most (-0.575)
+- Files changed: scripts/ccb_metrics/ir_metrics.py, scripts/ir_analysis.py
+- **Learnings for future iterations:**
+  - Z-scoring with statistics.stdev requires >=2 values; handle constant-value edge case
+  - Cost ratio should be inverted (positive = MCP cheaper) for intuitive composite interpretation
+  - Linter aggressively removes unused imports — add MANIFEST_PATH and MCPValueScore import in same edit as usage code
+---
+
+## 2026-02-16 - US-005
+- Added compute_cost_efficiency() computing tokens_per_relevant_file and mean_input_tokens
+- SG_full is 86.7% cheaper per relevant file found (47 vs 353 tokens)
+- SG_full uses 50% fewer total input tokens (245 vs 490)
+- Files changed: scripts/ir_analysis.py
+- **Learnings for future iterations:**
+  - token counts in task_metrics.json are already per-task (not cumulative), safe to use directly
+  - n_overlap from IRScores tells how many ground truth files the agent accessed
+---
+
+## 2026-02-16 - US-008
+- Added format_report_markdown() generating structured markdown with 6 sections
+- Added --report flag writing to docs/ir_analysis_report.md
+- Uses enterprise-friendly labels: baseline='IDE-native', sourcegraph_full='Context infrastructure'
+- Works with --suite filter for per-benchmark reports
+- Files changed: scripts/ir_analysis.py, docs/ir_analysis_report.md
+- **Learnings for future iterations:**
+  - FRIENDLY_LABELS dict is more maintainable than inline string replacements
+  - Markdown table formatting requires careful alignment — f-string conditionals in table cells cause layout issues; pre-format values first
+  - Time-to-Context section's conditional formatting (N/A vs numeric) must be handled outside the f-string
+---
