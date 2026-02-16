@@ -55,7 +55,9 @@ BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
 SELECTION_FILE = Path(__file__).resolve().parent.parent / "configs" / "selected_benchmark_tasks.json"
 GT_CACHE = Path(__file__).resolve().parent.parent / "configs" / "ground_truth_files.json"
 
-SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived", "preamble_test_"]
+# __v1_hinted: old run dirs from before enterprise task de-hinting (US-001..US-003).
+# Appended to batch dir names after reruns complete so pre-redesign data is excluded.
+SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived", "preamble_test_", "__v1_hinted"]
 CONFIGS = ["baseline", "sourcegraph_full"]
 # Benchmarks dropped from evaluation — exclude from ground truth builds and IR analysis
 DROPPED_BENCHMARKS = {"ccb_dependeval", "ccb_locobench"}

@@ -44,7 +44,9 @@ from status_fingerprints import fingerprint_error
 
 RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "official"
 
-SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive"]
+# __v1_hinted: old run dirs from before enterprise task de-hinting (US-001..US-003).
+# Appended to batch dir names after reruns complete so pre-redesign data is excluded.
+SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__v1_hinted"]
 
 DIR_PREFIX_TO_SUITE = {
     "bigcode_mcp_": "ccb_largerepo",
