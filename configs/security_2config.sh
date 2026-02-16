@@ -74,6 +74,7 @@ ALL_TASK_IDS=(
     sec-cve-002
     sec-cve-003
     sec-reach-001
+    sec-reach-002
 )
 
 # Parse arguments
@@ -133,6 +134,7 @@ declare -A TASK_SG_REPO_NAMES=(
     [sec-cve-002]="github.com/envoyproxy/envoy"
     [sec-cve-003]="go.googlesource.com/net"
     [sec-reach-001]="github.com/curl/curl"
+    [sec-reach-002]="github.com/envoyproxy/envoy"
 )
 
 # Derive short model name for run directory
