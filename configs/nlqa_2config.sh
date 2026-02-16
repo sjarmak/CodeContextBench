@@ -70,6 +70,7 @@ TASK_FILTER=""
 
 # All nlqa task IDs — populated by task-creation Ralphs
 ALL_TASK_IDS=(
+    nlqa-arch-001
 )
 
 # Parse arguments
@@ -125,6 +126,7 @@ setup_dual_accounts
 # Sourcegraph repo name mapping for nlqa tasks
 # Populated by task-creation Ralphs alongside ALL_TASK_IDS
 declare -A TASK_SG_REPO_NAMES=(
+    [nlqa-arch-001]="github.com/envoyproxy/envoy"
 )
 
 # Derive short model name for run directory
