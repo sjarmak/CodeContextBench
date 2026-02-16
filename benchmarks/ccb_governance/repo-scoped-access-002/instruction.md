@@ -21,28 +21,21 @@ Add an in-process metrics tracker to the evaluation engine that records:
 - **Match count**: how many evaluations resulted in a successful match
 - **Error count**: how many evaluations failed with errors
 
-### Deliverables
-
-1. Create a new file `internal/server/evaluation/metrics.go` containing an `EvaluationMetrics` struct that tracks the three counters above
-2. The tracker must be thread-safe — the evaluation server handles concurrent gRPC requests
-3. Integrate the tracker into the evaluation server so it records outcomes after each evaluation is processed
-4. The code must compile
-
 **YOU MUST IMPLEMENT CODE CHANGES.**
 
 ### Requirements
 
-1. New file at `internal/server/evaluation/metrics.go`
-2. Struct named `EvaluationMetrics` with methods to record outcomes and retrieve current metrics
-3. Concurrent-safe implementation (this is a high-throughput server)
-4. Integrated into the existing evaluation server so evaluations are automatically tracked
+1. Create a new file in the evaluation package with a struct that tracks the three counters above
+2. The tracker must be thread-safe — the evaluation server handles concurrent gRPC requests
+3. Provide methods to record outcomes and retrieve current metric values
+4. Integrate the tracker into the evaluation server so it records outcomes after each evaluation is processed
 5. All changes within `internal/server/evaluation/`
 6. Code compiles: `go build ./internal/server/evaluation/...`
 
 ## Success Criteria
 
-- `metrics.go` exists with `EvaluationMetrics` struct
-- Thread-safe implementation
+- A metrics tracking file exists in the evaluation package
+- Thread-safe implementation using appropriate synchronization
 - Integrated into the evaluation server
 - Go code compiles
 - No changes outside `internal/server/evaluation/`
