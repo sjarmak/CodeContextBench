@@ -75,6 +75,7 @@ ALL_TASK_IDS=(
     "onboard-orient-003"
     "onboard-handoff-001"
     "onboard-handoff-002"
+    "onboard-handoff-003"
 )
 
 # Parse arguments
@@ -135,6 +136,7 @@ declare -A TASK_SG_REPO_NAMES=(
     ["onboard-orient-003"]="github.com/apache/kafka"
     ["onboard-handoff-001"]="github.com/envoyproxy/envoy"
     ["onboard-handoff-002"]="github.com/hashicorp/terraform"
+    ["onboard-handoff-003"]="github.com/cilium/cilium"
 )
 
 # Derive short model name for run directory
