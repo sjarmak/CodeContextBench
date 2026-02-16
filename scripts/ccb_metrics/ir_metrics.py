@@ -168,6 +168,7 @@ class IRScores:
     ttfr_step: Optional[int] = None # Step index of first relevant file
     tt_all_r: Optional[float] = None  # Time to find ALL relevant files (None if not all found)
     n_steps_to_first: Optional[int] = None  # Tool calls before first relevant file
+    tokens_before_first_relevant: Optional[int] = None  # Cumulative output tokens up to TTFR step
 
     def to_dict(self) -> dict:
         return {
@@ -188,6 +189,7 @@ class IRScores:
             "ttfr_step": self.ttfr_step,
             "tt_all_r": self.tt_all_r,
             "n_steps_to_first": self.n_steps_to_first,
+            "tokens_before_first_relevant": self.tokens_before_first_relevant,
         }
 
 
@@ -741,6 +743,58 @@ def extract_time_to_context(
     if tt_all_r is not None:
         result["tt_all_r"] = round(tt_all_r, 1)
     return result
+
+
+def extract_tokens_before_first_relevant(
+    transcript_path: Path,
+    n_steps_to_first: int | None,
+) -> int | None:
+    """Sum output tokens from claude-code.txt up to the TTFR step.
+
+    Counts cumulative output_tokens from assistant messages, tracking tool_use
+    blocks as steps. Returns the cumulative output tokens at the step where
+    the first relevant file was found, or None if data is unavailable.
+
+    Args:
+        transcript_path: Path to agent/claude-code.txt.
+        n_steps_to_first: Step index (0-based) of the first relevant file.
+
+    Returns:
+        Cumulative output tokens up to and including the TTFR step, or None.
+    """
+    if n_steps_to_first is None or not transcript_path.is_file():
+        return None
+
+    cumulative_output = 0
+    tool_step = 0
+
+    for line in transcript_path.read_text(errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        if entry.get("type") != "assistant":
+            continue
+
+        message = entry.get("message", entry)
+        usage = message.get("usage", {})
+        out_tok = usage.get("output_tokens", 0)
+        cumulative_output += out_tok
+
+        # Count tool_use blocks in this message as steps
+        content_blocks = message.get("content", [])
+        if isinstance(content_blocks, list):
+            for block in content_blocks:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    if tool_step >= n_steps_to_first:
+                        return cumulative_output
+                    tool_step += 1
+
+    return None
 
 
 def _looks_like_file(path: str) -> bool:
