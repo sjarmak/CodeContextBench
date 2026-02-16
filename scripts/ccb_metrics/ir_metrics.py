@@ -191,6 +191,30 @@ class IRScores:
         }
 
 
+@dataclass
+class MCPValueScore:
+    """Composite MCP value score for a single task (SG_full vs baseline delta)."""
+
+    task_id: str
+    suite: str
+    retrieval_lift: float = 0.0
+    outcome_lift: float = 0.0
+    efficiency_lift: float = 0.0
+    cost_ratio: float = 0.0
+    composite: float = 0.0
+
+    def to_dict(self) -> dict:
+        return {
+            "task_id": self.task_id,
+            "suite": self.suite,
+            "retrieval_lift": round(self.retrieval_lift, 4),
+            "outcome_lift": round(self.outcome_lift, 4),
+            "efficiency_lift": round(self.efficiency_lift, 4),
+            "cost_ratio": round(self.cost_ratio, 4),
+            "composite": round(self.composite, 4),
+        }
+
+
 def compute_ir_scores(
     retrieved: list[str],
     ground_truth_files: list[str],
