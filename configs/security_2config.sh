@@ -72,6 +72,7 @@ TASK_FILTER=""
 ALL_TASK_IDS=(
     sec-cve-001
     sec-cve-002
+    sec-cve-003
 )
 
 # Parse arguments
@@ -129,6 +130,7 @@ setup_dual_accounts
 declare -A TASK_SG_REPO_NAMES=(
     [sec-cve-001]="github.com/curl/curl"
     [sec-cve-002]="github.com/envoyproxy/envoy"
+    [sec-cve-003]="go.googlesource.com/net"
 )
 
 # Derive short model name for run directory
