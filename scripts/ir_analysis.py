@@ -983,18 +983,20 @@ def format_table(data: dict) -> str:
         lines.append("COST EFFICIENCY:")
         overall = ce.get("overall", {})
         if overall:
-            header = f"  {'Config':20s} {'Tok/RelFile':>12s} {'MeanTokens':>12s} {'MeanOverlap':>12s} {'n':>5s}"
+            header = f"  {'Config':20s} {'Tok/RelFile':>12s} {'TokBefore1st':>12s} {'MeanTokens':>12s} {'MeanOverlap':>12s} {'n':>5s}"
             lines.append(header)
             lines.append("  " + "-" * (len(header) - 2))
             for cfg, agg in sorted(overall.items()):
                 tpr = agg.get("mean_tokens_per_relevant_file")
+                tbfr = agg.get("mean_tokens_before_first_relevant")
                 tok = agg.get("mean_input_tokens")
                 ovl = agg.get("mean_overlap")
                 n = agg.get("n_tasks", 0)
                 tpr_s = f"{tpr:>12,.0f}" if tpr else f"{'N/A':>12s}"
+                tbfr_s = f"{tbfr:>12,.0f}" if tbfr else f"{'N/A':>12s}"
                 tok_s = f"{tok:>12,.0f}" if tok else f"{'N/A':>12s}"
                 ovl_s = f"{ovl:>12.1f}" if ovl else f"{'N/A':>12s}"
-                lines.append(f"  {cfg:20s} {tpr_s} {tok_s} {ovl_s} {n:>5d}")
+                lines.append(f"  {cfg:20s} {tpr_s} {tbfr_s} {tok_s} {ovl_s} {n:>5d}")
             lines.append("")
 
         deltas = ce.get("deltas", {})
@@ -1158,17 +1160,19 @@ def format_report_markdown(data: dict) -> str:
     if ce:
         ce_overall = ce.get("overall", {})
         if ce_overall:
-            lines.append("| Config | Tokens/Relevant File | Mean Input Tokens | Mean Files Found | n |")
-            lines.append("|--------|---------------------|-------------------|-----------------|---|")
+            lines.append("| Config | Tokens/Relevant File | Tokens Before 1st Relevant | Mean Input Tokens | Mean Files Found | n |")
+            lines.append("|--------|---------------------|---------------------------|-------------------|-----------------|---|")
             for cfg, agg in sorted(ce_overall.items()):
                 tpr = agg.get("mean_tokens_per_relevant_file")
+                tbfr = agg.get("mean_tokens_before_first_relevant")
                 tok = agg.get("mean_input_tokens")
                 ovl = agg.get("mean_overlap")
                 n = agg.get("n_tasks", 0)
                 tpr_s = f"{tpr:,.0f}" if tpr else "N/A"
+                tbfr_s = f"{tbfr:,.0f}" if tbfr else "N/A"
                 tok_s = f"{tok:,.0f}" if tok else "N/A"
                 ovl_s = f"{ovl:.1f}" if ovl else "N/A"
-                lines.append(f"| {_fl(cfg)} | {tpr_s} | {tok_s} | {ovl_s} | {n} |")
+                lines.append(f"| {_fl(cfg)} | {tpr_s} | {tbfr_s} | {tok_s} | {ovl_s} | {n} |")
             lines.append("")
 
         if ce_deltas:
