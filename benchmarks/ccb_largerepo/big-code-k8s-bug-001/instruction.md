@@ -28,7 +28,7 @@ The bug is a race condition: if the driver starts first, scheduling succeeds imm
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file1.ext — examined for [reason]
 - path/to/file2.ext — examined for [reason]

@@ -13,7 +13,7 @@ Trace how Apache Camel routes a message from endpoint reception through the EIP 
 
 ## Requirements
 
-1. Identify all key files in the Component→Endpoint→Consumer→Processor→Producer hierarchy (API interfaces + base implementations)
+1. Identify all relevant components in the Component→Endpoint→Consumer→Processor→Producer hierarchy (API interfaces + base implementations)
 2. Trace the dependency chain from route definition through reification to runtime message processing
 3. Document the Pipeline and Channel architecture (how processors are chained and intercepted)
 4. Explain how the RouteReifier bridges the DSL model (RouteDefinition) to the runtime Route
@@ -22,7 +22,7 @@ Trace how Apache Camel routes a message from endpoint reception through the EIP 
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file1.ext — role in architecture
 - path/to/file2.ext — role in architecture

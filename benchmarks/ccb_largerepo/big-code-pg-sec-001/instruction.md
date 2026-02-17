@@ -24,7 +24,7 @@ Trace the PostgreSQL client authentication pipeline from the point a TCP connect
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file.ext — role in attack surface
 ...

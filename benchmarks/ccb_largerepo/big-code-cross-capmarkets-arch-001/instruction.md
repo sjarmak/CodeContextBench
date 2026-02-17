@@ -33,7 +33,7 @@ The Flink Kafka connector (in a separate repo: apache/flink-connector-kafka) ext
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - kafka/clients/src/.../Producer.java — role in data flow
 - flink/flink-core/src/.../Source.java — role in data flow

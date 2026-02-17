@@ -60,7 +60,7 @@ Study existing components like `camel-kafka`, `camel-netty`, or `camel-amqp` for
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file1.ext — examined to understand [pattern/API/convention]
 - path/to/file2.ext — modified to add [feature component]

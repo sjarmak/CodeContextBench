@@ -22,7 +22,7 @@
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file1.ext — role in attack surface
 - path/to/file2.ext — role in attack surface

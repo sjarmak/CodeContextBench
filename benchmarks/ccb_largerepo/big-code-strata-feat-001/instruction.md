@@ -37,7 +37,7 @@ The implementation must follow Strata's Joda-Beans pattern and span across the p
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file1.ext — examined to understand [pattern/API/convention]
 - path/to/file2.ext — modified to add [feature component]

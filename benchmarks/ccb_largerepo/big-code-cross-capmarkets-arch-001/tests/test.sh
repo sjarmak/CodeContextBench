@@ -11,7 +11,7 @@ git config --global --add safe.directory /workspace/kafka 2>/dev/null || true
 git config --global --add safe.directory /workspace/flink 2>/dev/null || true
 
 # ── Source shared verifier library ────────────────────────────────────────
-source /workspace/tests/verifier_lib.sh
+source /tests/verifier_lib.sh
 
 # ── Change detection guard ────────────────────────────────────────────────
 SOLUTION_FILE="/logs/agent/solution.md"

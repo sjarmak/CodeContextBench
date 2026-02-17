@@ -37,7 +37,7 @@ This crashes with an `AttributeError` on `.target.model` — the ORM attempts to
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file1.ext — examined for [reason]
 - path/to/file2.ext — examined for [reason]

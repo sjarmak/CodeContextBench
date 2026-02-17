@@ -24,7 +24,7 @@ Trace the Django CSRF protection and session handling pipeline from HTTP request
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file.ext — role in attack surface
 ...

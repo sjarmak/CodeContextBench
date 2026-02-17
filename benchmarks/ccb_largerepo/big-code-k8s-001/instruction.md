@@ -22,7 +22,7 @@ This task requires implementing code changes to add `NoScheduleNoTraffic` suppor
 
 ### Required Implementation
 
-Find and modify code in these areas:
+Address implementation concerns in these areas:
 
 1. **Taint Effect Constants & Enums**:
    - Find where taint effects (`NoSchedule`, `NoExecute`, etc.) are defined as constants

@@ -21,7 +21,7 @@ This task requires implementing code changes to add W4A8_MXFP4_INT8 support.
 
 ### Required Implementation
 
-Find and modify code in these areas:
+Address implementation concerns in these areas:
 
 1. **Python Quantization Enums**:
    - Find where `W4A8_MXFP4_FP8` is defined in Python code

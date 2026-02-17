@@ -22,7 +22,7 @@ Trace the PostgreSQL query execution pipeline from parse to execute. Starting fr
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file1.ext — role in architecture
 - path/to/file2.ext — role in architecture

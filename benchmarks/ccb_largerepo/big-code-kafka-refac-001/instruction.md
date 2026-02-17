@@ -32,7 +32,7 @@ The refactoring includes:
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file1.ext — why this file needs changes
 - path/to/file2.ext — why this file needs changes

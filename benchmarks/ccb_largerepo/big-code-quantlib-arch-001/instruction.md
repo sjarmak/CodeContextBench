@@ -13,7 +13,7 @@ Trace the QuantLib pricing chain for a barrier option: instrument→pricing engi
 
 ## Requirements
 
-1. Identify all key files in the pricing chain from BarrierOption through to PathGenerator
+1. Identify all relevant components in the pricing chain from BarrierOption through to PathGenerator
 2. Trace the dependency chain from NPV() through LazyObject.calculate() → Instrument.performCalculations() → engine.calculate()
 3. Document how the McSimulation framework connects MonteCarloModel, PathGenerator, and PathPricer
 4. Explain the term structure hierarchy (YieldTermStructure, BlackVolTermStructure) and how the stochastic process (GeneralizedBlackScholesProcess) uses them
@@ -22,7 +22,7 @@ Trace the QuantLib pricing chain for a barrier option: instrument→pricing engi
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file1.ext — role in architecture
 - path/to/file2.ext — role in architecture

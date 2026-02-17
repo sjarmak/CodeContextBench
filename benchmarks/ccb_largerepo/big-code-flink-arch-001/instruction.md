@@ -13,7 +13,7 @@ Map the Flink checkpoint coordination architecture: how the JobManager triggers 
 
 ## Requirements
 
-1. Identify all key files in the checkpoint coordination flow (JobManager-side coordinator, RPC dispatch, barrier events, barrier handlers, state snapshot, acknowledgment)
+1. Identify all relevant components in the checkpoint coordination flow (JobManager-side coordinator, RPC dispatch, barrier events, barrier handlers, state snapshot, acknowledgment)
 2. Trace the dependency chain from CheckpointCoordinator.triggerCheckpoint() through barrier propagation to CompletedCheckpoint
 3. Document the aligned vs unaligned checkpoint barrier handling (SingleCheckpointBarrierHandler vs CheckpointBarrierTracker)
 4. Explain the PendingCheckpoint lifecycle and the ack-based completion protocol
@@ -22,7 +22,7 @@ Map the Flink checkpoint coordination architecture: how the JobManager triggers 
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file1.ext — role in architecture
 - path/to/file2.ext — role in architecture

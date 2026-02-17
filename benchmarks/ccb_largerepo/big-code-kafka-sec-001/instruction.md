@@ -24,7 +24,7 @@ Trace the Apache Kafka SASL authentication flow from channel creation through me
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file.ext — role in attack surface
 ...

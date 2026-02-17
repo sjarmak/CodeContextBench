@@ -10,7 +10,7 @@ mkdir -p /logs/verifier
 git config --global --add safe.directory /workspace 2>/dev/null || true
 
 # ── Source shared verifier library ────────────────────────────────────────
-source /workspace/tests/verifier_lib.sh
+source /tests/verifier_lib.sh
 
 # ── Output check ─────────────────────────────────────────────────────────
 SOLUTION_FILE="/logs/agent/solution.md"

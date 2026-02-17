@@ -22,7 +22,7 @@ Map the Django ORM query compilation pipeline from QuerySet to SQL. Trace how a 
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file1.ext — role in architecture
 - path/to/file2.ext — role in architecture

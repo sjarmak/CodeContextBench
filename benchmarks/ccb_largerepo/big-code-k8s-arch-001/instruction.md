@@ -22,7 +22,7 @@ Explain the Kubernetes scheduler architecture and how a Pod gets assigned to a N
 
 Write your analysis to `/logs/agent/solution.md` with the following structure:
 
-```markdown
+```
 ## Files Examined
 - path/to/file1.ext — role in architecture
 - path/to/file2.ext — role in architecture

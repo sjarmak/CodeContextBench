@@ -9,7 +9,7 @@
 #   - Composite score computation
 #
 # Usage:
-#   source /workspace/tests/verifier_lib.sh
+#   source /tests/verifier_lib.sh
 #   parse_solution_files "/logs/agent/solution.md"
 #   compute_ir_metrics "/workspace/tests/ground_truth.json"
 #   write_ir_metrics "/logs/verifier/ir_metrics.json"
