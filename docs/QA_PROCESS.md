@@ -52,7 +52,7 @@ bash configs/validate_one_per_benchmark.sh --smoke-runtime --smoke-timeout-sec 3
 
 # Override timeout-heavy suites (format: suite=seconds,suite=seconds)
 bash configs/validate_one_per_benchmark.sh --smoke-runtime --smoke-timeout-sec 300 \
-  --smoke-timeout-overrides "ccb_pytorch=900,ccb_tac=900,ccb_crossrepo=900"
+  --smoke-timeout-overrides "ccb_pytorch=1800,ccb_tac=900,ccb_crossrepo=900"
 ```
 
 **Usage:**

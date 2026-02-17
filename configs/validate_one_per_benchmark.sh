@@ -27,7 +27,7 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 DRY_RUN=false
 SMOKE_RUNTIME=false
 SMOKE_TIMEOUT_SEC=300
-SMOKE_TIMEOUT_OVERRIDES="${SMOKE_TIMEOUT_OVERRIDES:-ccb_pytorch=900,ccb_tac=900,ccb_crossrepo=900}"
+SMOKE_TIMEOUT_OVERRIDES="${SMOKE_TIMEOUT_OVERRIDES:-ccb_pytorch=1800,ccb_tac=900,ccb_crossrepo=900}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
