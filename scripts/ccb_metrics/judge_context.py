@@ -16,7 +16,13 @@ from collections import Counter
 from pathlib import Path
 from typing import Optional
 
-from .discovery import discover_runs, _extract_task_id, _is_batch_dir, _is_task_dir
+from .discovery import (
+    discover_runs,
+    _extract_task_id,
+    _is_batch_dir,
+    _is_task_dir,
+    resolve_task_transcript_path,
+)
 from .extractors import (
     extract_tool_usage_from_trajectory,
     extract_tool_usage_from_transcript,
@@ -111,7 +117,7 @@ def _extract_agent_output(task_dir: Path) -> Optional[str]:
         return text
 
     # Fallback: last assistant message text from transcript
-    transcript_path = task_dir / "agent" / "claude-code.txt"
+    transcript_path = resolve_task_transcript_path(task_dir)
     if not transcript_path.is_file():
         return None
 
@@ -146,7 +152,7 @@ def _extract_agent_output(task_dir: Path) -> Optional[str]:
 def _extract_tool_usage_summary(task_dir: Path) -> Optional[dict]:
     """Extract tool usage summary: total calls, MCP calls, top 5 tools."""
     trajectory_path = task_dir / "agent" / "trajectory.json"
-    transcript_path = task_dir / "agent" / "claude-code.txt"
+    transcript_path = resolve_task_transcript_path(task_dir)
 
     usage = extract_tool_usage_from_trajectory(trajectory_path)
     if usage.get("tool_calls_total") is None:
@@ -173,7 +179,7 @@ def _extract_code_changes(task_dir: Path) -> Optional[list[dict]]:
     Returns a list of {file, action} dicts, or None if not available.
     """
     trajectory_path = task_dir / "agent" / "trajectory.json"
-    transcript_path = task_dir / "agent" / "claude-code.txt"
+    transcript_path = resolve_task_transcript_path(task_dir)
 
     changes: list[dict] = []
 
@@ -506,7 +512,7 @@ def generate_judge_contexts(
         ground_truth = _read_ground_truth(benchmarks_dir, benchmark, task_id)
 
         # Extract transcript summary
-        transcript_path = task_dir / "agent" / "claude-code.txt"
+        transcript_path = resolve_task_transcript_path(task_dir)
         transcript_summary = _extract_transcript_summary(transcript_path)
 
         # Extract agent output

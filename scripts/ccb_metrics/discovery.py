@@ -16,6 +16,10 @@ from typing import Optional
 
 from .models import TaskMetrics, RunMetrics
 from .task_selection import normalize_benchmark_name
+from .transcript_paths import (
+    TRANSCRIPT_CANDIDATE_RELATIVE_PATHS,
+    resolve_task_transcript_path as _resolve_task_transcript_path,
+)
 from .extractors import (
     extract_task_from_result_json,
     extract_task_tokens_from_transcript,
@@ -39,6 +43,14 @@ from .extractors import (
     extract_mcp_latency_from_trajectory,
     classify_search_strategy,
 )
+
+
+def resolve_task_transcript_path(task_dir: Path) -> Path:
+    """Resolve transcript path by trying multiple harness artifact names."""
+    # Keep helper in this module so discovery users can share one resolver.
+    # This list intentionally covers non-Claude harness artifact variants.
+    _ = TRANSCRIPT_CANDIDATE_RELATIVE_PATHS
+    return _resolve_task_transcript_path(task_dir)
 
 
 def _infer_benchmark(run_name: str) -> str:
@@ -151,7 +163,7 @@ def _process_task_dir(
     # Token data: prefer transcript (actual API usage) over result.json
     # (result.json n_input_tokens can include cumulative MCP result tokens,
     # inflating counts by 100x for MCP-enabled runs)
-    transcript_path = task_dir / "agent" / "claude-code.txt"
+    transcript_path = resolve_task_transcript_path(task_dir)
     tokens = extract_task_tokens_from_transcript(transcript_path)
     if tokens.get("input_tokens") is not None:
         tm.input_tokens = tokens["input_tokens"]
@@ -189,7 +201,7 @@ def _process_task_dir(
 
     # Tool usage — prefer trajectory, fall back to transcript
     trajectory_path = task_dir / "agent" / "trajectory.json"
-    transcript_path = task_dir / "agent" / "claude-code.txt"
+    transcript_path = resolve_task_transcript_path(task_dir)
     tool_usage = extract_tool_usage_from_trajectory(trajectory_path)
     if tool_usage.get("tool_calls_total") is None:
         tool_usage = extract_tool_usage_from_transcript(transcript_path)
@@ -351,7 +363,7 @@ def discover_runs(runs_dir: str | Path) -> list[RunMetrics]:
                 _transcript_for_config = None
                 for _td in sorted(batch_dir.iterdir()):
                     if _is_task_dir(_td):
-                        _candidate = _td / "agent" / "claude-code.txt"
+                        _candidate = resolve_task_transcript_path(_td)
                         if _candidate.is_file():
                             _transcript_for_config = _candidate
                             break
