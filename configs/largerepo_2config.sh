@@ -63,7 +63,7 @@ CONCURRENCY=1  # Big codebases - run serially within each task
 TIMEOUT_MULTIPLIER=10  # 10x default timeout for large repos
 RUN_BASELINE=true
 RUN_FULL=true
-CATEGORY="${CATEGORY:-official}"
+CATEGORY="${CATEGORY:-staging}"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do

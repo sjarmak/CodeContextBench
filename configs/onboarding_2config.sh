@@ -65,7 +65,7 @@ CONCURRENCY=2
 TIMEOUT_MULTIPLIER=10
 RUN_BASELINE=true
 RUN_FULL=true
-CATEGORY="${CATEGORY:-official}"
+CATEGORY="${CATEGORY:-staging}"
 TASK_FILTER=""
 
 # All onboarding task IDs — populated by task-creation Ralphs

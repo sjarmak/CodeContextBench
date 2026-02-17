@@ -29,6 +29,7 @@ scripts/
   cost_report.py             # Token/cost aggregation
   sync_task_metadata.py      # task.toml vs selection registry reconciliation
   archive_run.py             # Archive old runs to save disk
+  promote_run.py             # Validate & promote staging runs to official
   rerun_failed.py            # Generate rerun commands for failed tasks
 
 docs/
@@ -64,15 +65,23 @@ docs/
 
 ## Running Tasks
 
+Runs land in `runs/staging/` by default. After validation, promote to `runs/official/`.
+
 ```bash
-# Run a single benchmark (2 configs: baseline, SG_full)
+# Run a benchmark (lands in runs/staging/)
 ./configs/pytorch_2config.sh
 
 # Run with parallel execution
 ./configs/pytorch_2config.sh --parallel
 
-# Override parallelism
-./configs/pytorch_2config.sh --parallel 4
+# Check staging runs
+python3 scripts/promote_run.py --list
+
+# Promote validated run to official
+python3 scripts/promote_run.py --execute pytorch_opus_20260217_120000
+
+# Skip staging (write directly to official)
+CATEGORY=official ./configs/pytorch_2config.sh
 ```
 
 See [AGENTS.md](AGENTS.md) for parallel execution details and multi-account setup.
@@ -111,6 +120,13 @@ python3 scripts/generate_eval_report.py
 
 # Select benchmark tasks
 python3 scripts/select_benchmark_tasks.py
+
+# Promote staging runs to official
+python3 scripts/promote_run.py --list                    # View staging runs
+python3 scripts/promote_run.py --execute <run_name>      # Promote to official
+
+# Monitor staging runs
+python3 scripts/aggregate_status.py --staging
 ```
 
 ## Operational Skills (17)
@@ -180,6 +196,7 @@ MAINTENANCE
 |-------|--------|---------|
 | `/sync-metadata` | `scripts/sync_task_metadata.py` | Reconcile task.toml vs selected_benchmark_tasks.json, `--fix` to auto-update |
 | `/archive-run` | `scripts/archive_run.py` | Move old runs to archive/, optional compression, dry-run by default |
+| `/promote-run` | `scripts/promote_run.py` | Validate and promote staging runs to official, regenerate MANIFEST |
 | `/reextract-metrics` | `scripts/reextract_all_metrics.py` | Batch re-extract task_metrics.json after extraction bug fixes or schema changes |
 
 ### Supporting Scripts

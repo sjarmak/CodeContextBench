@@ -71,7 +71,7 @@ TIMEOUT_MULTIPLIER=10
 RUN_SGONLY=true
 RUN_FULL=true
 SUITE_FILTER=""
-CATEGORY="${CATEGORY:-official}"
+CATEGORY="${CATEGORY:-staging}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in

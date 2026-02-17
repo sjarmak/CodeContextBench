@@ -42,7 +42,9 @@ from status_fingerprints import fingerprint_error
 # Constants (duplicated from generate_manifest.py for independence)
 # ---------------------------------------------------------------------------
 
-RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "official"
+RUNS_DIR_OFFICIAL = Path(__file__).resolve().parent.parent / "runs" / "official"
+RUNS_DIR_STAGING = Path(__file__).resolve().parent.parent / "runs" / "staging"
+RUNS_DIR = RUNS_DIR_OFFICIAL  # default; overridden by --staging flag
 
 # __v1_hinted: old run dirs from before enterprise task de-hinting (US-001..US-003).
 # Appended to batch dir names after reruns complete so pre-redesign data is excluded.
@@ -650,6 +652,10 @@ def parse_args():
         "--interval", type=int, default=60,
         help="Seconds between scans in --watch mode (default: 60)",
     )
+    parser.add_argument(
+        "--staging", action="store_true",
+        help="Scan runs/staging/ instead of runs/official/",
+    )
     return parser.parse_args()
 
 
@@ -671,7 +677,11 @@ def run_once(args) -> dict:
 
 
 def main():
+    global RUNS_DIR
     args = parse_args()
+
+    if args.staging:
+        RUNS_DIR = RUNS_DIR_STAGING
 
     if args.watch:
         try:

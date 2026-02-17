@@ -64,7 +64,7 @@ CONCURRENCY=2
 TIMEOUT_MULTIPLIER="${TIMEOUT_MULTIPLIER:-10}"
 RUN_BASELINE=true
 RUN_FULL=true
-CATEGORY="${CATEGORY:-official}"
+CATEGORY="${CATEGORY:-staging}"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do

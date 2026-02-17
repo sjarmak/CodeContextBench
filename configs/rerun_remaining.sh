@@ -58,7 +58,7 @@ AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
 MODEL="${MODEL:-anthropic/claude-opus-4-6}"
 CONCURRENCY=2
 TIMEOUT_MULTIPLIER=10
-CATEGORY="${CATEGORY:-official}"
+CATEGORY="${CATEGORY:-staging}"
 SELECTION_FILE="$SCRIPT_DIR/selected_benchmark_tasks.json"
 
 # Disable fail-fast so one suite's failure doesn't block others

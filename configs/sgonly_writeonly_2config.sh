@@ -69,7 +69,7 @@ TIMEOUT_MULTIPLIER=3
 RUN_SGONLY=true
 RUN_FULL=true
 SUITE_FILTER=""
-CATEGORY="${CATEGORY:-official}"
+CATEGORY="${CATEGORY:-staging}"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do

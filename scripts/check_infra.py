@@ -326,6 +326,28 @@ def check_runs_dir() -> dict:
     }
 
 
+def check_staging_dir() -> dict:
+    """Check runs/staging/ directory for pending promotions."""
+    staging_dir = Path(__file__).resolve().parent.parent / "runs" / "staging"
+    if not staging_dir.is_dir():
+        return {
+            "check": "staging_dir",
+            "status": "WARN",
+            "message": f"runs/staging/ not found at {staging_dir}. Will be created on first run.",
+        }
+
+    run_count = sum(
+        1 for d in staging_dir.iterdir()
+        if d.is_dir() and d.name != "archive"
+    )
+    pending = f" ({run_count} pending promotion)" if run_count > 0 else ""
+    return {
+        "check": "staging_dir",
+        "status": "OK",
+        "message": f"runs/staging/ exists{pending}",
+    }
+
+
 def format_table(results: list[dict]) -> str:
     """Format results as colored table."""
     lines = []
@@ -388,8 +410,9 @@ def main():
     # Harbor CLI
     results.append(check_harbor())
 
-    # Runs directory
+    # Runs directories
     results.append(check_runs_dir())
+    results.append(check_staging_dir())
 
     if args.format == "json":
         output = {

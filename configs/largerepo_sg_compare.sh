@@ -59,7 +59,7 @@ AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
 MODEL="${MODEL:-anthropic/claude-opus-4-6}"
 CONCURRENCY=1
 TIMEOUT_MULTIPLIER=10
-CATEGORY="${CATEGORY:-official}"
+CATEGORY="${CATEGORY:-staging}"
 RUN_LATEST=true
 RUN_PRECISE=true
 

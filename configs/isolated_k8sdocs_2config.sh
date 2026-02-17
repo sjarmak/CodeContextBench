@@ -65,7 +65,7 @@ CONCURRENCY=2
 TIMEOUT_MULTIPLIER=3
 RUN_ISOLATED=true
 RUN_FULL=true
-CATEGORY="${CATEGORY:-official}"
+CATEGORY="${CATEGORY:-staging}"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do

@@ -56,7 +56,7 @@ MODEL="${MODEL:-anthropic/claude-opus-4-6}"
 AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
 TIMEOUT_MULTIPLIER=10
 CONCURRENCY=1          # Trials per task (1 = single attempt)
-CATEGORY="${CATEGORY:-official}"
+CATEGORY="${CATEGORY:-staging}"
 BENCHMARK_FILTER=""    # Empty = all benchmarks
 ONLY_TASKS=""          # Empty = all tasks; space-separated list = only these
 DRY_RUN=false

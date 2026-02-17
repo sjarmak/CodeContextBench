@@ -107,7 +107,7 @@ TIMEOUT_MULTIPLIER=10
 RUN_BASELINE=true
 RUN_FULL=true
 SKIP_SERVER_CHECK=false
-CATEGORY="${CATEGORY:-official}"
+CATEGORY="${CATEGORY:-staging}"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
