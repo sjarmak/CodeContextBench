@@ -6,7 +6,7 @@
 #   2. MCP-Full (Sourcegraph + Deep Search hybrid)
 #
 # Usage:
-#   ./configs/codereview_3config.sh [OPTIONS]
+#   ./configs/codereview_2config.sh [OPTIONS]
 #
 # Options:
 #   --baseline-only        Run only baseline (no MCP)
