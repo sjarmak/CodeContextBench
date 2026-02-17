@@ -30,16 +30,37 @@ Runs before any benchmark execution to catch task definition errors that would w
 - **Missing test scripts** -- Verifies `tests/test.sh` is present and executable
 - **Missing tasks** -- Detects tasks in the selection registry that have no corresponding benchmark directory
 
+### Runtime Smoke (No Agent)
+
+Pre-flight now also supports a **runtime smoke mode** that validates task runtime wiring without spending model tokens:
+- Builds the task Docker image
+- Runs verifier script (`/tests/test.sh`) in-container
+- Checks reward file creation (`/logs/verifier/reward.txt` or `.json`)
+
+Use this for new/modified tasks and before large reruns involving task-definition changes.
+
+**Quick sweep helper (one task per benchmark):**
+```bash
+# No-agent runtime smoke across one representative task per benchmark
+bash configs/validate_one_per_benchmark.sh --smoke-runtime --smoke-timeout-sec 300
+```
+
 **Usage:**
 ```bash
-# Validate all tasks
-python3 scripts/validate_tasks_preflight.py
+# Validate all tasks (static checks)
+python3 scripts/validate_tasks_preflight.py --all
 
 # Validate a specific suite
 python3 scripts/validate_tasks_preflight.py --suite ccb_pytorch
 
 # Validate a single task
-python3 scripts/validate_tasks_preflight.py --task sgt-001
+python3 scripts/validate_tasks_preflight.py --task benchmarks/ccb_pytorch/sgt-005
+
+# Runtime smoke for a single task (no agent)
+python3 scripts/validate_tasks_preflight.py --task benchmarks/ccb_largerepo/big-code-k8s-001 --smoke-runtime
+
+# Runtime smoke for a suite (expensive)
+python3 scripts/validate_tasks_preflight.py --suite ccb_largerepo --smoke-runtime --smoke-timeout-sec 900
 ```
 
 ---
