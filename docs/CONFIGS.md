@@ -99,3 +99,16 @@ cost extraction depends on `scripts/ccb_metrics/extractors.py` model pricing
 keys. Official Codex runs should use `gpt-5.3-codex` so pricing is explicit.
 If a model identifier is unknown to `MODEL_PRICING`, extraction falls back to
 `claude-opus-4-5-20250514` rates and emits a warning.
+
+## Codex Harness Auth and Model Policy
+
+Codex authentication is separate from Claude OAuth refresh automation in
+`configs/_common.sh`. Codex operators must configure Codex credentials directly
+using either ChatGPT login or an API key; Claude token refresh helpers are not
+reused for Codex harness execution.
+
+Official Codex benchmark runs require model `gpt-5.3-codex` and should
+fail-fast if that model is unavailable in the configured Codex environment.
+
+For this rollout, Codex MCP policy is sourcegraph_full-only for MCP-enabled
+runs, with baseline comparisons using `none`. No other MCP modes are allowed.
