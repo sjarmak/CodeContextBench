@@ -20,13 +20,23 @@ Usage:
 
     # JSON output
     python3 scripts/validate_tasks_preflight.py --all --format json
+
+    # Runtime smoke (no agent): Docker build + verifier execution
+    python3 scripts/validate_tasks_preflight.py --task benchmarks/ccb_largerepo/big-code-k8s-001 --smoke-runtime
+
+    # Runtime smoke for a full suite (expensive)
+    python3 scripts/validate_tasks_preflight.py --suite ccb_largerepo --smoke-runtime --smoke-timeout-sec 900
 """
 
 import argparse
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
+import uuid
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -207,6 +217,108 @@ def validate_task(task_dir: Path, selected_index: dict) -> list[dict]:
     return issues
 
 
+def _shorten(text: str, limit: int = 500) -> str:
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def smoke_task_runtime(task_dir: Path, timeout_sec: int = 300) -> list[dict]:
+    """Build task image and run verifier without an agent.
+
+    This catches broken Dockerfiles and verifier script/runtime wiring before
+    expensive benchmark batches are launched.
+    """
+    issues: list[dict] = []
+    benchmark = task_dir.parent.name if task_dir.parent.name != "tasks" else task_dir.parent.parent.name
+    task_name = task_dir.name
+
+    def issue(severity: str, check: str, message: str):
+        issues.append({
+            "severity": severity,
+            "check": check,
+            "task": task_name,
+            "benchmark": benchmark,
+            "message": message,
+            "path": str(task_dir),
+        })
+
+    if shutil.which("docker") is None:
+        issue("CRITICAL", "smoke_no_docker", "docker not found on PATH")
+        return issues
+
+    dockerfile = task_dir / "environment" / "Dockerfile"
+    tests_dir = task_dir / "tests"
+    test_sh = tests_dir / "test.sh"
+    if not dockerfile.is_file():
+        issue("CRITICAL", "smoke_missing_dockerfile", "Missing environment/Dockerfile")
+        return issues
+    if not test_sh.is_file():
+        issue("CRITICAL", "smoke_missing_test_sh", "Missing tests/test.sh")
+        return issues
+
+    image_tag = f"ccb-smoke-{task_name.lower().replace('_', '-')}-{uuid.uuid4().hex[:8]}"
+
+    try:
+        build = subprocess.run(
+            ["docker", "build", "-f", str(dockerfile), "-t", image_tag, str(dockerfile.parent)],
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            check=False,
+        )
+        if build.returncode != 0:
+            message = _shorten(build.stdout + "\n" + build.stderr)
+            issue("CRITICAL", "smoke_docker_build_fail", f"Docker build failed: {message}")
+            return issues
+
+        tmp_logs = tempfile.mkdtemp(prefix=f"ccb-smoke-{task_name}-")
+        run_cmd = [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{tests_dir}:/tests:ro",
+            "-v",
+            f"{tmp_logs}:/logs",
+            image_tag,
+            "bash",
+            "-lc",
+            (
+                "set -e; mkdir -p /logs/agent /logs/verifier; "
+                "printf 'smoke preflight\\n' > /logs/agent/solution.md; "
+                "bash /tests/test.sh"
+            ),
+        ]
+        run = subprocess.run(
+            run_cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            check=False,
+        )
+        if run.returncode != 0:
+            message = _shorten(run.stdout + "\n" + run.stderr)
+            issue("CRITICAL", "smoke_verifier_exec_fail", f"Verifier execution failed: {message}")
+            return issues
+
+        reward_txt = Path(tmp_logs) / "verifier" / "reward.txt"
+        reward_json = Path(tmp_logs) / "verifier" / "reward.json"
+        if not reward_txt.is_file() and not reward_json.is_file():
+            issue(
+                "CRITICAL",
+                "smoke_reward_missing",
+                "Verifier ran but produced no reward.txt/reward.json in /logs/verifier",
+            )
+    except subprocess.TimeoutExpired:
+        issue("CRITICAL", "smoke_timeout", f"Smoke run exceeded timeout ({timeout_sec}s)")
+    finally:
+        subprocess.run(["docker", "image", "rm", "-f", image_tag], capture_output=True, text=True)
+
+    return issues
+
+
 def discover_task_dirs(suite: str | None = None, all_tasks: bool = False) -> list[Path]:
     """Find all task directories to validate."""
     dirs = []
@@ -291,6 +403,17 @@ def main():
     parser.add_argument("--format", choices=["table", "json"], default="table")
     parser.add_argument("--critical-only", action="store_true",
                         help="Only show CRITICAL issues")
+    parser.add_argument(
+        "--smoke-runtime",
+        action="store_true",
+        help="Run Docker build + verifier smoke (no agent) for each task",
+    )
+    parser.add_argument(
+        "--smoke-timeout-sec",
+        type=int,
+        default=300,
+        help="Per-task timeout for --smoke-runtime (default: 300)",
+    )
     args = parser.parse_args()
 
     selected_index = load_selected_tasks()
@@ -311,6 +434,8 @@ def main():
     all_issues = []
     for td in task_dirs:
         issues = validate_task(td, selected_index)
+        if args.smoke_runtime:
+            issues.extend(smoke_task_runtime(td, timeout_sec=args.smoke_timeout_sec))
         all_issues.extend(issues)
 
     if args.critical_only:
