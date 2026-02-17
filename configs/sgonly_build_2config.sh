@@ -2,7 +2,7 @@
 # SG-Only Build-Requiring Suites: 2-Config Comparison
 #
 # Runs build-requiring benchmark tasks across 2 configurations:
-#   1. sourcegraph_only (truncated source — all code via MCP, verifier restores full repo)
+#   1. sg_only_env (truncated source — Dockerfile.sg_only swapped in, same agent MCP type)
 #   2. sourcegraph_full (full local repo + MCP, for comparison)
 #
 # These suites require compilation/testing — the verifier runs the project's
@@ -18,7 +18,7 @@
 #   ./configs/sgonly_build_2config.sh [OPTIONS]
 #
 # Options:
-#   --sgonly-only          Run only sourcegraph_only config
+#   --sgonly-only          Run only sg_only_env config
 #   --full-only            Run only sourcegraph_full config
 #   --suite SUITE          Run only one suite (swebenchpro|pytorch|enterprise)
 #   --model MODEL          Override model (default: claude-opus-4-6)
@@ -217,10 +217,10 @@ remove_verifier_wrapper() {
 run_task() {
     local task_id=$1
     local task_dir=$2
-    local mcp_type=$3
+    local run_label=$3
     local sg_repo=$4
     local use_dataset=$5  # "swebenchpro" or empty
-    local jobs_subdir="${JOBS_BASE}/${mcp_type}"
+    local jobs_subdir="${JOBS_BASE}/${run_label}"
 
     mkdir -p "$jobs_subdir"
 
@@ -230,10 +230,11 @@ run_task() {
         unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
     fi
 
-    echo "  Running ${task_id} [${mcp_type}] (repo: ${sg_repo:-none})..."
+    echo "  Running ${task_id} [${run_label}] (repo: ${sg_repo:-none})..."
 
+    # Both sg_only_env and sourcegraph_full use the same agent MCP type.
     if [ -n "$use_dataset" ]; then
-        BASELINE_MCP_TYPE=$mcp_type harbor run \
+        BASELINE_MCP_TYPE=sourcegraph_full harbor run \
             --dataset "$use_dataset" \
             -t "$task_id" \
             --agent-import-path "$AGENT_PATH" \
@@ -242,9 +243,9 @@ run_task() {
             -n $CONCURRENCY \
             --timeout-multiplier $TIMEOUT_MULTIPLIER \
             2>&1 | tee "${jobs_subdir}/${task_id}.log" \
-            || echo "  WARNING: ${task_id} [${mcp_type}] returned non-zero"
+            || echo "  WARNING: ${task_id} [${run_label}] returned non-zero"
     else
-        BASELINE_MCP_TYPE=$mcp_type harbor run \
+        BASELINE_MCP_TYPE=sourcegraph_full harbor run \
             --path "$task_dir" \
             --agent-import-path "$AGENT_PATH" \
             --model "$MODEL" \
@@ -252,7 +253,7 @@ run_task() {
             -n $CONCURRENCY \
             --timeout-multiplier $TIMEOUT_MULTIPLIER \
             2>&1 | tee "${jobs_subdir}/${task_id}.log" \
-            || echo "  WARNING: ${task_id} [${mcp_type}] returned non-zero"
+            || echo "  WARNING: ${task_id} [${run_label}] returned non-zero"
     fi
 }
 
@@ -268,7 +269,7 @@ if [ "$RUN_SGONLY" = true ]; then
         echo "[SWE-bench Pro SG-ONLY] Running ${#SWEBENCH_TASKS[@]} tasks..."
         for task_id in "${SWEBENCH_TASKS[@]}"; do
             sg_repo="${SWEBENCH_SG_REPO[$task_id]:-}"
-            run_task "$task_id" "" "sourcegraph_only" "$sg_repo" "swebenchpro"
+            run_task "$task_id" "" "sg_only_env" "$sg_repo" "swebenchpro"
         done
     fi
 
@@ -280,7 +281,7 @@ if [ "$RUN_SGONLY" = true ]; then
             task_dir="${BENCHMARKS_DIR}/ccb_pytorch/${task_id}"
             sg_repo="${PYTORCH_SG_REPO[$task_id]:-}"
             inject_verifier_wrapper "$task_dir"
-            run_task "$task_id" "$task_dir" "sourcegraph_only" "$sg_repo" ""
+            run_task "$task_id" "$task_dir" "sg_only_env" "$sg_repo" ""
             remove_verifier_wrapper "$task_dir"
         done
     fi
@@ -293,7 +294,7 @@ if [ "$RUN_SGONLY" = true ]; then
             task_dir="${BENCHMARKS_DIR}/ccb_enterprise/${task_id}"
             sg_repo="${ENTERPRISE_SG_REPO[$task_id]:-}"
             inject_verifier_wrapper "$task_dir"
-            run_task "$task_id" "$task_dir" "sourcegraph_only" "$sg_repo" ""
+            run_task "$task_id" "$task_dir" "sg_only_env" "$sg_repo" ""
             remove_verifier_wrapper "$task_dir"
         done
     fi

@@ -3,7 +3,7 @@
 #
 # Runs write-only benchmark tasks (K8s Docs, LinuxFLBench, Investigation)
 # across 2 configurations:
-#   1. sourcegraph_only (no local source — all code via MCP)
+#   1. sg_only_env (no local source — Dockerfile.sg_only swapped in, same agent MCP type)
 #   2. sourcegraph_full (full local repo + MCP, for comparison)
 #
 # These suites are "write-only" — the verifier checks agent OUTPUT
@@ -14,7 +14,7 @@
 #   ./configs/sgonly_writeonly_2config.sh [OPTIONS]
 #
 # Options:
-#   --sgonly-only          Run only sourcegraph_only config
+#   --sgonly-only          Run only sg_only_env config
 #   --full-only            Run only sourcegraph_full config
 #   --suite SUITE          Run only one suite (k8sdocs|linuxflbench|investigation)
 #   --model MODEL          Override model (default: claude-opus-4-6)
@@ -137,11 +137,11 @@ for t in tasks:
 
 # SG repo mappings
 declare -A K8SDOCS_SG_REPO=(
-    ["apiserver-doc-001"]="sg-benchmarks/kubernetes--stripped"
-    ["applyconfig-doc-001"]="sg-benchmarks/kubernetes--stripped"
-    ["client-go-doc-001"]="sg-benchmarks/kubernetes--stripped"
-    ["fairqueuing-doc-001"]="sg-benchmarks/kubernetes--stripped"
-    ["pkg-doc-001"]="sg-benchmarks/kubernetes--stripped"
+    ["apiserver-doc-001"]="github.com/sg-benchmarks/kubernetes--stripped"
+    ["applyconfig-doc-001"]="github.com/sg-benchmarks/kubernetes--stripped"
+    ["client-go-doc-001"]="github.com/sg-benchmarks/kubernetes--stripped"
+    ["fairqueuing-doc-001"]="github.com/sg-benchmarks/kubernetes--stripped"
+    ["pkg-doc-001"]="github.com/sg-benchmarks/kubernetes--stripped"
 )
 
 declare -A LFL_SG_REPO=(
@@ -217,10 +217,10 @@ restore_dockerfile() {
 run_single_task() {
     local task_id=$1
     local task_dir=$2
-    local mcp_type=$3
+    local run_label=$3
     local sg_repo=$4
     local suite_prefix=$5
-    local jobs_subdir="${JOBS_BASE}/${mcp_type}"
+    local jobs_subdir="${JOBS_BASE}/${run_label}"
 
     mkdir -p "$jobs_subdir"
 
@@ -230,9 +230,11 @@ run_single_task() {
         unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
     fi
 
-    echo "  Running ${task_id} [${mcp_type}] (repo: ${sg_repo:-none})..."
+    echo "  Running ${task_id} [${run_label}] (repo: ${sg_repo:-none})..."
 
-    BASELINE_MCP_TYPE=$mcp_type harbor run \
+    # sg_only_env is purely an environment change (Dockerfile swap);
+    # the agent always runs as sourcegraph_full.
+    BASELINE_MCP_TYPE=sourcegraph_full harbor run \
         --path "$task_dir" \
         --agent-import-path "$AGENT_PATH" \
         --model "$MODEL" \
@@ -240,7 +242,7 @@ run_single_task() {
         -n $CONCURRENCY \
         --timeout-multiplier $TIMEOUT_MULTIPLIER \
         2>&1 | tee "${jobs_subdir}/${task_id}.log" \
-        || echo "  WARNING: ${task_id} [${mcp_type}] returned non-zero"
+        || echo "  WARNING: ${task_id} [${run_label}] returned non-zero"
 }
 
 run_suite() {
@@ -304,13 +306,13 @@ if [ "$RUN_SGONLY" = true ]; then
 
     # Run tasks
     if [ -z "$SUITE_FILTER" ] || [ "$SUITE_FILTER" = "k8sdocs" ]; then
-        run_suite "K8s Docs" "${BENCHMARKS_DIR}/ccb_k8sdocs" "sourcegraph_only" K8SDOCS_TASKS K8SDOCS_SG_REPO
+        run_suite "K8s Docs" "${BENCHMARKS_DIR}/ccb_k8sdocs" "sg_only_env" K8SDOCS_TASKS K8SDOCS_SG_REPO
     fi
     if [ -z "$SUITE_FILTER" ] || [ "$SUITE_FILTER" = "linuxflbench" ]; then
-        run_suite "LinuxFLBench" "${BENCHMARKS_DIR}/ccb_linuxflbench" "sourcegraph_only" LFL_TASKS LFL_SG_REPO
+        run_suite "LinuxFLBench" "${BENCHMARKS_DIR}/ccb_linuxflbench" "sg_only_env" LFL_TASKS LFL_SG_REPO
     fi
     if [ -z "$SUITE_FILTER" ] || [ "$SUITE_FILTER" = "investigation" ]; then
-        run_suite "Investigation" "${BENCHMARKS_DIR}/ccb_investigation" "sourcegraph_only" INV_TASKS INV_SG_REPO
+        run_suite "Investigation" "${BENCHMARKS_DIR}/ccb_investigation" "sg_only_env" INV_TASKS INV_SG_REPO
     fi
 
     # Restore all Dockerfiles
