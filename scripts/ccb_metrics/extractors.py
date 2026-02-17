@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from .models import TaskMetrics
+from .transcript_paths import infer_task_dir_from_transcript_path, resolve_task_transcript_path
 
 
 def _parse_iso(ts: Optional[str]) -> Optional[datetime]:
@@ -34,6 +35,20 @@ def _seconds_between(start: Optional[str], end: Optional[str]) -> Optional[float
     if s is None or e is None:
         return None
     return (e - s).total_seconds()
+
+
+def _resolve_existing_transcript_path(transcript_path: str | Path) -> Path:
+    """Resolve transcript path with task-level fallback candidates."""
+    path = Path(transcript_path)
+    if path.is_file():
+        return path
+
+    task_dir = infer_task_dir_from_transcript_path(path)
+    if task_dir is not None:
+        candidate = resolve_task_transcript_path(task_dir)
+        if candidate.is_file():
+            return candidate
+    return path
 
 
 def extract_task_from_result_json(
@@ -174,7 +189,7 @@ def extract_task_tokens_from_transcript(
         "cache_read_input_tokens": None,
         "total_cost_usd": None,
     }
-    path = Path(claude_code_txt_path)
+    path = _resolve_existing_transcript_path(claude_code_txt_path)
     if not path.is_file():
         return empty
 
@@ -346,7 +361,7 @@ def extract_tool_usage_from_transcript(
         tool_calls_by_name (Counter dict), mcp_ratio (mcp/total).
         Returns None-valued dict if file is missing or unparseable.
     """
-    path = Path(claude_code_txt_path)
+    path = _resolve_existing_transcript_path(claude_code_txt_path)
     if not path.is_file():
         return _empty_tool_usage()
 
@@ -436,7 +451,7 @@ def extract_run_config(
 
     # --- Extract from claude-code.txt init line ---
     if transcript_path is not None:
-        tp = Path(transcript_path)
+        tp = _resolve_existing_transcript_path(transcript_path)
         if tp.is_file():
             try:
                 for line in tp.open():
@@ -625,7 +640,7 @@ def extract_search_patterns_from_transcript(
     Returns:
         Dict with same schema as extract_search_patterns_from_trajectory.
     """
-    path = Path(claude_code_txt_path)
+    path = _resolve_existing_transcript_path(claude_code_txt_path)
     if not path.is_file():
         return _empty_search_patterns()
 
@@ -755,7 +770,7 @@ def extract_code_changes_from_transcript(
     Returns:
         Dict with same schema as extract_code_changes_from_trajectory.
     """
-    path = Path(claude_code_txt_path)
+    path = _resolve_existing_transcript_path(claude_code_txt_path)
     if not path.is_file():
         return _empty_code_changes()
 
@@ -1095,7 +1110,7 @@ def extract_conversation_analysis_from_transcript(
         "backtrack_count": None,
         "context_window_peak_pct": None,
     }
-    path = Path(claude_code_txt_path)
+    path = _resolve_existing_transcript_path(claude_code_txt_path)
     if not path.is_file():
         return empty
 
