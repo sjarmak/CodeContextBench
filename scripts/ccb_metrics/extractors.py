@@ -7,6 +7,7 @@ for missing fields. Stdlib only — no external dependencies.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import statistics as _statistics
 from datetime import datetime
@@ -15,6 +16,9 @@ from typing import Optional
 
 from .models import TaskMetrics
 from .transcript_paths import infer_task_dir_from_transcript_path, resolve_task_transcript_path
+
+logger = logging.getLogger(__name__)
+_WARNED_UNKNOWN_PRICING_MODELS: set[str] = set()
 
 
 def _parse_iso(ts: Optional[str]) -> Optional[datetime]:
@@ -840,6 +844,7 @@ MODEL_PRICING: dict[str, dict[str, float]] = {
     # GPT family
     "gpt-4o":      {"input": 2.50, "output": 10.0, "cache_write": 0, "cache_read": 0},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60, "cache_write": 0, "cache_read": 0},
+    "gpt-5.3-codex": {"input": 1.50, "output": 6.0, "cache_write": 0, "cache_read": 0},
     "o1":          {"input": 15.0, "output": 60.0, "cache_write": 0, "cache_read": 0},
     # Gemini family
     "gemini-2.0-flash": {"input": 0.10, "output": 0.40, "cache_write": 0, "cache_read": 0},
@@ -862,8 +867,9 @@ def calculate_cost_from_tokens(
         output_tokens: Number of output tokens.
         cache_creation: Number of cache creation (write) tokens.
         cache_read: Number of cache read tokens.
-        model: Model identifier (key into MODEL_PRICING). Falls back to
-            default Opus 4.5 pricing for unknown models.
+        model: Model identifier (key into MODEL_PRICING). Unknown models
+            deterministically fall back to default Opus 4.5 pricing and emit
+            a one-time warning per model.
 
     Returns:
         Estimated cost in USD, or None if input/output tokens unavailable.
@@ -871,7 +877,16 @@ def calculate_cost_from_tokens(
     if input_tokens is None or output_tokens is None:
         return None
 
-    prices = MODEL_PRICING.get(model, MODEL_PRICING[_DEFAULT_MODEL])
+    prices = MODEL_PRICING.get(model)
+    if prices is None:
+        prices = MODEL_PRICING[_DEFAULT_MODEL]
+        if model not in _WARNED_UNKNOWN_PRICING_MODELS:
+            logger.warning(
+                "Unknown model pricing for '%s'; using fallback '%s' rates",
+                model,
+                _DEFAULT_MODEL,
+            )
+            _WARNED_UNKNOWN_PRICING_MODELS.add(model)
 
     cost = (input_tokens / 1_000_000) * prices["input"]
     cost += (output_tokens / 1_000_000) * prices["output"]

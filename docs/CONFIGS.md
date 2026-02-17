@@ -91,3 +91,11 @@ The configuration is controlled by the `BASELINE_MCP_TYPE` environment variable 
 All three configs use `--dangerously-skip-permissions` for autonomous operation and deliver evaluation context via `--append-system-prompt`.
 
 Source: `~/evals/custom_agents/agents/claudecode/agents/claude_baseline_agent.py` lines 97-480
+
+## Multi-Harness Costing Caveat
+
+For non-Anthropic harnesses (Codex, Cursor, Gemini, Copilot, OpenHands), token
+cost extraction depends on `scripts/ccb_metrics/extractors.py` model pricing
+keys. Official Codex runs should use `gpt-5.3-codex` so pricing is explicit.
+If a model identifier is unknown to `MODEL_PRICING`, extraction falls back to
+`claude-opus-4-5-20250514` rates and emits a warning.
