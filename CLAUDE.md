@@ -4,7 +4,7 @@ This file is the operational quick-reference for benchmark maintenance.
 `AGENTS.md` mirrors this file.
 
 ## Benchmark Overview
-8 SDLC phase suites, 170 tasks. Tasks are organized by development lifecycle
+8 SDLC phase suites, 157 tasks. Tasks are organized by development lifecycle
 phase: build, debug, design, document, fix, secure, test, understand.
 See `README.md` for the full suite table and `docs/TASK_CATALOG.md` for
 per-task details.

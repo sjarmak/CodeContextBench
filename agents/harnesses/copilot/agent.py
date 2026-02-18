@@ -1,7 +1,6 @@
 """Copilot harness agent that runs the GitHub Copilot CLI with our baseline guidance."""
 
 import os
-import re
 import shlex
 from pathlib import Path
 
@@ -30,11 +29,14 @@ class CopilotCliAgent(BaseInstalledAgent):
         return Path(__file__).parent / "install-copilot.sh.j2"
 
     def create_run_agent_commands(self, instruction: str) -> list[ExecInput]:
-        token = self._resolve_token()
+        token = (
+            os.environ.get("COPILOT_GITHUB_TOKEN")
+            or os.environ.get("GH_TOKEN")
+            or os.environ.get("GITHUB_TOKEN")
+        )
         if not token:
             raise RuntimeError(
-                "Copilot CLI requires COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN, "
-                "or a token stored in ~/.config/gh/hosts.yml"
+                "Copilot CLI requires COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN"
             )
 
         env = {
@@ -69,25 +71,9 @@ class CopilotCliAgent(BaseInstalledAgent):
             f"{log_path}"
         )
 
-        return [ExecInput(command=command, env=env)]
-
-    def _resolve_token(self) -> str | None:
-        for var in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
-            value = os.environ.get(var)
-            if value:
-                return value
-
-        cfg = Path.home() / ".config/gh/hosts.yml"
-        if not cfg.exists():
-            return None
-
-        pattern = re.compile(r"^\s*oauth_token:\s*(\S+)")
-        with cfg.open() as fh:
-            for line in fh:
-                match = pattern.match(line)
-                if match:
-                    return match.group(1).strip()
-        return None
+        return [
+            ExecInput(command=command, env=env),
+        ]
 
     def populate_context_post_run(self, context: AgentContext) -> None:
         log_path = EnvironmentPaths.agent_dir / self._OUTPUT_FILENAME

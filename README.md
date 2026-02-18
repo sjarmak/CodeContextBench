@@ -16,11 +16,11 @@ Eight suites organized by software development lifecycle phase:
 | `ccb_design` | Architecture & Design | 20 | 20 | Architecture analysis, dependency graphs, change impact |
 | `ccb_fix` | Bug Repair | 25 | 25 | Diagnosing and fixing real bugs across production codebases |
 | `ccb_build` | Feature & Refactoring | 25 | 25 | New features, refactoring, dependency management |
-| `ccb_test` | Testing & QA | 20 | 20 | Code review, performance testing, code search, test generation |
-| `ccb_document` | Documentation | 20 | 20 | API references, architecture docs, changelogs, runbooks |
+| `ccb_test` | Testing & QA | 14 | 20 | Code review, performance testing, code search validation |
+| `ccb_document` | Documentation | 13 | 20 | API references, architecture docs, migration guides |
 | `ccb_secure` | Security & Compliance | 20 | 20 | CVE analysis, reachability, governance, access control |
 | `ccb_debug` | Debugging & Investigation | 20 | 20 | Root cause tracing, fault localization, provenance |
-| **Total** | | **170** | **170** | |
+| **Total** | | **157** | **170** | |
 
 See `docs/PRD_SDLC_SUITE_REORGANIZATION.md` for the reorganization rationale and task mapping.
 
@@ -139,10 +139,10 @@ See `python3 scripts/generate_eval_report.py --help` for all options.
 
 ## Running with Harbor
 
-The unified runner executes all 170 tasks across the 2-config matrix:
+The unified runner executes all 157 tasks across the 2-config matrix:
 
 ```bash
-# Run all 170 tasks across 2 configs
+# Run all 157 tasks across 2 configs
 bash configs/run_selected_tasks.sh
 
 # Run only the baseline config
