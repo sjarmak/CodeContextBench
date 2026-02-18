@@ -4,6 +4,10 @@
 # Bonus: root_cause_mrr factored into task_quality
 
 set -e
+
+# sg_only_env: restore full repo before verification (no-op for regular runs)
+[ -f /tmp/.sg_only_mode ] && [ -f /tests/sgonly_verifier_wrapper.sh ] && source /tests/sgonly_verifier_wrapper.sh
+
 cd /workspace
 mkdir -p /logs/verifier
 
@@ -25,7 +29,7 @@ SOLUTION_SIZE=$(wc -c < "$SOLUTION_FILE")
 echo "Solution file found ($SOLUTION_SIZE bytes)"
 
 # ── IR metrics pipeline ──────────────────────────────────────────────────
-run_ir_pipeline "$SOLUTION_FILE" "/workspace/tests/ground_truth.json" "/logs/verifier/ir_metrics.json"
+run_ir_pipeline "$SOLUTION_FILE" "/tests/ground_truth.json" "/logs/verifier/ir_metrics.json"
 
 # ── Task quality scoring ─────────────────────────────────────────────────
 QUALITY_SCORE=0

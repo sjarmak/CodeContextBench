@@ -47,10 +47,10 @@ fi
 
 # ── IR metrics pipeline ──────────────────────────────────────────────────
 if [ "$HAS_SOLUTION" -eq 1 ]; then
-    run_ir_pipeline "$SOLUTION_FILE" "/workspace/tests/ground_truth.json" "/logs/verifier/ir_metrics.json"
+    run_ir_pipeline "$SOLUTION_FILE" "/tests/ground_truth.json" "/logs/verifier/ir_metrics.json"
 else
     # Extract files from git diff if no solution.md
-    load_ground_truth "/workspace/tests/ground_truth.json"
+    load_ground_truth "/tests/ground_truth.json"
     AGENT_FILES=()
     while IFS= read -r f; do
         [ -n "$f" ] && AGENT_FILES+=("$f")
@@ -60,7 +60,7 @@ else
             [ -n "$f" ] && AGENT_FILES+=("$f")
         done < <(git diff --name-only "$ORIGIN_REF..HEAD" 2>/dev/null)
     fi
-    compute_ir_metrics "/workspace/tests/ground_truth.json"
+    compute_ir_metrics "/tests/ground_truth.json"
     compute_dep_accuracy
     write_ir_metrics "/logs/verifier/ir_metrics.json"
 fi
