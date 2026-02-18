@@ -1,18 +1,15 @@
-"""Copilot harness agent stub for CodeContextBench multi-harness evaluation.
+"""Copilot harness agent placeholder.
 
-Harbor reference:
-- No built-in Copilot installed agent in src/harbor/agents/installed as of 2026-02-18.
-
-Import path:
-- agents.harnesses.copilot:CopilotHarnessAgent
+Harbor currently does not expose an installed Copilot CLI agent, so this class
+remains a stub until such a module exists. It still shares the baseline guidance
+contract and will be the place to hook into Harbor once Copilot support lands.
 """
 
 
 class CopilotHarnessAgent:
-    """Stub agent for GitHub Copilot harness integration."""
+    """Stub that will be replaced when Harbor provides a Copilot CLI agent."""
 
     def __init__(self, *args, **kwargs):
         raise NotImplementedError(
-            "CopilotHarnessAgent is a stub. Implement Copilot harness integration "
-            "before using this agent."
+            "CopilotHarnessAgent requires a Harbor Copilot CLI integration."
         )

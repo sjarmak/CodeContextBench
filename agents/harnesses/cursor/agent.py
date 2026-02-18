@@ -1,18 +1,9 @@
-"""Cursor harness agent stub for CodeContextBench multi-harness evaluation.
+"""Cursor harness agent wired to Harbor's Cursor CLI with shared guidance."""
 
-Harbor reference:
-- src/harbor/agents/installed/cursor_cli.py
+from harbor.agents.installed.cursor_cli import CursorCli
 
-Import path:
-- agents.harnesses.cursor:CursorHarnessAgent
-"""
+from ..base import BaselineHarnessMixin
 
 
-class CursorHarnessAgent:
-    """Stub agent for Cursor harness integration."""
-
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError(
-            "CursorHarnessAgent is a stub. Implement Cursor harness integration "
-            "before using this agent."
-        )
+class CursorHarnessAgent(BaselineHarnessMixin, CursorCli):
+    """Cursor CLI agent extended with evaluation context and MCP wiring."""

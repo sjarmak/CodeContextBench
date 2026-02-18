@@ -1,18 +1,9 @@
-"""Codex harness agent stub for CodeContextBench multi-harness evaluation.
+"""Codex harness agent using Harbor's Codex CLI and shared baseline guidance."""
 
-Harbor reference:
-- src/harbor/agents/installed/codex.py
+from harbor.agents.installed.codex import Codex
 
-Import path:
-- agents.harnesses.codex:CodexHarnessAgent
-"""
+from ..base import BaselineHarnessMixin
 
 
-class CodexHarnessAgent:
-    """Stub agent for Codex harness integration."""
-
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError(
-            "CodexHarnessAgent is a stub. Implement Codex harness integration "
-            "before using this agent."
-        )
+class CodexHarnessAgent(BaselineHarnessMixin, Codex):
+    """Codex CLI agent extended with evaluation context and MCP wiring."""

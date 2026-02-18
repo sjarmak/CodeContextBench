@@ -1,18 +1,9 @@
-"""Gemini harness agent stub for CodeContextBench multi-harness evaluation.
+"""Gemini harness agent wired to Harbor's Gemini CLI with shared guidance."""
 
-Harbor reference:
-- src/harbor/agents/installed/gemini_cli.py
+from harbor.agents.installed.gemini_cli import GeminiCli
 
-Import path:
-- agents.harnesses.gemini:GeminiHarnessAgent
-"""
+from ..base import BaselineHarnessMixin
 
 
-class GeminiHarnessAgent:
-    """Stub agent for Gemini harness integration."""
-
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError(
-            "GeminiHarnessAgent is a stub. Implement Gemini harness integration "
-            "before using this agent."
-        )
+class GeminiHarnessAgent(BaselineHarnessMixin, GeminiCli):
+    """Gemini CLI agent extended with evaluation context and MCP wiring."""

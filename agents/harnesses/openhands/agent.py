@@ -1,18 +1,9 @@
-"""OpenHands harness agent stub for CodeContextBench multi-harness evaluation.
+"""OpenHands harness agent wired to Harbor's OpenHands CLI with shared baseline tooling."""
 
-Harbor reference:
-- src/harbor/agents/installed/openhands.py
+from harbor.agents.installed.openhands import OpenHands
 
-Import path:
-- agents.harnesses.openhands:OpenHandsHarnessAgent
-"""
+from ..base import BaselineHarnessMixin
 
 
-class OpenHandsHarnessAgent:
-    """Stub agent for OpenHands harness integration."""
-
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError(
-            "OpenHandsHarnessAgent is a stub. Implement OpenHands harness integration "
-            "before using this agent."
-        )
+class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
+    """OpenHands CLI agent extended with evaluation context and MCP wiring."""
