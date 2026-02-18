@@ -612,8 +612,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--runs-dir",
-        default=str(Path.home() / "evals/custom_agents/agents/claudecode/runs/official"),
-        help="Path to Harbor runs/official/ directory (default: ~/evals/.../runs/official/)",
+        default=str(Path(__file__).resolve().parent.parent.parent / "runs" / "official"),
+        help="Path to Harbor runs/official/ directory (default: <project>/runs/official/)",
     )
     parser.add_argument(
         "--benchmarks-dir",

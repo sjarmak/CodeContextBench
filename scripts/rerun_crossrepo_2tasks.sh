@@ -5,7 +5,7 @@
 # run because they completed before the set -e fix was applied to test.sh.
 # cross_file_reasoning_01 and refactor_rename_01 should have valid results from that run.
 #
-# Total: 2 tasks x 3 configs = 6 pairs
+# Total: 2 tasks x 2 configs
 
 set -e
 
@@ -14,21 +14,14 @@ cd "$SCRIPT_DIR/.."
 
 BENCH_DIR="$(pwd)/benchmarks"
 
-# Agent module
-AGENT_DIR="${AGENT_DIR:-$HOME/evals/custom_agents/agents/claudecode}"
-export PYTHONPATH="${AGENT_DIR}:$(pwd):${PYTHONPATH:-}"
+# Agent code lives in-repo under agents/
+export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
 # Shared config: subscription mode + token refresh
 source "$(pwd)/configs/_common.sh"
 
 # Load credentials
-if [ -f ~/evals/.env.local ]; then
-    echo "Loading credentials from ~/evals/.env.local..."
-    source ~/evals/.env.local
-else
-    echo "ERROR: ~/evals/.env.local not found"
-    exit 1
-fi
+load_credentials
 
 # Common parameters
 MODEL="anthropic/claude-opus-4-5-20251101"
@@ -46,7 +39,7 @@ declare -A CROSSREPO_SG=(
     ["bug_localization_01"]="sg-benchmarks/scikit-learn--cb7e82dd"
 )
 
-CONFIGS=("baseline" "sourcegraph_base" "sourcegraph_full")
+CONFIGS=("baseline" "sourcegraph_full")
 
 # Helper functions
 run_task() {
@@ -101,14 +94,13 @@ extract_metrics() {
 mcp_type_for_config() {
     case "$1" in
         baseline)          echo "none" ;;
-        sourcegraph_base)  echo "sourcegraph_base" ;;
         sourcegraph_full)  echo "sourcegraph_full" ;;
     esac
 }
 
 # Pre-flight
 echo "=============================================="
-echo "Re-running 2 crossrepo tasks x 3 configs = 6 pairs"
+echo "Re-running 2 crossrepo tasks x 2 configs"
 echo "=============================================="
 echo "Token status:"
 ensure_fresh_token
@@ -141,10 +133,10 @@ echo "=============================================="
 echo "All $TOTAL re-runs complete!"
 echo "=============================================="
 echo ""
-echo "Results: ${CROSSREPO_JOBS}/{baseline,sourcegraph_base,sourcegraph_full}/"
+echo "Results: ${CROSSREPO_JOBS}/{baseline,sourcegraph_full}/"
 echo ""
 echo "Quick reward check:"
-for config in baseline sourcegraph_base sourcegraph_full; do
+for config in baseline sourcegraph_full; do
     for f in "$CROSSREPO_JOBS/$config"/*/*/result.json "$CROSSREPO_JOBS/$config"/*/result.json; do
         if [ -f "$f" ]; then
             task=$(python3 -c "import json; d=json.load(open('$f')); print(d.get('task_id', d.get('name','?')))" 2>/dev/null)

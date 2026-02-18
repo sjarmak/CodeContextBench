@@ -186,8 +186,8 @@ def check_multi_account_tokens() -> list[dict]:
 
 
 def check_env_local() -> dict:
-    """Check ~/evals/.env.local for required variables (subscription-only mode)."""
-    env_file = Path(REAL_HOME) / "evals" / ".env.local"
+    """Check .env.local for required variables (subscription-only mode)."""
+    env_file = Path(__file__).resolve().parent.parent / ".env.local"
 
     if not env_file.is_file():
         return {

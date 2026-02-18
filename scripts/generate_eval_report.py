@@ -11,7 +11,7 @@ Stdlib only. Compatible with Python 3.10+.
 
 Usage:
     python3 scripts/generate_eval_report.py \
-        --runs-dir ~/evals/custom_agents/agents/claudecode/runs/official/ \
+        --runs-dir ./runs/official/ \
         --output-dir ./eval_reports/
 """
 
@@ -613,7 +613,7 @@ def main() -> None:
         epilog=(
             "Examples:\n"
             "  python3 scripts/generate_eval_report.py \\\n"
-            "      --runs-dir ~/evals/custom_agents/agents/claudecode/runs/official/ \\\n"
+            "      --runs-dir ./runs/official/ \\\n"
             "      --output-dir ./eval_reports/\n"
             "\n"
             "  python3 scripts/generate_eval_report.py --no-csv\n"

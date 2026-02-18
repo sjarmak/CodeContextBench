@@ -23,7 +23,7 @@
 #
 # Prerequisites:
 #   - configs/selected_benchmark_tasks.json in repo
-#   - ~/evals/.env.local with USE_SUBSCRIPTION=true
+#   - .env.local (repo root) with USE_SUBSCRIPTION=true
 #   - SOURCEGRAPH_ACCESS_TOKEN in .env.local (for MCP modes)
 
 set -e
@@ -32,9 +32,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$SCRIPT_DIR/.."
 cd "$REPO_ROOT"
 
-# Agent module lives in the evals repo; add it to PYTHONPATH
-AGENT_DIR="${AGENT_DIR:-$HOME/evals/custom_agents/agents/claudecode}"
-export PYTHONPATH="${AGENT_DIR}:$(pwd):$PYTHONPATH"
+# Agent code lives in-repo under agents/
+export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
 # Shared config: subscription mode + token refresh
 source "$SCRIPT_DIR/_common.sh"
@@ -105,10 +104,7 @@ if [ ! -f "$SELECTION_FILE" ]; then
     exit 1
 fi
 
-if [ -f ~/evals/.env.local ]; then
-    echo "Loading credentials from ~/evals/.env.local..."
-    source ~/evals/.env.local
-fi
+load_credentials
 
 enforce_subscription_mode
 

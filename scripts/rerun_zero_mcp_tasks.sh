@@ -16,21 +16,14 @@ cd "$SCRIPT_DIR/.."
 
 BENCH_DIR="/home/stephanie_jarmak/CodeContextBench/benchmarks"
 
-# Agent module lives in the evals repo; add it to PYTHONPATH
-AGENT_DIR="${AGENT_DIR:-$HOME/evals/custom_agents/agents/claudecode}"
-export PYTHONPATH="${AGENT_DIR}:$(pwd):${PYTHONPATH:-}"
+# Agent code lives in-repo under agents/
+export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
 # Shared config: subscription mode + token refresh
 source "$(pwd)/configs/_common.sh"
 
 # Load credentials
-if [ -f ~/evals/.env.local ]; then
-    echo "Loading credentials from ~/evals/.env.local..."
-    source ~/evals/.env.local
-else
-    echo "ERROR: ~/evals/.env.local not found"
-    exit 1
-fi
+load_credentials
 
 # Common parameters
 MODEL="anthropic/claude-opus-4-5-20251101"
@@ -110,9 +103,9 @@ extract_metrics() {
 # ============================================
 run_task "[1/14] simple_test_01 (crossrepo SB)" \
     "${BENCH_DIR}/ccb_crossrepo/simple_test_01" \
-    "sourcegraph_base" \
+    "sourcegraph_full" \
     "sg-benchmarks/kubernetes--8c9c67c0" \
-    "${CROSSREPO_JOBS}/sourcegraph_base"
+    "${CROSSREPO_JOBS}/sourcegraph_full"
 
 run_task "[2/14] simple_test_01 (crossrepo SF)" \
     "${BENCH_DIR}/ccb_crossrepo/simple_test_01" \
@@ -120,7 +113,7 @@ run_task "[2/14] simple_test_01 (crossrepo SF)" \
     "sg-benchmarks/kubernetes--8c9c67c0" \
     "${CROSSREPO_JOBS}/sourcegraph_full"
 
-extract_metrics "${CROSSREPO_JOBS}/sourcegraph_base" "ccb_crossrepo" "sourcegraph_base"
+extract_metrics "${CROSSREPO_JOBS}/sourcegraph_full" "ccb_crossrepo" "sourcegraph_full"
 extract_metrics "${CROSSREPO_JOBS}/sourcegraph_full" "ccb_crossrepo" "sourcegraph_full"
 
 # ============================================
@@ -128,27 +121,27 @@ extract_metrics "${CROSSREPO_JOBS}/sourcegraph_full" "ccb_crossrepo" "sourcegrap
 # ============================================
 run_task "[3/14] dibench-python-inducer-cgen (SB)" \
     "${BENCH_DIR}/ccb_dibench/dibench-python-inducer-cgen" \
-    "sourcegraph_base" \
+    "sourcegraph_full" \
     "sg-benchmarks/cgen--dibench" \
-    "${DIBENCH_JOBS}/sourcegraph_base"
+    "${DIBENCH_JOBS}/sourcegraph_full"
 
 run_task "[4/14] dibench-python-rhinosec-iamactionhunter (SB)" \
     "${BENCH_DIR}/ccb_dibench/dibench-python-rhinosec-iamactionhunter" \
-    "sourcegraph_base" \
+    "sourcegraph_full" \
     "sg-benchmarks/IAMActionHunter--dibench" \
-    "${DIBENCH_JOBS}/sourcegraph_base"
+    "${DIBENCH_JOBS}/sourcegraph_full"
 
 run_task "[5/14] dibench-rust-rusticata-pcap-parser (SB)" \
     "${BENCH_DIR}/ccb_dibench/dibench-rust-rusticata-pcap-parser" \
-    "sourcegraph_base" \
+    "sourcegraph_full" \
     "sg-benchmarks/pcap-parser--dibench" \
-    "${DIBENCH_JOBS}/sourcegraph_base"
+    "${DIBENCH_JOBS}/sourcegraph_full"
 
 run_task "[6/14] dibench-csharp-dotnetkoans (SB)" \
     "${BENCH_DIR}/ccb_dibench/dibench-csharp-dotnetkoans" \
-    "sourcegraph_base" \
+    "sourcegraph_full" \
     "sg-benchmarks/DotNetKoans--dibench" \
-    "${DIBENCH_JOBS}/sourcegraph_base"
+    "${DIBENCH_JOBS}/sourcegraph_full"
 
 run_task "[7/14] dibench-python-inducer-cgen (SF)" \
     "${BENCH_DIR}/ccb_dibench/dibench-python-inducer-cgen" \
@@ -174,7 +167,7 @@ run_task "[10/14] dibench-csharp-dotnetkoans (SF)" \
     "sg-benchmarks/DotNetKoans--dibench" \
     "${DIBENCH_JOBS}/sourcegraph_full"
 
-extract_metrics "${DIBENCH_JOBS}/sourcegraph_base" "ccb_dibench" "sourcegraph_base"
+extract_metrics "${DIBENCH_JOBS}/sourcegraph_full" "ccb_dibench" "sourcegraph_full"
 extract_metrics "${DIBENCH_JOBS}/sourcegraph_full" "ccb_dibench" "sourcegraph_full"
 
 # ============================================
@@ -199,22 +192,22 @@ extract_metrics "${LOCOBENCH_JOBS}/sourcegraph_full" "ccb_locobench" "sourcegrap
 # ============================================
 run_task "[13/14] sgt-008 (pytorch SB)" \
     "${BENCH_DIR}/ccb_pytorch/sgt-008" \
-    "sourcegraph_base" \
+    "sourcegraph_full" \
     "sg-benchmarks/pytorch--863edc78" \
-    "${PYTORCH_JOBS}/sourcegraph_base"
+    "${PYTORCH_JOBS}/sourcegraph_full"
 
-extract_metrics "${PYTORCH_JOBS}/sourcegraph_base" "ccb_pytorch" "sourcegraph_base"
+extract_metrics "${PYTORCH_JOBS}/sourcegraph_full" "ccb_pytorch" "sourcegraph_full"
 
 # ============================================
 # 5. SWE-Perf: sweperf-001 (SB only)
 # ============================================
 run_task "[14/14] sweperf-001 (sweperf SB)" \
     "${BENCH_DIR}/ccb_sweperf/tasks/sweperf-001" \
-    "sourcegraph_base" \
+    "sourcegraph_full" \
     "sg-benchmarks/numpy--a639fbf5" \
-    "${SWEPERF_JOBS}/sourcegraph_base"
+    "${SWEPERF_JOBS}/sourcegraph_full"
 
-extract_metrics "${SWEPERF_JOBS}/sourcegraph_base" "ccb_sweperf" "sourcegraph_base"
+extract_metrics "${SWEPERF_JOBS}/sourcegraph_full" "ccb_sweperf" "sourcegraph_full"
 
 # ============================================
 # Summary
@@ -228,8 +221,8 @@ echo "Results by benchmark:"
 echo "  ${CROSSREPO_JOBS}/sourcegraph_{base,full}/"
 echo "  ${DIBENCH_JOBS}/sourcegraph_{base,full}/"
 echo "  ${LOCOBENCH_JOBS}/sourcegraph_full/"
-echo "  ${PYTORCH_JOBS}/sourcegraph_base/"
-echo "  ${SWEPERF_JOBS}/sourcegraph_base/"
+echo "  ${PYTORCH_JOBS}/sourcegraph_full/"
+echo "  ${SWEPERF_JOBS}/sourcegraph_full/"
 echo ""
 echo "Check MCP usage:"
 for d in "$CROSSREPO_JOBS" "$DIBENCH_JOBS" "$LOCOBENCH_JOBS" "$PYTORCH_JOBS" "$SWEPERF_JOBS"; do

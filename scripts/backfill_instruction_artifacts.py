@@ -21,7 +21,7 @@ from pathlib import Path
 
 
 # Known MCP modes that get the preamble
-HYBRID_MCP_MODES = {"sourcegraph_full", "sourcegraph_base"}
+HYBRID_MCP_MODES = {"sourcegraph_full"}
 
 # All 3config scripts' TASK_SG_REPO_NAMES mappings (hardcoded here for backfill)
 # These match the associative arrays in the config scripts.
@@ -45,10 +45,10 @@ def detect_mcp_mode(trial_dir: str) -> str:
     """Detect MCP mode from directory path.
 
     Directory structure: .../runs/.../run_name/MODE/timestamp/trial_id/
-    MODE is one of: baseline, sourcegraph_full, sourcegraph_base
+    MODE is one of: baseline, sourcegraph_full
     """
     parts = Path(trial_dir).parts
-    for mode in ("sourcegraph_full", "sourcegraph_base", "baseline",
+    for mode in ("sourcegraph_full", "baseline",
                  "sourcegraph", "deepsearch", "deepsearch_hybrid"):
         if mode in parts:
             return mode
@@ -179,7 +179,7 @@ def main():
     dry_run = "--dry-run" in sys.argv
 
     search_roots = [
-        Path("/home/stephanie_jarmak/evals/custom_agents/agents/claudecode/runs/official"),
+        Path(__file__).resolve().parent.parent / "runs" / "official",
         Path("/home/stephanie_jarmak/CodeContextBench/runs/validation"),
     ]
 

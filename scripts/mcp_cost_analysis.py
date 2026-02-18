@@ -14,7 +14,7 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
-RUNS_DIR = Path("/home/stephanie_jarmak/evals/custom_agents/agents/claudecode/runs/official")
+RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "official"
 
 SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived"]
 

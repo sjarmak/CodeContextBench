@@ -23,21 +23,14 @@ cd "$SCRIPT_DIR/.."
 
 BENCH_DIR="$(pwd)/benchmarks"
 
-# Agent module
-AGENT_DIR="${AGENT_DIR:-$HOME/evals/custom_agents/agents/claudecode}"
-export PYTHONPATH="${AGENT_DIR}:$(pwd):${PYTHONPATH:-}"
+# Agent code lives in-repo under agents/
+export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
 # Shared config: subscription mode + token refresh
 source "$(pwd)/configs/_common.sh"
 
 # Load credentials
-if [ -f ~/evals/.env.local ]; then
-    echo "Loading credentials from ~/evals/.env.local..."
-    source ~/evals/.env.local
-else
-    echo "ERROR: ~/evals/.env.local not found"
-    exit 1
-fi
+load_credentials
 
 # Common parameters
 MODEL="anthropic/claude-opus-4-5-20251101"
@@ -73,7 +66,7 @@ declare -A PYTORCH_SG=(
 
 K8SDOCS_SG="sg-benchmarks/kubernetes--8c9c67c0"
 
-CONFIGS=("baseline" "sourcegraph_base" "sourcegraph_full")
+CONFIGS=("baseline" "sourcegraph_full" "sourcegraph_full")
 
 # ============================================
 # Helper functions
@@ -130,7 +123,7 @@ extract_metrics() {
 mcp_type_for_config() {
     case "$1" in
         baseline)          echo "none" ;;
-        sourcegraph_base)  echo "sourcegraph_base" ;;
+        sourcegraph_full)  echo "sourcegraph_full" ;;
         sourcegraph_full)  echo "sourcegraph_full" ;;
     esac
 }
@@ -161,7 +154,7 @@ N=0
 # ============================================
 
 # servo: only SB and SF
-for config in "sourcegraph_base" "sourcegraph_full"; do
+for config in "sourcegraph_full" "sourcegraph_full"; do
     N=$((N + 1))
     mcp=$(mcp_type_for_config "$config")
     run_task "[$N/$TOTAL] big-code-servo-001 (largerepo $config)" \
@@ -247,14 +240,14 @@ echo "All $TOTAL re-runs complete!"
 echo "=============================================="
 echo ""
 echo "Results:"
-echo "  ${LARGEREPO_JOBS}/{baseline,sourcegraph_base,sourcegraph_full}/"
-echo "  ${PYTORCH_JOBS}/{baseline,sourcegraph_base,sourcegraph_full}/"
-echo "  ${K8SDOCS_JOBS}/{baseline,sourcegraph_base,sourcegraph_full}/"
+echo "  ${LARGEREPO_JOBS}/{baseline,sourcegraph_full,sourcegraph_full}/"
+echo "  ${PYTORCH_JOBS}/{baseline,sourcegraph_full,sourcegraph_full}/"
+echo "  ${K8SDOCS_JOBS}/{baseline,sourcegraph_full,sourcegraph_full}/"
 echo ""
 echo "Quick reward check:"
 for d in "$LARGEREPO_JOBS" "$PYTORCH_JOBS" "$K8SDOCS_JOBS"; do
     bench=$(basename "$d" | sed 's/_opus_.*//')
-    for config in baseline sourcegraph_base sourcegraph_full; do
+    for config in baseline sourcegraph_full sourcegraph_full; do
         for f in "$d/$config"/*/*/result.json "$d/$config"/*/result.json; do
             if [ -f "$f" ]; then
                 task=$(python3 -c "import json; d=json.load(open('$f')); print(d.get('task_id', d.get('name','?')))" 2>/dev/null)

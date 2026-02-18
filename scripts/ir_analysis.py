@@ -51,7 +51,7 @@ from ccb_metrics.ir_metrics import (
     MCPValueScore,
 )
 
-RUNS_DIR = Path("/home/stephanie_jarmak/evals/custom_agents/agents/claudecode/runs/official")
+RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "official"
 MANIFEST_PATH = RUNS_DIR / "MANIFEST.json"
 BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
 SELECTION_FILE = Path(__file__).resolve().parent.parent / "configs" / "selected_benchmark_tasks.json"

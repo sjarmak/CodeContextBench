@@ -1,5 +1,5 @@
 #!/bin/bash
-# Re-run ALL 4 crossrepo tasks x 3 configs = 12 pairs
+# Re-run ALL 4 crossrepo tasks x 2 configs
 #
 # All 4 crossrepo test.sh scripts had verifier issues:
 # - api_upgrade_01, refactor_rename_01: corpus validate_patch.py doesn't accept --expected
@@ -18,21 +18,14 @@ cd "$SCRIPT_DIR/.."
 
 BENCH_DIR="$(pwd)/benchmarks"
 
-# Agent module
-AGENT_DIR="${AGENT_DIR:-$HOME/evals/custom_agents/agents/claudecode}"
-export PYTHONPATH="${AGENT_DIR}:$(pwd):${PYTHONPATH:-}"
+# Agent code lives in-repo under agents/
+export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
 # Shared config: subscription mode + token refresh
 source "$(pwd)/configs/_common.sh"
 
 # Load credentials
-if [ -f ~/evals/.env.local ]; then
-    echo "Loading credentials from ~/evals/.env.local..."
-    source ~/evals/.env.local
-else
-    echo "ERROR: ~/evals/.env.local not found"
-    exit 1
-fi
+load_credentials
 
 # Common parameters
 MODEL="anthropic/claude-opus-4-5-20251101"
@@ -52,7 +45,7 @@ declare -A CROSSREPO_SG=(
     ["refactor_rename_01"]="sg-benchmarks/django--9e8f0953"
 )
 
-CONFIGS=("baseline" "sourcegraph_base" "sourcegraph_full")
+CONFIGS=("baseline" "sourcegraph_full" "sourcegraph_full")
 
 # Helper functions
 run_task() {
@@ -107,14 +100,14 @@ extract_metrics() {
 mcp_type_for_config() {
     case "$1" in
         baseline)          echo "none" ;;
-        sourcegraph_base)  echo "sourcegraph_base" ;;
+        sourcegraph_full)  echo "sourcegraph_full" ;;
         sourcegraph_full)  echo "sourcegraph_full" ;;
     esac
 }
 
 # Pre-flight
 echo "=============================================="
-echo "Re-running 4 crossrepo tasks x 3 configs = 12 pairs"
+echo "Re-running 4 crossrepo tasks x 2 configs"
 echo "=============================================="
 echo "Token status:"
 ensure_fresh_token
@@ -147,10 +140,10 @@ echo "=============================================="
 echo "All $TOTAL re-runs complete!"
 echo "=============================================="
 echo ""
-echo "Results: ${CROSSREPO_JOBS}/{baseline,sourcegraph_base,sourcegraph_full}/"
+echo "Results: ${CROSSREPO_JOBS}/{baseline,sourcegraph_full,sourcegraph_full}/"
 echo ""
 echo "Quick reward check:"
-for config in baseline sourcegraph_base sourcegraph_full; do
+for config in baseline sourcegraph_full sourcegraph_full; do
     for f in "$CROSSREPO_JOBS/$config"/*/*/result.json; do
         if [ -f "$f" ]; then
             task=$(python3 -c "import json; d=json.load(open('$f')); print(d.get('task_name','?'))" 2>/dev/null)

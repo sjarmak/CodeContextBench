@@ -11,7 +11,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-BASE_DIR = "/home/stephanie_jarmak/evals/custom_agents/agents/claudecode/runs/official"
+BASE_DIR = str(Path(__file__).resolve().parent.parent / "runs" / "official")
 
 DIR_PREFIX_TO_SUITE = {
     "swebenchpro": "ccb_swebenchpro",

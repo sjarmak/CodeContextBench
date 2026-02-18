@@ -19,9 +19,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$SCRIPT_DIR/.."
 cd "$REPO_ROOT"
 
-# Agent module lives in the evals repo; add it to PYTHONPATH
-AGENT_DIR="${AGENT_DIR:-$HOME/evals/custom_agents/agents/claudecode}"
-export PYTHONPATH="${AGENT_DIR}:$(pwd):${PYTHONPATH:-}"
+# Agent code lives in-repo under agents/
+export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
 SELECTION_FILE="$REPO_ROOT/configs/selected_benchmark_tasks.json"
 MODEL="${MODEL:-anthropic/claude-opus-4-6}"
@@ -74,9 +73,7 @@ fi
 
 # Load credentials only for agent-based mode
 if [ "$SMOKE_RUNTIME" = false ]; then
-    if [ -f ~/evals/.env.local ]; then
-        source ~/evals/.env.local
-    fi
+    load_credentials
     enforce_subscription_mode
 fi
 

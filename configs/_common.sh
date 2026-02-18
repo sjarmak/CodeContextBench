@@ -20,6 +20,22 @@ enforce_subscription_mode() {
 }
 
 # ============================================
+# CREDENTIAL LOADING
+# ============================================
+# Loads .env.local from project root.
+load_credentials() {
+    local repo_root
+    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    local env_local="${repo_root}/.env.local"
+    if [ -f "$env_local" ]; then
+        echo "Loading credentials from $env_local..."
+        source "$env_local"
+    else
+        echo "Warning: .env.local not found at $env_local"
+    fi
+}
+
+# ============================================
 # FAIL-FAST MODE
 # ============================================
 # When true, if any task errors out, kill all running tasks and abort immediately.
@@ -700,7 +716,7 @@ CANARY_ENABLED=${CANARY_ENABLED:-false}
 
 # validate_canary_result: check a canary task's result.json for systemic failures.
 # Args: $1 = jobs_subdir (e.g., runs/official/pytorch_opus_ts/baseline)
-#        $2 = mode (baseline, sourcegraph_base, sourcegraph_full)
+#        $2 = mode (baseline, sourcegraph_full)
 # Writes canary_verdict.json to jobs_subdir.
 # Returns 0 (pass) or 1 (stop).
 validate_canary_result() {
@@ -787,7 +803,7 @@ STOP_FINGERPRINTS = [
 ]
 
 # mcp_connection only stops MCP configs
-if mode in ("sourcegraph_base", "sourcegraph_full"):
+if mode in ("sourcegraph_full",):
     STOP_FINGERPRINTS.append(
         ("mcp_connection",
          re.compile(r"mcp.*(?:connection|timeout|refused|error)|sourcegraph.*(?:fail|error|timeout)", re.I),
@@ -821,7 +837,7 @@ CANARY_EOF
 # Args: $1 = task_id_array_name
 #        $2 = command_builder_function
 #        $3 = jobs_subdir (for canary verdict output)
-#        $4 = mode (baseline, sourcegraph_base, sourcegraph_full)
+#        $4 = mode (baseline, sourcegraph_full)
 # Falls through to run_tasks_parallel if CANARY_ENABLED != true or only 1 task.
 run_canary_then_batch() {
     local -n _canary_task_ids=$1

@@ -21,21 +21,14 @@ cd "$SCRIPT_DIR/.."
 
 BENCH_DIR="$(pwd)/benchmarks"
 
-# Agent module
-AGENT_DIR="${AGENT_DIR:-$HOME/evals/custom_agents/agents/claudecode}"
-export PYTHONPATH="${AGENT_DIR}:$(pwd):${PYTHONPATH:-}"
+# Agent code lives in-repo under agents/
+export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
 # Shared config: subscription mode + token refresh
 source "$(pwd)/configs/_common.sh"
 
 # Load credentials
-if [ -f ~/evals/.env.local ]; then
-    echo "Loading credentials from ~/evals/.env.local..."
-    source ~/evals/.env.local
-else
-    echo "ERROR: ~/evals/.env.local not found"
-    exit 1
-fi
+load_credentials
 
 # Common parameters
 MODEL="anthropic/claude-opus-4-5-20251101"
@@ -82,7 +75,7 @@ declare -A PYTORCH_SG=(
 
 K8SDOCS_SG="sg-benchmarks/kubernetes--8c9c67c0"
 
-CONFIGS=("baseline" "sourcegraph_base" "sourcegraph_full")
+CONFIGS=("baseline" "sourcegraph_full")
 
 # ============================================
 # Helper functions
@@ -139,7 +132,6 @@ extract_metrics() {
 mcp_type_for_config() {
     case "$1" in
         baseline)          echo "none" ;;
-        sourcegraph_base)  echo "sourcegraph_base" ;;
         sourcegraph_full)  echo "sourcegraph_full" ;;
     esac
 }
@@ -183,7 +175,7 @@ for d in runs/official/pytorch_opus_*/; do
         cp -r "$d" "$dest"
         # Remove only affected task results from the live directory
         for task in sgt-005 sgt-008 sgt-009 sgt-010 sgt-016 sgt-025; do
-            for config in baseline sourcegraph_base sourcegraph_full; do
+            for config in baseline sourcegraph_full sourcegraph_full; do
                 # Remove result directories matching affected tasks
                 find "$d/$config/" -name "result.json" -exec grep -l "\"$task\"" {} \; 2>/dev/null | while read f; do
                     trial_dir=$(dirname "$f")
@@ -203,7 +195,7 @@ for d in runs/official/k8s_docs_opus_*/; do
         dest="${ARCHIVE_DIR}/k8sdocs/$(basename $d)"
         echo "  Archiving pkg-doc-001 from $d -> $dest"
         mkdir -p "$dest"
-        for config in baseline sourcegraph_base sourcegraph_full; do
+        for config in baseline sourcegraph_full sourcegraph_full; do
             find "$d/$config/" -name "result.json" -exec grep -l "pkg-doc-001" {} \; 2>/dev/null | while read f; do
                 trial_dir=$(dirname "$f")
                 cp -r "$trial_dir" "$dest/$(basename $trial_dir)"
@@ -316,10 +308,10 @@ echo "All $TOTAL re-runs complete!"
 echo "=============================================="
 echo ""
 echo "Results:"
-echo "  ${CROSSREPO_JOBS}/{baseline,sourcegraph_base,sourcegraph_full}/"
-echo "  ${LARGEREPO_JOBS}/{baseline,sourcegraph_base,sourcegraph_full}/"
-echo "  ${PYTORCH_JOBS}/{baseline,sourcegraph_base,sourcegraph_full}/"
-echo "  ${K8SDOCS_JOBS}/{baseline,sourcegraph_base,sourcegraph_full}/"
+echo "  ${CROSSREPO_JOBS}/{baseline,sourcegraph_full,sourcegraph_full}/"
+echo "  ${LARGEREPO_JOBS}/{baseline,sourcegraph_full,sourcegraph_full}/"
+echo "  ${PYTORCH_JOBS}/{baseline,sourcegraph_full,sourcegraph_full}/"
+echo "  ${K8SDOCS_JOBS}/{baseline,sourcegraph_full,sourcegraph_full}/"
 echo ""
 echo "Archived pre-fix results:"
 echo "  ${ARCHIVE_DIR}/"
@@ -327,7 +319,7 @@ echo ""
 echo "Quick reward check:"
 for d in "$CROSSREPO_JOBS" "$LARGEREPO_JOBS" "$PYTORCH_JOBS" "$K8SDOCS_JOBS"; do
     bench=$(basename "$d" | sed 's/_opus_.*//')
-    for config in baseline sourcegraph_base sourcegraph_full; do
+    for config in baseline sourcegraph_full sourcegraph_full; do
         for f in "$d/$config"/*/*/result.json "$d/$config"/*/result.json; do
             if [ -f "$f" ]; then
                 task=$(python3 -c "import json; d=json.load(open('$f')); print(d.get('task_id', d.get('name','?')))" 2>/dev/null)

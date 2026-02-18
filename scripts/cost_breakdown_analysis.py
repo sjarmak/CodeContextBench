@@ -22,7 +22,7 @@ from pathlib import Path
 # Constants
 # ---------------------------------------------------------------------------
 
-RUNS_DIR = Path("/home/stephanie_jarmak/evals/custom_agents/agents/claudecode/runs/official")
+RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "official"
 OUTPUT_JSON = Path(__file__).resolve().parent.parent / "docs" / "cost_breakdown.json"
 
 SKIP_PATTERNS = [

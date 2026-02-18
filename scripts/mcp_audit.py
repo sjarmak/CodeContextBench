@@ -21,11 +21,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-RUNS_DIR = Path("/home/stephanie_jarmak/evals/custom_agents/agents/claudecode/runs/official")
+RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "official"
 SELECTION_FILE = Path(__file__).resolve().parent.parent / "configs" / "selected_benchmark_tasks.json"
 
 SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived"]
-CONFIGS = ["baseline", "sourcegraph_base", "sourcegraph_full"]
+CONFIGS = ["baseline", "sourcegraph_full"]
 
 DIR_PREFIX_TO_SUITE = {
     "bigcode_mcp_": "ccb_largerepo",
@@ -393,7 +393,6 @@ def build_paired_analysis(all_metrics: list[dict], selection_meta: dict) -> dict
     paired_results = []
     for (benchmark, task_id), configs in sorted(grouped.items()):
         bl = configs.get("baseline")
-        sg_base = configs.get("sourcegraph_base")
         sg_full = configs.get("sourcegraph_full")
 
         # Get selection metadata
@@ -402,15 +401,15 @@ def build_paired_analysis(all_metrics: list[dict], selection_meta: dict) -> dict
         base_record = {
             "benchmark": benchmark,
             "task_id": task_id,
-            "language": sel.get("language") or (bl or sg_base or sg_full or {}).get("language"),
-            "difficulty": sel.get("difficulty") or (bl or sg_base or sg_full or {}).get("difficulty"),
-            "category": sel.get("category") or (bl or sg_base or sg_full or {}).get("category"),
-            "sdlc_phase": sel.get("sdlc_phase") or (bl or sg_base or sg_full or {}).get("sdlc_phase"),
-            "mcp_benefit_score": sel.get("mcp_benefit_score") or (bl or sg_base or sg_full or {}).get("mcp_benefit_score"),
-            "repo": sel.get("repo") or (bl or sg_base or sg_full or {}).get("repo"),
+            "language": sel.get("language") or (bl or sg_full or {}).get("language"),
+            "difficulty": sel.get("difficulty") or (bl or sg_full or {}).get("difficulty"),
+            "category": sel.get("category") or (bl or sg_full or {}).get("category"),
+            "sdlc_phase": sel.get("sdlc_phase") or (bl or sg_full or {}).get("sdlc_phase"),
+            "mcp_benefit_score": sel.get("mcp_benefit_score") or (bl or sg_full or {}).get("mcp_benefit_score"),
+            "repo": sel.get("repo") or (bl or sg_full or {}).get("repo"),
         }
 
-        for cfg_name, cfg_data in [("baseline", bl), ("sourcegraph_base", sg_base), ("sourcegraph_full", sg_full)]:
+        for cfg_name, cfg_data in [("baseline", bl), ("sourcegraph_full", sg_full)]:
             if cfg_data is None:
                 base_record[f"{cfg_name}_reward"] = None
                 base_record[f"{cfg_name}_agent_time"] = None
@@ -463,9 +462,9 @@ def build_paired_analysis(all_metrics: list[dict], selection_meta: dict) -> dict
             base_record[f"{cfg_name}_search_calls_nls"] = cfg_data.get("search_calls_nls")
             base_record[f"{cfg_name}_search_calls_deepsearch"] = cfg_data.get("search_calls_deepsearch")
 
-        # Compute deltas: SG_base vs baseline, SG_full vs baseline
-        for mcp_cfg in ["sourcegraph_base", "sourcegraph_full"]:
-            prefix = "sg_base" if "base" in mcp_cfg else "sg_full"
+        # Compute deltas: SG_full vs baseline
+        for mcp_cfg in ["sourcegraph_full"]:
+            prefix = "sg_full"
             bl_reward = base_record.get("baseline_reward")
             mcp_reward = base_record.get(f"{mcp_cfg}_reward")
             bl_time = base_record.get("baseline_agent_time")
@@ -492,7 +491,7 @@ def build_paired_analysis(all_metrics: list[dict], selection_meta: dict) -> dict
                 base_record[f"{prefix}_impact"] = "missing_data"
 
         # Complexity metrics (use baseline or any available)
-        ref = bl or sg_base or sg_full or {}
+        ref = bl or sg_full or {}
         lines_added = ref.get("lines_added")
         lines_removed = ref.get("lines_removed")
         total_loc = (lines_added or 0) + (lines_removed or 0) if lines_added is not None or lines_removed is not None else None
@@ -581,7 +580,7 @@ def _mcp_usage_analysis(paired: list[dict]) -> dict:
     search_vs_nav = {"search": 0, "navigation": 0}
 
     for task in paired:
-        for cfg in ["sourcegraph_base", "sourcegraph_full"]:
+        for cfg in ["sourcegraph_full"]:
             mcp_calls = task.get(f"{cfg}_tool_calls_mcp")
             mcp_ratio = task.get(f"{cfg}_mcp_ratio")
             tool_by_name = task.get(f"{cfg}_tool_calls_by_name") or {}
@@ -641,7 +640,7 @@ def _efficiency_analysis(paired: list[dict]) -> dict:
     """Analyze time and cost efficiency deltas between baseline and MCP configs."""
     results = {}
 
-    for prefix, cfg in [("sg_base", "sourcegraph_base"), ("sg_full", "sourcegraph_full")]:
+    for prefix, cfg in [("sg_full", "sourcegraph_full")]:
         time_deltas = []
         cost_deltas = []
         output_deltas = []
@@ -749,7 +748,7 @@ def _reward_analysis(paired: list[dict]) -> dict:
     """Analyze reward deltas by benchmark, task type, complexity."""
     results = {}
 
-    for prefix, cfg in [("sg_base", "sourcegraph_base"), ("sg_full", "sourcegraph_full")]:
+    for prefix, cfg in [("sg_full", "sourcegraph_full")]:
         reward_deltas = []
         by_benchmark = defaultdict(list)
         by_difficulty = defaultdict(list)
@@ -941,8 +940,8 @@ def _mcp_effectiveness_analysis(paired: list[dict]) -> dict:
     ]
 
     results = {}
-    for cfg in ["sourcegraph_base", "sourcegraph_full"]:
-        prefix = "sg_base" if "base" in cfg else "sg_full"
+    for cfg in ["sourcegraph_full"]:
+        prefix = "sg_full"
         bin_results = {}
         for lo, hi, label in bins:
             tasks_in_bin = []
@@ -975,8 +974,8 @@ def _mcp_effectiveness_analysis(paired: list[dict]) -> dict:
     # MCP usage correlated with benchmark/task type
     mcp_vs_task_type = defaultdict(lambda: {"mcp_calls": [], "rewards": [], "time_deltas": []})
     for task in paired:
-        for cfg in ["sourcegraph_base", "sourcegraph_full"]:
-            prefix = "sg_base" if "base" in cfg else "sg_full"
+        for cfg in ["sourcegraph_full"]:
+            prefix = "sg_full"
             mcp_calls = task.get(f"{cfg}_tool_calls_mcp")
             reward = task.get(f"{cfg}_reward")
             td = task.get(f"{prefix}_time_delta_pct")
@@ -1013,7 +1012,7 @@ def format_report(report: dict) -> str:
     # Summary
     s = report.get("summary", {})
     lines.append(f"\nTotal paired tasks: {s.get('total_paired_tasks', 0)}")
-    lines.append(f"Tasks with all 3 configs: {s.get('tasks_with_all_configs', 0)}")
+    lines.append(f"Tasks with all configs: {s.get('tasks_with_all_configs', 0)}")
     lines.append(f"Benchmarks: {s.get('n_benchmarks', 0)}")
 
     # === Section 1: Timing Verification ===
@@ -1079,7 +1078,7 @@ def format_report(report: dict) -> str:
     lines.append("=" * 80)
     rew = report.get("reward_analysis", {})
 
-    for prefix in ["sg_base", "sg_full"]:
+    for prefix in ["sg_full"]:
         pdata = rew.get(prefix, {})
         overall = pdata.get("overall", {})
         lines.append(f"\n  --- {prefix.upper()} vs BASELINE ---")
@@ -1126,7 +1125,7 @@ def format_report(report: dict) -> str:
     lines.append("=" * 80)
     eff = report.get("efficiency", {})
 
-    for prefix in ["sg_base", "sg_full"]:
+    for prefix in ["sg_full"]:
         pdata = eff.get(prefix, {})
         td = pdata.get("time_delta_pct", {})
         cd = pdata.get("cost_delta_pct", {})
@@ -1149,7 +1148,7 @@ def format_report(report: dict) -> str:
     lines.append("=" * 80)
     eff_data = report.get("mcp_effectiveness", {})
 
-    for cfg in ["sourcegraph_base", "sourcegraph_full"]:
+    for cfg in ["sourcegraph_full"]:
         bins = eff_data.get(cfg, {})
         if not bins:
             continue
@@ -1205,7 +1204,6 @@ def main():
     # Count completeness
     all3 = sum(1 for t in paired
                if t.get("baseline_reward") is not None
-               and t.get("sourcegraph_base_reward") is not None
                and t.get("sourcegraph_full_reward") is not None)
 
     benchmarks = set(t.get("benchmark", "") for t in paired)

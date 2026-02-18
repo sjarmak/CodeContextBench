@@ -114,7 +114,7 @@ The configuration is controlled by the `BASELINE_MCP_TYPE` environment variable 
 
 Both configs use `--dangerously-skip-permissions` for autonomous operation and deliver evaluation context via `--append-system-prompt`.
 
-Source: `~/evals/custom_agents/agents/claudecode/agents/claude_baseline_agent.py` lines 97-480
+Source: `agents/claude_baseline_agent.py` lines 97-480
 
 ## Multi-Harness Costing Caveat
 
