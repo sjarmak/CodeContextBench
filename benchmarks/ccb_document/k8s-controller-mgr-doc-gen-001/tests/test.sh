@@ -96,13 +96,11 @@ base = (
 )
 
 # Hallucination penalty: invalid path mentions only.
-# In sg_only mode, /workspace has no repo — skip path existence check
-sg_only = Path('/tmp/.sg_only_mode').exists()
 penalty = 0.0
 path_candidates = set(re.findall(r"(?:staging/src|pkg|cmd|api)/[A-Za-z0-9_./-]+\.go", text))
 invalid = 0
 for p in path_candidates:
-    if not sg_only and not Path('/workspace', p).exists():
+    if not Path('/workspace', p).exists():
         invalid += 1
 if path_candidates:
     invalid_ratio = invalid / len(path_candidates)
