@@ -51,6 +51,16 @@ RUNS_DIR = RUNS_DIR_OFFICIAL  # default; overridden by --staging flag
 SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__v1_hinted"]
 
 DIR_PREFIX_TO_SUITE = {
+    # SDLC phase suite prefixes (new naming: {phase}_{model}_{timestamp})
+    "build_": "ccb_build",
+    "debug_": "ccb_debug",
+    "design_": "ccb_design",
+    "document_": "ccb_document",
+    "fix_": "ccb_fix",
+    "secure_": "ccb_secure",
+    "test_": "ccb_test",
+    "understand_": "ccb_understand",
+    # Legacy benchmark prefixes
     "bigcode_mcp_": "ccb_largerepo",
     "codereview_": "ccb_codereview",
     "crossrepo_": "ccb_crossrepo",
@@ -124,6 +134,31 @@ def _extract_task_name(dirname: str) -> str:
     """Strip __hash suffix from directory name to get task name."""
     parts = dirname.rsplit("__", 1)
     return parts[0] if len(parts) == 2 else dirname
+
+
+def _normalize_sdlc_task_name(raw: str) -> str:
+    """Normalize SDLC trial task_name from result.json to canonical task ID.
+
+    Handles:
+      'camel-routing-arch-001'                     → 'camel-routing-arch-001'  (unchanged)
+      'sdlc_design_camel-routing-arch-001_gIhlvn'  → 'camel-routing-arch-001'
+      'sdlc_understand_envoy-filter-chain-qa-001_SbCI8g' → 'envoy-filter-chain-qa-001'
+
+    The SDLC runner names tasks as sdlc_{phase}_{task_id}_{6-char-random}.
+    Stripping the prefix and suffix recovers the canonical benchmark task ID.
+    """
+    import re
+    # Strip sdlc_{phase}_ prefix
+    m = re.match(r"^sdlc_[a-z]+_(.+)$", raw)
+    if m:
+        raw = m.group(1)
+    # Strip trailing _{6-alphanum} random suffix
+    m = re.match(r"^(.+)_[A-Za-z0-9]{6}$", raw)
+    if m:
+        candidate = m.group(1)
+        if "-" in candidate:  # sanity: valid task IDs contain hyphens
+            raw = candidate
+    return raw
 
 
 def _read_log_tail(task_dir: Path, n: int = 10) -> list[str]:
@@ -207,6 +242,15 @@ def classify_task(task_dir: Path, timeout_hours: float) -> dict:
     reward = _extract_reward(data)
     tokens = _extract_tokens(data)
     wall_clock = data.get("wall_clock_seconds")
+
+    # Override task_name with canonical form from result.json when available.
+    # SDLC trial dirs are named sdlc_{phase}_{task}_{random}__hash which
+    # produces a truncated/prefixed name via _extract_task_name. The result.json
+    # task_name field has the full name; _normalize_sdlc_task_name strips the
+    # sdlc_{phase}_ prefix and _{6-char-random} suffix to recover the canonical ID.
+    raw_task_name = data.get("task_name", "")
+    if raw_task_name:
+        record["task_name"] = _normalize_sdlc_task_name(raw_task_name)
 
     record["reward"] = reward
     record["metrics"] = {k: v for k, v in tokens.items() if v is not None}
@@ -333,8 +377,15 @@ def _iter_task_dirs(config_path: Path):
                 if trial_dir.is_dir() and not trial_dir.name.startswith("20") and not should_skip(trial_dir.name):
                     yield trial_dir
         elif "__" in entry.name:
-            # Direct task dir (task_name__hash)
+            # Old-style direct task dir: task_name__hash
             yield entry
+        elif entry.name.startswith("ccb_"):
+            # New SDLC-style task config dir: ccb_{suite}_{task}_{config}
+            # The task-level result.json lives in the trial subdir inside.
+            # (The result.json directly here is a batch summary without rewards.)
+            for trial_dir in sorted(entry.iterdir()):
+                if trial_dir.is_dir() and not should_skip(trial_dir.name):
+                    yield trial_dir
 
 
 def _match_task_id_to_run_name(task_id: str, run_names: set[str]) -> str | None:

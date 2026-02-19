@@ -140,6 +140,9 @@ def detect_clone_type(dockerfile_text):
     # SWE-bench prebuilt images (FROM jefzda/sweap-images:...)
     if 'sweap-images' in dockerfile_text or 'swebench' in dockerfile_text.lower():
         return 'swebench'
+    # ccb-linux-base prebuilt images (contain kernel source at /workspace/)
+    if re.search(r'^FROM\s+ccb-linux-base:', dockerfile_text, re.MULTILINE):
+        return 'ccb_linux_base'
     # Pre-built base images (FROM harbor-... or FROM ghcr.io/theagentcompany/...)
     if 'harbor-' in dockerfile_text or 'theagentcompany' in dockerfile_text:
         return 'prebuilt'
@@ -152,8 +155,19 @@ def detect_clone_type(dockerfile_text):
     return 'none'
 
 
+def has_defect_injection(task_dir):
+    """Check if the task uses inject_defects.sh (code review tasks)."""
+    return (task_dir / "environment" / "inject_defects.sh").exists()
+
+
 def is_write_only_verifier(task_dir):
-    """Check if the verifier just checks text output (no compilation/tests)."""
+    """Check if the verifier just checks text output (no compilation/tests).
+
+    Tasks with inject_defects.sh are NEVER write-only — the verifier checks
+    whether the agent fixed the defected source files locally.
+    """
+    if has_defect_injection(task_dir):
+        return False
     test_sh = task_dir / "tests" / "test.sh"
     if not test_sh.exists():
         return False
@@ -225,6 +239,45 @@ RUN mkdir -p /logs/agent /logs/verifier
 
 # Mark sg_only mode so verifiers can skip local-path checks
 RUN touch /tmp/.sg_only_mode
+
+ENTRYPOINT []
+"""
+
+
+def generate_ccb_linux_base_sgonly(task_dir, dockerfile_text):
+    """Generate sg_only for ccb-linux-base tasks (kernel source at /workspace/).
+
+    ccb-linux-base already has Claude Code CLI installed. For sg_only, we:
+    1. Keep the same ccb-linux-base image (avoids npm/Node install issues)
+    2. Remove the kernel source from /workspace/ (agent uses MCP instead)
+    3. Re-init /workspace as empty git repo
+    4. Mark sg_only mode
+    """
+    # Extract the exact base image tag (e.g. ccb-linux-base:v5.6.7)
+    m = re.search(r'^FROM\s+(ccb-linux-base:\S+)', dockerfile_text, re.MULTILINE)
+    base_image = m.group(1) if m else 'ccb-linux-base:latest'
+
+    task_name = task_dir.name
+    return f"""# {task_name} — sg_only_env variant
+# Uses ccb-linux-base (has Claude Code pre-installed) but removes kernel source.
+# Agent uses Sourcegraph MCP for code access, writes JSON answer to /workspace/.
+
+FROM {base_image}
+
+# Remove kernel source from /workspace/ — agent uses MCP instead of local source
+RUN find /workspace -mindepth 1 -delete 2>/dev/null; true
+
+# Re-init workspace as empty git repo
+RUN git init /workspace && \\
+    git -C /workspace config user.email "agent@example.com" && \\
+    git -C /workspace config user.name "Agent"
+
+RUN mkdir -p /logs/agent /logs/verifier
+
+# Mark sg_only mode so verifiers can skip local-path checks
+RUN touch /tmp/.sg_only_mode && echo '/workspace' > /tmp/.sg_only_workdir
+
+WORKDIR /workspace
 
 ENTRYPOINT []
 """
@@ -368,32 +421,41 @@ def main():
 
         dockerfile_text = dockerfile.read_text()
         clone_type = detect_clone_type(dockerfile_text)
+        # ccb-linux-base images need special handling: use same base but remove kernel source
+        is_linux_base = (clone_type == 'ccb_linux_base')
         # Write-only if: no repo in baseline, OR verifier only checks output
         # (doc-gen, analysis tasks). Write-only gives the agent an empty
         # workspace so it must use MCP — no confusing truncated file trees.
-        write_only = (clone_type == 'none') or is_write_only_verifier(task_dir)
+        write_only = (not is_linux_base) and ((clone_type == 'none') or is_write_only_verifier(task_dir))
 
         try:
-            if write_only:
+            if is_linux_base:
+                # ccb-linux-base has Claude Code pre-installed; remove kernel source for sg_only
+                content = generate_ccb_linux_base_sgonly(task_dir, dockerfile_text)
+                write_only_count += 1
+                label = 'linux-base-sgonly'
+            elif write_only:
                 # No local code needed: minimal image, empty workspace
                 content = generate_write_only(task_dir, dockerfile_text)
                 write_only_count += 1
+                label = 'write-only'
             else:
                 # Verifier needs local code (compilation, test execution):
                 # keep repo but truncate source files
                 content = generate_build_requiring(task_dir, dockerfile_text)
                 build_count += 1
+                label = 'build-req'
 
             if dry_run:
-                print(f"  {'WRITE-ONLY' if write_only else 'BUILD-REQ':>10} {suite:<25} {task_id}")
+                print(f"  {label.upper():>18} {suite:<25} {task_id}")
             else:
                 sgonly.write_text(content)
                 generated += 1
                 if verbose:
-                    print(f"  GENERATED {task_id} ({'write-only' if write_only else 'build-req'})")
+                    print(f"  GENERATED {task_id} ({label})")
 
                 # For build-requiring tasks, add verifier guard and wrapper
-                if not write_only:
+                if not write_only and not is_linux_base:
                     if inject_test_guard(task_dir):
                         guards_added += 1
                     if copy_wrapper(task_dir):
