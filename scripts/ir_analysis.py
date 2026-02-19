@@ -51,11 +51,13 @@ from ccb_metrics.ir_metrics import (
     MCPValueScore,
 )
 
-RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "official"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+RUNS_DIR = REPO_ROOT / "runs" / "official"
+STAGING_DIR = REPO_ROOT / "runs" / "staging"
 MANIFEST_PATH = RUNS_DIR / "MANIFEST.json"
-BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
-SELECTION_FILE = Path(__file__).resolve().parent.parent / "configs" / "selected_benchmark_tasks.json"
-GT_CACHE = Path(__file__).resolve().parent.parent / "configs" / "ground_truth_files.json"
+BENCHMARKS_DIR = REPO_ROOT / "benchmarks"
+SELECTION_FILE = REPO_ROOT / "configs" / "selected_benchmark_tasks.json"
+GT_CACHE = REPO_ROOT / "configs" / "ground_truth_files.json"
 
 # __v1_hinted: old run dirs from before enterprise task de-hinting (US-001..US-003).
 # Appended to batch dir names after reruns complete so pre-redesign data is excluded.
@@ -65,6 +67,7 @@ CONFIGS = ["baseline", "sourcegraph_full"]
 DROPPED_BENCHMARKS = {"ccb_dependeval", "ccb_locobench"}
 
 DIR_PREFIX_TO_SUITE = {
+    # Legacy benchmark prefixes (runs/official/)
     "bigcode_mcp_": "ccb_largerepo",
     "bigcode_sgcompare_": "ccb_largerepo",
     "codereview_": "ccb_codereview",
@@ -90,6 +93,15 @@ DIR_PREFIX_TO_SUITE = {
     "paired_rerun_crossrepo_": "ccb_crossrepo",
     "paired_rerun_pytorch_": "ccb_pytorch",
     "paired_rerun_": None,
+    # SDLC phase suite prefixes (runs/staging/)
+    "build_": "ccb_build",
+    "debug_": "ccb_debug",
+    "design_": "ccb_design",
+    "document_": "ccb_document",
+    "fix_": "ccb_fix",
+    "secure_": "ccb_secure",
+    "test_": "ccb_test",
+    "understand_": "ccb_understand",
 }
 
 
@@ -213,6 +225,122 @@ def _walk_task_dirs() -> list[dict]:
                         all_tasks[key] = info
 
     return list(all_tasks.values())
+
+
+def _walk_sdlc_staging_dirs(runs_dir: Path) -> list[dict]:
+    """Walk SDLC staging run directories.
+
+    SDLC staging layout:
+        runs/staging/{suite_stem}_{model}_{ts}/{config}/{job_name}/{trial_dir}/
+    Where:
+        job_name = ccb_{suite_stem}_{task_id}_{config}
+        trial_dir = sdlc_{suite_stem}_{task_prefix}__{hash}
+    """
+    all_tasks: dict[tuple[str, str, str], dict] = {}
+
+    if not runs_dir.exists():
+        return []
+
+    for run_dir in sorted(runs_dir.iterdir()):
+        if not run_dir.is_dir() or run_dir.name in ("archive", "MANIFEST.json"):
+            continue
+        if should_skip(run_dir.name):
+            continue
+
+        suite = _suite_from_run_dir(run_dir.name)
+
+        for config_dir in sorted(run_dir.iterdir()):
+            if not config_dir.is_dir():
+                continue
+            config_name = config_dir.name
+            if config_name not in CONFIGS:
+                continue
+
+            for job_dir in sorted(config_dir.iterdir()):
+                if not job_dir.is_dir():
+                    continue
+                job_name = job_dir.name
+
+                # Extract task_id from job_name: ccb_{suite}_{task_id}_{config}
+                # e.g. ccb_test_aspnetcore-code-review-001_sourcegraph_full
+                task_id = _extract_task_id_from_job(job_name, config_name, suite)
+                if not task_id:
+                    continue
+
+                # Find the trial subdirectory (there should be exactly one)
+                trial_dir = None
+                for sub in sorted(job_dir.iterdir()):
+                    if sub.is_dir() and sub.name not in ("archive",):
+                        # Skip non-trial dirs (logs, etc.)
+                        if (sub / "result.json").is_file():
+                            trial_dir = sub
+                            break
+
+                if trial_dir is None:
+                    continue
+
+                transcript = trial_dir / "agent" / "claude-code.txt"
+                if not transcript.is_file():
+                    transcript = trial_dir / "claude-code.txt"
+
+                started_at = ""
+                result_file = trial_dir / "result.json"
+                if result_file.is_file():
+                    try:
+                        rdata = json.loads(result_file.read_text())
+                        started_at = rdata.get("started_at", "")
+                    except Exception:
+                        pass
+
+                task_suite = suite or _infer_suite(task_id)
+
+                info = {
+                    "task_id": task_id,
+                    "suite": task_suite or "unknown",
+                    "config": config_name,
+                    "task_dir": str(trial_dir),
+                    "transcript": str(transcript) if transcript.is_file() else None,
+                    "started_at": started_at,
+                }
+
+                key = (info["suite"], config_name, task_id)
+                if key in all_tasks:
+                    if started_at > all_tasks[key].get("started_at", ""):
+                        all_tasks[key] = info
+                else:
+                    all_tasks[key] = info
+
+    return list(all_tasks.values())
+
+
+def _extract_task_id_from_job(job_name: str, config_name: str, suite: str | None) -> str | None:
+    """Extract task_id from SDLC job directory name.
+
+    Job name format: ccb_{suite_stem}_{task_id}_{config}
+    e.g. ccb_test_aspnetcore-code-review-001_sourcegraph_full → aspnetcore-code-review-001
+    """
+    # Strip config suffix
+    for cfg in ("_sourcegraph_full", "_baseline"):
+        if job_name.endswith(cfg):
+            job_name = job_name[: -len(cfg)]
+            break
+    else:
+        return None
+
+    # Strip ccb_{suite_stem}_ prefix
+    if suite:
+        suite_stem = suite.removeprefix("ccb_")
+        prefix = f"ccb_{suite_stem}_"
+        if job_name.startswith(prefix):
+            return job_name[len(prefix):]
+
+    # Fallback: try all known SDLC suite stems
+    for stem in ("build", "debug", "design", "document", "fix", "secure", "test", "understand"):
+        prefix = f"ccb_{stem}_"
+        if job_name.startswith(prefix):
+            return job_name[len(prefix):]
+
+    return None
 
 
 def _infer_suite(task_id: str) -> str | None:
@@ -800,13 +928,23 @@ def run_ir_analysis(
     suite_filter: str | None = None,
     per_task: bool = False,
     value_weights: tuple[float, ...] = (0.25, 0.25, 0.20, 0.15, 0.15),
+    runs_dir: Path | None = None,
+    staging: bool = False,
 ) -> dict:
     """Main analysis pipeline."""
     gt_registry = _ensure_ground_truth()
     if not gt_registry:
         return {"error": "No ground truth available. Run --build-ground-truth first."}
 
-    tasks = _walk_task_dirs()
+    if runs_dir:
+        # Custom runs directory: try SDLC layout first, then official layout
+        tasks = _walk_sdlc_staging_dirs(runs_dir)
+        if not tasks:
+            tasks = _walk_task_dirs()
+    elif staging:
+        tasks = _walk_sdlc_staging_dirs(STAGING_DIR)
+    else:
+        tasks = _walk_task_dirs()
     # Exclude dropped benchmarks
     tasks = [t for t in tasks if t["suite"] not in DROPPED_BENCHMARKS]
     if suite_filter:
@@ -921,7 +1059,7 @@ def run_ir_analysis(
     sg_scores = overall_by_config.get("sourcegraph_full", [])
     if len(bl_scores) >= 5 and len(sg_scores) >= 5:
         try:
-            from ccb_metrics.statistics import welchs_t_test, cohens_d, bootstrap_ci
+            from ccb_metrics.statistics import welchs_t_test, cohens_d, bootstrap_ci_dict as bootstrap_ci
 
             # Match by task_id for paired comparison
             bl_by_id = {s.task_id: s for s in bl_scores}
@@ -1629,6 +1767,14 @@ def parse_args():
         "--report", action="store_true",
         help="Generate stakeholder-ready markdown report to docs/ir_analysis_report.md",
     )
+    parser.add_argument(
+        "--staging", action="store_true",
+        help="Scan runs/staging/ instead of runs/official/ (SDLC phase suite layout)",
+    )
+    parser.add_argument(
+        "--runs-dir", default=None,
+        help="Custom runs directory to scan (overrides --staging)",
+    )
     return parser.parse_args()
 
 
@@ -1662,10 +1808,14 @@ def main():
         print("ERROR: --value-weights must be 4 or 5 comma-separated floats", file=sys.stderr)
         sys.exit(1)
 
+    custom_runs_dir = Path(args.runs_dir) if args.runs_dir else None
+
     data = run_ir_analysis(
         suite_filter=args.suite,
         per_task=args.per_task,
         value_weights=vw,
+        runs_dir=custom_runs_dir,
+        staging=args.staging,
     )
 
     if args.report:

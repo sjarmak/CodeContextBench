@@ -28,6 +28,16 @@ SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived"
 CONFIGS = ["baseline", "sourcegraph_full"]
 
 DIR_PREFIX_TO_SUITE = {
+    # SDLC phase suite prefixes (new naming: {phase}_{model}_{timestamp})
+    "build_": "ccb_build",
+    "debug_": "ccb_debug",
+    "design_": "ccb_design",
+    "document_": "ccb_document",
+    "fix_": "ccb_fix",
+    "secure_": "ccb_secure",
+    "test_": "ccb_test",
+    "understand_": "ccb_understand",
+    # Legacy benchmark prefixes
     "bigcode_mcp_": "ccb_largerepo",
     "bigcode_sgcompare_": "ccb_largerepo",
     "codereview_": "ccb_codereview",
@@ -723,7 +733,7 @@ def _stat_tests_on_deltas(
     Uses zero as baseline reference (testing whether deltas differ from 0).
     """
     try:
-        from ccb_metrics.statistics import welchs_t_test, cohens_d, bootstrap_ci
+        from ccb_metrics.statistics import welchs_t_test, cohens_d, bootstrap_ci_dict as bootstrap_ci
     except ImportError:
         return {"error": "ccb_metrics.statistics not importable"}
 
@@ -850,7 +860,7 @@ def _reward_analysis(paired: list[dict]) -> dict:
         if len(reward_deltas) >= 5:
             try:
                 from ccb_metrics.statistics import (
-                    welchs_t_test, cohens_d, mcnemar_test, bootstrap_ci,
+                    welchs_t_test, cohens_d, mcnemar_test, bootstrap_ci_dict as bootstrap_ci,
                 )
                 # Collect paired raw rewards (not deltas) for t-test
                 bl_vals = []

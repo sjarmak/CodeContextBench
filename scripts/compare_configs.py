@@ -38,6 +38,11 @@ def gather_comparison(
 ) -> dict:
     """Scan all tasks and group results by (suite, task_name) across configs.
 
+    Dedup policy: when multiple runs exist for the same (suite, task, config),
+    keep the one with the latest started_at timestamp. Comparisons are always
+    latest-to-latest: the most recent baseline run is compared to the most
+    recent sourcegraph_full run, independently per task.
+
     Returns structured comparison data.
     """
     # task_key = (suite, task_name) -> {config: record}
@@ -66,8 +71,12 @@ def gather_comparison(
                 record["suite"] = suite
                 record["config"] = config
                 key = (suite, record["task_name"])
-                # Latest run dir wins (sorted order)
-                task_matrix[key][config] = record
+                # Latest started_at wins — explicit timestamp comparison so
+                # the policy holds even when run dir names don't sort
+                # chronologically.
+                existing = task_matrix[key].get(config)
+                if existing is None or record.get("started_at", "") >= existing.get("started_at", ""):
+                    task_matrix[key][config] = record
 
     return _build_comparison(task_matrix, suite_filter)
 
@@ -287,7 +296,7 @@ def _compute_statistical_tests(data: dict) -> dict:
     Returns dict with welchs_t, cohens_d, mcnemar, bootstrap_ci keys.
     """
     from ccb_metrics.statistics import (
-        welchs_t_test, cohens_d, mcnemar_test, bootstrap_ci,
+        welchs_t_test, cohens_d, mcnemar_test, bootstrap_ci_dict as bootstrap_ci,
     )
 
     bl_rewards: list[float] = []
