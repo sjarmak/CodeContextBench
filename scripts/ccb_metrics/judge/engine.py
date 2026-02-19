@@ -146,6 +146,9 @@ class LLMJudge:
         self.temperature = temperature
         self.rounds = rounds
         self.dimensions: list[str] = dimensions if dimensions else list(DEFAULT_DIMENSIONS)
+        invalid = set(self.dimensions) - set(DIMENSION_WEIGHTS)
+        if invalid:
+            raise ValueError(f"Invalid dimensions: {invalid}. Valid: {list(DIMENSION_WEIGHTS)}")
         self._backend = AnthropicBackend(
             model=model, temperature=temperature
         )
@@ -181,7 +184,7 @@ class LLMJudge:
             config="",
             judge_score=judge_score,
             dimension_scores=dim_scores,
-            oracle_confidence=judge_input.oracle_ground_truth and "high" or "low",
+            oracle_confidence="high" if (judge_input.oracle_ground_truth or "").strip() else "low",
             model=self.model,
             temperature=self.temperature,
             rounds=1,
@@ -214,13 +217,18 @@ class LLMJudge:
             dim_scores = _parse_dimension_scores(response, self.dimensions)
             all_dim_scores.append(dim_scores)
 
-        # Majority-vote per dimension
+        # Majority-vote per dimension (median tie-break when no majority)
         voted_dims: dict[str, float] = {}
         vote_distribution: dict[str, dict] = {}
         for dim in self.dimensions:
             per_round = [d.get(dim, 0.0) for d in all_dim_scores]
             counter = Counter(per_round)
             majority_score, majority_count = counter.most_common(1)[0]
+            if majority_count * 2 <= rounds and rounds > 1:
+                # No majority — use median as deterministic tie-break
+                sorted_scores = sorted(per_round)
+                majority_score = sorted_scores[len(sorted_scores) // 2]
+                majority_count = counter[majority_score]
             voted_dims[dim] = majority_score
             vote_distribution[dim] = {
                 "score": majority_score,
@@ -245,7 +253,7 @@ class LLMJudge:
             config="",
             judge_score=judge_score,
             dimension_scores=voted_dims,
-            oracle_confidence=judge_input.oracle_ground_truth and "high" or "low",
+            oracle_confidence="high" if (judge_input.oracle_ground_truth or "").strip() else "low",
             model=self.model,
             temperature=self.temperature,
             rounds=rounds,
