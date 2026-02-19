@@ -16,6 +16,30 @@
 #   COMPOSITE=$(composite_score "$TASK_QUALITY" "$FILE_RECALL" "$FILE_PRECISION" "$DEP_ACCURACY")
 
 # ---------------------------------------------------------------------------
+# Debug mode: capture verifier diagnostics when DEBUG_MODE=true
+# ---------------------------------------------------------------------------
+if [ "${DEBUG_MODE:-}" = "true" ]; then
+    set -x
+    _debug_dir="/logs/verifier/debug"
+    mkdir -p "$_debug_dir"
+
+    # Capture environment variables (filter secrets)
+    env | sort | grep -vE 'KEY|TOKEN|SECRET|PASSWORD' > "$_debug_dir/environment.txt" 2>/dev/null || true
+
+    # Capture workspace git status
+    ( cd /workspace 2>/dev/null && git status 2>&1 ) > "$_debug_dir/workspace_git_status.txt" 2>/dev/null || true
+
+    # Capture workspace git diff (capped at 500 lines)
+    ( cd /workspace 2>/dev/null && git diff 2>&1 | head -500 ) > "$_debug_dir/workspace_git_diff.txt" 2>/dev/null || true
+
+    # Capture workspace file tree (capped at 200 lines)
+    find /workspace -type f 2>/dev/null | head -200 > "$_debug_dir/workspace_file_tree.txt" 2>/dev/null || true
+
+    echo "DEBUG: Verifier diagnostics written to $_debug_dir"
+    unset _debug_dir
+fi
+
+# ---------------------------------------------------------------------------
 # Globals (populated by functions below)
 # ---------------------------------------------------------------------------
 AGENT_FILES=()           # Files extracted from agent's solution.md

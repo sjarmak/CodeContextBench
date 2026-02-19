@@ -22,6 +22,57 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 
 @dataclass
+class DefectAnnotation:
+    """Structured annotation for a single expected defect.
+
+    Populated from expected_defects.json entries that include the optional
+    ``defect_type`` field.  Only defects with a ``defect_type`` value produce
+    an annotation; legacy entries without the field are silently skipped.
+    """
+
+    defect_id: str          # e.g. "defect-1"
+    file: str               # repo-relative path
+    defect_type: str        # one of DEFECT_TYPE_ENUM
+    line_start: Optional[int] = None
+    line_end: Optional[int] = None
+
+    def to_dict(self) -> dict:
+        d: dict = {
+            "defect_id": self.defect_id,
+            "file": self.file,
+            "defect_type": self.defect_type,
+        }
+        if self.line_start is not None:
+            d["line_start"] = self.line_start
+        if self.line_end is not None:
+            d["line_end"] = self.line_end
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "DefectAnnotation":
+        return cls(
+            defect_id=d["defect_id"],
+            file=d["file"],
+            defect_type=d["defect_type"],
+            line_start=d.get("line_start"),
+            line_end=d.get("line_end"),
+        )
+
+
+# Canonical defect_type enum values.
+DEFECT_TYPE_ENUM = frozenset({
+    "null-deref",
+    "resource-leak",
+    "race-condition",
+    "injection",
+    "logic-error",
+    "buffer-overflow",
+    "use-after-free",
+    "other",
+})
+
+
+@dataclass
 class TaskGroundTruth:
     """Ground truth files for a single benchmark task."""
 
@@ -30,13 +81,33 @@ class TaskGroundTruth:
     files: list[str]        # repo-relative paths needing modification
     source: str             # "patch" | "diff" | "ground_truth_dir" | "test_script" | "instruction"
     confidence: str         # "high" | "medium" | "low"
+    defect_annotations: list[DefectAnnotation] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = {
+            "task_id": self.task_id,
+            "benchmark": self.benchmark,
+            "files": self.files,
+            "source": self.source,
+            "confidence": self.confidence,
+        }
+        if self.defect_annotations:
+            d["defect_annotations"] = [a.to_dict() for a in self.defect_annotations]
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "TaskGroundTruth":
-        return cls(**d)
+        annotations = [
+            DefectAnnotation.from_dict(a) for a in d.get("defect_annotations", [])
+        ]
+        return cls(
+            task_id=d["task_id"],
+            benchmark=d["benchmark"],
+            files=d["files"],
+            source=d["source"],
+            confidence=d["confidence"],
+            defect_annotations=annotations,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -361,6 +432,223 @@ def _gt_tac(task_dir: Path) -> Optional[TaskGroundTruth]:
     return None
 
 
+def _files_from_checklist_refs(file_references: list) -> list[str]:
+    """Extract file paths from checklist-type ground truth file_references.
+
+    Each reference has a 'patterns' list of regex strings.  We un-escape the
+    regex to recover approximate file paths for IR evaluation.
+    """
+    files: list[str] = []
+    seen: set[str] = set()
+    for ref in file_references:
+        if not isinstance(ref, dict):
+            continue
+        for pat in ref.get("patterns", []):
+            if not isinstance(pat, str):
+                continue
+            # Un-escape common regex sequences to recover file paths
+            path = pat.replace("\\.",".")  # \\.  → .
+            path = path.replace("\\-","-")
+            path = path.replace("\\(",  "(").replace("\\)", ")")
+            # Skip non-path patterns (keywords, function names without /)
+            if "/" not in path:
+                continue
+            if path not in seen:
+                seen.add(path)
+                files.append(path)
+    return files
+
+
+def _gt_sdlc(task_dir: Path) -> Optional[TaskGroundTruth]:
+    """Unified ground truth extractor for SDLC phase suites.
+
+    Handles multiple GT schemas found in ccb_build/debug/design/document/
+    fix/secure/test/understand.  Priority order:
+
+    1. tests/ground_truth.json  (multiple schemas)
+    2. tests/expected_defects.json  (code review / test tasks)
+    3. tests/expected_changes.json  (understand / build tasks)
+    4. tests/reference_fix.patch  (debug tasks)
+    5. tests/expected.diff  (fix tasks)
+    6. solution/solve.sh  (fix tasks — gold patch)
+    7. Fallback to test_script → instruction regex
+    """
+    task_name = task_dir.name
+
+    # ── Strategy 1: tests/ground_truth.json ──
+    gt_file = task_dir / "tests" / "ground_truth.json"
+    if gt_file.is_file():
+        try:
+            data = json.loads(gt_file.read_text(errors="replace"))
+        except (json.JSONDecodeError, OSError):
+            data = None
+
+        if data and isinstance(data, list) and all(isinstance(x, str) for x in data):
+            # Schema G: plain list of file/dir paths (e.g. flipt-transitive-deps-001)
+            if data:
+                return TaskGroundTruth(
+                    task_id=task_name,
+                    benchmark="",
+                    files=data,
+                    source="ground_truth_json_list",
+                    confidence="medium",
+                )
+
+        if data and isinstance(data, dict):
+            # Schema A: architecture type — {files, dependency_chain, ...}
+            if "files" in data and isinstance(data["files"], list):
+                files = [f for f in data["files"] if isinstance(f, str)]
+                if files:
+                    return TaskGroundTruth(
+                        task_id=task_name,
+                        benchmark="",
+                        files=files,
+                        source="ground_truth_json_files",
+                        confidence=data.get("confidence", "medium"),
+                    )
+
+            # Schema B: checklist type — {file_references, required_findings, ...}
+            if "file_references" in data and isinstance(data["file_references"], list):
+                files = _files_from_checklist_refs(data["file_references"])
+                if files:
+                    return TaskGroundTruth(
+                        task_id=task_name,
+                        benchmark="",
+                        files=files,
+                        source="ground_truth_json_refs",
+                        confidence="medium",
+                    )
+
+            # Schema C: buggy files — {buggy_files, buggy_functions}
+            if "buggy_files" in data and isinstance(data["buggy_files"], list):
+                files = [f for f in data["buggy_files"] if isinstance(f, str)]
+                if files:
+                    return TaskGroundTruth(
+                        task_id=task_name,
+                        benchmark="",
+                        files=files,
+                        source="ground_truth_json_buggy",
+                        confidence="high",
+                    )
+
+            # Schema D: entries type — {key_fields, entries: [{file, ...}]}
+            if "entries" in data and isinstance(data["entries"], list):
+                files = []
+                seen: set[str] = set()
+                for entry in data["entries"]:
+                    f = entry.get("file", "") if isinstance(entry, dict) else ""
+                    if f and f not in seen:
+                        seen.add(f)
+                        files.append(f)
+                if files:
+                    return TaskGroundTruth(
+                        task_id=task_name,
+                        benchmark="",
+                        files=files,
+                        source="ground_truth_json_entries",
+                        confidence="medium",
+                    )
+
+            # Schema E: perf type — {file_path, target_function, ...}
+            if "file_path" in data and isinstance(data["file_path"], str):
+                return TaskGroundTruth(
+                    task_id=task_name,
+                    benchmark="",
+                    files=[data["file_path"]],
+                    source="ground_truth_json_perf",
+                    confidence="low",
+                )
+
+            # Schema F: scoring_categories (document) — no files; fall through
+
+    # ── Strategy 2: tests/expected_defects.json ──
+    defects_file = task_dir / "tests" / "expected_defects.json"
+    if defects_file.is_file():
+        try:
+            defects = json.loads(defects_file.read_text(errors="replace"))
+        except (json.JSONDecodeError, OSError):
+            defects = None
+        if defects and isinstance(defects, list):
+            files = []
+            seen_d: set[str] = set()
+            annotations: list[DefectAnnotation] = []
+            for d in defects:
+                if not isinstance(d, dict):
+                    continue
+                f = d.get("file", "")
+                if f and f not in seen_d:
+                    seen_d.add(f)
+                    files.append(f)
+                # Build annotation when defect_type is present
+                dt = d.get("defect_type", "")
+                if dt and dt in DEFECT_TYPE_ENUM:
+                    annotations.append(DefectAnnotation(
+                        defect_id=d.get("id", ""),
+                        file=f,
+                        defect_type=dt,
+                        line_start=d.get("line_start"),
+                        line_end=d.get("line_end"),
+                    ))
+            if files:
+                return TaskGroundTruth(
+                    task_id=task_name,
+                    benchmark="",
+                    files=files,
+                    source="expected_defects_json",
+                    confidence="high",
+                    defect_annotations=annotations,
+                )
+
+    # ── Strategy 3: tests/expected_changes.json ──
+    ec_file = task_dir / "tests" / "expected_changes.json"
+    if ec_file.is_file():
+        try:
+            ec_data = json.loads(ec_file.read_text(errors="replace"))
+        except (json.JSONDecodeError, OSError):
+            ec_data = None
+        if ec_data and isinstance(ec_data, dict):
+            files = ec_data.get("expected_files", [])
+            if files and isinstance(files, list):
+                return TaskGroundTruth(
+                    task_id=task_name,
+                    benchmark="",
+                    files=[f for f in files if isinstance(f, str)],
+                    source="expected_changes_json",
+                    confidence="high",
+                )
+
+    # ── Strategy 4: tests/reference_fix.patch ──
+    for patch_name in ("tests/reference_fix.patch", "tests/expected.diff", "tests/expected.patch"):
+        patch_file = task_dir / patch_name
+        if patch_file.is_file():
+            files = _files_from_patch(patch_file.read_text(errors="replace"))
+            if files:
+                return TaskGroundTruth(
+                    task_id=task_name,
+                    benchmark="",
+                    files=files,
+                    source="patch",
+                    confidence="high",
+                )
+
+    # ── Strategy 5: solution/solve.sh (gold patch) ──
+    for solve_name in ("solution/solve.sh", "environment/solve.sh"):
+        solve_file = task_dir / solve_name
+        if solve_file.is_file():
+            files = _files_from_patch(solve_file.read_text(errors="replace"))
+            if files:
+                return TaskGroundTruth(
+                    task_id=task_name,
+                    benchmark="",
+                    files=files,
+                    source="patch",
+                    confidence="high",
+                )
+
+    # No suite-specific GT found — caller will try fallback chain
+    return None
+
+
 def _gt_largerepo(task_dir: Path) -> Optional[TaskGroundTruth]:
     """Extract ground truth for LargeRepo tasks.
 
@@ -542,6 +830,15 @@ _BENCHMARK_STRATEGIES = {
     "ccb_dibench": _gt_dibench,
     "ccb_tac": _gt_tac,
     "ccb_largerepo": _gt_largerepo,
+    # SDLC phase suites (unified extractor)
+    "ccb_build": _gt_sdlc,
+    "ccb_debug": _gt_sdlc,
+    "ccb_design": _gt_sdlc,
+    "ccb_document": _gt_sdlc,
+    "ccb_fix": _gt_sdlc,
+    "ccb_secure": _gt_sdlc,
+    "ccb_test": _gt_sdlc,
+    "ccb_understand": _gt_sdlc,
 }
 
 

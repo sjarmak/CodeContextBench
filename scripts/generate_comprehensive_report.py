@@ -34,7 +34,7 @@ from ccb_metrics.statistics import (
     welchs_t_test,
     cohens_d,
     mcnemar_test,
-    bootstrap_ci,
+    bootstrap_ci_dict as bootstrap_ci,
     MetricComparison,
 )
 
@@ -276,7 +276,7 @@ def compute_aggregate_stats(paired_rewards: list[tuple[float, float]]) -> dict:
     # Statistical tests
     t_test = welchs_t_test(bl_rewards, sf_rewards)
     effect = cohens_d(bl_rewards, sf_rewards)
-    ci = bootstrap_ci(diffs, n=10000, seed=42)
+    ci = bootstrap_ci(diffs, n_bootstrap=10000)
 
     # McNemar's test (pass/fail)
     pass_threshold = 0.001  # reward > 0 = pass

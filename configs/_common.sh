@@ -36,6 +36,14 @@ load_credentials() {
 }
 
 # ============================================
+# VERIFIER DEBUG MODE
+# ============================================
+# When DEBUG_MODE=true, verifier_lib.sh captures diagnostics to /logs/verifier/debug/
+# (environment, git status, git diff, file tree). Does not affect scoring.
+# Pass through to Docker containers via environment inheritance.
+export DEBUG_MODE="${DEBUG_MODE:-}"
+
+# ============================================
 # FAIL-FAST MODE
 # ============================================
 # When true, if any task errors out, kill all running tasks and abort immediately.

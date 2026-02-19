@@ -36,5 +36,23 @@ if _openhands_mod is not None:
     _openhands_mod.get_api_key_var_names_from_model_name = _get_api_key_var_names_from_model_name
 
 
+def _litellm_codex_model(model_name: str) -> str:
+    """Return LiteLLM model string for Codex so the container uses the OpenAI provider."""
+    if not model_name or not model_name.strip():
+        return model_name
+    s = model_name.strip()
+    lower = s.lower()
+    if lower in _CODEX_MODEL_PREFIXES or ("codex" in lower and "gpt" in lower):
+        return f"openai/{s}" if not s.startswith("openai/") else s
+    return model_name
+
+
 class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
     """OpenHands CLI agent extended with evaluation context and MCP wiring."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # LiteLLM inside the container needs a provider prefix (e.g. openai/gpt-5.3-codex)
+        # or it raises "LLM Provider NOT provided". Normalize Codex models so env LLM_MODEL works.
+        if self.model_name:
+            self.model_name = _litellm_codex_model(self.model_name)

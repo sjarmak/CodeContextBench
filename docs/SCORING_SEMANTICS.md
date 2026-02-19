@@ -140,6 +140,59 @@ How each benchmark is scored, what the numbers mean, and known limitations.
 | Investigation | 0.3–0.6 | Deep debugging |
 | SWE-Perf | 0.3–0.6 | Performance optimization |
 
+## Defect Annotation Format
+
+Code review and security review tasks in `ccb_test/` use
+`tests/expected_defects.json` to define ground truth defects.  Each defect
+entry supports the following optional annotation fields for richer analysis.
+These fields are informational metadata; **scoring logic is unchanged**.
+
+### Optional Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `defect_type` | string enum | Classifies the nature of the defect (see enum below) |
+| `line_start` | integer | First line of the defect location in the source file |
+| `line_end` | integer | Last line of the defect location in the source file |
+
+### `defect_type` Enum Values
+
+| Value | Description |
+|-------|-------------|
+| `null-deref` | Null/nil pointer dereference |
+| `resource-leak` | Resource (memory, handle, cache) not properly released |
+| `race-condition` | Concurrent access without proper synchronization |
+| `injection` | Input validation bypass allowing injection or unauthorized input |
+| `logic-error` | Inverted condition, off-by-one, wrong operator, or other logic mistake |
+| `buffer-overflow` | Write past allocated buffer bounds |
+| `use-after-free` | Access to memory after deallocation |
+| `other` | Defect that does not fit the above categories |
+
+### Example
+
+```json
+{
+  "id": "defect-1",
+  "file": "lib/vtls/openssl.c",
+  "line_start": 992,
+  "line_end": 997,
+  "type": "security",
+  "severity": "high",
+  "defect_type": "buffer-overflow",
+  "description": "Buffer bounds check removed from SSL password callback."
+}
+```
+
+### Ground Truth Registry Integration
+
+When `defect_type` is present in an `expected_defects.json` entry, the ground
+truth extraction in `scripts/ccb_metrics/ground_truth.py` populates
+`TaskGroundTruth.defect_annotations` -- a list of `DefectAnnotation` objects
+carrying `defect_id`, `file`, `defect_type`, `line_start`, and `line_end`.
+Tasks without `defect_type` fields produce an empty annotations list.  The
+serialized registry (`configs/ground_truth_files.json`) includes annotations
+only when non-empty.
+
 ## Archived Suite Scoring (for reference)
 
 The following suites are archived and not included in official evaluation:

@@ -196,6 +196,7 @@ def _process_task_dir(
             tm.judge_score = judge_data.get("judge_score")
             tm.judge_rubric = judge_data.get("rubric")
             tm.judge_model = judge_data.get("judge_model")
+            tm.oracle_confidence = judge_data.get("oracle_confidence")
         except (OSError, json.JSONDecodeError):
             pass
 

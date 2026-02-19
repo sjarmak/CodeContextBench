@@ -231,48 +231,287 @@ def mcnemar_test(
 
 
 def bootstrap_ci(
-    data: List[float],
-    stat_fn: Callable[[List[float]], float] = statistics.mean,
-    n: int = 10_000,
-    confidence: float = 0.95,
-    seed: int = 42,
-) -> dict:
-    """Percentile bootstrap confidence interval.
+    values: List[float],
+    n_bootstrap: int = 1000,
+    ci: float = 0.95,
+) -> Tuple[float, float, float]:
+    """Percentile bootstrap confidence interval for the mean.
+
+    Uses random.Random(42) internally for reproducibility.
 
     Args:
-        data: Sample values.
-        stat_fn: Statistic to bootstrap (default: mean).
-        n: Number of bootstrap resamples.
-        confidence: Confidence level.
-        seed: RNG seed for reproducibility.
+        values: Sample values.
+        n_bootstrap: Number of bootstrap resamples.
+        ci: Confidence level.
 
     Returns:
-        Dict with estimate, ci_lower, ci_upper.
+        Tuple of (mean, ci_lower, ci_upper).
+
+    >>> m, lo, hi = bootstrap_ci([0.5, 0.6, 0.7])
+    >>> lo <= m <= hi
+    True
+    >>> abs(m - 0.6) < 0.001
+    True
+    >>> bootstrap_ci([])
+    (0.0, 0.0, 0.0)
+    >>> bootstrap_ci([0.5])
+    (0.5, 0.5, 0.5)
     """
-    if not data:
-        return {"estimate": 0.0, "ci_lower": 0.0, "ci_upper": 0.0}
+    if not values:
+        return (0.0, 0.0, 0.0)
 
-    estimate = stat_fn(data)
+    mean_val = sum(values) / len(values)
 
-    if len(data) == 1:
-        return {"estimate": estimate, "ci_lower": estimate, "ci_upper": estimate}
+    if len(values) == 1:
+        return (mean_val, mean_val, mean_val)
 
-    rng = random.Random(seed)
-    resamples = []
-    for _ in range(n):
-        sample = rng.choices(data, k=len(data))
-        resamples.append(stat_fn(sample))
+    rng = random.Random(42)
+    resamples: List[float] = []
+    for _ in range(n_bootstrap):
+        sample = rng.choices(values, k=len(values))
+        resamples.append(sum(sample) / len(sample))
 
     resamples.sort()
-    alpha = 1 - confidence
-    lo_idx = int(alpha / 2 * n)
-    hi_idx = int((1 - alpha / 2) * n) - 1
+    alpha = 1 - ci
+    lo_idx = int(alpha / 2 * n_bootstrap)
+    hi_idx = int((1 - alpha / 2) * n_bootstrap) - 1
 
-    return {
-        "estimate": round(estimate, 6),
-        "ci_lower": round(resamples[lo_idx], 6),
-        "ci_upper": round(resamples[hi_idx], 6),
+    return (
+        round(mean_val, 6),
+        round(resamples[lo_idx], 6),
+        round(resamples[hi_idx], 6),
+    )
+
+
+def bootstrap_ci_dict(
+    values: List[float],
+    n_bootstrap: int = 1000,
+    ci: float = 0.95,
+) -> dict:
+    """Backwards-compatible dict wrapper around bootstrap_ci.
+
+    Returns dict with ``estimate``, ``ci_lower``, ``ci_upper`` keys.
+    Use this when callers expect a dict (legacy compatibility).
+    """
+    m, lo, hi = bootstrap_ci(values, n_bootstrap=n_bootstrap, ci=ci)
+    return {"estimate": m, "ci_lower": lo, "ci_upper": hi}
+
+
+def paired_bootstrap_delta(
+    values_a: List[float],
+    values_b: List[float],
+    n_bootstrap: int = 1000,
+    ci: float = 0.95,
+) -> Tuple[float, float, float, float]:
+    """Paired bootstrap test for the mean delta (b - a).
+
+    Uses random.Random(42) internally for reproducibility.
+
+    Args:
+        values_a: Baseline measurements (paired with values_b).
+        values_b: Treatment measurements (paired with values_a).
+        n_bootstrap: Number of bootstrap resamples.
+        ci: Confidence level.
+
+    Returns:
+        Tuple of (mean_delta, ci_lower, ci_upper, p_value) where p_value
+        is the proportion of bootstrap deltas crossing zero (two-tailed).
+
+    >>> a = [0.4, 0.5, 0.6]; b = [0.5, 0.6, 0.7]
+    >>> delta, lo, hi, p = paired_bootstrap_delta(a, b)
+    >>> abs(delta - 0.1) < 0.001
+    True
+    >>> lo > 0
+    True
+    >>> paired_bootstrap_delta([], [])
+    (0.0, 0.0, 0.0, 1.0)
+    """
+    if not values_a or not values_b:
+        return (0.0, 0.0, 0.0, 1.0)
+
+    n = min(len(values_a), len(values_b))
+    deltas = [values_b[i] - values_a[i] for i in range(n)]
+    mean_delta = sum(deltas) / len(deltas)
+
+    if len(deltas) == 1:
+        return (mean_delta, mean_delta, mean_delta, 1.0)
+
+    rng = random.Random(42)
+    boot_deltas: List[float] = []
+    for _ in range(n_bootstrap):
+        indices = rng.choices(range(len(deltas)), k=len(deltas))
+        boot_mean = sum(deltas[i] for i in indices) / len(indices)
+        boot_deltas.append(boot_mean)
+
+    boot_deltas.sort()
+    alpha = 1 - ci
+    lo_idx = int(alpha / 2 * n_bootstrap)
+    hi_idx = int((1 - alpha / 2) * n_bootstrap) - 1
+
+    # Two-tailed p-value: proportion of bootstrap deltas crossing zero
+    if mean_delta >= 0:
+        p_one = sum(1 for d in boot_deltas if d <= 0) / n_bootstrap
+    else:
+        p_one = sum(1 for d in boot_deltas if d >= 0) / n_bootstrap
+    p_value = min(p_one * 2, 1.0)
+
+    return (
+        round(mean_delta, 6),
+        round(boot_deltas[lo_idx], 6),
+        round(boot_deltas[hi_idx], 6),
+        round(p_value, 6),
+    )
+
+
+def spearman_rank_correlation(
+    x: List[float],
+    y: List[float],
+) -> Tuple[float, float]:
+    """Spearman rank correlation coefficient and approximate p-value.
+
+    Ranks values (handling ties via average rank), computes Pearson
+    correlation on the ranks. P-value approximated via t-distribution.
+    Stdlib only — no scipy/numpy.
+
+    Args:
+        x: First variable values.
+        y: Second variable values (paired with x).
+
+    Returns:
+        Tuple of (rho, p_value).
+
+    >>> x = [1.0, 2.0, 3.0, 4.0, 5.0]; y = [1.0, 2.0, 3.0, 4.0, 5.0]
+    >>> rho, p = spearman_rank_correlation(x, y)
+    >>> abs(rho - 1.0) < 0.001
+    True
+    >>> p < 0.05
+    True
+    >>> rho2, _ = spearman_rank_correlation([1.0, 2.0, 3.0], [3.0, 2.0, 1.0])
+    >>> abs(rho2 - (-1.0)) < 0.001
+    True
+    >>> spearman_rank_correlation([], [])
+    (0.0, 1.0)
+    >>> spearman_rank_correlation([1.0], [1.0])
+    (0.0, 1.0)
+    """
+    n = min(len(x), len(y))
+    if n < 2:
+        return (0.0, 1.0)
+
+    x, y = list(x[:n]), list(y[:n])
+
+    def _ranks(vals: List[float]) -> List[float]:
+        indexed = sorted(enumerate(vals), key=lambda kv: kv[1])
+        r = [0.0] * len(vals)
+        i = 0
+        while i < len(indexed):
+            j = i
+            while j + 1 < len(indexed) and indexed[j + 1][1] == indexed[j][1]:
+                j += 1
+            avg_rank = (i + j) / 2.0 + 1.0  # 1-indexed average rank
+            for k in range(i, j + 1):
+                r[indexed[k][0]] = avg_rank
+            i = j + 1
+        return r
+
+    rx, ry = _ranks(x), _ranks(y)
+
+    mx = sum(rx) / n
+    my = sum(ry) / n
+    num = sum((rx[i] - mx) * (ry[i] - my) for i in range(n))
+    denom_x = sum((rx[i] - mx) ** 2 for i in range(n))
+    denom_y = sum((ry[i] - my) ** 2 for i in range(n))
+    denom = math.sqrt(denom_x * denom_y) if denom_x * denom_y > 0 else 0.0
+
+    if denom == 0.0:
+        return (0.0, 1.0)
+
+    rho = max(-1.0, min(1.0, num / denom))
+
+    if abs(rho) >= 1.0:
+        return (round(rho, 6), 0.0)
+
+    t = rho * math.sqrt(n - 2) / math.sqrt(1 - rho ** 2)
+    p_value = 2 * (1 - _normal_cdf(abs(t)))
+
+    return (round(rho, 6), round(p_value, 6))
+
+
+def retrieval_outcome_correlation(
+    ir_scores: List[float],
+    rewards: List[float],
+    suite_labels: List[str],
+) -> dict:
+    """Spearman correlation between IR retrieval quality and task reward.
+
+    Computes overall and per-suite correlations. Effect size is mean reward
+    for high-recall tasks (>= 0.8) minus mean reward for low-recall tasks
+    (< 0.5).
+
+    Args:
+        ir_scores: File recall scores per task.
+        rewards: Task reward scores per task (paired with ir_scores).
+        suite_labels: Suite name per task (paired with ir_scores).
+
+    Returns:
+        Dict with 'overall' key and per-suite keys. Each value contains
+        rho, p_value, effect_size.
+
+    >>> ir = [0.1, 0.5, 0.8, 0.9]; r = [0.0, 0.5, 0.8, 1.0]
+    >>> s = ["a", "a", "b", "b"]
+    >>> res = retrieval_outcome_correlation(ir, r, s)
+    >>> abs(res["overall"]["rho"] - 1.0) < 0.01
+    True
+    >>> retrieval_outcome_correlation([], [], [])
+    {'overall': {'rho': 0.0, 'p_value': 1.0, 'effect_size': 0.0}}
+    """
+    if not ir_scores or not rewards:
+        return {"overall": {"rho": 0.0, "p_value": 1.0, "effect_size": 0.0}}
+
+    n = min(len(ir_scores), len(rewards), len(suite_labels))
+    ir_scores = list(ir_scores[:n])
+    rewards = list(rewards[:n])
+    suite_labels = list(suite_labels[:n])
+
+    rho, p = spearman_rank_correlation(ir_scores, rewards)
+
+    high_r = [rewards[i] for i in range(n) if ir_scores[i] >= 0.8]
+    low_r = [rewards[i] for i in range(n) if ir_scores[i] < 0.5]
+    effect_size = (
+        sum(high_r) / len(high_r) - sum(low_r) / len(low_r)
+        if high_r and low_r
+        else 0.0
+    )
+
+    result: dict = {
+        "overall": {
+            "rho": round(rho, 6),
+            "p_value": round(p, 6),
+            "effect_size": round(effect_size, 6),
+        }
     }
+
+    for suite in sorted(set(suite_labels)):
+        idx = [i for i in range(n) if suite_labels[i] == suite]
+        if len(idx) < 3:
+            continue
+        s_ir = [ir_scores[i] for i in idx]
+        s_r = [rewards[i] for i in idx]
+        s_rho, s_p = spearman_rank_correlation(s_ir, s_r)
+        s_high = [s_r[j] for j, i in enumerate(idx) if ir_scores[i] >= 0.8]
+        s_low = [s_r[j] for j, i in enumerate(idx) if ir_scores[i] < 0.5]
+        s_effect = (
+            sum(s_high) / len(s_high) - sum(s_low) / len(s_low)
+            if s_high and s_low
+            else 0.0
+        )
+        result[suite] = {
+            "rho": round(s_rho, 6),
+            "p_value": round(s_p, 6),
+            "effect_size": round(s_effect, 6),
+        }
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -338,7 +577,7 @@ class MetricComparison:
                 for i in range(min_len)
             ]
             if diffs:
-                self.ci = bootstrap_ci(diffs)
+                self.ci = bootstrap_ci_dict(diffs)
 
         return self
 

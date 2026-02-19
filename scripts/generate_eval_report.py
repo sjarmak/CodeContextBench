@@ -406,6 +406,98 @@ def _build_cache_efficiency(runs: list[RunMetrics]) -> Optional[tuple[list[str],
     return headers, rows
 
 
+def _pearson_r(xs: list[float], ys: list[float]) -> Optional[float]:
+    """Pearson correlation coefficient. Returns None if fewer than 2 paired points."""
+    n = len(xs)
+    if n < 2:
+        return None
+    # Use statistics.correlation if available (Python 3.10+)
+    try:
+        from statistics import correlation
+        return correlation(xs, ys)
+    except (ImportError, AttributeError):
+        pass
+    # Manual fallback
+    mean_x = sum(xs) / n
+    mean_y = sum(ys) / n
+    num = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+    den_x = sum((x - mean_x) ** 2 for x in xs) ** 0.5
+    den_y = sum((y - mean_y) ** 2 for y in ys) ** 0.5
+    if den_x == 0 or den_y == 0:
+        return None
+    return num / (den_x * den_y)
+
+
+def _build_dual_score_per_task(runs: list[RunMetrics]) -> Optional[tuple[list[str], list[list[str]]]]:
+    """Table: Per-task dual scores (verifier reward vs judge score), flagging divergent cases."""
+    judged_tasks = [
+        (r.benchmark, r.config_name, t)
+        for r in runs
+        for t in r.tasks
+        if t.judge_score is not None
+    ]
+    if not judged_tasks:
+        return None
+
+    headers = [
+        "Benchmark", "Config", "Task ID",
+        "Verifier Reward", "Judge Score", "Delta", "Oracle Confidence",
+    ]
+    rows = []
+    for bench, config, t in sorted(judged_tasks, key=lambda x: (x[0], x[1], x[2].task_id)):
+        verifier = t.reward
+        judge = t.judge_score
+        delta = None if (verifier is None or judge is None) else judge - verifier
+        flag = ""
+        if delta is not None and abs(delta) > 0.3:
+            flag = " [DIVERGENT]"
+        rows.append([
+            bench,
+            config,
+            t.task_id,
+            _fmt(verifier),
+            _fmt(judge),
+            (_fmt(delta) + flag) if delta is not None else "-",
+            t.oracle_confidence or "-",
+        ])
+    return headers, rows
+
+
+def _build_dual_score_aggregate(runs: list[RunMetrics]) -> Optional[tuple[list[str], list[list[str]]]]:
+    """Table: Aggregate dual scores per suite and config with Pearson r correlation."""
+    judged_runs = [r for r in runs if any(t.judge_score is not None for t in r.tasks)]
+    if not judged_runs:
+        return None
+
+    headers = ["Benchmark", "Config", "Tasks (judged)", "Mean Verifier", "Mean Judge", "Delta", "Pearson r"]
+    rows = []
+    for r in sorted(judged_runs, key=lambda x: (x.benchmark, x.config_name)):
+        judged_tasks = [t for t in r.tasks if t.judge_score is not None]
+        n = len(judged_tasks)
+
+        # Paired values for both metrics (both non-None)
+        paired = [(t.reward, t.judge_score) for t in judged_tasks
+                  if t.reward is not None and t.judge_score is not None]
+        paired_v = [p[0] for p in paired]
+        paired_j = [p[1] for p in paired]
+
+        mean_v = _safe_mean(paired_v) if paired_v else None
+        mean_j = _safe_mean(paired_j) if paired_j else None
+        delta = (mean_j - mean_v) if (mean_v is not None and mean_j is not None) else None
+        r_val = _pearson_r(paired_v, paired_j)
+
+        rows.append([
+            r.benchmark,
+            r.config_name,
+            str(n),
+            _fmt(mean_v),
+            _fmt(mean_j),
+            _fmt(delta) if delta is not None else "-",
+            _fmt(r_val) if r_val is not None else "-",
+        ])
+    return headers, rows
+
+
 def _build_swebench_partial(runs: list[RunMetrics]) -> Optional[tuple[list[str], list[list[str]]]]:
     """Table 6: SWE-Bench Pro partial scores per config."""
     swe_runs = [r for r in runs if "swebench" in r.benchmark.lower()]
@@ -504,6 +596,16 @@ def generate_report(
 
     h, r = _build_per_benchmark_breakdown(runs)
     tables.append(("Per-Benchmark Breakdown (Mean Reward)", "per_benchmark_breakdown", h, r))
+
+    dual_agg = _build_dual_score_aggregate(runs)
+    if dual_agg:
+        h, r = dual_agg
+        tables.append(("Dual-Score Aggregate (Verifier vs Judge)", "dual_score_aggregate", h, r))
+
+    dual_task = _build_dual_score_per_task(runs)
+    if dual_task:
+        h, r = dual_task
+        tables.append(("Dual-Score Per-Task", "dual_score_per_task", h, r))
 
     h, r = _build_efficiency(runs)
     tables.append(("Efficiency", "efficiency", h, r))

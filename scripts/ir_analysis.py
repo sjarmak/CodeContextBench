@@ -51,11 +51,13 @@ from ccb_metrics.ir_metrics import (
     MCPValueScore,
 )
 
-RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "official"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+RUNS_DIR = REPO_ROOT / "runs" / "official"
+STAGING_DIR = REPO_ROOT / "runs" / "staging"
 MANIFEST_PATH = RUNS_DIR / "MANIFEST.json"
-BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
-SELECTION_FILE = Path(__file__).resolve().parent.parent / "configs" / "selected_benchmark_tasks.json"
-GT_CACHE = Path(__file__).resolve().parent.parent / "configs" / "ground_truth_files.json"
+BENCHMARKS_DIR = REPO_ROOT / "benchmarks"
+SELECTION_FILE = REPO_ROOT / "configs" / "selected_benchmark_tasks.json"
+GT_CACHE = REPO_ROOT / "configs" / "ground_truth_files.json"
 
 # __v1_hinted: old run dirs from before enterprise task de-hinting (US-001..US-003).
 # Appended to batch dir names after reruns complete so pre-redesign data is excluded.
@@ -65,6 +67,7 @@ CONFIGS = ["baseline", "sourcegraph_full"]
 DROPPED_BENCHMARKS = {"ccb_dependeval", "ccb_locobench"}
 
 DIR_PREFIX_TO_SUITE = {
+    # Legacy benchmark prefixes (runs/official/)
     "bigcode_mcp_": "ccb_largerepo",
     "bigcode_sgcompare_": "ccb_largerepo",
     "codereview_": "ccb_codereview",
@@ -90,6 +93,15 @@ DIR_PREFIX_TO_SUITE = {
     "paired_rerun_crossrepo_": "ccb_crossrepo",
     "paired_rerun_pytorch_": "ccb_pytorch",
     "paired_rerun_": None,
+    # SDLC phase suite prefixes (runs/staging/)
+    "build_": "ccb_build",
+    "debug_": "ccb_debug",
+    "design_": "ccb_design",
+    "document_": "ccb_document",
+    "fix_": "ccb_fix",
+    "secure_": "ccb_secure",
+    "test_": "ccb_test",
+    "understand_": "ccb_understand",
 }
 
 
@@ -213,6 +225,122 @@ def _walk_task_dirs() -> list[dict]:
                         all_tasks[key] = info
 
     return list(all_tasks.values())
+
+
+def _walk_sdlc_staging_dirs(runs_dir: Path) -> list[dict]:
+    """Walk SDLC staging run directories.
+
+    SDLC staging layout:
+        runs/staging/{suite_stem}_{model}_{ts}/{config}/{job_name}/{trial_dir}/
+    Where:
+        job_name = ccb_{suite_stem}_{task_id}_{config}
+        trial_dir = sdlc_{suite_stem}_{task_prefix}__{hash}
+    """
+    all_tasks: dict[tuple[str, str, str], dict] = {}
+
+    if not runs_dir.exists():
+        return []
+
+    for run_dir in sorted(runs_dir.iterdir()):
+        if not run_dir.is_dir() or run_dir.name in ("archive", "MANIFEST.json"):
+            continue
+        if should_skip(run_dir.name):
+            continue
+
+        suite = _suite_from_run_dir(run_dir.name)
+
+        for config_dir in sorted(run_dir.iterdir()):
+            if not config_dir.is_dir():
+                continue
+            config_name = config_dir.name
+            if config_name not in CONFIGS:
+                continue
+
+            for job_dir in sorted(config_dir.iterdir()):
+                if not job_dir.is_dir():
+                    continue
+                job_name = job_dir.name
+
+                # Extract task_id from job_name: ccb_{suite}_{task_id}_{config}
+                # e.g. ccb_test_aspnetcore-code-review-001_sourcegraph_full
+                task_id = _extract_task_id_from_job(job_name, config_name, suite)
+                if not task_id:
+                    continue
+
+                # Find the trial subdirectory (there should be exactly one)
+                trial_dir = None
+                for sub in sorted(job_dir.iterdir()):
+                    if sub.is_dir() and sub.name not in ("archive",):
+                        # Skip non-trial dirs (logs, etc.)
+                        if (sub / "result.json").is_file():
+                            trial_dir = sub
+                            break
+
+                if trial_dir is None:
+                    continue
+
+                transcript = trial_dir / "agent" / "claude-code.txt"
+                if not transcript.is_file():
+                    transcript = trial_dir / "claude-code.txt"
+
+                started_at = ""
+                result_file = trial_dir / "result.json"
+                if result_file.is_file():
+                    try:
+                        rdata = json.loads(result_file.read_text())
+                        started_at = rdata.get("started_at", "")
+                    except Exception:
+                        pass
+
+                task_suite = suite or _infer_suite(task_id)
+
+                info = {
+                    "task_id": task_id,
+                    "suite": task_suite or "unknown",
+                    "config": config_name,
+                    "task_dir": str(trial_dir),
+                    "transcript": str(transcript) if transcript.is_file() else None,
+                    "started_at": started_at,
+                }
+
+                key = (info["suite"], config_name, task_id)
+                if key in all_tasks:
+                    if started_at > all_tasks[key].get("started_at", ""):
+                        all_tasks[key] = info
+                else:
+                    all_tasks[key] = info
+
+    return list(all_tasks.values())
+
+
+def _extract_task_id_from_job(job_name: str, config_name: str, suite: str | None) -> str | None:
+    """Extract task_id from SDLC job directory name.
+
+    Job name format: ccb_{suite_stem}_{task_id}_{config}
+    e.g. ccb_test_aspnetcore-code-review-001_sourcegraph_full → aspnetcore-code-review-001
+    """
+    # Strip config suffix
+    for cfg in ("_sourcegraph_full", "_baseline"):
+        if job_name.endswith(cfg):
+            job_name = job_name[: -len(cfg)]
+            break
+    else:
+        return None
+
+    # Strip ccb_{suite_stem}_ prefix
+    if suite:
+        suite_stem = suite.removeprefix("ccb_")
+        prefix = f"ccb_{suite_stem}_"
+        if job_name.startswith(prefix):
+            return job_name[len(prefix):]
+
+    # Fallback: try all known SDLC suite stems
+    for stem in ("build", "debug", "design", "document", "fix", "secure", "test", "understand"):
+        prefix = f"ccb_{stem}_"
+        if job_name.startswith(prefix):
+            return job_name[len(prefix):]
+
+    return None
 
 
 def _infer_suite(task_id: str) -> str | None:
@@ -796,17 +924,78 @@ def compute_cost_efficiency(
     }
 
 
+def _compute_per_suite_correlation(
+    ir_scores: list[IRScores],
+    gt_registry: dict[str, TaskGroundTruth],
+) -> dict | None:
+    """Compute per-suite Spearman retrieval-outcome correlation.
+
+    Uses retrieval_outcome_correlation from ccb_metrics.statistics for the
+    heavy lifting: file_recall as IR metric, reward from MANIFEST.
+    Returns per-suite rho, p-value, and effect size.
+    """
+    manifest_rewards = _load_manifest_rewards()
+    if not manifest_rewards:
+        return None
+
+    # Build parallel lists: ir_score, reward, suite_label
+    ir_vals: list[float] = []
+    reward_vals: list[float] = []
+    suite_labels: list[str] = []
+
+    for s in ir_scores:
+        reward = manifest_rewards.get((s.task_id, s.config_name))
+        if reward is None:
+            continue
+        suite = _infer_suite(s.task_id) or "unknown"
+        ir_vals.append(s.file_recall)
+        reward_vals.append(reward)
+        suite_labels.append(suite)
+
+    if len(ir_vals) < 3:
+        return None
+
+    try:
+        from ccb_metrics.statistics import retrieval_outcome_correlation
+        return retrieval_outcome_correlation(ir_vals, reward_vals, suite_labels)
+    except ImportError:
+        return None
+
+
 def run_ir_analysis(
     suite_filter: str | None = None,
     per_task: bool = False,
     value_weights: tuple[float, ...] = (0.25, 0.25, 0.20, 0.15, 0.15),
+    runs_dir: Path | None = None,
+    staging: bool = False,
+    min_confidence: str = "medium",
+    correlate: bool = False,
 ) -> dict:
-    """Main analysis pipeline."""
+    """Main analysis pipeline.
+
+    Args:
+        min_confidence: Minimum GT confidence for aggregate metrics.
+            "low" includes everything (backwards compatible).
+            "medium" excludes low-confidence tasks from aggregates.
+            "high" restricts aggregates to high-confidence GT only.
+            Tasks excluded from aggregates are still included in per-task
+            output with a [low-conf] marker.
+        correlate: If True, compute per-suite Spearman retrieval-outcome
+            correlation via ccb_metrics.statistics.retrieval_outcome_correlation.
+    """
     gt_registry = _ensure_ground_truth()
     if not gt_registry:
         return {"error": "No ground truth available. Run --build-ground-truth first."}
 
-    tasks = _walk_task_dirs()
+    if runs_dir:
+        # Custom runs directory: try SDLC layout first, then official layout
+        tasks = _walk_sdlc_staging_dirs(runs_dir)
+        if not tasks:
+            tasks = _walk_task_dirs()
+    elif staging:
+        tasks = _walk_sdlc_staging_dirs(STAGING_DIR)
+    else:
+        tasks = _walk_task_dirs()
     # Exclude dropped benchmarks
     tasks = [t for t in tasks if t["suite"] not in DROPPED_BENCHMARKS]
     if suite_filter:
@@ -892,19 +1081,58 @@ def run_ir_analysis(
 
     n_flagged = n_before - len(all_scores)
 
-    # Aggregate
-    overall_by_config: dict[str, list[IRScores]] = defaultdict(list)
+    # --- Confidence gating (US-011) ---
+    # Build lookup: task_id -> confidence level from ground truth registry
+    _CONF_ORDER = {"high": 3, "medium": 2, "low": 1}
+    min_conf_level = _CONF_ORDER.get(min_confidence, 2)
+
+    # Identify tasks below the confidence threshold
+    low_conf_task_ids: set[str] = set()
     for s in all_scores:
+        gt = gt_registry.get(s.task_id)
+        if gt:
+            task_conf = _CONF_ORDER.get(gt.confidence, 1)
+            if task_conf < min_conf_level:
+                low_conf_task_ids.add(s.task_id)
+
+    # Split scores: agg_scores for aggregation, all_scores kept for per-task
+    agg_scores: list[IRScores] = [
+        s for s in all_scores if s.task_id not in low_conf_task_ids
+    ]
+    agg_by_suite_config: dict[tuple[str, str], list[IRScores]] = defaultdict(list)
+    for s in agg_scores:
+        suite_key = _infer_suite(s.task_id) or "unknown"
+        agg_by_suite_config[(suite_key, s.config_name)].append(s)
+
+    # Per-suite confidence breakdown
+    conf_breakdown: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for s in all_scores:
+        gt = gt_registry.get(s.task_id)
+        if gt:
+            suite_key = _infer_suite(s.task_id) or "unknown"
+            conf_breakdown[suite_key][gt.confidence] += 1
+
+    # Aggregate (using confidence-filtered scores)
+    overall_by_config: dict[str, list[IRScores]] = defaultdict(list)
+    for s in agg_scores:
         overall_by_config[s.config_name].append(s)
 
     result: dict = {
         "summary": {
             "total_tasks_with_gt": len(gt_registry),
             "total_runs_analyzed": len(all_scores),
+            "total_in_aggregates": len(agg_scores),
+            "excluded_low_confidence": len(all_scores) - len(agg_scores),
+            "low_confidence_task_ids": sorted(low_conf_task_ids),
+            "min_confidence": min_confidence,
             "skipped_no_ground_truth": skipped_no_gt,
             "skipped_no_transcript": skipped_no_transcript,
             "excluded_zero_mcp_sg": n_flagged,
             "excluded_zero_mcp_task_ids": sorted(flagged_ids),
+            "confidence_breakdown_by_suite": {
+                suite: dict(sorted(counts.items()))
+                for suite, counts in sorted(conf_breakdown.items())
+            },
         },
         "overall_by_config": {
             cfg: aggregate_ir_scores(scores)
@@ -912,7 +1140,7 @@ def run_ir_analysis(
         },
         "by_suite_config": {
             f"{suite}__{cfg}": aggregate_ir_scores(scores)
-            for (suite, cfg), scores in sorted(by_suite_config.items())
+            for (suite, cfg), scores in sorted(agg_by_suite_config.items())
         },
     }
 
@@ -921,7 +1149,7 @@ def run_ir_analysis(
     sg_scores = overall_by_config.get("sourcegraph_full", [])
     if len(bl_scores) >= 5 and len(sg_scores) >= 5:
         try:
-            from ccb_metrics.statistics import welchs_t_test, cohens_d, bootstrap_ci
+            from ccb_metrics.statistics import welchs_t_test, cohens_d, bootstrap_ci_dict as bootstrap_ci
 
             # Match by task_id for paired comparison
             bl_by_id = {s.task_id: s for s in bl_scores}
@@ -1066,13 +1294,13 @@ def run_ir_analysis(
         except ImportError:
             pass
 
-    # US-003: Retrieval-outcome correlation
-    corr = compute_retrieval_outcome_correlation(all_scores)
+    # US-003: Retrieval-outcome correlation (uses agg_scores for confidence gating)
+    corr = compute_retrieval_outcome_correlation(agg_scores)
     if corr:
         result["retrieval_outcome_correlation"] = corr
 
     # US-004: Composite MCP value scores
-    value_scores = compute_mcp_value_scores(all_scores, weights=value_weights)
+    value_scores = compute_mcp_value_scores(agg_scores, weights=value_weights)
     if value_scores:
         by_suite: dict[str, list[MCPValueScore]] = defaultdict(list)
         for vs in value_scores:
@@ -1095,12 +1323,27 @@ def run_ir_analysis(
         }
 
     # US-005: Cost-efficiency metrics
-    cost_eff = compute_cost_efficiency(all_scores)
+    cost_eff = compute_cost_efficiency(agg_scores)
     if cost_eff:
         result["cost_efficiency"] = cost_eff
 
+    # US-011: --correlate — per-suite Spearman retrieval-outcome correlation
+    if correlate:
+        corr_data = _compute_per_suite_correlation(agg_scores, gt_registry)
+        if corr_data:
+            result["per_suite_correlation"] = corr_data
+
     if per_task:
-        result["per_task"] = [s.to_dict() for s in all_scores]
+        # Mark low-confidence tasks in per-task output
+        per_task_list = []
+        for s in all_scores:
+            d = s.to_dict()
+            gt = gt_registry.get(s.task_id)
+            d["gt_confidence"] = gt.confidence if gt else "unknown"
+            if s.task_id in low_conf_task_ids:
+                d["confidence_excluded"] = True
+            per_task_list.append(d)
+        result["per_task"] = per_task_list
 
     return result
 
@@ -1115,12 +1358,26 @@ def format_table(data: dict) -> str:
     s = data.get("summary", {})
     lines.append(f"Tasks with ground truth: {s.get('total_tasks_with_gt', 0)}")
     lines.append(f"Runs analyzed:           {s.get('total_runs_analyzed', 0)}")
+    lines.append(f"In aggregates:           {s.get('total_in_aggregates', s.get('total_runs_analyzed', 0))}")
+    min_conf = s.get("min_confidence", "medium")
+    n_low_conf = s.get("excluded_low_confidence", 0)
+    if n_low_conf:
+        lines.append(f"Excluded (low-conf GT):  {n_low_conf}  (below --min-confidence={min_conf})")
     lines.append(f"Skipped (no GT):         {s.get('skipped_no_ground_truth', 0)}")
     lines.append(f"Skipped (no transcript): {s.get('skipped_no_transcript', 0)}")
     n_zero_mcp = s.get("excluded_zero_mcp_sg", 0)
     if n_zero_mcp:
         lines.append(f"Excluded (zero-MCP SG):  {n_zero_mcp}  (invalid: MCP available but never used)")
     lines.append("")
+
+    # Per-suite confidence breakdown
+    conf_bd = s.get("confidence_breakdown_by_suite", {})
+    if conf_bd:
+        lines.append("GT CONFIDENCE BREAKDOWN BY SUITE:")
+        for suite, counts in sorted(conf_bd.items()):
+            parts = [f"{c} {n}" for c, n in sorted(counts.items(), key=lambda x: -{"high": 3, "medium": 2, "low": 1}.get(x[0], 0))]
+            lines.append(f"  {suite:35s} {', '.join(parts)}")
+        lines.append("")
 
     # Overall by config
     overall = data.get("overall_by_config", {})
@@ -1220,6 +1477,29 @@ def format_table(data: dict) -> str:
                     f"    {row['task_id']:40s} {row['suite']:20s} "
                     f"{row.get('mrr_delta', 0):>+7.3f} {row.get('reward_delta', 0):>+7.3f}"
                 )
+        lines.append("")
+
+    # Per-suite retrieval-outcome correlation (--correlate)
+    psc = data.get("per_suite_correlation", {})
+    if psc:
+        lines.append("PER-SUITE RETRIEVAL-OUTCOME CORRELATION (--correlate):")
+        overall_c = psc.get("overall", {})
+        if overall_c:
+            lines.append(
+                f"  Overall: rho={overall_c.get('rho', 'N/A')}, "
+                f"p={overall_c.get('p_value', 'N/A')}, "
+                f"effect_size={overall_c.get('effect_size', 'N/A')}"
+            )
+        header = f"  {'Suite':30s} {'rho':>8s} {'p-value':>10s} {'effect':>8s}"
+        lines.append(header)
+        lines.append("  " + "-" * (len(header) - 2))
+        for key, vals in sorted(psc.items()):
+            if key == "overall":
+                continue
+            rho = vals.get("rho", 0.0)
+            p_val = vals.get("p_value", 1.0)
+            eff = vals.get("effect_size", 0.0)
+            lines.append(f"  {key:30s} {rho:>+8.4f} {p_val:>10.6f} {eff:>+8.4f}")
         lines.append("")
 
     # MCP Value Scores
@@ -1346,6 +1626,26 @@ def format_table(data: dict) -> str:
                         f"delta={delta_val:>+12,.0f}  ({pct:>+.1f}%)"
                     )
             lines.append("")
+
+    # Per-task scores (if present)
+    per_task_data = data.get("per_task", [])
+    if per_task_data:
+        lines.append("PER-TASK IR SCORES:")
+        header = (
+            f"  {'Task':40s} {'Config':20s} {'MRR':>7s} {'F.Rec':>7s} "
+            f"{'Conf':>6s}"
+        )
+        lines.append(header)
+        lines.append("  " + "-" * (len(header) - 2))
+        for t in per_task_data:
+            conf = t.get("gt_confidence", "?")
+            marker = " [low-conf]" if t.get("confidence_excluded") else ""
+            lines.append(
+                f"  {t.get('task_id', ''):40s} {t.get('config_name', ''):20s} "
+                f"{t.get('mrr', 0):>7.3f} {t.get('file_recall', 0):>7.3f} "
+                f"{conf:>6s}{marker}"
+            )
+        lines.append("")
 
     return "\n".join(lines)
 
@@ -1629,6 +1929,32 @@ def parse_args():
         "--report", action="store_true",
         help="Generate stakeholder-ready markdown report to docs/ir_analysis_report.md",
     )
+    parser.add_argument(
+        "--staging", action="store_true",
+        help="Scan runs/staging/ instead of runs/official/ (SDLC phase suite layout)",
+    )
+    parser.add_argument(
+        "--runs-dir", default=None,
+        help="Custom runs directory to scan (overrides --staging)",
+    )
+    parser.add_argument(
+        "--min-confidence", choices=["high", "medium", "low"], default="medium",
+        help=(
+            "Minimum GT confidence for aggregate metrics. "
+            "'medium' (default) excludes low-confidence tasks from aggregates "
+            "(still shown in per-task output with [low-conf] marker). "
+            "'low' includes everything (backwards compatible). "
+            "'high' restricts aggregates to high-confidence GT only."
+        ),
+    )
+    parser.add_argument(
+        "--correlate", action="store_true",
+        help=(
+            "Compute per-suite Spearman retrieval-outcome correlation "
+            "using retrieval_outcome_correlation from ccb_metrics.statistics. "
+            "Outputs rho, p-value, and effect size per suite."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1662,10 +1988,16 @@ def main():
         print("ERROR: --value-weights must be 4 or 5 comma-separated floats", file=sys.stderr)
         sys.exit(1)
 
+    custom_runs_dir = Path(args.runs_dir) if args.runs_dir else None
+
     data = run_ir_analysis(
         suite_filter=args.suite,
         per_task=args.per_task,
         value_weights=vw,
+        runs_dir=custom_runs_dir,
+        staging=args.staging,
+        min_confidence=args.min_confidence,
+        correlate=args.correlate,
     )
 
     if args.report:
