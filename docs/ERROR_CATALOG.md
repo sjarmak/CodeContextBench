@@ -188,3 +188,26 @@ Fingerprints are defined in `scripts/status_fingerprints.py` and matched in orde
 **Fix:** SG_full preamble updated in `claude_baseline_agent.py` to instruct the agent: "After calling sg_deepsearch, call sg_deepsearch_read at least 3-5 times with 10-15 second waits between attempts. Deep Search is asynchronous and typically takes 50-300 seconds." Reruns with the updated preamble should resolve the issue.
 
 **Auto-retry:** true
+
+---
+
+## Verifier Debug Mode
+
+Set `DEBUG_MODE=true` before running configs to capture full verifier diagnostics:
+
+```bash
+DEBUG_MODE=true ./configs/test_2config.sh
+```
+
+Debug output is written to `/logs/verifier/debug/` inside the container and does not affect scoring. The following files are captured:
+
+| File | Contents |
+|------|----------|
+| `environment.txt` | All environment variables (secrets filtered out) |
+| `workspace_git_status.txt` | `git status` output from `/workspace` |
+| `workspace_git_diff.txt` | `git diff` output from `/workspace` (capped at 500 lines) |
+| `workspace_file_tree.txt` | File listing of `/workspace` (capped at 200 lines) |
+
+Debug capture adds less than 2 seconds of overhead (env, git, find commands only). The `DEBUG_MODE` environment variable is exported by `configs/_common.sh` and inherited by Docker containers via Harbor.
+
+Secret filtering excludes any environment variable whose name contains `KEY`, `TOKEN`, `SECRET`, or `PASSWORD`.
