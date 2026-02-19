@@ -111,6 +111,15 @@ Search before you build. Existing patterns reduce tokens, ensure consistency, an
 
 {repo_scope}
 
+## Local File Editing
+
+Local source files may be truncated (empty). Use Sourcegraph to *read and understand* code, then *edit local files* based on what you learn. The verifier restores the full codebase and applies your local edits on top.
+
+- **Search/Read remotely:** Use MCP tools to find files, understand patterns, read implementations
+- **Edit locally:** Use Edit, Write, and Bash to modify files in your working directory
+- **Don't over-read:** Once you understand the pattern, start implementing. Reading 20+ remote files without writing code wastes time.
+- **Verify locally:** Run tests with Bash to check your changes
+
 ## Tool Selection Logic
 
 **Start here:**
