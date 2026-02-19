@@ -31,6 +31,7 @@ class TaskMetrics:
     judge_score: Optional[float] = None
     judge_rubric: Optional[dict[str, float]] = None
     judge_model: Optional[str] = None
+    oracle_confidence: Optional[str] = None  # high / medium / low
 
     # Task selection metadata (from selected_benchmark_tasks.json)
     sdlc_phase: Optional[str] = None
