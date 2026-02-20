@@ -49,13 +49,9 @@ Write your migration guide to `/workspace/documentation.md` with the following s
 4. **Testing Your Migration** - How to validate the upgrade was successful
 5. **Rollback Guidance** - How to safely rollback if needed
 
-## Scoring Criteria
+## Evaluation
 
-Your documentation will be evaluated on:
-- **Completeness**: All required breaking changes are documented
-- **Accuracy**: Migration steps correctly reflect the actual code changes
-- **Clarity**: Instructions are clear with concrete examples
-- **Practicality**: Includes testing steps and rollback guidance
+Your review will be evaluated on detection accuracy and fix quality.
 
 ## Tips
 

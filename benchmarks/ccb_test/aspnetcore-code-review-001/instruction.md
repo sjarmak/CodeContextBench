@@ -55,14 +55,9 @@ Each entry must include:
 - `description` — What the defect is and what impact it has
 - `fix_applied` — Boolean indicating whether you committed a fix
 
-## Scoring
+## Evaluation
 
-Your submission is scored on two equally weighted components:
-
-1. **Detection score (50%)**: F1 score (harmonic mean of precision and recall) of your reported defects matched against the ground truth. A reported defect matches if it identifies the correct file and a related issue.
-2. **Fix score (50%)**: Proportion of defects where you both identified the issue and applied a correct code fix (verified by checking for expected code patterns in the modified files).
-
-**Final score** = 0.5 × detection_F1 + 0.5 × fix_score
+Your review will be evaluated on detection accuracy and fix quality.
 
 ## Testing
 

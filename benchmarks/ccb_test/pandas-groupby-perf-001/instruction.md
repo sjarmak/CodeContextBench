@@ -58,13 +58,7 @@ python -m pytest pandas/tests/groupby/test_aggregate.py -v -k series
 ## Output
 
 Your optimized code should be in `/workspace/optimized/`.
-The verifier will measure runtime improvement as:
-
-```
-runtime_reduction = 1 - (optimized_runtime / baseline_runtime)
-```
-
-Higher values indicate better optimization. A value of 0.5 means 2x speedup.
+The verifier will measure runtime improvement relative to the baseline. Greater speedups yield higher scores.
 
 ## Workspace Structure
 

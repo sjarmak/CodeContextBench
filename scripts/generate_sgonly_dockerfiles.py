@@ -321,6 +321,10 @@ def generate_build_requiring(task_dir, dockerfile_text):
 # --- sg_only_env: back up full repo, then truncate source ---
 RUN cp -a {repo_dir} /repo_full
 RUN {truncate_find_expr(repo_dir, extra_excludes)}
+# Recommit truncated state so git history cannot recover full files.
+# Without this, `git show HEAD:<file>` or `git checkout HEAD -- <file>`
+# would bypass truncation by reading from the pre-truncation commit.
+RUN cd {repo_dir} && git add -A && git commit -m "sg_only truncation" --allow-empty --quiet
 RUN touch /tmp/.sg_only_mode && echo '{repo_dir}' > /tmp/.sg_only_workdir
 """
 
