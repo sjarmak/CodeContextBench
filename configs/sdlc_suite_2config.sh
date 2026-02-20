@@ -58,7 +58,41 @@ fi
 
 mapfile -t ALL_TASK_IDS < <(find "${BENCHMARK_DIR}/${SUITE}" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
 
+# Re-sort tasks by expected duration descending (heaviest first).
+# This ensures long-running tasks start immediately in the first parallel wave,
+# overlapping with many lighter tasks instead of blocking the tail end.
+mapfile -t ALL_TASK_IDS < <(python3 - "${BENCHMARK_DIR}/${SUITE}" "${ALL_TASK_IDS[@]}" <<'SORT_EOF'
+import sys, os, re
+suite_dir = sys.argv[1]
+task_ids = sys.argv[2:]
+
+def task_weight(task_id):
+    toml_path = os.path.join(suite_dir, task_id, "task.toml")
+    try:
+        with open(toml_path) as f:
+            text = f.read()
+    except OSError:
+        return 0
+    build = 900  # default
+    agent = 1200  # default
+    m = re.search(r'build_timeout_sec\s*=\s*(\d+)', text)
+    if m:
+        build = int(m.group(1))
+    m = re.search(r'timeout_sec\s*=\s*(\d+)', text)
+    if m:
+        agent = int(m.group(1))
+    m = re.search(r'time_limit_sec\s*=\s*(\d+)', text)
+    if m:
+        agent = max(agent, int(m.group(1)))
+    return build + agent
+
+for tid in sorted(task_ids, key=task_weight, reverse=True):
+    print(tid)
+SORT_EOF
+)
+
 # Parse arguments
+SKIP_PREBUILD=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --baseline-only)
@@ -84,6 +118,10 @@ while [[ $# -gt 0 ]]; do
         --task)
             TASK_FILTERS+=("$2")
             shift 2
+            ;;
+        --no-prebuild)
+            SKIP_PREBUILD=true
+            shift
             ;;
         *)
             echo "Unknown option: $1"
@@ -185,7 +223,9 @@ _sdlc_run_single() {
             return 1
         fi
 
-        temp_task_dir=$(mktemp -d "/tmp/sdlc_${SUITE_STEM}_${task_id}_XXXXXX")
+        temp_task_dir="/tmp/sgonly_${task_id}"
+        rm -rf "$temp_task_dir"
+        mkdir -p "$temp_task_dir"
         cp -a "${task_path}/." "${temp_task_dir}/"
         cp "${temp_task_dir}/environment/Dockerfile.sg_only" "${temp_task_dir}/environment/Dockerfile"
         run_task_path="$temp_task_dir"
@@ -231,6 +271,13 @@ run_task_batch() {
     validate_and_report "${JOBS_BASE}/${mode}" "$mode"
     log_section "Completed ${SUITE_STEM} - Mode: $mode"
 }
+
+# Pre-build all Docker images to warm the cache before agent runs.
+# This moves Docker build time out of the critical path (API session slots).
+if [ "$SKIP_PREBUILD" = false ]; then
+    log_section "Pre-building Docker images for ${SUITE}"
+    prebuild_images "$SUITE"
+fi
 
 if [ "$RUN_BASELINE" = true ] && [ "$RUN_FULL" = true ]; then
     run_paired_configs TASK_IDS _sdlc_run_single "$JOBS_BASE"
