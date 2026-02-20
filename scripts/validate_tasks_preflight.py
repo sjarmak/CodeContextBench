@@ -157,16 +157,26 @@ def validate_task(task_dir: Path, selected_index: dict) -> list[dict]:
     else:
         toml_data = parse_task_toml_simple(toml_path)
 
-    # --- Check test.sh ---
+    # --- Check test.sh (or eval.sh for MCP-unique tasks) ---
     test_sh = task_dir / "tests" / "test.sh"
-    if not test_sh.is_file():
-        issue("CRITICAL", "missing_test_sh", "No tests/test.sh found")
+    eval_sh = task_dir / "tests" / "eval.sh"
+    if test_sh.is_file():
+        verifier_script = test_sh
+        verifier_name = "test.sh"
+    elif eval_sh.is_file():
+        verifier_script = eval_sh
+        verifier_name = "eval.sh"
     else:
-        if not os.access(test_sh, os.X_OK):
-            issue("WARNING", "test_not_executable", "tests/test.sh is not executable")
+        verifier_script = None
+        verifier_name = None
+        issue("CRITICAL", "missing_test_sh", "No tests/test.sh or tests/eval.sh found")
+
+    if verifier_script is not None:
+        if not os.access(verifier_script, os.X_OK):
+            issue("WARNING", "test_not_executable", f"tests/{verifier_name} is not executable")
 
         # Check for known bad patterns in test.sh
-        test_content = test_sh.read_text(errors="replace")
+        test_content = verifier_script.read_text(errors="replace")
         if "--output_path" in test_content and "--result_path" not in test_content:
             # Check if this is a TAC task with the known --output_path bug
             if "tac" in benchmark.lower():

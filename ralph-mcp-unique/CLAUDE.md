@@ -6,14 +6,13 @@ You are an autonomous coding agent working on extending CodeContextBench with MC
 
 1. Read the PRD at `ralph-mcp-unique/prd.json` (relative to project root)
 2. Read the progress log at `ralph-mcp-unique/progress.txt` (check Codebase Patterns section first)
-3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.
-4. Pick the **highest priority** user story where `passes: false`
-5. Implement that single user story
-6. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)
-7. Update CLAUDE.md files if you discover reusable patterns
-8. If checks pass, commit ALL changes with message: `feat: [Story ID] - [Story Title]`
-9. Update the PRD to set `passes: true` for the completed story
-10. Append your progress to `ralph-mcp-unique/progress.txt`
+3. Pick the **highest priority** user story where `passes: false`
+4. Implement that single user story
+5. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)
+6. Update CLAUDE.md files if you discover reusable patterns
+7. If checks pass, commit ALL changes to `main` with message: `feat: [Story ID] - [Story Title]`
+8. Update the PRD to set `passes: true` for the completed story
+9. Append your progress to `ralph-mcp-unique/progress.txt`
 
 ## Key Architecture Context
 
@@ -80,6 +79,12 @@ If ALL stories are complete and passing, reply with:
 <promise>COMPLETE</promise>
 
 If there are still stories with `passes: false`, end your response normally.
+
+## Git Policy
+
+- **All work happens on `main`** — do NOT create feature branches
+- Never run `git checkout -b` or `git switch -c` — commit directly to `main`
+- This avoids cross-session branch confusion when multiple agents work on the repo
 
 ## Important
 

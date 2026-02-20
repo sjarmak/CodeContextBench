@@ -26,6 +26,11 @@ per-task details.
 - `docs/SKILLS.md` - AI agent skill system overview
 - `skills/` - operational runbooks for AI agents (see `skills/README.md`)
 
+## Git Policy
+- **All work happens on `main`** — do NOT create feature branches.
+- Never run `git checkout -b` or `git switch -c`.
+- Commit directly to `main`. This avoids cross-session branch confusion when multiple agents work on the repo.
+
 ## Typical Skill Routing
 Use these defaults unless there is a task-specific reason not to.
 

@@ -82,6 +82,17 @@ DIR_PREFIX_TO_SUITE = {
     "swebenchpro_": "ccb_swebenchpro",
     "sweperf_": "ccb_sweperf",
     "tac_": "ccb_tac",
+    # MCP-unique org-scale retrieval suites
+    "ccb_mcp_crossrepo_tracing_": "ccb_mcp_crossrepo_tracing",
+    "ccb_mcp_security_": "ccb_mcp_security",
+    "ccb_mcp_migration_": "ccb_mcp_migration",
+    "ccb_mcp_incident_": "ccb_mcp_incident",
+    "ccb_mcp_onboarding_": "ccb_mcp_onboarding",
+    "ccb_mcp_compliance_": "ccb_mcp_compliance",
+    "ccb_mcp_crossorg_": "ccb_mcp_crossorg",
+    "ccb_mcp_domain_": "ccb_mcp_domain",
+    "ccb_mcp_org_": "ccb_mcp_org",
+    "ccb_mcp_platform_": "ccb_mcp_platform",
 }
 
 CONFIGS = ["baseline", "sourcegraph_full", "sourcegraph_isolated"]

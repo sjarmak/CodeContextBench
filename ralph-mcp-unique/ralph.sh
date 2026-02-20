@@ -71,9 +71,6 @@ cd "$INSTANCE_DIR"
 PRD_FILE="$INSTANCE_DIR/prd.json"
 PROGRESS_FILE="$INSTANCE_DIR/progress.txt"
 RUN_LOG="$INSTANCE_DIR/ralph-run.log"
-ARCHIVE_DIR="$INSTANCE_DIR/archive"
-LAST_BRANCH_FILE="$INSTANCE_DIR/.last-branch"
-
 for req in CLAUDE.md AGENTS.md "$PRD_FILE" "$PROGRESS_FILE"; do
   if [[ ! -f "$req" ]]; then
     echo "Error: missing required file in $INSTANCE_DIR: $req" >&2
@@ -84,28 +81,6 @@ done
 if ! command -v "$TOOL" >/dev/null 2>&1; then
   echo "Error: tool '$TOOL' is not installed or not on PATH" >&2
   exit 127
-fi
-
-CURRENT_BRANCH="$(jq -r '.branchName // empty' "$PRD_FILE" 2>/dev/null || true)"
-if [[ -f "$LAST_BRANCH_FILE" ]]; then
-  LAST_BRANCH="$(cat "$LAST_BRANCH_FILE" 2>/dev/null || true)"
-else
-  LAST_BRANCH=""
-fi
-
-if [[ -n "$CURRENT_BRANCH" && -n "$LAST_BRANCH" && "$CURRENT_BRANCH" != "$LAST_BRANCH" ]]; then
-  DATE_PREFIX="$(date +%Y-%m-%d)"
-  SAFE_BRANCH="${LAST_BRANCH#ralph/}"
-  DEST="$ARCHIVE_DIR/${DATE_PREFIX}-${SAFE_BRANCH}"
-  mkdir -p "$DEST"
-  [[ -f "$PRD_FILE" ]] && cp "$PRD_FILE" "$DEST/prd.json"
-  [[ -f "$PROGRESS_FILE" ]] && cp "$PROGRESS_FILE" "$DEST/progress.txt"
-  [[ -f "$RUN_LOG" ]] && cp "$RUN_LOG" "$DEST/ralph-run.log"
-  echo "[$(ts)] Archived previous run to $DEST" | tee -a "$PROGRESS_FILE" "$RUN_LOG"
-fi
-
-if [[ -n "$CURRENT_BRANCH" ]]; then
-  echo "$CURRENT_BRANCH" > "$LAST_BRANCH_FILE"
 fi
 
 touch "$RUN_LOG"

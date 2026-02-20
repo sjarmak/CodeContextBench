@@ -1358,3 +1358,111 @@ def extract_mcp_latency_from_trajectory(
         "mcp_latency_p50_ms": round(p50, 1),
         "mcp_latency_p95_ms": round(p95, 1),
     }
+
+
+def extract_compaction_events_from_transcript(
+    claude_code_txt_path: str | Path,
+) -> dict:
+    """Extract context compaction events from a claude-code.txt transcript.
+
+    Compaction appears as a three-event sequence in the JSONL:
+      1. {"type": "system", "subtype": "status", "status": "compacting"}
+      2. {"type": "system", "subtype": "status", "status": null}
+      3. {"type": "system", "subtype": "compact_boundary",
+          "compact_metadata": {"trigger": "auto", "pre_tokens": N}}
+
+    Also detects the token drop by tracking input_tokens on assistant turns
+    before and after each compact_boundary event.
+
+    Returns:
+        Dict with:
+          compaction_count: int — number of compaction events
+          compaction_events: list[dict] — per-event details:
+            - turn_index: assistant turn number when compaction occurred
+            - pre_tokens: token count that triggered compaction (from metadata)
+            - post_tokens: first assistant turn input_tokens after compaction
+            - tokens_dropped: pre_tokens - post_tokens
+            - trigger: "auto" or other (from metadata)
+          compaction_first_turn_pct: float — first compaction turn / total turns
+          compaction_total_tokens_dropped: int — sum of all tokens_dropped
+        All None if no transcript or no compaction events.
+    """
+    empty: dict = {
+        "compaction_count": 0,
+        "compaction_events": None,
+        "compaction_first_turn_pct": None,
+        "compaction_total_tokens_dropped": None,
+    }
+    path = _resolve_existing_transcript_path(claude_code_txt_path)
+    if not path.is_file():
+        return empty
+
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return empty
+
+    assistant_turn_count = 0
+    pending_compact: dict | None = None
+    events: list[dict] = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        etype = entry.get("type")
+
+        if etype == "assistant":
+            assistant_turn_count += 1
+            message = entry.get("message") or {}
+            usage = message.get("usage") or entry.get("usage") or {}
+            inp = usage.get("input_tokens") or 0
+            cache_create = usage.get("cache_creation_input_tokens") or 0
+            cache_read = usage.get("cache_read_input_tokens") or 0
+            total_input = inp + cache_create + cache_read
+
+            if pending_compact is not None and total_input > 0:
+                pending_compact["post_tokens"] = total_input
+                pre = pending_compact.get("pre_tokens") or 0
+                pending_compact["tokens_dropped"] = pre - total_input
+                events.append(pending_compact)
+                pending_compact = None
+
+        elif etype == "system":
+            subtype = entry.get("subtype")
+            if subtype == "compact_boundary":
+                metadata = entry.get("compact_metadata") or {}
+                pending_compact = {
+                    "turn_index": assistant_turn_count,
+                    "pre_tokens": metadata.get("pre_tokens"),
+                    "post_tokens": None,
+                    "tokens_dropped": None,
+                    "trigger": metadata.get("trigger", "unknown"),
+                }
+
+    if pending_compact is not None:
+        events.append(pending_compact)
+
+    if not events:
+        return empty
+
+    total_dropped = sum(
+        e["tokens_dropped"] for e in events if e["tokens_dropped"] is not None
+    )
+    first_turn_pct = (
+        round(events[0]["turn_index"] / assistant_turn_count, 4)
+        if assistant_turn_count > 0
+        else None
+    )
+
+    return {
+        "compaction_count": len(events),
+        "compaction_events": events,
+        "compaction_first_turn_pct": first_turn_pct,
+        "compaction_total_tokens_dropped": total_dropped if total_dropped else None,
+    }

@@ -12,17 +12,19 @@
 #   ./configs/run_selected_tasks.sh [OPTIONS]
 #
 # Options:
-#   --benchmark BENCHMARK  Run only this benchmark (e.g., ccb_build, ccb_fix)
-#   --baseline-only        Run only baseline (no MCP)
-#   --full-only            Run only MCP-Full (sourcegraph_full)
-#   --model MODEL          Override model (default: claude-opus-4-6)
-#   --concurrency N        Concurrent tasks (default: 2)
-#   --category CATEGORY    Run category (default: staging)
-#   --skip-completed       Skip tasks that already have result.json + task_metrics.json
-#   --dry-run              Print tasks without running
+#   --benchmark BENCHMARK           Run only this benchmark (e.g., ccb_build, ccb_fix)
+#   --selection-file PATH           Use alternate selection file (default: selected_benchmark_tasks.json)
+#   --use-case-category CATEGORY    Filter by MCP-unique use case category (A-J), only valid with --selection-file
+#   --baseline-only                 Run only baseline (no MCP)
+#   --full-only                     Run only MCP-Full (sourcegraph_full)
+#   --model MODEL                   Override model (default: claude-opus-4-6)
+#   --concurrency N                 Concurrent tasks (default: 2)
+#   --category CATEGORY             Run category (default: staging)
+#   --skip-completed                Skip tasks that already have result.json + task_metrics.json
+#   --dry-run                       Print tasks without running
 #
 # Prerequisites:
-#   - configs/selected_benchmark_tasks.json in repo
+#   - configs/selected_benchmark_tasks.json in repo (or --selection-file path)
 #   - .env.local (repo root) with USE_SUBSCRIPTION=true
 #   - SOURCEGRAPH_ACCESS_TOKEN in .env.local (for MCP modes)
 
@@ -44,6 +46,7 @@ SELECTION_FILE="$REPO_ROOT/configs/selected_benchmark_tasks.json"
 # PARSE ARGUMENTS
 # ============================================
 BENCHMARK_FILTER=""
+USE_CASE_CATEGORY_FILTER=""
 MODEL="${MODEL:-anthropic/claude-opus-4-6}"
 CONCURRENCY=1
 TIMEOUT_MULTIPLIER=10
@@ -58,6 +61,14 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --benchmark)
             BENCHMARK_FILTER="$2"
+            shift 2
+            ;;
+        --selection-file)
+            SELECTION_FILE="$2"
+            shift 2
+            ;;
+        --use-case-category)
+            USE_CASE_CATEGORY_FILTER="$2"
             shift 2
             ;;
         --baseline-only)
@@ -120,17 +131,26 @@ ensure_fresh_token
 # EXTRACT TASKS FROM SELECTION FILE
 # ============================================
 # Python helper to extract task info grouped by benchmark
+# Supports both standard format (benchmark field) and MCP-unique format (mcp_suite field).
+# task_dir in both formats is relative to benchmarks/ (no benchmarks/ prefix).
 extract_tasks() {
     python3 -c "
 import json, sys
 
 selection = json.load(open('$SELECTION_FILE'))
 benchmark_filter = '$BENCHMARK_FILTER'
+use_case_category_filter = '$USE_CASE_CATEGORY_FILTER'
 
 for task in selection['tasks']:
-    bm = task['benchmark']
+    # Support both standard (benchmark) and MCP-unique (mcp_suite) selection files
+    bm = task.get('benchmark') or task.get('mcp_suite', '')
+    if not bm:
+        continue
     if benchmark_filter and bm != benchmark_filter:
         continue
+    if use_case_category_filter and task.get('use_case_category', '') != use_case_category_filter:
+        continue
+    # task_dir is relative to benchmarks/ in both formats
     task_dir = 'benchmarks/' + task['task_dir']
     print(f'{bm}\t{task[\"task_id\"]}\t{task_dir}')
 "
@@ -181,6 +201,7 @@ echo "Total tasks:   $TOTAL_TASKS"
 echo "Concurrency:   $CONCURRENCY"
 echo "Configs:       baseline=$RUN_BASELINE sourcegraph_full=$RUN_FULL"
 echo "Skip done:     $SKIP_COMPLETED"
+[ -n "$USE_CASE_CATEGORY_FILTER" ] && echo "Category:      $USE_CASE_CATEGORY_FILTER"
 echo ""
 echo "Tasks per benchmark:"
 for bm in $(echo "${!BENCHMARK_COUNTS[@]}" | tr ' ' '\n' | sort); do

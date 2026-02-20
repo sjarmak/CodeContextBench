@@ -838,6 +838,7 @@ before retrying."""
                 script_lines = [
                     '#!/bin/bash',
                     'export PATH=/usr/local/bin:/usr/bin:/bin:$PATH',
+                    'export CLAUDE_CODE_MAX_OUTPUT_TOKENS=128000',
                     '# Detect working directory',
                     'if [ -d /workspace ]; then WORKDIR=/workspace',
                     'elif [ -d /app ]; then WORKDIR=/app',
@@ -897,11 +898,12 @@ before retrying."""
                 env_with_autonomous = {
                     **env,
                     'FORCE_AUTO_BACKGROUND_TASKS': '1',
-                    'ENABLE_BACKGROUND_TASKS': '1'
+                    'ENABLE_BACKGROUND_TASKS': '1',
+                    'CLAUDE_CODE_MAX_OUTPUT_TOKENS': '128000',
                 }
 
                 # Add SSL workaround for MCP HTTP transport
-                if mcp_type in ["sourcegraph", "sourcegraph_full", "sourcegraph_base", "sourcegraph_isolated", "deepsearch", "deepsearch_hybrid"]:
+                if mcp_type in ["sourcegraph", "sourcegraph_full", "sourcegraph_base", "sourcegraph_isolated", "artifact_full", "deepsearch", "deepsearch_hybrid"]:
                     env_with_autonomous['NODE_TLS_REJECT_UNAUTHORIZED'] = '0'
 
                 if mcp_type == "sourcegraph_base":
