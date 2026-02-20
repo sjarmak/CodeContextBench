@@ -1,7 +1,7 @@
 FROM golang:1.20-bookworm
 
 # Install dependencies for verifier (jq and bc for weighted checklist scoring)
-RUN apt-get update && apt-get install -y jq bc git && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends jq bc git && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 

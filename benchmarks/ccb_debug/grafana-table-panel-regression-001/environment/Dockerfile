@@ -3,15 +3,11 @@ FROM golang:1.23-bookworm
 WORKDIR /workspace
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
-    npm \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
 
 # Clone Grafana at the target commit (v38 migration regression)
 # Commit 26d36ec contains the migration fix; we check out its parent to get the broken state

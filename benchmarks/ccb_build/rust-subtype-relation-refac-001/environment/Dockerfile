@@ -3,15 +3,12 @@ FROM rust:1.82-bookworm
 WORKDIR /workspace
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
     python3-pip \
-    npm
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
+    && rm -rf /var/lib/apt/lists/*
 
 # Clone Rust compiler at pinned commit (1.93.1)
 RUN git clone --filter=blob:none --no-checkout https://github.com/rust-lang/rust.git . && \

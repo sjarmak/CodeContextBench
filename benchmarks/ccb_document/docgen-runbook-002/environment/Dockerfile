@@ -4,15 +4,12 @@ WORKDIR /workspace
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
-    npm \
     ripgrep \
     && rm -rf /var/lib/apt/lists/*
-
-RUN npm install -g @anthropic-ai/claude-code
 
 RUN git clone --filter=blob:none --no-checkout https://github.com/envoyproxy/envoy.git . && \
     git checkout 1d0ba73ad200d28e86c0c23f76c55320f82a8fba && \

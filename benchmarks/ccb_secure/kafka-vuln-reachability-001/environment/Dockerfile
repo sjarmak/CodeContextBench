@@ -1,7 +1,7 @@
 FROM eclipse-temurin:17-jdk-jammy
 
 # Install required tools for verification
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     jq \
     bc \

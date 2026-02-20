@@ -3,15 +3,12 @@ FROM golang:1.23-bookworm
 WORKDIR /workspace
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
     python3-pip \
-    npm
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
+    && rm -rf /var/lib/apt/lists/*
 
 # Clone the actual Kubernetes repository at pinned commit (v1.30.0)
 # This ensures BOTH baseline and MCP agents have identical file access

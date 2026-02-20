@@ -3,15 +3,12 @@ FROM golang:1.23-bookworm
 WORKDIR /workspace
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
     python3-pip \
-    npm
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
+    && rm -rf /var/lib/apt/lists/*
 
 # Clone Kubernetes at pinned commit (v1.30.0)
 # All four sub-projects (apiextensions-apiserver, client-go, apimachinery, api)

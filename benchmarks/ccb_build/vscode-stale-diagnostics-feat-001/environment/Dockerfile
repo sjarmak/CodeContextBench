@@ -3,15 +3,13 @@ FROM node:22-bookworm
 WORKDIR /workspace
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     build-essential \
     python3 \
-    python3-pip
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
 
 # Clone the actual VS Code repository at pinned commit (1.96.0)
 # This ensures BOTH baseline and MCP agents have identical file access

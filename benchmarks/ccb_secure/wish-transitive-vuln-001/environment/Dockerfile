@@ -1,7 +1,7 @@
 FROM golang:1.19-bookworm
 
 # Install tools needed for verification
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     bc \
     git \

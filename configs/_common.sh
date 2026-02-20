@@ -44,6 +44,12 @@ load_credentials() {
 export DEBUG_MODE="${DEBUG_MODE:-}"
 
 # ============================================
+# DOCKER BUILD OPTIMIZATION
+# ============================================
+# BuildKit enables parallel layer execution, better caching, and smaller images.
+export DOCKER_BUILDKIT=1
+
+# ============================================
 # FAIL-FAST MODE
 # ============================================
 # When true, if any task errors out, kill all running tasks and abort immediately.

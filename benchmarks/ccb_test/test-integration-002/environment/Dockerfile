@@ -2,16 +2,13 @@ FROM golang:1.22-bookworm
 
 WORKDIR /workspace
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
-    npm \
     ripgrep \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
-
-RUN npm install -g @anthropic-ai/claude-code
 
 RUN git clone --filter=blob:none --no-checkout https://github.com/navidrome/navidrome.git . && \
     git checkout 9c3b4561652a15846993d477003e111f0df0c585 && \

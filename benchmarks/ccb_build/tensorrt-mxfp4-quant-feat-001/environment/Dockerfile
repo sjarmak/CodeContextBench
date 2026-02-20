@@ -3,16 +3,13 @@ FROM python:3.11-bookworm
 WORKDIR /workspace
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
-    npm \
     build-essential \
     cmake \
-    ninja-build
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
+    ninja-build \
+    && rm -rf /var/lib/apt/lists/*
 
 # Clone the actual TensorRT-LLM repository at pinned commit
 # This ensures BOTH baseline and MCP agents have identical file access

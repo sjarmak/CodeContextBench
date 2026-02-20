@@ -3,15 +3,11 @@ FROM golang:1.23-bookworm
 WORKDIR /workspace
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
-    npm \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
 
 # Clone Kubernetes at the target commit (DRA AllocationMode change)
 # Commit 2e534d6 is the change introducing multi-node AllocationMode:All

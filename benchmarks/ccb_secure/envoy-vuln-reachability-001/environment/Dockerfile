@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim
 
 # Install dependencies for analysis
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     ripgrep \

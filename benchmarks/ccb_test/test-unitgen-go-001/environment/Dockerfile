@@ -2,15 +2,12 @@ FROM golang:1.22-bookworm
 
 WORKDIR /workspace
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
-    npm \
     ripgrep \
     && rm -rf /var/lib/apt/lists/*
-
-RUN npm install -g @anthropic-ai/claude-code
 
 RUN git clone --filter=blob:none --no-checkout https://github.com/kubernetes/kubernetes.git . && \
     git checkout 8c9c67c000104450cfc5a5f48053a9a84b73cf93 && \

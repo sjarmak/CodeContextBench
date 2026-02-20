@@ -1,7 +1,7 @@
 FROM ubuntu:22.04
 
 # Install common tools (python3 needed for inject_defects.sh)
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
@@ -11,11 +11,8 @@ RUN apt-get update && apt-get install -y \
 # Install Node.js (for Claude Code CLI)
 RUN if ! command -v node &> /dev/null; then \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs; \
+    apt-get install -y --no-install-recommends nodejs; \
     fi
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
 
 # Clone TryGhost/Ghost at pinned commit (PR #26260 merge commit)
 RUN git clone --filter=blob:none --no-checkout https://github.com/TryGhost/Ghost.git /workspace && \

@@ -3,14 +3,10 @@ FROM python:3.11-slim
 WORKDIR /workspace
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
-    npm \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
 
 # Clone Envoy at pinned commit (blobless clone — repo is very large)
 RUN git clone --filter=blob:none --no-checkout https://github.com/envoyproxy/envoy.git . && \

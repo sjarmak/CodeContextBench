@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install git and dependencies
 RUN apt-get update && \
-    apt-get install -y git ca-certificates && \
+    apt-get install -y --no-install-recommends git ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 # Clone VS Code at pinned commit (v1.99.3)

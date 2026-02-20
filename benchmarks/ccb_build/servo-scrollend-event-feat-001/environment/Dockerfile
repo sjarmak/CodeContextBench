@@ -3,18 +3,15 @@ FROM rust:1.83-bookworm
 WORKDIR /workspace
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
     python3-pip \
-    npm \
     build-essential \
     autoconf \
-    pkg-config
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
 # Clone the actual Servo repository at pinned commit
 # This ensures BOTH baseline and MCP agents have identical file access

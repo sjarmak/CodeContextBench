@@ -3,14 +3,10 @@ FROM golang:1.21-bookworm
 WORKDIR /workspace
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
-    npm \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
 
 # Clone Flipt at pinned commit
 RUN git clone --filter=blob:none --no-checkout https://github.com/flipt-io/flipt.git . && \

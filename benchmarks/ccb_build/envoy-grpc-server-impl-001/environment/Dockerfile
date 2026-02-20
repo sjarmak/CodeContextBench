@@ -2,7 +2,7 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update -qq && apt-get install -y -qq \
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
     git \
     curl \
     ca-certificates \

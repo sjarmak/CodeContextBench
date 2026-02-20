@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim
 
 # Install git, jq, bc for verifier
-RUN apt-get update && apt-get install -y git jq bc && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends git jq bc && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 

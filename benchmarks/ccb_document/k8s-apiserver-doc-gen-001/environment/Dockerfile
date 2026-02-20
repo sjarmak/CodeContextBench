@@ -3,15 +3,12 @@ FROM golang:1.23-bookworm
 WORKDIR /workspace
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
-    npm \
-    ripgrep
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
+    ripgrep \
+    && rm -rf /var/lib/apt/lists/*
 
 # Clone the Kubernetes repository at pinned commit for reproducibility
 RUN git clone --filter=blob:none --no-checkout https://github.com/kubernetes/kubernetes.git . && \

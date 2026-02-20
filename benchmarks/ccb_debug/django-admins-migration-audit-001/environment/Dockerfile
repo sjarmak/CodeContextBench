@@ -3,14 +3,10 @@ FROM python:3.12-bookworm
 WORKDIR /workspace
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
-    npm \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
 
 # Clone Django at the commit just before the ADMINS/MANAGERS migration
 # Commit e295033 is the migration commit; we check out its parent

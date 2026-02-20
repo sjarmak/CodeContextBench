@@ -1,7 +1,7 @@
 FROM python:3.12-bookworm
 
 # Install system dependencies (including build tools for Cython extensions)
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
     curl \
