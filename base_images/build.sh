@@ -44,12 +44,19 @@ echo ""
 
 IMAGES=(
     "Dockerfile.django-674eda1c    ccb-repo-django-674eda1c"
+    "Dockerfile.django-9e7cc2b6    ccb-repo-django-9e7cc2b6"
     "Dockerfile.flipt-3d5a345f     ccb-repo-flipt-3d5a345f"
     "Dockerfile.k8s-11602f08       ccb-repo-k8s-11602f08"
     "Dockerfile.k8s-8c9c67c0       ccb-repo-k8s-8c9c67c0"
     "Dockerfile.kafka-0753c489     ccb-repo-kafka-0753c489"
     "Dockerfile.kafka-e678b4b      ccb-repo-kafka-e678b4b"
     "Dockerfile.flink-0cc95fcc     ccb-repo-flink-0cc95fcc"
+    "Dockerfile.camel-1006f047     ccb-repo-camel-1006f047"
+    "Dockerfile.postgres-5a461dc4  ccb-repo-postgres-5a461dc4"
+    "Dockerfile.strata-66225ca9    ccb-repo-strata-66225ca9"
+    "Dockerfile.curl-09e25b9d      ccb-repo-curl-09e25b9d"
+    "Dockerfile.envoy-1d0ba73a     ccb-repo-envoy-1d0ba73a"
+    "Dockerfile.envoy-d7809ba2     ccb-repo-envoy-d7809ba2"
 )
 
 TOTAL_START=$SECONDS

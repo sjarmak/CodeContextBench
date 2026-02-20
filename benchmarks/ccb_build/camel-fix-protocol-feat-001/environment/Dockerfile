@@ -1,18 +1,1 @@
-FROM eclipse-temurin:17-jdk
-
-WORKDIR /workspace
-
-# Install dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    curl \
-    python3 \
-    python3-pip \
-    && rm -rf /var/lib/apt/lists/*
-
-# Clone Apache Camel at pinned commit (camel-4.18.0)
-RUN git clone --filter=blob:none --no-checkout https://github.com/apache/camel.git . && \
-    git checkout 1006f047cdaba93c67df94219af608b993debc5a && \
-    git config user.email "agent@example.com" && \
-    git config user.name "Agent"
-
+FROM ccb-repo-camel-1006f047

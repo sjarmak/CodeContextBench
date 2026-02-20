@@ -14,7 +14,7 @@ setup_multi_accounts
 MODEL="anthropic/claude-sonnet-4-6"
 AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
 BENCHMARK_DIR="benchmarks"
-CONCURRENCY=2
+CONCURRENCY=1
 TIMEOUT_MULTIPLIER=10
 
 run_sgfull_task() {

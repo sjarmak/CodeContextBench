@@ -45,7 +45,7 @@ SELECTION_FILE="$REPO_ROOT/configs/selected_benchmark_tasks.json"
 # ============================================
 BENCHMARK_FILTER=""
 MODEL="${MODEL:-anthropic/claude-opus-4-6}"
-CONCURRENCY=2
+CONCURRENCY=1
 TIMEOUT_MULTIPLIER=10
 RUN_BASELINE=true
 RUN_FULL=true
