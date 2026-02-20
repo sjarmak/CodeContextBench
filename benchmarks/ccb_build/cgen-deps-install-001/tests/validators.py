@@ -118,6 +118,11 @@ class PythonValidator(DependencyValidator):
     @staticmethod
     def _is_valid_requirement(line: str) -> bool:
         """Check if line is a valid requirement."""
+        # Strip PEP 508 environment markers (everything after ";")
+        # e.g., 'boto3==1.26.113 ; python_version >= "3.9"' -> 'boto3==1.26.113'
+        line = line.split(";")[0].strip()
+        # Strip extras specifiers e.g., "package[extra1,extra2]>=1.0" -> "package>=1.0"
+        line = re.sub(r"\[.*?\]", "", line)
         # Pattern: package_name with optional version specifiers
         # e.g., "requests", "requests==2.28.0", "requests>=2.28.0,<3.0"
         pattern = r"^[a-zA-Z0-9\-_.]+(\s*[><=!~]+\s*[0-9\.\*]+)?(\s*,\s*[><=!~]+\s*[0-9\.\*]+)*$"

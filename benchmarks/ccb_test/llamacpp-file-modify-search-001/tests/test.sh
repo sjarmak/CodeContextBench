@@ -16,9 +16,13 @@ fi
 echo "Running TAC evaluator for sde-find-answer-in-codebase-2..."
 cd /utils
 
-if [ -f "/utils/init.sh" ]; then
-    SERVER_HOSTNAME="${TAC_SERVER_HOSTNAME:-localhost}" bash /utils/init.sh || true
-fi
+# NOTE: init.sh intentionally SKIPPED during verification.
+# init.sh resets RocketChat services, which destroys the agent's chat messages
+# before eval.py can read them. The services are already running from the agent's
+# session, so no re-initialization is needed for the verifier.
+# if [ -f "/utils/init.sh" ]; then
+#     SERVER_HOSTNAME="${TAC_SERVER_HOSTNAME:-localhost}" bash /utils/init.sh || true
+# fi
 
 DECRYPTION_KEY="${DECRYPTION_KEY:-theagentcompany is all you need}" \
 python_default /utils/eval.py \
