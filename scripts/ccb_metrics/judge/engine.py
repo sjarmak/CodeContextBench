@@ -23,6 +23,7 @@ from .prompts import (
     DIRECT_REVIEW_PROMPT,
     REFERENCE_COMPLETENESS_PROMPT,
     REFERENCE_CORRECTNESS_PROMPT,
+    RUBRIC_CRITERIA_PROMPT,
 )
 
 # ---------------------------------------------------------------------------
@@ -82,6 +83,56 @@ def _render_prompt(template: str, judge_input: JudgeInput) -> str:
         evaluation_criteria=criteria_text,
         context_files=context_text,
     )
+
+
+def _format_criteria(criteria: list[dict]) -> str:
+    """Format a criteria list for inclusion in the rubric prompt."""
+    lines: list[str] = []
+    for i, c in enumerate(criteria, 1):
+        metric = c.get("metric", f"criterion_{i}")
+        max_score = c.get("max_score", 1)
+        description = c.get("description", "")
+        lines.append(f"Criterion {i}: **{metric}** (max score: {max_score})")
+        lines.append(f"  {description}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def _parse_criteria_scores(
+    response: dict, criteria: list[dict]
+) -> tuple[dict[str, dict], float]:
+    """Extract per-criterion scores from LLM response.
+
+    Returns:
+        (criteria_scores, rubric_score) where rubric_score is normalized mean.
+    """
+    raw = response.get("criteria_scores", {})
+    criteria_scores: dict[str, dict] = {}
+    normalized_scores: list[float] = []
+
+    for c in criteria:
+        metric = c.get("metric", "")
+        max_score = float(c.get("max_score", 1) or 1)
+        entry = raw.get(metric, {})
+        if isinstance(entry, dict):
+            raw_score = float(entry.get("score", 0.0))
+            reasoning = entry.get("reasoning", "")
+        else:
+            raw_score = 0.0
+            reasoning = ""
+        # Clamp to valid range
+        raw_score = max(0.0, min(raw_score, max_score))
+        normalized = raw_score / max_score if max_score > 0 else 0.0
+        criteria_scores[metric] = {
+            "score": raw_score,
+            "max_score": max_score,
+            "normalized_score": round(normalized, 4),
+            "reasoning": reasoning,
+        }
+        normalized_scores.append(normalized)
+
+    rubric_score = sum(normalized_scores) / len(normalized_scores) if normalized_scores else 0.0
+    return criteria_scores, round(rubric_score, 4)
 
 
 def _select_prompt(judge_input: JudgeInput) -> str:
@@ -266,6 +317,38 @@ class LLMJudge:
             judged_at=datetime.now(timezone.utc).isoformat(),
             provenance={**provenance, "confidence": confidence_float},
         )
+
+    def evaluate_with_criteria(
+        self,
+        judge_input: JudgeInput,
+        criteria: list[dict],
+    ) -> tuple[dict[str, dict], float]:
+        """Score agent output against AAA rubric criteria from criteria.json.
+
+        Args:
+            judge_input: Task input bundle.
+            criteria: List of {metric, description, max_score} dicts.
+
+        Returns:
+            (criteria_scores, rubric_score) where:
+              criteria_scores = {metric: {score, max_score, normalized_score, reasoning}}
+              rubric_score = mean of normalized per-criterion scores (0.0 – 1.0)
+        """
+        if not criteria:
+            return {}, 0.0
+
+        criteria_text = _format_criteria(criteria)
+        user_prompt = RUBRIC_CRITERIA_PROMPT.format(
+            task_description=judge_input.task_description,
+            agent_output=judge_input.code_changes or "(no output)",
+            criteria_text=criteria_text,
+        )
+        system_prompt = (
+            "You are a precise rubric evaluator. Always respond with valid JSON only."
+        )
+
+        response = self._backend.call(system_prompt, user_prompt)
+        return _parse_criteria_scores(response, criteria)
 
     # ---- internals ----
 

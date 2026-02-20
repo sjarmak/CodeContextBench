@@ -10,6 +10,7 @@ Public API exports:
 
 from .engine import LLMJudge
 from .models import JudgeInput, JudgeResult, OracleBundle, normalize_score
+from .prompts import RUBRIC_CRITERIA_PROMPT
 
 __all__ = [
     "LLMJudge",
@@ -17,4 +18,5 @@ __all__ = [
     "JudgeResult",
     "OracleBundle",
     "normalize_score",
+    "RUBRIC_CRITERIA_PROMPT",
 ]

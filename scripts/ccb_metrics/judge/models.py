@@ -59,10 +59,15 @@ class JudgeResult:
     vote_distribution: dict = field(default_factory=dict)
     judged_at: str = ""
     provenance: dict = field(default_factory=dict)
+    # Hybrid evaluation fields (populated when criteria.json is present)
+    criteria_scores: dict = field(default_factory=dict)
+    rubric_score: float = 0.0
+    hybrid_composite: Optional[float] = None
+    verifier_weight: float = 0.6
 
     def to_dict(self) -> dict:
         """Produce JSON-serializable output matching judge_result.schema.json."""
-        return {
+        result: dict = {
             "task_id": self.task_id,
             "benchmark": self.benchmark,
             "config": self.config,
@@ -77,6 +82,14 @@ class JudgeResult:
             "vote_distribution": self.vote_distribution,
             "provenance": self.provenance,
         }
+        # Include hybrid fields only when criteria scoring was performed
+        if self.criteria_scores:
+            result["criteria_scores"] = self.criteria_scores
+            result["rubric_score"] = self.rubric_score
+        if self.hybrid_composite is not None:
+            result["hybrid_composite"] = self.hybrid_composite
+            result["verifier_weight"] = self.verifier_weight
+        return result
 
 
 # ---- Helpers ----

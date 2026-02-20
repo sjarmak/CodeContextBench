@@ -89,9 +89,64 @@ DIR_PREFIX_TO_SUITE: dict[str, str] = {
     "paired_rerun_dibench_": "ccb_dibench",
     "paired_rerun_crossrepo_": "ccb_crossrepo",
     "paired_rerun_pytorch_": "ccb_pytorch",
+    # MCP-unique suites
+    "ccb_mcp_crossrepo_tracing_": "ccb_mcp_crossrepo_tracing",
+    "ccb_mcp_security_": "ccb_mcp_security",
+    "ccb_mcp_migration_": "ccb_mcp_migration",
+    "ccb_mcp_incident_": "ccb_mcp_incident",
+    "ccb_mcp_onboarding_": "ccb_mcp_onboarding",
+    "ccb_mcp_compliance_": "ccb_mcp_compliance",
+    "ccb_mcp_crossorg_": "ccb_mcp_crossorg",
+    "ccb_mcp_domain_": "ccb_mcp_domain",
+    "ccb_mcp_org_": "ccb_mcp_org",
+    "ccb_mcp_platform_": "ccb_mcp_platform",
 }
 
 DEFAULT_MODEL = "gpt-4o"
+DEFAULT_VERIFIER_WEIGHT = 0.6
+
+
+# ---------------------------------------------------------------------------
+# Hybrid evaluation helpers
+# ---------------------------------------------------------------------------
+
+
+def _find_criteria_json(task_id: str, benchmark: str, benchmarks_dir: Path) -> Optional[Path]:
+    """Locate tests/criteria.json for a task in the benchmarks directory.
+
+    Searches benchmarks/<benchmark>/<task_id>/tests/criteria.json.
+    Also tries slug variants (lower-case, underscore → hyphen normalization).
+
+    Returns the Path if found, else None.
+    """
+    # Direct lookup: benchmark/task_id/tests/criteria.json
+    suite_dir = benchmarks_dir / benchmark
+    if suite_dir.is_dir():
+        candidate = suite_dir / task_id / "tests" / "criteria.json"
+        if candidate.is_file():
+            return candidate
+        # Normalize: task_id may differ in case or use underscores vs hyphens
+        slug = task_id.lower().replace("_", "-")
+        for subdir in suite_dir.iterdir():
+            if subdir.is_dir() and subdir.name.lower().replace("_", "-") == slug:
+                candidate = subdir / "tests" / "criteria.json"
+                if candidate.is_file():
+                    return candidate
+    return None
+
+
+def _load_criteria_json(path: Path) -> list[dict]:
+    """Load and return criteria list from criteria.json.
+
+    Returns empty list on error.
+    """
+    try:
+        data = json.loads(path.read_text())
+        if isinstance(data, list):
+            return data
+    except (OSError, json.JSONDecodeError):
+        pass
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -363,6 +418,8 @@ def _run_single_task(
     total: int,
     use_ensemble: bool = False,
     ensemble_rounds: int = 3,
+    hybrid: bool = False,
+    verifier_weight: float = DEFAULT_VERIFIER_WEIGHT,
 ) -> tuple[str, bool, Optional[str]]:
     """Evaluate a single task.  Returns (task_id, success, error_msg)."""
     task_dir: Path = task_info["task_dir"]
@@ -434,6 +491,30 @@ def _run_single_task(
     result.benchmark = benchmark
     result.config = config
 
+    # --- Hybrid evaluation: rubric scoring from criteria.json ---
+    if hybrid:
+        criteria_path = _find_criteria_json(task_id, benchmark, benchmarks_dir)
+        if criteria_path is not None:
+            criteria = _load_criteria_json(criteria_path)
+            if criteria:
+                try:
+                    crit_scores, rubric_score = judge.evaluate_with_criteria(
+                        judge_input, criteria
+                    )
+                    result.criteria_scores = crit_scores
+                    result.rubric_score = rubric_score
+                    composite = (
+                        verifier_weight * verifier_reward
+                        + (1.0 - verifier_weight) * rubric_score
+                    )
+                    result.hybrid_composite = round(composite, 4)
+                    result.verifier_weight = verifier_weight
+                except Exception as exc:
+                    # Non-fatal: log and continue without rubric scores
+                    print(
+                        f"[{idx}/{total}] {task_id} WARN rubric scoring failed: {exc}"
+                    )
+
     # Write judge_result.json
     try:
         judge_result_path.write_text(
@@ -449,10 +530,13 @@ def _run_single_task(
     correctness = dims.get("correctness", 0.0)
     completeness = dims.get("completeness", 0.0)
     oracle_conf = oracle.confidence
+    extra = ""
+    if result.hybrid_composite is not None:
+        extra = f" rubric={result.rubric_score:.2f} hybrid={result.hybrid_composite:.2f}"
     print(
         f"[{idx}/{total}] {task_id} "
         f"correctness={correctness:.2f} completeness={completeness:.2f} "
-        f"judge_score={result.judge_score:.2f} (confidence={oracle_conf})"
+        f"judge_score={result.judge_score:.2f} (confidence={oracle_conf}){extra}"
     )
 
     return task_id, True, None
@@ -477,6 +561,25 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ensemble", action="store_true", help="Enable 3-round majority-vote ensemble scoring")
     p.add_argument("--dry-run", action="store_true", help="Print task list with oracle confidence; skip API calls")
     p.add_argument("--force", action="store_true", help="Re-evaluate tasks that already have judge_result.json")
+    p.add_argument(
+        "--hybrid",
+        action="store_true",
+        help=(
+            "Enable hybrid evaluation: auto-detect tests/criteria.json and include "
+            "rubric scoring. Computes composite = verifier_weight * verifier_reward + "
+            "(1 - verifier_weight) * rubric_score."
+        ),
+    )
+    p.add_argument(
+        "--hybrid-weight",
+        type=float,
+        default=DEFAULT_VERIFIER_WEIGHT,
+        metavar="W",
+        help=(
+            f"Verifier reward weight for hybrid composite (default: {DEFAULT_VERIFIER_WEIGHT}). "
+            "Must be in [0, 1]. Rubric weight = 1 - W."
+        ),
+    )
     return p
 
 
@@ -513,6 +616,21 @@ def main(argv: Optional[list[str]] = None) -> int:
             )
         return 0
 
+    # Validate hybrid weight
+    verifier_weight = args.hybrid_weight
+    if not (0.0 <= verifier_weight <= 1.0):
+        print(
+            f"ERROR: --hybrid-weight must be in [0, 1], got {verifier_weight}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.hybrid:
+        print(
+            f"Hybrid mode enabled: verifier_weight={verifier_weight:.2f}, "
+            f"rubric_weight={1.0 - verifier_weight:.2f}"
+        )
+
     # Build judge
     effective_rounds = 3 if args.ensemble else args.rounds
     judge = LLMJudge(
@@ -534,6 +652,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             counter, counter_lock, total,
             use_ensemble=args.ensemble,
             ensemble_rounds=effective_rounds,
+            hybrid=args.hybrid,
+            verifier_weight=verifier_weight,
         )
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:

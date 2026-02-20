@@ -89,6 +89,36 @@ Respond with ONLY valid JSON in this exact format:
 }}
 """
 
+RUBRIC_CRITERIA_PROMPT = """\
+You are an expert evaluator assessing an AI agent's output against task-specific rubric criteria.
+
+## Task Description
+{task_description}
+
+## Agent Output
+{agent_output}
+
+## Rubric Criteria
+Evaluate the agent's output against each criterion below. Assign a score from 0 to max_score \
+(inclusive). Use fractional values for partial credit.
+
+{criteria_text}
+
+## Instructions
+Score each criterion based on the description. Be evidence-based and cite specific output elements.
+
+Respond with ONLY valid JSON in this exact format:
+{{
+  "criteria_scores": {{
+    "<metric_name>": {{
+      "score": <float 0 to max_score>,
+      "reasoning": "<brief explanation citing specific evidence>"
+    }}
+  }},
+  "overall_reasoning": "<synthesis of the evaluation across all criteria>"
+}}
+"""
+
 DIRECT_REVIEW_PROMPT = """\
 You are an expert code evaluator assessing an AI coding agent's output based on \
 the task description alone. No reference answer is available.
