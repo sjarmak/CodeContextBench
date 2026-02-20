@@ -145,13 +145,24 @@ def validate_task(data: dict, task_dir: str, config: str) -> List[Flag]:
             flag("deepsearch_unused", "WARNING",
                  "Deep Search was never used in sourcegraph_full mode")
 
-    # barely_tried: reward == 0 and tool_calls_total < 3
+    # barely_tried: low reward with very few or unmeasured tool calls
     reward = data.get("reward")
     total_calls = data.get("tool_calls_total")
-    if reward is not None and total_calls is not None:
-        if reward == 0 and total_calls < 3:
+    if reward is not None and reward < 0.1:
+        if total_calls is None or total_calls < 3:
+            calls_str = str(total_calls) if total_calls is not None else "null"
             flag("barely_tried", "WARNING",
-                 f"Task got reward=0 with only {total_calls} tool calls")
+                 f"Low reward ({reward}) with minimal/unmeasured tool calls ({calls_str})")
+
+    # metrics_extraction_failed: all token/tool metrics null despite task completing
+    input_tokens = data.get("input_tokens")
+    output_tokens = data.get("output_tokens")
+    files_modified = data.get("files_modified")
+    if (input_tokens is None and output_tokens is None
+            and total_calls is None and files_modified is None
+            and status not in ("error",)):
+        flag("metrics_extraction_failed", "WARNING",
+             "All metrics are null — metric extraction may have failed")
 
     # suspiciously_fast: wall_clock_seconds < 10 (non-crash)
     wall_clock = data.get("wall_clock_seconds")
@@ -161,7 +172,6 @@ def validate_task(data: dict, task_dir: str, config: str) -> List[Flag]:
              f"Task completed in {wall_clock:.1f}s (suspiciously fast)")
 
     # no_output_tokens: output_tokens == 0 or < 50
-    output_tokens = data.get("output_tokens")
     if output_tokens is not None and output_tokens < 50:
         flag("no_output_tokens", "WARNING",
              f"Output tokens very low: {output_tokens}")
