@@ -1,20 +1,4 @@
-FROM golang:1.23-bookworm
-
-WORKDIR /workspace
-
-# Install dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    curl \
-    python3 \
-    ripgrep \
-    && rm -rf /var/lib/apt/lists/*
-
-# Clone the Kubernetes repository at pinned commit for reproducibility
-RUN git clone --filter=blob:none --no-checkout https://github.com/kubernetes/kubernetes.git . && \
-    git checkout 8c9c67c000104450cfc5a5f48053a9a84b73cf93 && \
-    git config user.email "agent@example.com" && \
-    git config user.name "Agent"
+FROM ccb-repo-k8s-8c9c67c0
 
 # SURGICAL: Remove ONLY the target doc.go (not recursive!)
 RUN rm -f staging/src/k8s.io/apiserver/pkg/util/flowcontrol/fairqueuing/queueset/doc.go

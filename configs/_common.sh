@@ -49,6 +49,19 @@ export DEBUG_MODE="${DEBUG_MODE:-}"
 # BuildKit enables parallel layer execution, better caching, and smaller images.
 export DOCKER_BUILDKIT=1
 
+# Build CCB base images if not already cached (< 7 days old).
+# These pre-clone frequently-used repos (Django, K8s, Flipt, Kafka, Flink)
+# so task Dockerfiles that inherit from them skip the expensive git clone.
+ensure_base_images() {
+    local repo_root
+    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    local build_script="${repo_root}/base_images/build.sh"
+    if [ -x "$build_script" ]; then
+        echo "Ensuring CCB base images are built..."
+        bash "$build_script" --parallel
+    fi
+}
+
 # ============================================
 # FAIL-FAST MODE
 # ============================================
