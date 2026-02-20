@@ -233,8 +233,14 @@ _sdlc_run_single() {
 
     elif [ "$config" = "artifact_full" ]; then
         local artifact="${task_path}/environment/Dockerfile.artifact_only"
-        if [ ! -f "$artifact" ]; then
-            echo "ERROR: Missing Dockerfile.artifact_only for $task_id at $artifact"
+        local chosen_dockerfile=""
+        if [ -f "$artifact" ]; then
+            chosen_dockerfile="Dockerfile.artifact_only"
+        elif [ -f "${task_path}/environment/Dockerfile.sg_only" ]; then
+            echo "WARNING: No Dockerfile.artifact_only for $task_id — falling back to Dockerfile.sg_only"
+            chosen_dockerfile="Dockerfile.sg_only"
+        else
+            echo "ERROR: No Dockerfile.artifact_only or Dockerfile.sg_only for $task_id"
             return 1
         fi
 
@@ -242,7 +248,7 @@ _sdlc_run_single() {
         rm -rf "$temp_task_dir"
         mkdir -p "$temp_task_dir"
         cp -a "${task_path}/." "${temp_task_dir}/"
-        cp "${temp_task_dir}/environment/Dockerfile.artifact_only" "${temp_task_dir}/environment/Dockerfile"
+        cp "${temp_task_dir}/environment/${chosen_dockerfile}" "${temp_task_dir}/environment/Dockerfile"
         run_task_path="$temp_task_dir"
     fi
 
