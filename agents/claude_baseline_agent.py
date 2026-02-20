@@ -847,6 +847,23 @@ before retrying."""
                     'cd "$WORKDIR"',
                 ]
 
+                # For artifact_full: delete source files so agent must use MCP.
+                # Baseline keeps source readable (mcp_type == "none").
+                # We delete rather than truncate to avoid agents wasting tokens
+                # trying to read visible-but-empty files.
+                if mcp_type == "artifact_full":
+                    script_lines.extend([
+                        '# Delete source files — agent must use MCP to read code',
+                        'find /workspace -type f \\( '
+                        '-name "*.cs" -o -name "*.py" -o -name "*.ts" -o -name "*.tsx" '
+                        '-o -name "*.js" -o -name "*.jsx" -o -name "*.go" -o -name "*.rs" '
+                        '-o -name "*.java" -o -name "*.c" -o -name "*.h" -o -name "*.cpp" '
+                        '-o -name "*.rb" -o -name "*.php" -o -name "*.swift" -o -name "*.kt" '
+                        '-o -name "*.scala" -o -name "*.vue" -o -name "*.svelte" '
+                        '\\) -delete',
+                        'echo "Source files deleted for artifact_full mode"',
+                    ])
+
                 # If system prompt exists, read it from file and pass via --append-system-prompt
                 if _system_prompt_content:
                     script_lines.append('SYSPROMPT=$(cat /tmp/claude_system_prompt.txt)')

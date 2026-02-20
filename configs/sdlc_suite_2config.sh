@@ -215,9 +215,22 @@ _sdlc_run_single() {
         return 1
     fi
 
+    # For artifact configs, BOTH baseline and full use Dockerfile.artifact_only
+    # (baseline keeps source readable; MCP-full deletes source files at runtime).
+    if [ "$config" = "baseline" ] && [ "${FULL_CONFIG}" = "artifact_full" ]; then
+        local artifact="${task_path}/environment/Dockerfile.artifact_only"
+        if [ -f "$artifact" ]; then
+            temp_task_dir="/tmp/artifact_bl_${task_id}"
+            rm -rf "$temp_task_dir"
+            mkdir -p "$temp_task_dir"
+            cp -a "${task_path}/." "${temp_task_dir}/"
+            cp "${temp_task_dir}/environment/Dockerfile.artifact_only" "${temp_task_dir}/environment/Dockerfile"
+            run_task_path="$temp_task_dir"
+        fi
+
     # For MCP-full runs, enforce sg_only Docker build env without mutating the
     # original task path (baseline may run in parallel on the same task).
-    if [ "$config" = "sourcegraph_full" ]; then
+    elif [ "$config" = "sourcegraph_full" ]; then
         local sgonly="${task_path}/environment/Dockerfile.sg_only"
         if [ ! -f "$sgonly" ]; then
             echo "ERROR: Missing Dockerfile.sg_only for $task_id at $sgonly"
