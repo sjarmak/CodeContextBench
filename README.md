@@ -77,8 +77,6 @@ benchmarks/              # Task definitions organized by SDLC phase + MCP-unique
   ccb_mcp_onboarding/    #   MCP-unique: onboarding & comprehension (3 tasks)
   ccb_mcp_crossorg/      #   MCP-unique: cross-org discovery (2 tasks)
   ccb_mcp_platform/      #   MCP-unique: platform knowledge (1 task)
-fixtures/                # Repo-set fixtures for MCP-unique tasks
-  repo_sets/             #   Polyrepo definitions (local vs MCP-only access)
 configs/                 # Run configs and task selection
   _common.sh             #   Shared infra: token refresh, parallel execution, multi-account
   sdlc_suite_2config.sh  #   Generic SDLC runner (used by phase wrappers below)

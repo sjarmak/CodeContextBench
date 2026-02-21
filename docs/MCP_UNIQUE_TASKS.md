@@ -39,9 +39,6 @@ cross-repo tasks — not whether MCP can access information the baseline can't.
 │  configs/use_case_registry.json        (100 use cases)     │
 │         │                                                   │
 │         ▼                                                   │
-│  fixtures/repo_sets/*.json             (polyrepo fixtures)  │
-│         │                                                   │
-│         ▼                                                   │
 │  scripts/generate_mcp_unique_tasks.py  (task generator)    │
 │         │                                                   │
 │         ▼                                                   │
@@ -84,21 +81,22 @@ Ten suites map to use case categories A-J:
 **Current starter pack: 14 tasks across 6 active suites.** See
 `configs/selected_mcp_unique_tasks.json` for the canonical list.
 
-## Repo-Set Fixtures
+## Repo Sets
 
-Each task uses a **repo-set fixture** defining which repos are local vs MCP-only:
+Each task's Dockerfile defines its repo set — all repos are cloned for
+baseline, truncated for MCP-Full. Common repo groupings across tasks:
 
-| Fixture | Local Repo | MCP-Only Repos | Cross-Org |
-|---------|-----------|----------------|-----------|
-| `kubernetes-ecosystem` | kubernetes/kubernetes | kubernetes-client-go, kubernetes-api, etcd-io/etcd | Yes |
-| `nodejs-web-stack` | nodejs/node | expressjs-express, lodash, prisma-prisma | Yes |
-| `python-ml-stack` | scikit-learn/scikit-learn | numpy, pandas-dev/pandas, scipy | Yes |
-| `grafana-observability` | grafana/grafana | grafana-loki, grafana-mimir | No |
-| `multi-org-go` | kubernetes/kubernetes | etcd-io/etcd, grafana/grafana | Yes |
+| Repo Set | Repos | Cross-Org | Language |
+|----------|-------|-----------|----------|
+| Kubernetes ecosystem | kubernetes, client-go, api, etcd | Yes (k8s + etcd-io) | Go |
+| Node.js web stack | node, express, lodash, prisma | Yes (4 orgs) | JS/TS |
+| Python ML stack | scikit-learn, numpy, pandas, scipy | Yes (4 orgs) | Python |
+| Grafana observability | grafana, loki, mimir | No (all grafana) | Go/TS |
+| Multi-org Go | kubernetes, etcd, grafana | Yes (3 orgs) | Go |
 
-Fixtures are in `fixtures/repo_sets/*.json` and validate against
-`schemas/repo_set_fixture.schema.json`. SG mirror repos (`sg-benchmarks/*`)
-are tracked in `configs/sg_mirror_revisions.json`.
+Repos not natively indexed in Sourcegraph use `sg-benchmarks` mirrors
+(e.g., `sg-benchmarks/kubernetes-client-go`). The Dockerfile is the
+source of truth for which repos a task uses and at what version.
 
 ## Task Authoring
 
@@ -118,8 +116,8 @@ python3 scripts/generate_mcp_unique_tasks.py --category A
 python3 scripts/generate_mcp_unique_tasks.py --use-case-ids 1 --validate
 ```
 
-The generator reads `configs/use_case_registry.json` and `fixtures/repo_sets/`
-to fill `templates/mcp_unique_task/*.j2` templates.
+The generator reads `configs/use_case_registry.json` to fill
+`templates/mcp_unique_task/*.j2` templates.
 
 ### Worked Example: CCX-dep-trace-001
 
@@ -369,21 +367,18 @@ Hybrid score = 0.6 × verifier_reward + 0.4 × rubric_score.
 ### Add a Task to an Existing Category
 
 1. Add the use case to `configs/use_case_registry.json` if not present
-2. Ensure a repo-set fixture exists in `fixtures/repo_sets/`
-3. Run the generator:
-   ```bash
-   python3 scripts/generate_mcp_unique_tasks.py --use-case-ids <N> --curate-oracle --validate
-   ```
-4. Verify with the validity gate
-5. Add to `configs/selected_mcp_unique_tasks.json`
+2. Copy an existing task directory as a template (e.g., `ccx-dep-trace-001/`)
+3. Update the Dockerfile to clone all required repos at pinned versions
+4. Update `instruction.md`, `task_spec.json`, and `oracle_answer.json`
+5. Verify with the validity gate
+6. Add to `configs/selected_mcp_unique_tasks.json`
 
 ### Add a New Category (C, F, G, H, I, J)
 
 1. Create the use case entries in `configs/use_case_registry.json`
    (set `oracle_type` from `"tbd"` to a real type)
-2. Create or reuse a repo-set fixture
-3. The suite directory `benchmarks/ccb_mcp_<suite>/` is created automatically
-   by the generator
+2. Copy an existing task as a template, update Dockerfile with the required repos
+3. The suite directory `benchmarks/ccb_mcp_<suite>/` must be created manually
 4. Add the suite prefix to `DIR_PREFIX_TO_SUITE` in:
    - `scripts/aggregate_status.py`
    - `scripts/generate_manifest.py`
@@ -409,21 +404,16 @@ Wait for SG indexing (~hours), then verify:
 mcp__sourcegraph__keyword_search("repo:^github.com/sg-benchmarks/org-repo$")
 ```
 
-Record the SHA in `configs/sg_mirror_revisions.json`.
-
 ### Cross-Host (GitHub + GitLab) — Deferred
 
 Cross-host support requires a multi-host Sourcegraph instance. The current
-design uses `cross_org` (different GitHub orgs) instead. To add cross-host:
+design uses cross-org (different GitHub orgs) instead. To add cross-host:
 
-1. Add `host` field to repo objects in fixtures (currently only `github.com`)
-2. Update fixture schema `schemas/repo_set_fixture.schema.json`
-3. Add cross_host suite `ccb_mcp_crosshost` to `suiteMapping` in the PRD
-4. Ensure SG instance indexes the new host
+1. Create tasks with repos from multiple code hosts
+2. Ensure SG instance indexes all hosts
+3. Add `ccb_mcp_crosshost` suite to `DIR_PREFIX_TO_SUITE` mappings
 
 ## Design Decisions
-
-These decisions are recorded in `ralph-mcp-unique/prd.json` under `designDecisions`:
 
 - **Q1**: Use sg-benchmarks mirrors for 7 repos not natively indexed
 - **Q2**: Focus on org-scale quantity (3-20 repos), structured oracle, customer-framed prompts

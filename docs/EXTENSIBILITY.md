@@ -104,7 +104,7 @@ python3 scripts/validate_tasks_preflight.py --suite ccb_mcp_<suite>
 - `task.toml` verification type must be `"test"` (Harbor standard)
 - `tests/eval.sh` must be executable (`chmod +x`)
 - Use `/tests/` paths inside eval.sh (Harbor uploads `tests/` to `/tests/`)
-- All repos in fixtures must be indexed in Sourcegraph
+- All repos cloned in Dockerfiles must be indexed in Sourcegraph
 - `scripts/ccb_metrics/oracle_checks.py` must be stdlib-only Python
 
 **Directory structure:**
