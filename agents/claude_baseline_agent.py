@@ -359,14 +359,14 @@ class BaselineClaudeCodeAgent(ClaudeCode):
            (checked in host env AND _container_env_cache populated by setup())
         4. Fallback: "the codebase"
         """
-        sg_repo_name = os.environ.get("SOURCEGRAPH_REPO_NAME", "")
+        cache = getattr(self, '_container_env_cache', {})
+
+        sg_repo_name = os.environ.get("SOURCEGRAPH_REPO_NAME", "") or cache.get("SOURCEGRAPH_REPO_NAME", "")
         if sg_repo_name:
             # Strip github.com/ prefix if present — templates add it back
             if sg_repo_name.startswith("github.com/"):
                 return sg_repo_name[len("github.com/"):]
             return sg_repo_name
-
-        cache = getattr(self, '_container_env_cache', {})
 
         locobench_prefix = os.environ.get("LOCOBENCH_PROJECT_ID", "") or cache.get("LOCOBENCH_PROJECT_ID", "")
         if locobench_prefix:
@@ -1037,8 +1037,8 @@ before retrying."""
         mcp_type_setup = os.environ.get("BASELINE_MCP_TYPE", "none").lower()
         if mcp_type_setup != "none":
             self._container_env_cache = {}
-            for var_name in ("LOCOBENCH_PROJECT_ID", "SWEBENCH_REPO_COMMIT"):
-                if not os.environ.get("SOURCEGRAPH_REPO_NAME") and not os.environ.get(var_name):
+            for var_name in ("SOURCEGRAPH_REPO_NAME", "LOCOBENCH_PROJECT_ID", "SWEBENCH_REPO_COMMIT"):
+                if not os.environ.get(var_name):
                     try:
                         result = await environment.exec(f'echo ${{{var_name}:-}}')
                         # Filter out bash warning messages (e.g., "bash: cannot set terminal process group")
