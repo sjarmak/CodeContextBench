@@ -665,7 +665,7 @@ def main():
             if info["status"] != "errored":
                 total_reward += info["reward"]
 
-            if "judge_score" in info:
+            if info.get("judge_score") is not None:
                 judge_score_sum += info["judge_score"]
                 judge_count += 1
 
