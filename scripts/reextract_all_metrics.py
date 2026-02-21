@@ -19,6 +19,7 @@ from pathlib import Path
 
 # Ensure scripts/ is on path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from config_utils import discover_configs, is_mcp_config, config_short_name
 
 from extract_task_metrics import process_task_dir
 from ccb_metrics.task_selection import load_selected_tasks, build_task_index, enrich_task_metrics
@@ -53,8 +54,6 @@ DIR_PREFIX_TO_SUITE = {
     "paired_rerun_pytorch_": "ccb_pytorch",
     "paired_rerun_": None,  # multi-benchmark — infer per task
 }
-
-CONFIGS = ["baseline", "sourcegraph_full", "sourcegraph", "deepsearch"]
 
 
 def should_skip(dirname: str) -> bool:
@@ -151,10 +150,8 @@ def find_task_dirs(runs_dir: Path, suite_filter: str | None = None) -> list[tupl
         if suite_filter and suite != suite_filter:
             continue
 
-        for config_name in CONFIGS:
+        for config_name in discover_configs(run_dir):
             config_dir = run_dir / config_name
-            if not config_dir.is_dir():
-                continue
 
             for subdir in sorted(config_dir.iterdir()):
                 if not subdir.is_dir():

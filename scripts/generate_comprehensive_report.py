@@ -29,6 +29,7 @@ from statistics import mean, stdev, median
 _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
+from config_utils import discover_configs, is_mcp_config, is_config_dir, config_short_name
 
 from ccb_metrics.statistics import (
     welchs_t_test,
@@ -46,8 +47,6 @@ REPO_ROOT = _SCRIPT_DIR.parent
 MANIFEST_PATH = REPO_ROOT / "runs" / "official" / "MANIFEST.json"
 EVAL_REPORT_PATH = REPO_ROOT / "eval_reports" / "eval_report.json"
 SELECTED_TASKS_PATH = REPO_ROOT / "configs" / "selected_benchmark_tasks.json"
-
-CONFIGS = ("baseline", "sourcegraph_full")
 
 # Benchmark display names and descriptions
 BENCHMARK_INFO = {
@@ -226,7 +225,7 @@ def get_canonical_tasks(manifest: dict) -> dict[str, dict[str, float]]:
     for key, run in manifest["runs"].items():
         suite = key.rsplit("/", 1)[0]
         config = key.rsplit("/", 1)[1]
-        if config not in CONFIGS:
+        if not is_config_dir(config):
             continue
         for task_id, task_data in run["tasks"].items():
             tasks[task_id][config] = task_data.get("reward")
@@ -243,7 +242,7 @@ def get_detailed_tasks(eval_report: dict, canonical_task_ids: set[str]) -> dict[
     result: dict[str, dict[str, dict]] = defaultdict(dict)
     for run in eval_report.get("runs", []):
         config = run.get("config_name", "")
-        if config not in CONFIGS:
+        if not is_config_dir(config):
             continue
         for task in run.get("tasks", []):
             tid = task.get("task_id", "")

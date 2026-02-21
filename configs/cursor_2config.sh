@@ -2,8 +2,8 @@
 # Cursor Harness 2-Config Runner
 #
 # Runs selected tasks across 2 configurations:
-#   1. Baseline (BASELINE_MCP_TYPE=none)
-#   2. MCP-Full (BASELINE_MCP_TYPE=sourcegraph_full)
+#   1. baseline-local-direct (BASELINE_MCP_TYPE=none)
+#   2. mcp-remote-direct (BASELINE_MCP_TYPE=sourcegraph_full)
 #
 # Usage:
 #   ./configs/cursor_2config.sh [OPTIONS]
@@ -201,11 +201,11 @@ run_mode() {
 }
 
 if [ "$RUN_BASELINE" = true ]; then
-    run_mode "baseline" "none"
+    run_mode "baseline-local-direct" "none"
 fi
 
 if [ "$RUN_FULL" = true ]; then
-    run_mode "sourcegraph_full" "sourcegraph_full"
+    run_mode "mcp-remote-direct" "sourcegraph_full"
 fi
 
 print_validation_summary "$JOBS_BASE"

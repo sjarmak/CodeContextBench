@@ -32,6 +32,7 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from config_utils import discover_configs, is_mcp_config, is_config_dir, config_short_name
 
 from ccb_metrics.ground_truth import (
     build_ground_truth_registry,
@@ -62,7 +63,6 @@ GT_CACHE = REPO_ROOT / "configs" / "ground_truth_files.json"
 # __v1_hinted: old run dirs from before enterprise task de-hinting (US-001..US-003).
 # Appended to batch dir names after reruns complete so pre-redesign data is excluded.
 SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived", "preamble_test_", "__v1_hinted"]
-CONFIGS = ["baseline", "sourcegraph_full"]
 # Benchmarks dropped from evaluation — exclude from ground truth builds and IR analysis
 DROPPED_BENCHMARKS = {"ccb_dependeval", "ccb_locobench"}
 
@@ -164,7 +164,7 @@ def _walk_task_dirs() -> list[dict]:
             if not config_dir.is_dir():
                 continue
             config_name = config_dir.name
-            if config_name not in CONFIGS:
+            if not is_config_dir(config_name):
                 continue
 
             for batch_dir in sorted(config_dir.iterdir()):
@@ -253,7 +253,7 @@ def _walk_sdlc_staging_dirs(runs_dir: Path) -> list[dict]:
             if not config_dir.is_dir():
                 continue
             config_name = config_dir.name
-            if config_name not in CONFIGS:
+            if not is_config_dir(config_name):
                 continue
 
             for job_dir in sorted(config_dir.iterdir()):
@@ -533,7 +533,7 @@ def _load_task_metrics_tokens() -> dict[tuple[str, str], int]:
         if not run_dir.is_dir() or should_skip(run_dir.name):
             continue
         for config_dir in run_dir.iterdir():
-            if not config_dir.is_dir() or config_dir.name not in CONFIGS:
+            if not config_dir.is_dir() or not is_config_dir(config_dir.name):
                 continue
             config = config_dir.name
             for batch_dir in config_dir.iterdir():
@@ -579,7 +579,7 @@ def _load_task_metrics_cost() -> dict[tuple[str, str], float]:
         if not run_dir.is_dir() or should_skip(run_dir.name):
             continue
         for config_dir in run_dir.iterdir():
-            if not config_dir.is_dir() or config_dir.name not in CONFIGS:
+            if not config_dir.is_dir() or not is_config_dir(config_dir.name):
                 continue
             config = config_dir.name
             for batch_dir in config_dir.iterdir():

@@ -32,6 +32,9 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+from config_utils import discover_configs, is_mcp_config, config_short_name
+
 RUNS_DIR = PROJECT_ROOT / "runs" / "official"
 
 SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived"]
@@ -58,8 +61,6 @@ DIR_PREFIX_TO_SUITE = {
     "sweperf_": "ccb_sweperf",
     "tac_": "ccb_tac",
 }
-
-CONFIGS = ["baseline", "sourcegraph_full"]
 
 
 def should_skip(dirname: str) -> bool:
@@ -217,10 +218,8 @@ def find_h3_tasks(
         if suite_filters and suite not in suite_filters:
             continue
 
-        for config in CONFIGS:
+        for config in discover_configs(run_dir):
             config_dir = run_dir / config
-            if not config_dir.is_dir():
-                continue
 
             for subdir in sorted(config_dir.iterdir()):
                 if not subdir.is_dir():

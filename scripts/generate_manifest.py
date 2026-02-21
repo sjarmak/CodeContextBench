@@ -15,6 +15,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+from config_utils import discover_configs, is_mcp_config, config_short_name
+
 RUNS_DIR = PROJECT_ROOT / "runs" / "official"
 
 # Directories to skip entirely.
@@ -68,7 +71,6 @@ DIR_PREFIX_TO_SUITE = {
     "ccb_mcp_platform_": "ccb_mcp_platform",
 }
 
-CONFIGS = ["baseline", "sourcegraph_full", "sourcegraph_isolated"]
 
 
 def load_judge_scores(path: Path) -> dict[str, dict]:
@@ -446,10 +448,8 @@ def build_run_history(
         if suite is None:
             continue
 
-        for config in CONFIGS:
+        for config in discover_configs(run_dir):
             config_path = run_dir / config
-            if not config_path.exists():
-                continue
 
             all_runs = scan_config_dir_all_runs(config_path)
             for task_name, entries in all_runs.items():
@@ -562,10 +562,8 @@ def main():
         if suite is None:
             continue
 
-        for config in CONFIGS:
+        for config in discover_configs(run_dir):
             config_path = run_dir / config
-            if not config_path.exists():
-                continue
 
             tasks = scan_config_dir(config_path)
             key = (suite, config)

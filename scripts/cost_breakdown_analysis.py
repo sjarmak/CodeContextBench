@@ -22,6 +22,9 @@ from pathlib import Path
 # Constants
 # ---------------------------------------------------------------------------
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from config_utils import discover_configs, is_mcp_config, is_config_dir, config_short_name
+
 RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "official"
 OUTPUT_JSON = Path(__file__).resolve().parent.parent / "docs" / "cost_breakdown.json"
 
@@ -29,7 +32,6 @@ SKIP_PATTERNS = [
     "__broken_verifier", "validation_test", "archive",
     "__archived", "preamble_test_", "__v1_hinted",
 ]
-CONFIGS = ["baseline", "sourcegraph_full"]
 
 # Anthropic pricing (per million tokens) -- as specified in the analysis request
 # Note: the actual cost_usd in task_metrics.json uses the Opus 4.5 pricing
@@ -208,7 +210,7 @@ def collect_task_data() -> list[dict]:
             if not config_dir.is_dir():
                 continue
             config_name = config_dir.name
-            if config_name not in CONFIGS:
+            if not is_config_dir(config_name):
                 continue
 
             for batch_dir in sorted(config_dir.iterdir()):
@@ -305,8 +307,8 @@ def analysis_a_token_breakdown(data: list[dict]) -> dict:
         by_config[r["config"]].append(r)
 
     result = {}
-    for config in CONFIGS:
-        recs = by_config.get(config, [])
+    for config in sorted(by_config.keys()):
+        recs = by_config[config]
         if not recs:
             continue
 
@@ -662,11 +664,11 @@ def print_analysis_a(result: dict) -> None:
     print(header)
     print("  " + "-" * (len(header) - 2))
 
-    for config in CONFIGS:
+    for config in sorted(result.keys()):
         c = result.get(config)
-        if not c:
+        if not c or not isinstance(c, dict) or "n_tasks" not in c:
             continue
-        short = config.replace("sourcegraph_", "SG_")
+        short = config_short_name(config)
         print(
             f"  {short:20s} {c['n_tasks']:>5d} ${c['mean_cost_usd']:>8.4f} ${c['median_cost_usd']:>8.4f} "
             f"{c['mean_input_tokens']:>12,} {c['mean_output_tokens']:>12,} "
@@ -678,11 +680,11 @@ def print_analysis_a(result: dict) -> None:
     print(header2)
     print("  " + "-" * (len(header2) - 2))
 
-    for config in CONFIGS:
+    for config in sorted(result.keys()):
         c = result.get(config)
-        if not c:
+        if not c or not isinstance(c, dict) or "dollar_input" not in c:
             continue
-        short = config.replace("sourcegraph_", "SG_")
+        short = config_short_name(config)
         print(
             f"  {short:20s} ${c['dollar_input']:>8.4f} ${c['dollar_output']:>8.4f} "
             f"${c['dollar_cache_create']:>8.4f} ${c['dollar_cache_read']:>8.4f} "
@@ -694,11 +696,11 @@ def print_analysis_a(result: dict) -> None:
     print(header3)
     print("  " + "-" * (len(header3) - 2))
 
-    for config in CONFIGS:
+    for config in sorted(result.keys()):
         c = result.get(config)
-        if not c:
+        if not c or not isinstance(c, dict) or "pct_input" not in c:
             continue
-        short = config.replace("sourcegraph_", "SG_")
+        short = config_short_name(config)
         print(
             f"  {short:20s} {c['pct_input']:>7.1f}% {c['pct_output']:>7.1f}% "
             f"{c['pct_cache_create']:>7.1f}% {c['pct_cache_read']:>7.1f}%"
@@ -842,7 +844,7 @@ def print_outlier_analysis(data: list[dict]) -> None:
     header = f"    {'Config':20s} {'MeanWith':>10s} {'MeanWithout':>12s} {'Delta':>10s}"
     print(header)
     print("    " + "-" * (len(header) - 4))
-    for config in CONFIGS:
+    for config in sorted(by_config.keys()):
         recs = by_config.get(config, [])
         if not recs:
             continue
@@ -850,7 +852,7 @@ def print_outlier_analysis(data: list[dict]) -> None:
         mean_all = _safe_mean([r["cost_usd"] for r in recs])
         mean_filtered = _safe_mean([r["cost_usd"] for r in filtered])
         n_removed = len(recs) - len(filtered)
-        short = config.replace("sourcegraph_", "SG_")
+        short = config_short_name(config)
         print(
             f"    {short:20s} ${mean_all:>8.4f} ${mean_filtered:>10.4f} "
             f"${mean_all - mean_filtered:>+8.4f}  (removed {n_removed} tasks)"

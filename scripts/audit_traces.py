@@ -37,6 +37,9 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+from config_utils import discover_configs, is_mcp_config, config_short_name
+
 RUNS_DIR = PROJECT_ROOT / "runs" / "official"
 
 SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive"]
@@ -63,8 +66,6 @@ DIR_PREFIX_TO_SUITE = {
     "sweperf_": "ccb_sweperf",
     "tac_": "ccb_tac",
 }
-
-CONFIGS = ["baseline", "sourcegraph_full"]
 
 # Known MCP tool name patterns (the sg_ prefix is used in harbor transcripts).
 # We match "name":"mcp__sourcegraph__sg_..." to count only actual tool_use
@@ -497,13 +498,11 @@ def collect_all_tasks(
         if suite_filter and suite != suite_filter:
             continue
 
-        for config in CONFIGS:
+        for config in discover_configs(run_dir):
             if config_filter and config != config_filter:
                 continue
 
             config_path = run_dir / config
-            if not config_path.is_dir():
-                continue
 
             for task_dir, batch_name in iter_task_dirs(config_path):
                 result_path = task_dir / "result.json"
@@ -867,26 +866,27 @@ def format_summary(report: dict, verbose: bool = False) -> str:
     lines.append("")
 
     lines.append("BY CONFIG:")
-    for cfg in CONFIGS:
+    for cfg in sorted(s["config_counts"].keys()):
         count = s["config_counts"].get(cfg, 0)
-        short = cfg.replace("sourcegraph_", "SG_")
+        short = config_short_name(cfg)
         lines.append(f"  {short:18s}  {count:>5d}")
     lines.append("")
 
     # --- Suite x Config matrix ---
     matrix = report["suite_config_matrix"]
     if matrix:
+        _all_cfgs = sorted({cfg for suite_data in matrix.values() for cfg in suite_data})
         lines.append("SUITE x CONFIG MATRIX:")
         header = f"  {'Suite':25s}"
-        for cfg in CONFIGS:
-            short = cfg.replace("sourcegraph_", "SG_")
+        for cfg in _all_cfgs:
+            short = config_short_name(cfg)
             header += f" | {short:>20s}"
         lines.append(header)
         lines.append("  " + "-" * (len(header) - 2))
 
         for suite in sorted(matrix.keys()):
             row = f"  {suite:25s}"
-            for cfg in CONFIGS:
+            for cfg in _all_cfgs:
                 cell = matrix[suite].get(cfg)
                 if cell:
                     p = cell.get("passed", 0)
@@ -1008,10 +1008,10 @@ def format_summary(report: dict, verbose: bool = False) -> str:
     # --- Token summary ---
     ts = report["token_summary"]
     lines.append("TOKEN SUMMARY BY CONFIG:")
-    for cfg in CONFIGS:
+    for cfg in sorted(ts["by_config"].keys()):
         info = ts["by_config"].get(cfg)
         if info:
-            short = cfg.replace("sourcegraph_", "SG_")
+            short = config_short_name(cfg)
             lines.append(f"  {short:18s}  tasks={info['task_count']:>4d}  "
                          f"avg_in={info['avg_input_tokens']:>10,}  "
                          f"avg_out={info['avg_output_tokens']:>8,}  "

@@ -19,8 +19,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from config_utils import discover_configs, is_mcp_config, config_short_name
 from aggregate_status import (
-    RUNS_DIR, SKIP_PATTERNS, CONFIGS,
+    RUNS_DIR, SKIP_PATTERNS,
     should_skip, detect_suite, _iter_task_dirs, _extract_task_name,
 )
 
@@ -129,12 +130,10 @@ def scan_costs(suite_filter: str | None = None, config_filter: str | None = None
         if suite_filter and suite != suite_filter:
             continue
 
-        for config in CONFIGS:
+        for config in discover_configs(run_dir):
             if config_filter and config != config_filter:
                 continue
             config_path = run_dir / config
-            if not config_path.is_dir():
-                continue
 
             for task_dir in _iter_task_dirs(config_path):
                 cost_data = extract_cost_data(task_dir)
@@ -233,11 +232,9 @@ def format_cost_table(data: dict) -> str:
     lines.append("-" * len(header))
 
     for suite, configs in sorted(data["by_suite"].items()):
-        for config in CONFIGS:
-            if config not in configs:
-                continue
+        for config in sorted(configs.keys()):
             c = configs[config]
-            short_cfg = config.replace("sourcegraph_", "SG_")
+            short_cfg = config_short_name(config)
             lines.append(
                 f"{suite:25s} {short_cfg:18s}  {c['tasks']:>5d}  "
                 f"${c['cost_usd']:>7.2f}  ${c['avg_cost_per_task']:>7.2f}  "
@@ -257,12 +254,10 @@ def format_cost_table(data: dict) -> str:
     if len(config_costs) > 1:
         lines.append("CONFIG COST COMPARISON:")
         baseline_cost = config_costs.get("baseline", 0)
-        for config in CONFIGS:
-            if config not in config_costs:
-                continue
+        for config in sorted(config_costs.keys()):
             cost = config_costs[config]
             tasks = config_tasks[config]
-            short = config.replace("sourcegraph_", "SG_")
+            short = config_short_name(config)
             diff = ""
             if baseline_cost > 0 and config != "baseline":
                 pct = ((cost / tasks) / (baseline_cost / config_tasks.get("baseline", 1)) - 1) * 100

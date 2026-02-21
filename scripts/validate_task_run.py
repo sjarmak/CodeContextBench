@@ -23,6 +23,8 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import List, Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from config_utils import is_mcp_config
 
 # ANSI color codes
 RED = "\033[91m"
@@ -37,8 +39,8 @@ SEVERITY_COLORS = {
     "INFO": CYAN,
 }
 
-# Configs that use MCP tools
-MCP_CONFIGS = {"sourcegraph_full"}
+# Configs that use MCP tools (uses is_mcp_config() for new names)
+MCP_CONFIGS = {"sourcegraph_full", "mcp-remote-direct", "mcp-remote-artifact", "artifact_full"}
 
 
 @dataclass
@@ -130,7 +132,7 @@ def validate_task(data: dict, task_dir: str, config: str) -> List[Flag]:
         flag("task_crashed", "CRITICAL", "Task name contains [CRASHED]")
 
     # mcp_never_used: tool_calls_mcp == 0 in MCP modes
-    if config in MCP_CONFIGS:
+    if is_mcp_config(config):
         mcp_calls = data.get("tool_calls_mcp")
         if mcp_calls is not None and mcp_calls == 0:
             flag("mcp_never_used", "CRITICAL",
@@ -138,12 +140,12 @@ def validate_task(data: dict, task_dir: str, config: str) -> List[Flag]:
 
     # --- WARNING rules ---
 
-    # deepsearch_unused: search_calls_deepsearch == 0 in sourcegraph_full
-    if config == "sourcegraph_full":
+    # deepsearch_unused: search_calls_deepsearch == 0 in MCP direct modes
+    if config in ("sourcegraph_full", "mcp-remote-direct"):
         ds_calls = data.get("search_calls_deepsearch")
         if ds_calls is not None and ds_calls == 0:
             flag("deepsearch_unused", "WARNING",
-                 "Deep Search was never used in sourcegraph_full mode")
+                 "Deep Search was never used in MCP mode")
 
     # barely_tried: low reward with very few or unmeasured tool calls
     reward = data.get("reward")
@@ -179,7 +181,7 @@ def validate_task(data: dict, task_dir: str, config: str) -> List[Flag]:
     # --- INFO rules ---
 
     # mcp_ratio_report: report mcp_ratio value for MCP modes
-    if config in MCP_CONFIGS:
+    if is_mcp_config(config):
         mcp_ratio = data.get("mcp_ratio")
         if mcp_ratio is not None:
             flag("mcp_ratio_report", "INFO",

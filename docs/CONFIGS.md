@@ -1,8 +1,47 @@
 # Agent Configuration Matrix
 
-This document describes the 2 agent configurations (Baseline and MCP-Full) used in the CodeContextBench evaluation. Each configuration controls which tools the Claude Code agent can use for code navigation and discovery during benchmark tasks.
+This document describes the agent configurations used in the CodeContextBench
+evaluation. Each configuration controls tools, source access, and verification
+mode.
 
-## Configuration Summary
+## Three-Dimensional Config Naming
+
+Config names encode three independent dimensions:
+
+```
+{agent}-{source}-{verifier}
+```
+
+| Dimension | Values | Meaning |
+|---|---|---|
+| **agent** | `baseline` / `mcp` | Whether Sourcegraph MCP tools are available |
+| **source** | `local` / `remote` | Whether source code is in `/workspace` (`local`) or deleted (`remote`) |
+| **verifier** | `direct` / `artifact` | Whether verifier checks git changes (`direct`) or a `review.json` artifact (`artifact`) |
+
+### Config Matrix
+
+| Config Name | Agent | Source | Verifier | Internal `mcp_type` | Dockerfile |
+|---|---|---|---|---|---|
+| `baseline-local-direct` | No MCP | Full source | Git changes | `none` | Original |
+| `mcp-remote-direct` | MCP | Source deleted | Git changes | `sourcegraph_full` | `Dockerfile.sg_only` |
+| `baseline-local-artifact` | No MCP | Full source | `review.json` | `none` | `Dockerfile.artifact_only` |
+| `mcp-remote-artifact` | MCP | Source deleted | `review.json` | `artifact_full` | `Dockerfile.artifact_only` |
+
+**Standard SDLC suites** use `baseline-local-direct` + `mcp-remote-direct`.
+**Artifact evaluation** uses `baseline-local-artifact` + `mcp-remote-artifact`
+(set via `FULL_CONFIG=mcp-remote-artifact`).
+
+### Legacy Names
+
+Existing run directories may use older names. Analysis scripts accept both:
+
+| Legacy Name | New Name |
+|---|---|
+| `baseline` | `baseline-local-direct` |
+| `sourcegraph_full` | `mcp-remote-direct` |
+| `artifact_full` | `mcp-remote-artifact` |
+
+## Tool Lists
 
 | Paper Config Name | `BASELINE_MCP_TYPE` value | MCP Endpoint | Local Search Tools | Sourcegraph MCP Tools |
 |---|---|---|---|---|

@@ -20,12 +20,12 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from config_utils import discover_configs, is_mcp_config, is_config_dir, config_short_name
 
 RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "official"
 SELECTION_FILE = Path(__file__).resolve().parent.parent / "configs" / "selected_benchmark_tasks.json"
 
 SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived"]
-CONFIGS = ["baseline", "sourcegraph_full"]
 
 DIR_PREFIX_TO_SUITE = {
     # SDLC phase suite prefixes (new naming: {phase}_{model}_{timestamp})
@@ -215,7 +215,7 @@ def collect_task_metrics(paired_only: bool = False) -> list[dict]:
             if not config_dir.is_dir():
                 continue
             config_name = config_dir.name
-            if config_name not in CONFIGS:
+            if not is_config_dir(config_name):
                 continue
 
             for batch_dir in sorted(config_dir.iterdir()):
@@ -522,8 +522,9 @@ def _timing_verification(paired: list[dict]) -> dict:
              "has_env_setup": 0, "has_verifier": 0, "timing_consistent": 0,
              "timing_inconsistent": 0}
 
+    _paired_configs = ["baseline", "sourcegraph_full"]  # field-name prefixes in paired records
     for task in paired:
-        for cfg in CONFIGS:
+        for cfg in _paired_configs:
             agent_time = task.get(f"{cfg}_agent_time")
             wall_time = task.get(f"{cfg}_wall_time")
             env_time = task.get(f"{cfg}_env_setup_time")
@@ -893,8 +894,9 @@ def _token_verification(paired: list[dict]) -> dict:
     stats = {"total_checks": 0, "has_tokens": 0, "zero_input": 0, "zero_output": 0,
              "suspiciously_low": 0, "suspiciously_high": 0}
 
+    _paired_configs = ["baseline", "sourcegraph_full"]  # field-name prefixes in paired records
     for task in paired:
-        for cfg in CONFIGS:
+        for cfg in _paired_configs:
             inp = task.get(f"{cfg}_input_tokens")
             out = task.get(f"{cfg}_output_tokens")
             cache_create = task.get(f"{cfg}_cache_creation_tokens")

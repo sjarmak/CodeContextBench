@@ -44,12 +44,13 @@ Use these defaults unless there is a task-specific reason not to.
 - Planning/prioritization: `whats-next`
 
 ## Evaluation Configs
-Two configs per task: **Baseline** (full local code, no MCP) and **MCP-Full**
-(local source truncated, Sourcegraph MCP enabled). MCP-Full uses
-`Dockerfile.sg_only` so the agent cannot read source locally and must discover
-code via MCP tools. The verifier restores the full repo before scoring.
-See `docs/CONFIGS.md` for the full environment model, tool lists, and how to
-add sg_only support to new tasks.
+Config names encode three dimensions: `{agent}-{source}-{verifier}`.
+Standard pairing: **baseline-local-direct** (full local code, no MCP) and
+**mcp-remote-direct** (source deleted, Sourcegraph MCP). Artifact evaluation
+uses **baseline-local-artifact** + **mcp-remote-artifact** (review.json output).
+MCP configs use `Dockerfile.sg_only` or `Dockerfile.artifact_only` so the
+agent must discover code via MCP tools. The verifier restores the full repo
+before scoring. See `docs/CONFIGS.md` for the full config matrix.
 
 ## Standard Workflow
 0. **Before commit or push:** Run `python3 scripts/repo_health.py` (or `--quick`). Fix any failures so main stays clean and drift is caught early (see `docs/REPO_HEALTH.md`).

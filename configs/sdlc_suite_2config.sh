@@ -1,6 +1,6 @@
 #!/bin/bash
-# Generic SDLC 2-config runner (baseline + sourcegraph_full).
-# Suite-specific wrappers should set SDLC_SUITE and SDLC_SUITE_LABEL.
+# Generic SDLC 2-config runner (baseline + MCP).
+# Suite-specific wrappers should set SDLC_SUITE, SDLC_SUITE_LABEL, and optionally FULL_CONFIG.
 
 set -e
 
@@ -49,7 +49,7 @@ TIMEOUT_MULTIPLIER=10
 RUN_BASELINE=true
 RUN_FULL=true
 CATEGORY="${CATEGORY:-staging}"
-FULL_CONFIG="${FULL_CONFIG:-sourcegraph_full}"
+FULL_CONFIG="${FULL_CONFIG:-mcp-remote-direct}"
 TASK_FILTERS=()
 
 if [ ! -d "${BENCHMARK_DIR}/${SUITE}" ]; then
@@ -200,7 +200,7 @@ extract_all_metrics() {
 _sdlc_run_single() {
     local task_id=$1
     local task_home=$2
-    local config=${3:-baseline}
+    local config=${3:-baseline-local-direct}
     local mcp_type=${4:-none}
     local jobs_base=${5:-$JOBS_BASE}
     local jobs_subdir="${jobs_base}/${config}"
@@ -215,9 +215,16 @@ _sdlc_run_single() {
         return 1
     fi
 
-    # For artifact configs, BOTH baseline and full use Dockerfile.artifact_only
-    # (baseline keeps source readable; MCP-full deletes source files at runtime).
-    if [ "$config" = "baseline" ] && [ "${FULL_CONFIG}" = "artifact_full" ]; then
+    # Derive source access and verifier mode from config name.
+    # config_to_mcp_type sets SOURCE_ACCESS and VERIFIER_MODE globals.
+    config_to_mcp_type "$config" > /dev/null
+
+    # Dockerfile selection based on SOURCE_ACCESS and VERIFIER_MODE:
+    #   local  + direct   → original Dockerfile (no swap needed)
+    #   local  + artifact → Dockerfile.artifact_only (source stays readable)
+    #   remote + direct   → Dockerfile.sg_only (source truncated at build time)
+    #   remote + artifact → Dockerfile.artifact_only (preferred) or Dockerfile.sg_only (fallback)
+    if [ "$SOURCE_ACCESS" = "local" ] && [ "$VERIFIER_MODE" = "artifact" ]; then
         local artifact="${task_path}/environment/Dockerfile.artifact_only"
         if [ -f "$artifact" ]; then
             temp_task_dir="/tmp/artifact_bl_${task_id}"
@@ -228,15 +235,12 @@ _sdlc_run_single() {
             run_task_path="$temp_task_dir"
         fi
 
-    # For MCP-full runs, enforce sg_only Docker build env without mutating the
-    # original task path (baseline may run in parallel on the same task).
-    elif [ "$config" = "sourcegraph_full" ]; then
+    elif [ "$SOURCE_ACCESS" = "remote" ] && [ "$VERIFIER_MODE" = "direct" ]; then
         local sgonly="${task_path}/environment/Dockerfile.sg_only"
         if [ ! -f "$sgonly" ]; then
             echo "ERROR: Missing Dockerfile.sg_only for $task_id at $sgonly"
             return 1
         fi
-
         temp_task_dir="/tmp/sgonly_${task_id}"
         rm -rf "$temp_task_dir"
         mkdir -p "$temp_task_dir"
@@ -244,7 +248,7 @@ _sdlc_run_single() {
         cp "${temp_task_dir}/environment/Dockerfile.sg_only" "${temp_task_dir}/environment/Dockerfile"
         run_task_path="$temp_task_dir"
 
-    elif [ "$config" = "artifact_full" ]; then
+    elif [ "$SOURCE_ACCESS" = "remote" ] && [ "$VERIFIER_MODE" = "artifact" ]; then
         local artifact="${task_path}/environment/Dockerfile.artifact_only"
         local chosen_dockerfile=""
         if [ -f "$artifact" ]; then
@@ -256,7 +260,6 @@ _sdlc_run_single() {
             echo "ERROR: No Dockerfile.artifact_only or Dockerfile.sg_only for $task_id"
             return 1
         fi
-
         temp_task_dir="/tmp/artifact_${task_id}"
         rm -rf "$temp_task_dir"
         mkdir -p "$temp_task_dir"
@@ -313,19 +316,23 @@ if [ "$SKIP_PREBUILD" = false ]; then
     prebuild_images "$SUITE"
 fi
 
+BL_CONFIG=$(baseline_config_for "$FULL_CONFIG")
+BL_MCP=$(config_to_mcp_type "$BL_CONFIG")
+FULL_MCP=$(config_to_mcp_type "$FULL_CONFIG")
+
 if [ "$RUN_BASELINE" = true ] && [ "$RUN_FULL" = true ]; then
     run_paired_configs TASK_IDS _sdlc_run_single "$JOBS_BASE"
 
-    for config in baseline "$FULL_CONFIG"; do
+    for config in "$BL_CONFIG" "$FULL_CONFIG"; do
         if [ -d "${JOBS_BASE}/${config}" ]; then
             extract_all_metrics "${JOBS_BASE}/${config}" "${SUITE}" "$config"
             validate_and_report "${JOBS_BASE}/${config}" "$config"
         fi
     done
 elif [ "$RUN_BASELINE" = true ]; then
-    run_task_batch "baseline" "none"
+    run_task_batch "$BL_CONFIG" "$BL_MCP"
 elif [ "$RUN_FULL" = true ]; then
-    run_task_batch "$FULL_CONFIG" "$FULL_CONFIG"
+    run_task_batch "$FULL_CONFIG" "$FULL_MCP"
 fi
 
 print_validation_summary "$JOBS_BASE"

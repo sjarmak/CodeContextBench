@@ -36,6 +36,59 @@ load_credentials() {
 }
 
 # ============================================
+# CONFIG NAME MAPPING
+# ============================================
+# Three-dimensional config names: {agent}-{source}-{verifier}
+#   agent:    baseline (no MCP) | mcp (Sourcegraph MCP)
+#   source:   local (full source) | remote (source deleted)
+#   verifier: direct (git changes) | artifact (review.json)
+#
+# These map to internal Harbor mcp_type values via config_to_mcp_type().
+# Legacy names (baseline, sourcegraph_full, artifact_full) are accepted
+# for backward compatibility with existing run directories.
+
+VERIFIER_MODE="direct"
+SOURCE_ACCESS="local"
+
+# Map composite config name → internal mcp_type for Harbor.
+# Side effects: sets VERIFIER_MODE and SOURCE_ACCESS globals.
+config_to_mcp_type() {
+    local config_name="$1"
+    case "$config_name" in
+        baseline-local-direct)
+            VERIFIER_MODE="direct"; SOURCE_ACCESS="local"; echo "none" ;;
+        mcp-remote-direct)
+            VERIFIER_MODE="direct"; SOURCE_ACCESS="remote"; echo "sourcegraph_full" ;;
+        baseline-local-artifact)
+            VERIFIER_MODE="artifact"; SOURCE_ACCESS="local"; echo "none" ;;
+        mcp-remote-artifact)
+            VERIFIER_MODE="artifact"; SOURCE_ACCESS="remote"; echo "artifact_full" ;;
+        # Legacy names
+        baseline)
+            VERIFIER_MODE="direct"; SOURCE_ACCESS="local"; echo "none" ;;
+        sourcegraph_full)
+            VERIFIER_MODE="direct"; SOURCE_ACCESS="remote"; echo "sourcegraph_full" ;;
+        artifact_full)
+            VERIFIER_MODE="artifact"; SOURCE_ACCESS="remote"; echo "artifact_full" ;;
+        none)
+            VERIFIER_MODE="direct"; SOURCE_ACCESS="local"; echo "none" ;;
+        *)
+            echo "WARNING: Unknown config name: $config_name" >&2
+            VERIFIER_MODE="direct"; SOURCE_ACCESS="local"; echo "$config_name" ;;
+    esac
+}
+
+# Derive the baseline config name that pairs with a given FULL_CONFIG.
+# Artifact full configs pair with artifact baselines.
+baseline_config_for() {
+    local full="$1"
+    case "$full" in
+        *-artifact|artifact_full) echo "baseline-local-artifact" ;;
+        *)                        echo "baseline-local-direct" ;;
+    esac
+}
+
+# ============================================
 # VERIFIER DEBUG MODE
 # ============================================
 # When DEBUG_MODE=true, verifier_lib.sh captures diagnostics to /logs/verifier/debug/
@@ -934,8 +987,7 @@ run_canary_then_batch() {
 #   run_paired_configs TASK_IDS _my_run_fn "$JOBS_BASE"
 #
 # The run function must accept: $1=task_id $2=task_home $3=config_mode $4=mcp_type $5=jobs_base
-# It is responsible for creating the jobs_subdir (e.g., baseline/ or sourcegraph_full/) and
-# launching harbor.
+# It is responsible for creating the jobs_subdir and launching harbor.
 #
 # This launches 2 containers per task (1 baseline + 1 MCP) simultaneously, so the total
 # concurrent containers is 2x the number of tasks. PARALLEL_JOBS limits total concurrent PIDs.
@@ -952,18 +1004,25 @@ run_paired_configs() {
     echo "Paired execution: $num_tasks tasks x 2 configs"
     echo "========================================"
     echo ""
-    local full_config="${FULL_CONFIG:-sourcegraph_full}"
-    echo "Each task launches baseline + ${full_config} simultaneously."
+    local full_config="${FULL_CONFIG:-mcp-remote-direct}"
+    local bl_config
+    bl_config=$(baseline_config_for "$full_config")
+    echo "Each task launches ${bl_config} + ${full_config} simultaneously."
     echo "Total concurrent containers: up to $((num_tasks * 2)) (limited by PARALLEL_JOBS=$PARALLEL_JOBS)"
     echo ""
 
-    mkdir -p "${jobs_base}/baseline" "${jobs_base}/${full_config}"
+    mkdir -p "${jobs_base}/${bl_config}" "${jobs_base}/${full_config}"
+
+    # Resolve mcp_type values once
+    local bl_mcp full_mcp
+    bl_mcp=$(config_to_mcp_type "$bl_config")
+    full_mcp=$(config_to_mcp_type "$full_config")
 
     # Build paired task list: each task gets two entries
     local paired_ids=()
     for task_id in "${_paired_task_ids[@]}"; do
-        paired_ids+=("${task_id}|baseline|none")
-        paired_ids+=("${task_id}|${full_config}|${full_config}")
+        paired_ids+=("${task_id}|${bl_config}|${bl_mcp}")
+        paired_ids+=("${task_id}|${full_config}|${full_mcp}")
     done
 
     # Wrapper command function that splits the paired ID

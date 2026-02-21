@@ -16,7 +16,7 @@
 #   --selection-file PATH           Use alternate selection file (default: selected_benchmark_tasks.json)
 #   --use-case-category CATEGORY    Filter by MCP-unique use case category (A-J), only valid with --selection-file
 #   --baseline-only                 Run only baseline (no MCP)
-#   --full-only                     Run only MCP-Full (sourcegraph_full)
+#   --full-only                     Run only MCP-Full (mcp-remote-direct)
 #   --model MODEL                   Override model (default: claude-opus-4-6)
 #   --concurrency N                 Concurrent tasks (default: 2)
 #   --category CATEGORY             Run category (default: staging)
@@ -199,7 +199,7 @@ echo "Source:        $SELECTION_FILE"
 echo "Model:         $MODEL"
 echo "Total tasks:   $TOTAL_TASKS"
 echo "Concurrency:   $CONCURRENCY"
-echo "Configs:       baseline=$RUN_BASELINE sourcegraph_full=$RUN_FULL"
+echo "Configs:       baseline-local-direct=$RUN_BASELINE mcp-remote-direct=$RUN_FULL"
 echo "Skip done:     $SKIP_COMPLETED"
 [ -n "$USE_CASE_CATEGORY_FILTER" ] && echo "Category:      $USE_CASE_CATEGORY_FILTER"
 echo ""
@@ -324,10 +324,10 @@ run_benchmark() {
 # ============================================
 for bm in $(echo "${!BENCHMARK_COUNTS[@]}" | tr ' ' '\n' | sort); do
     if [ "$RUN_BASELINE" = true ]; then
-        run_benchmark "$bm" "baseline" "none"
+        run_benchmark "$bm" "baseline-local-direct" "none"
     fi
     if [ "$RUN_FULL" = true ]; then
-        run_benchmark "$bm" "sourcegraph_full" "sourcegraph_full"
+        run_benchmark "$bm" "mcp-remote-direct" "sourcegraph_full"
     fi
 done
 

@@ -33,6 +33,9 @@ from datetime import datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+from config_utils import discover_configs, is_mcp_config, config_short_name
+
 STAGING_DIR = PROJECT_ROOT / "runs" / "staging"
 OFFICIAL_DIR = PROJECT_ROOT / "runs" / "official"
 VALIDATE_SCRIPT = PROJECT_ROOT / "scripts" / "validate_task_run.py"
@@ -41,7 +44,6 @@ EXTRACT_METRICS_SCRIPT = PROJECT_ROOT / "scripts" / "extract_task_metrics.py"
 SELECTED_TASKS_FILE = PROJECT_ROOT / "configs" / "selected_benchmark_tasks.json"
 
 SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__v1_hinted"]
-CONFIGS = ["baseline", "sourcegraph_full", "sourcegraph_isolated", "sg_only_env"]
 
 DIR_PREFIX_TO_SUITE = {
     "bigcode_mcp_": "ccb_largerepo",
@@ -190,10 +192,8 @@ def extract_missing_task_metrics(run_dir: Path, *, execute: bool) -> tuple[int, 
     generated_count = 0
     errors: list[str] = []
 
-    for config_name in CONFIGS:
+    for config_name in discover_configs(run_dir):
         config_path = run_dir / config_name
-        if not config_path.is_dir():
-            continue
 
         for task_dir in find_task_dirs(config_path):
             result_json = task_dir / "result.json"
@@ -247,10 +247,8 @@ def validate_run(run_dir: Path) -> ValidationResult:
         return result
 
     # Find config subdirectories
-    for config_name in CONFIGS:
-        config_path = run_dir / config_name
-        if config_path.is_dir():
-            result.configs_found.append(config_name)
+    for config_name in discover_configs(run_dir):
+        result.configs_found.append(config_name)
 
     if not result.configs_found:
         result.error = "No config directories found (expected baseline/, sourcegraph_full/, etc.)"

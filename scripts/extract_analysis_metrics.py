@@ -44,6 +44,9 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+from config_utils import discover_configs, is_mcp_config, config_short_name
+
 RUNS_DIR = PROJECT_ROOT / "runs" / "official"
 SELECTED_TASKS_PATH = PROJECT_ROOT / "configs" / "selected_benchmark_tasks.json"
 
@@ -72,7 +75,6 @@ DIR_PREFIX_TO_SUITE = {
     "tac_": "ccb_tac",
 }
 
-CONFIGS = ["baseline", "sourcegraph_full"]
 CONFIG_SHORT = {
     "baseline": "BL",
     "sourcegraph_full": "SG_full",
@@ -312,13 +314,11 @@ def collect_results(
         if suite_filter and suite != suite_filter:
             continue
 
-        for config in CONFIGS:
+        for config in discover_configs(run_dir):
             if config_filter and config != config_filter:
                 continue
 
             config_path = run_dir / config
-            if not config_path.is_dir():
-                continue
 
             for entry in sorted(config_path.iterdir()):
                 if not entry.is_dir() or should_skip(entry.name):
@@ -619,9 +619,10 @@ def format_table(
 
     # Header row
     dim_width = max(25, max((len(str(k)) for k in data.keys()), default=25) + 2)
+    _all_cfgs = sorted({cfg for dim_data in data.values() for cfg in dim_data})
     header = f"  {'Dimension':<{dim_width}}"
-    for cfg in CONFIGS:
-        short = CONFIG_SHORT[cfg]
+    for cfg in _all_cfgs:
+        short = CONFIG_SHORT.get(cfg, config_short_name(cfg))
         sub_header = " | ".join(f"{h:>{w}}" for _, h, w in metric_cols)
         header += f"  {short}: {sub_header}"
     lines.append(header)
@@ -631,7 +632,7 @@ def format_table(
     for dim_val in sorted(data.keys()):
         configs = data[dim_val]
         row = f"  {dim_val:<{dim_width}}"
-        for cfg in CONFIGS:
+        for cfg in _all_cfgs:
             s = configs.get(cfg)
             if s:
                 cells = []
@@ -813,8 +814,8 @@ def main():
     config_counts = defaultdict(int)
     for r in enriched:
         config_counts[r["config"]] += 1
-    for cfg in CONFIGS:
-        output_parts.append(f"  {CONFIG_SHORT[cfg]}: {config_counts.get(cfg, 0)} tasks")
+    for cfg in sorted(config_counts.keys()):
+        output_parts.append(f"  {CONFIG_SHORT.get(cfg, config_short_name(cfg))}: {config_counts.get(cfg, 0)} tasks")
 
     # Summary (overall)
     if dim is None or dim == "summary":

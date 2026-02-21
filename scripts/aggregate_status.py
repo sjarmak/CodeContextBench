@@ -37,6 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from status_fingerprints import fingerprint_error
+from config_utils import discover_configs, is_mcp_config, config_short_name
 
 # ---------------------------------------------------------------------------
 # Constants (duplicated from generate_manifest.py for independence)
@@ -95,7 +96,11 @@ DIR_PREFIX_TO_SUITE = {
     "ccb_mcp_platform_": "ccb_mcp_platform",
 }
 
-CONFIGS = ["baseline", "sourcegraph_full", "sourcegraph_isolated"]
+# Legacy hardcoded list — kept for backward compatibility (rerun_failed.py imports it).
+# New code should use discover_configs(run_dir) from config_utils instead.
+CONFIGS = ["baseline", "sourcegraph_full", "sourcegraph_isolated",
+           "baseline-local-direct", "mcp-remote-direct",
+           "baseline-local-artifact", "mcp-remote-artifact"]
 
 SELECTION_CONFIG = Path(__file__).resolve().parent.parent / "configs" / "selected_benchmark_tasks.json"
 
@@ -321,7 +326,7 @@ def scan_all_tasks(
         if suite_filter and suite != suite_filter:
             continue
 
-        for config in CONFIGS:
+        for config in discover_configs(run_dir):
             if config_filter and config != config_filter:
                 continue
 
@@ -602,11 +607,11 @@ def format_table(output: dict) -> str:
         configs_present = set()
         for configs in by_suite.values():
             configs_present.update(configs.keys())
-        configs_sorted = [c for c in CONFIGS if c in configs_present]
+        configs_sorted = sorted(configs_present)
 
         header = f"{'Suite':25s}"
         for cfg in configs_sorted:
-            short = cfg.replace("sourcegraph_", "SG_")
+            short = config_short_name(cfg)
             header += f" | {short:>18s}"
         lines.append(header)
         lines.append("-" * len(header))

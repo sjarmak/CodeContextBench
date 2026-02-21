@@ -14,11 +14,12 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from config_utils import discover_configs, is_mcp_config, is_config_dir, config_short_name
+
 RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "official"
 
 SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived"]
-
-CONFIGS = ["baseline", "sourcegraph_full"]
 
 DIR_PREFIX_TO_SUITE = {
     "bigcode_mcp_": "ccb_largerepo",
@@ -164,7 +165,7 @@ def collect_all_metrics() -> dict:
             if not config_dir.is_dir():
                 continue
             config_name = config_dir.name
-            if config_name not in CONFIGS:
+            if not is_config_dir(config_name):
                 continue
 
             for batch_dir in sorted(config_dir.iterdir()):
