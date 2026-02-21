@@ -20,10 +20,12 @@
 #   --full-config CONFIG            Full config name (default: mcp-remote-direct)
 #                                   Use mcp-remote-artifact for artifact-based evaluation
 #   --model MODEL                   Override model (default: claude-opus-4-6)
-#   --concurrency N                 Concurrent tasks (default: 2)
+#   --concurrency N                 Trials per task via harbor -n (default: 1)
+#   --parallel N                    Parallel task slots (default: 1). Set to 8 for multi-account runs.
 #   --category CATEGORY             Run category (default: staging)
 #   --skip-completed                Skip tasks that already have result.json + task_metrics.json
 #   --dry-run                       Print tasks without running
+#   --yes                           Skip confirmation prompt (non-interactive mode)
 #
 # Prerequisites:
 #   - configs/selected_benchmark_tasks.json in repo (or --selection-file path)
@@ -50,7 +52,8 @@ SELECTION_FILE="$REPO_ROOT/configs/selected_benchmark_tasks.json"
 BENCHMARK_FILTER=""
 USE_CASE_CATEGORY_FILTER=""
 MODEL="${MODEL:-anthropic/claude-opus-4-6}"
-CONCURRENCY=1
+CONCURRENCY=1        # harbor -n: trials per task
+PARALLEL_TASKS=1     # number of simultaneous task processes
 TIMEOUT_MULTIPLIER=10
 RUN_BASELINE=true
 RUN_FULL=true
@@ -58,6 +61,7 @@ CATEGORY="${CATEGORY:-staging}"
 FULL_CONFIG="${FULL_CONFIG:-mcp-remote-direct}"
 DRY_RUN=false
 SKIP_COMPLETED=false
+YES=false
 AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
 
 while [[ $# -gt 0 ]]; do
@@ -90,6 +94,10 @@ while [[ $# -gt 0 ]]; do
             CONCURRENCY="$2"
             shift 2
             ;;
+        --parallel)
+            PARALLEL_TASKS="$2"
+            shift 2
+            ;;
         --category)
             CATEGORY="$2"
             shift 2
@@ -104,6 +112,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             DRY_RUN=true
+            shift
+            ;;
+        --yes)
+            YES=true
             shift
             ;;
         *)
@@ -204,13 +216,19 @@ for bm in "${!BENCHMARK_COUNTS[@]}"; do
     TOTAL_TASKS=$(( TOTAL_TASKS + ${BENCHMARK_COUNTS[$bm]} ))
 done
 
+N_CONFIGS=0
+[ "$RUN_BASELINE" = true ] && N_CONFIGS=$(( N_CONFIGS + 1 ))
+[ "$RUN_FULL" = true ] && N_CONFIGS=$(( N_CONFIGS + 1 ))
+TOTAL_AGENT_RUNS=$(( TOTAL_TASKS * N_CONFIGS ))
+
 echo "=============================================="
 echo "CodeContextBench Selected Tasks Runner"
 echo "=============================================="
 echo "Source:        $SELECTION_FILE"
 echo "Model:         $MODEL"
-echo "Total tasks:   $TOTAL_TASKS"
-echo "Concurrency:   $CONCURRENCY"
+echo "Total tasks:   $TOTAL_TASKS ($TOTAL_AGENT_RUNS agent runs across $N_CONFIGS config(s))"
+echo "Parallel:      $PARALLEL_TASKS simultaneous task slots"
+echo "Trials/task:   $CONCURRENCY"
 echo "Configs:       $BASELINE_CONFIG=$RUN_BASELINE $FULL_CONFIG=$RUN_FULL"
 echo "Skip done:     $SKIP_COMPLETED"
 [ -n "$USE_CASE_CATEGORY_FILTER" ] && echo "Category:      $USE_CASE_CATEGORY_FILTER"
@@ -233,6 +251,17 @@ if [ "$DRY_RUN" = true ]; then
         fi
     done
     exit 0
+fi
+
+# ============================================
+# CONFIRMATION GATE
+# ============================================
+if [ "$YES" != true ]; then
+    echo "----------------------------------------------"
+    echo "Ready to launch $TOTAL_AGENT_RUNS agent runs ($PARALLEL_TASKS parallel)."
+    echo ""
+    read -r -p "Press Enter to proceed, Ctrl+C to abort... " _
+    echo ""
 fi
 
 # ============================================
@@ -274,52 +303,53 @@ is_task_completed() {
 }
 
 # ============================================
-# RUN FUNCTION — runs all tasks for a benchmark via --path mode
+# PARALLEL JOB POOL
 # ============================================
-run_benchmark() {
-    local bm=$1
-    local mcp_mode=$2
-    local mcp_type=$3
+declare -a _PIDS=()
 
-    local jobs_dir="runs/${CATEGORY}/${bm}_${MODEL_SHORT}_${TIMESTAMP}/${mcp_mode}"
-    mkdir -p "$jobs_dir"
+# Block until fewer than PARALLEL_TASKS jobs are running
+_wait_for_slot() {
+    while [ "${#_PIDS[@]}" -ge "${PARALLEL_TASKS}" ]; do
+        local new_pids=() p
+        for p in "${_PIDS[@]}"; do
+            kill -0 "$p" 2>/dev/null && new_pids+=("$p")
+        done
+        _PIDS=("${new_pids[@]}")
+        [ "${#_PIDS[@]}" -ge "${PARALLEL_TASKS}" ] && sleep 2
+    done
+}
 
-    echo ""
-    echo "[${mcp_mode}] Running ${BENCHMARK_COUNTS[$bm]} ${bm} tasks..."
+# Wait for all pending jobs to complete
+_drain_pool() {
+    local p
+    for p in "${_PIDS[@]}"; do
+        wait "$p" 2>/dev/null || true
+    done
+    _PIDS=()
+}
 
-    # Get task IDs and directories for this benchmark
-    local task_ids task_dirs
-    task_ids=$(echo "${BENCHMARK_TASK_IDS[$bm]}" | grep -v '^$')
-    task_dirs=$(echo "${BENCHMARK_TASK_DIRS[$bm]}" | grep -v '^$')
+# Launch one task in the background; respects PARALLEL_TASKS slot limit
+# Args: bm mcp_mode mcp_type task_id task_path jobs_dir
+_launch_task() {
+    local bm="$1" mcp_mode="$2" mcp_type="$3" task_id="$4" task_path="$5" jobs_dir="$6"
+    local abs_path="$REPO_ROOT/$task_path"
 
-    # Iterate over tasks using parallel arrays
-    local idx=0
-    while IFS= read -r task_id && IFS= read -r task_path <&3; do
-        [ -z "$task_id" ] && continue
-        idx=$((idx + 1))
+    if [ ! -d "$abs_path" ]; then
+        echo "WARNING: Task directory not found: $abs_path"
+        return
+    fi
 
-        # Skip completed tasks if requested
-        if is_task_completed "$jobs_dir" "$task_id"; then
-            echo "  [${mcp_mode}] SKIP (completed): $task_id"
-            continue
-        fi
+    _wait_for_slot
 
-        local abs_path="$REPO_ROOT/$task_path"
-
-        unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
-        echo "  [${mcp_mode}] ($idx/${BENCHMARK_COUNTS[$bm]}) $task_id"
-
-        if [ ! -d "$abs_path" ]; then
-            echo "WARNING: Task directory not found: $abs_path"
-            continue
-        fi
-
-        # Swap Dockerfile for artifact configs (both baseline-local-artifact and mcp-remote-artifact)
+    (
         local _df="${abs_path}/environment/Dockerfile"
         local _df_artifact="${abs_path}/environment/Dockerfile.artifact_only"
         local _df_swapped=false
         if [[ "$mcp_mode" == *-artifact ]] && [ -f "$_df_artifact" ]; then
-            cp "$_df" "${_df}.run_bak"
+            # Only backup if .run_bak doesn't already exist (idempotent on re-run after kill)
+            if [ ! -f "${_df}.run_bak" ]; then
+                cp "$_df" "${_df}.run_bak"
+            fi
             cp "$_df_artifact" "$_df"
             _df_swapped=true
         fi
@@ -329,33 +359,96 @@ run_benchmark() {
             --agent-import-path "$AGENT_PATH" \
             --model "$MODEL" \
             --jobs-dir "$jobs_dir" \
-            -n $CONCURRENCY \
-            --timeout-multiplier $TIMEOUT_MULTIPLIER \
+            -n "$CONCURRENCY" \
+            --timeout-multiplier "$TIMEOUT_MULTIPLIER" \
             2>&1 | tee -a "${jobs_dir}.log" \
             || echo "WARNING: Task failed: $task_id (continuing...)"
 
-        # Restore original Dockerfile after run
         if [ "$_df_swapped" = true ]; then
             mv "${_df}.run_bak" "$_df"
         fi
-    done <<< "$task_ids" 3<<< "$task_dirs"
-
-    unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
-
-    # Extract per-task metrics
-    extract_all_metrics "$jobs_dir" "$bm" "$mcp_mode"
-    validate_and_report "$jobs_dir" "$mcp_mode"
+    ) &
+    _PIDS+=("$!")
+    echo "  [${mcp_mode}] Started $task_id (PID ${_PIDS[-1]}, ${#_PIDS[@]}/${PARALLEL_TASKS} slots used)"
 }
 
 # ============================================
-# MAIN EXECUTION
+# MAIN EXECUTION — submit all tasks across benchmarks into shared pool
 # ============================================
+
+# First pass: create all jobs_dirs and collect them for post-processing
+declare -A BL_JOBS_DIRS   # bm -> jobs_dir for baseline
+declare -A FULL_JOBS_DIRS # bm -> jobs_dir for full
+
 for bm in $(echo "${!BENCHMARK_COUNTS[@]}" | tr ' ' '\n' | sort); do
     if [ "$RUN_BASELINE" = true ]; then
-        run_benchmark "$bm" "$BASELINE_CONFIG" "$BL_MCP_TYPE"
+        local_dir="runs/${CATEGORY}/${bm}_${MODEL_SHORT}_${TIMESTAMP}/${BASELINE_CONFIG}"
+        BL_JOBS_DIRS[$bm]="$local_dir"
+        mkdir -p "$local_dir"
     fi
     if [ "$RUN_FULL" = true ]; then
-        run_benchmark "$bm" "$FULL_CONFIG" "$FULL_MCP_TYPE"
+        local_dir="runs/${CATEGORY}/${bm}_${MODEL_SHORT}_${TIMESTAMP}/${FULL_CONFIG}"
+        FULL_JOBS_DIRS[$bm]="$local_dir"
+        mkdir -p "$local_dir"
+    fi
+done
+
+# Submit all tasks: baseline first across all benchmarks, then full
+# This keeps config passes clean while maximizing cross-benchmark parallelism
+for config_pass in baseline full; do
+    if [ "$config_pass" = "baseline" ] && [ "$RUN_BASELINE" != true ]; then
+        continue
+    fi
+    if [ "$config_pass" = "full" ] && [ "$RUN_FULL" != true ]; then
+        continue
+    fi
+
+    [ "$config_pass" = "baseline" ] && mcp_mode="$BASELINE_CONFIG" && mcp_type="$BL_MCP_TYPE"
+    [ "$config_pass" = "full" ]     && mcp_mode="$FULL_CONFIG"     && mcp_type="$FULL_MCP_TYPE"
+
+    echo ""
+    echo "=== Submitting $config_pass tasks (${mcp_mode}) ==="
+
+    for bm in $(echo "${!BENCHMARK_COUNTS[@]}" | tr ' ' '\n' | sort); do
+        [ "$config_pass" = "baseline" ] && jobs_dir="${BL_JOBS_DIRS[$bm]}"
+        [ "$config_pass" = "full" ]     && jobs_dir="${FULL_JOBS_DIRS[$bm]}"
+
+        task_ids=$(echo "${BENCHMARK_TASK_IDS[$bm]}" | grep -v '^$')
+        task_dirs=$(echo "${BENCHMARK_TASK_DIRS[$bm]}" | grep -v '^$')
+
+        while IFS= read -r task_id && IFS= read -r task_path <&3; do
+            [ -z "$task_id" ] && continue
+            if is_task_completed "$jobs_dir" "$task_id"; then
+                echo "  [${mcp_mode}] SKIP (completed): $task_id"
+                continue
+            fi
+            _launch_task "$bm" "$mcp_mode" "$mcp_type" "$task_id" "$task_path" "$jobs_dir"
+        done <<< "$task_ids" 3<<< "$task_dirs"
+    done
+
+    # Wait for all tasks in this config pass to finish before starting the next
+    echo ""
+    echo "=== Waiting for $config_pass tasks to complete... ==="
+    _drain_pool
+    echo "=== $config_pass pass complete ==="
+done
+
+unset SOURCEGRAPH_REPO_NAME 2>/dev/null || true
+
+# ============================================
+# POST-PROCESSING
+# ============================================
+echo ""
+echo "=== Extracting metrics and validating outputs ==="
+
+for bm in $(echo "${!BENCHMARK_COUNTS[@]}" | tr ' ' '\n' | sort); do
+    if [ "$RUN_BASELINE" = true ] && [ -n "${BL_JOBS_DIRS[$bm]:-}" ]; then
+        extract_all_metrics "${BL_JOBS_DIRS[$bm]}" "$bm" "$BASELINE_CONFIG"
+        validate_and_report "${BL_JOBS_DIRS[$bm]}" "$BASELINE_CONFIG"
+    fi
+    if [ "$RUN_FULL" = true ] && [ -n "${FULL_JOBS_DIRS[$bm]:-}" ]; then
+        extract_all_metrics "${FULL_JOBS_DIRS[$bm]}" "$bm" "$FULL_CONFIG"
+        validate_and_report "${FULL_JOBS_DIRS[$bm]}" "$FULL_CONFIG"
     fi
 done
 
