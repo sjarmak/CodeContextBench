@@ -2,7 +2,7 @@
 # Instance: instance_NodeBB__NodeBB-eb49a64974ca844bca061744fb3383f5d13b02ad-vnan
 # Repo: NodeBB/NodeBB
 
-FROM jefzda/sweap-images:nodebb.nodebb-NodeBB__NodeBB-eb49a64974ca844bca061744fb3383f5d13b02ad-vnan
+FROM jefzda/sweap-images:nodebb.nodebb-NodeBB__NodeBB-eb49a64974ca844bca061744fb3383f5d13b02ad
 
 # Install uv for Python package management
 RUN curl -LsSf https://astral.sh/uv/0.7.13/install.sh | sh || true

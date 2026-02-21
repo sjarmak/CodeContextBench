@@ -248,14 +248,18 @@ def run_golden_test(
         (logs_dir / "verifier").mkdir()
         (logs_dir / "agent").mkdir()
 
-        # Build file injection commands
+        # Write mock files to host tmpdir, then mount and copy inside container.
+        # This avoids OS argument-list-too-long for large files (e.g. solve.sh).
+        import base64
+        staging_dir = Path(tmpdir) / "staging"
+        staging_dir.mkdir()
         inject_cmds = []
         for path, content in mock_files.items():
+            # Write each file to staging dir with a safe filename
+            safe_name = path.replace("/", "__").lstrip("_")
+            (staging_dir / safe_name).write_text(content)
             inject_cmds.append(f"mkdir -p $(dirname '{path}')")
-            # Use base64 to avoid shell escaping issues
-            import base64
-            b64 = base64.b64encode(content.encode()).decode()
-            inject_cmds.append(f"echo '{b64}' | base64 -d > '{path}'")
+            inject_cmds.append(f"cp '/tmp/_staging/{safe_name}' '{path}'")
 
         inject_script = "\n".join(inject_cmds)
 
@@ -276,6 +280,7 @@ mkdir -p /logs/verifier /logs/agent
             "docker", "run", "--rm",
             "-v", f"{tests_dir}:/tests:ro",
             "-v", f"{logs_dir}:/logs",
+            "-v", f"{staging_dir}:/tmp/_staging:ro",
             tag,
             "bash", "-c", run_script,
         ]

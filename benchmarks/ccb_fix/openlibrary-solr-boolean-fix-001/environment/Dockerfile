@@ -2,7 +2,7 @@
 # Instance: instance_internetarchive__openlibrary-92db3454aeaa02f89b4cdbc3103f7e95c9759f92-v2c55207218fb8a0138425cbf7d9675272e240b90
 # Repo: internetarchive/openlibrary
 
-FROM jefzda/sweap-images:internetarchive.openlibrary-internetarchive__openlibrary-92db3454aeaa02f89b4cdbc3103f7e95c9759f92-v2c55207218fb8a0138425cbf7d9675272e240b90
+FROM jefzda/sweap-images:internetarchive.openlibrary-internetarchive__openlibrary-92db3454aeaa02f89b4cdbc3103f7e95c9759f92-v2c55207218fb8a0138425cbf7d967
 
 # Install uv for Python package management
 RUN curl -LsSf https://astral.sh/uv/0.7.13/install.sh | sh || true
