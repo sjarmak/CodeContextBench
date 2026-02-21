@@ -349,8 +349,13 @@ _drain_pool() {
 # Launch a task PAIR: baseline + full simultaneously for the same task.
 # Follows _common.sh's run_paired_configs pattern: both configs run in parallel
 # per task so timing is comparable and resource utilization is maximized.
-# Dockerfile swap (for artifact mode) is handled once at the task level and
-# restored by a background watcher after BOTH configs complete — no race condition.
+#
+# Key design: baseline uses the ORIGINAL Dockerfile (full local repos).
+# MCP uses a TEMP COPY of the task dir with Dockerfile.sg_only swapped in
+# so the agent has NO local source code and must use Sourcegraph MCP tools.
+# The verifier's tests/ dir (uploaded by Harbor at runtime) still works
+# because oracle_checks.py scores answer.json content, not compiled code.
+#
 # Args: bm task_id task_path bl_jobs_dir full_jobs_dir
 _launch_task_pair() {
     local bm="$1" task_id="$2" task_path="$3" bl_jobs_dir="$4" full_jobs_dir="$5"
@@ -361,22 +366,10 @@ _launch_task_pair() {
         return
     fi
 
-    # Swap Dockerfile once for both configs (artifact mode only).
-    # Idempotent: skip backup if .run_bak already exists (safe on re-run after kill).
-    local _df="${abs_path}/environment/Dockerfile"
-    local _df_artifact="${abs_path}/environment/Dockerfile.artifact_only"
-    local _df_swapped=false
-    if [[ "$FULL_CONFIG" == *-artifact ]] && [ -f "$_df_artifact" ]; then
-        if [ ! -f "${_df}.run_bak" ]; then
-            cp "$_df" "${_df}.run_bak"
-        fi
-        cp "$_df_artifact" "$_df"
-        _df_swapped=true
-    fi
-
     local pair_pids=()
+    local _mcp_temp_dir=""
 
-    # Launch baseline config
+    # Launch baseline config — uses original Dockerfile (full local repos)
     if [ "$RUN_BASELINE" = true ]; then
         _wait_for_slot
         local _bl_home
@@ -400,15 +393,30 @@ _launch_task_pair() {
         sleep 2
     fi
 
-    # Launch full/MCP config
+    # Launch full/MCP config — uses Dockerfile.sg_only (no local source code)
     if [ "$RUN_FULL" = true ]; then
+        local _mcp_task_path="$abs_path"
+        local _df_sgonly="${abs_path}/environment/Dockerfile.sg_only"
+
+        # Create temp copy with Dockerfile.sg_only swapped in.
+        # This ensures baseline sees the original Dockerfile while MCP sees sg_only.
+        if [ -f "$_df_sgonly" ]; then
+            _mcp_temp_dir=$(mktemp -d "/tmp/mcp_${task_id}_XXXXXX")
+            cp -a "${abs_path}/." "${_mcp_temp_dir}/"
+            cp "${_mcp_temp_dir}/environment/Dockerfile.sg_only" "${_mcp_temp_dir}/environment/Dockerfile"
+            _mcp_task_path="$_mcp_temp_dir"
+            echo "  [sg_only] Using empty-workspace Dockerfile for MCP config: $task_id"
+        else
+            echo "  WARNING: No Dockerfile.sg_only for $task_id — MCP will have local source access"
+        fi
+
         _wait_for_slot
         local _full_home
         _full_home=$(_next_account)
         (
             export HOME="$_full_home"
             BASELINE_MCP_TYPE=$FULL_MCP_TYPE harbor run \
-                --path "$abs_path" \
+                --path "$_mcp_task_path" \
                 --agent-import-path "$AGENT_PATH" \
                 --model "$MODEL" \
                 --jobs-dir "$full_jobs_dir" \
@@ -423,14 +431,14 @@ _launch_task_pair() {
         sleep 2
     fi
 
-    # Background watcher: restore Dockerfile after BOTH pair configs complete.
+    # Background watcher: clean up temp dir after MCP config completes.
     # Not counted in _PIDS (it's cleanup, not a work slot).
-    if [ "$_df_swapped" = true ] && [ "${#pair_pids[@]}" -gt 0 ]; then
+    if [ -n "$_mcp_temp_dir" ] && [ "${#pair_pids[@]}" -gt 0 ]; then
         (
             for p in "${pair_pids[@]}"; do
                 wait "$p" 2>/dev/null || true
             done
-            [ -f "${_df}.run_bak" ] && mv "${_df}.run_bak" "$_df"
+            rm -rf "$_mcp_temp_dir" 2>/dev/null || true
         ) &
     fi
 }
