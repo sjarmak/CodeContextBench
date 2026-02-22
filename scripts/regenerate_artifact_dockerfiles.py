@@ -38,9 +38,24 @@ def has_repo_base_image(dockerfile_text: str) -> bool:
 
 
 def detect_workdir(dockerfile_text: str, fallback: str = "/app") -> str:
-    """Detect the last WORKDIR from a Dockerfile."""
+    """Detect the last WORKDIR from a Dockerfile.
+
+    If no explicit WORKDIR, infer from the base image:
+      - ccb-repo-* images use /workspace
+      - jefzda/sweap-images:* (SWE-bench Pro) use /app
+    """
     workdirs = re.findall(r"^WORKDIR\s+(\S+)", dockerfile_text, re.MULTILINE)
-    return workdirs[-1] if workdirs else fallback
+    if workdirs:
+        return workdirs[-1]
+    # Infer from base image
+    m = re.search(r"^FROM\s+(\S+)", dockerfile_text, re.MULTILINE)
+    if m:
+        image = m.group(1)
+        if re.search(r"^ccb-repo-", image):
+            return "/workspace"
+        if re.search(r"sweap-images:", image):
+            return "/app"
+    return fallback
 
 
 def has_repo_full(dockerfile_text: str) -> bool:
@@ -150,6 +165,23 @@ def add_chmod_to_existing(text: str) -> str:
     return text
 
 
+def fix_workdir_in_existing(text: str, correct_workdir: str) -> str:
+    """Fix wrong workdir in cp -a and sentinel lines of an existing artifact_only file."""
+    # Extract current cp -a source path
+    m = re.search(r"^RUN cp -a (\S+) /repo_full", text, re.MULTILINE)
+    if not m:
+        return text
+    current_path = m.group(1)
+    if current_path == correct_workdir:
+        return text  # already correct
+
+    # Replace all occurrences of the wrong path
+    text = text.replace(f"cp -a {current_path} /repo_full", f"cp -a {correct_workdir} /repo_full")
+    text = text.replace(f"echo '{current_path}' > /tmp/.artifact_only_workdir", f"echo '{correct_workdir}' > /tmp/.artifact_only_workdir")
+    text = text.replace(f"Source stays in {current_path}", f"Source stays in {correct_workdir}")
+    return text
+
+
 def main():
     dry_run = "--dry-run" in sys.argv
     verbose = "--verbose" in sys.argv or "-v" in sys.argv
@@ -183,18 +215,33 @@ def main():
             task_name = task_dir.name
             task_path = f"{suite_dir.name}/{task_name}"
 
-            # Case 1: Already has /repo_full — check if needs chmod
+            # Case 1: Already has /repo_full — check if needs chmod or workdir fix
             if has_repo_full(text):
-                if not has_chmod_repo_full(text):
-                    new_text = add_chmod_to_existing(text)
+                new_text = text
+                changed = False
+
+                if not has_chmod_repo_full(new_text):
+                    new_text = add_chmod_to_existing(new_text)
                     if new_text != text:
-                        if not dry_run:
-                            artifact_only.write_text(new_text)
+                        changed = True
                         stats["chmod_added"] += 1
-                        if verbose:
-                            print(f"  CHMOD   {task_path}")
-                    else:
-                        stats["already_correct"] += 1
+
+                # Fix workdir if it doesn't match the base image
+                correct_wd = detect_workdir(new_text)
+                fixed_text = fix_workdir_in_existing(new_text, correct_wd)
+                if fixed_text != new_text:
+                    new_text = fixed_text
+                    changed = True
+                    stats.setdefault("workdir_fixed", 0)
+                    stats["workdir_fixed"] += 1
+                    if verbose:
+                        print(f"  WDFIX   {task_path} (workdir={correct_wd})")
+
+                if changed:
+                    if not dry_run:
+                        artifact_only.write_text(new_text)
+                    if verbose and "workdir_fixed" not in stats or stats.get("workdir_fixed", 0) == 0:
+                        print(f"  CHMOD   {task_path}")
                 else:
                     stats["already_correct"] += 1
                 continue
@@ -239,6 +286,7 @@ def main():
     print(f"  Stubs fixed (backup added):     {stats['stubs_fixed']}")
     print(f"  Transformed from sg_only:       {stats['sgonly_transformed']}")
     print(f"  Chmod added to existing:        {stats['chmod_added']}")
+    print(f"  Workdir fixed:                  {stats.get('workdir_fixed', 0)}")
     print(f"  Already correct:                {stats['already_correct']}")
     print(f"  Write-only skipped:             {stats['write_only_skipped']}")
     if stats["errors"]:
