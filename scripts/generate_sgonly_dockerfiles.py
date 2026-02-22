@@ -17,6 +17,51 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BENCHMARKS = REPO_ROOT / "benchmarks"
 WRAPPER_SRC = REPO_ROOT / "scripts" / "sgonly_verifier_wrapper.sh"
 
+# Mapping from upstream GitHub repos (as they appear in Dockerfile git clone URLs)
+# to their version-pinned sg-benchmarks mirrors on Sourcegraph.
+# Used to inject SOURCEGRAPH_REPOS env var into Dockerfile.sg_only / Dockerfile.artifact_only
+# so the agent searches the correct version-pinned mirrors instead of HEAD on public repos.
+UPSTREAM_TO_MIRROR = {
+    "kubernetes/kubernetes": "sg-benchmarks/kubernetes-kubernetes",
+    "etcd-io/etcd": "sg-benchmarks/etcd-io-etcd",
+    "grafana/grafana": "sg-benchmarks/grafana",
+    "grafana/loki": "sg-benchmarks/grafana-loki",
+    "kubernetes/client-go": "sg-benchmarks/kubernetes-client-go",
+    "kubernetes/api": "sg-benchmarks/kubernetes-api",
+    "scikit-learn/scikit-learn": "sg-benchmarks/scikit-learn",
+    "numpy/numpy": "sg-benchmarks/numpy",
+    "pandas-dev/pandas": "sg-benchmarks/pandas",
+    "scipy/scipy": "sg-benchmarks/scipy",
+    "nodejs/node": "sg-benchmarks/nodejs-node",
+    "expressjs/express": "sg-benchmarks/expressjs-express",
+    "prometheus/prometheus": "sg-benchmarks/prometheus",
+}
+
+
+def extract_mirror_repos(dockerfile_text: str) -> list:
+    """Extract upstream repos from git clone commands and map to sg-benchmarks mirrors.
+
+    Parses 'git clone ... https://github.com/{org}/{repo}' lines from the baseline
+    Dockerfile to determine which repos are used, then maps each to its sg-benchmarks
+    mirror name. Also handles repos already cloned from sg-benchmarks directly.
+    """
+    mirrors = []
+    for line in dockerfile_text.splitlines():
+        # Match: git clone ... https://github.com/{org}/{repo}[.git] ...
+        match = re.search(r'github\.com/([^/\s]+/[^/\s]+?)(?:\.git)?\s', line)
+        if not match:
+            # Also try URL at end of line (no trailing space)
+            match = re.search(r'github\.com/([^/\s]+/[^/\s]+?)(?:\.git)?$', line.strip())
+        if match:
+            upstream = match.group(1)
+            mirror = UPSTREAM_TO_MIRROR.get(upstream)
+            if mirror:
+                mirrors.append(mirror)
+            elif upstream.startswith("sg-benchmarks/"):
+                # Already an sg-benchmarks repo — pass through
+                mirrors.append(upstream)
+    return sorted(set(mirrors))
+
 GUARD_LINE = '[ -f /tmp/.sg_only_mode ] && [ -f /tests/sgonly_verifier_wrapper.sh ] && source /tests/sgonly_verifier_wrapper.sh'
 GUARD_COMMENT = '# sg_only_env: restore full repo before verification (no-op for regular runs)'
 
@@ -225,13 +270,20 @@ def generate_write_only(task_dir, dockerfile_text):
             base_image = 'debian:bookworm-slim'
 
     task_name = task_dir.name
+
+    # Extract mirror repos from baseline Dockerfile for SOURCEGRAPH_REPOS env var
+    mirrors = extract_mirror_repos(dockerfile_text)
+    sg_repos_env = ""
+    if mirrors:
+        sg_repos_env = f'ENV SOURCEGRAPH_REPOS="{",".join(mirrors)}"\n'
+
     return f"""# {task_name} — sg_only_env variant
 # No local repo clone — agent uses Sourcegraph MCP exclusively for code access.
 
 FROM {base_image}
 
 ENV DEBIAN_FRONTEND=noninteractive
-
+{sg_repos_env}
 RUN apt-get update && apt-get install -y --no-install-recommends \\
     git \\
     ca-certificates \\
@@ -316,6 +368,12 @@ def generate_build_requiring(task_dir, dockerfile_text):
     else:
         repo_dir = workdir
 
+    # Extract mirror repos for SOURCEGRAPH_REPOS env var
+    mirrors = extract_mirror_repos(dockerfile_text)
+    sg_repos_line = ""
+    if mirrors:
+        sg_repos_line = f'\nENV SOURCEGRAPH_REPOS="{",".join(mirrors)}"'
+
     # Build the sg_only section to append
     sg_section = f"""
 # --- sg_only_env: back up full repo, then truncate source ---
@@ -325,7 +383,7 @@ RUN {truncate_find_expr(repo_dir, extra_excludes)}
 # Without this, `git show HEAD:<file>` or `git checkout HEAD -- <file>`
 # would bypass truncation by reading from the pre-truncation commit.
 RUN cd {repo_dir} && git add -A && git commit -m "sg_only truncation" --allow-empty --quiet
-RUN touch /tmp/.sg_only_mode && echo '{repo_dir}' > /tmp/.sg_only_workdir
+RUN touch /tmp/.sg_only_mode && echo '{repo_dir}' > /tmp/.sg_only_workdir{sg_repos_line}
 """
 
     # Find insertion point: before the last ENTRYPOINT/CMD or at the end
@@ -352,6 +410,65 @@ RUN touch /tmp/.sg_only_mode && echo '{repo_dir}' > /tmp/.sg_only_workdir
         result += f'\nWORKDIR {workdir}\n\nENTRYPOINT []\n'
 
     return result
+
+
+def generate_artifact_only_mcp(task_dir, dockerfile_text):
+    """Generate a Dockerfile.artifact_only for MCP-unique tasks.
+
+    Identical to the write-only sg_only variant but uses .artifact_only_mode marker
+    instead of .sg_only_mode. These are used by the artifact_full config where the
+    agent produces answer.json instead of editing source files.
+    """
+    workdir = detect_workdir(dockerfile_text)
+    base_image = 'ubuntu:22.04'
+
+    m = re.match(r'^FROM\s+(\S+)', dockerfile_text, re.MULTILINE)
+    if m:
+        orig_base = m.group(1)
+        if 'python' in orig_base.lower():
+            base_image = 'python:3.11-slim'
+        elif 'golang' in orig_base.lower() or 'go:' in orig_base.lower():
+            base_image = 'golang:1.23-bookworm'
+        elif 'node' in orig_base.lower():
+            base_image = 'node:22-bookworm-slim'
+
+    task_name = task_dir.name
+    mirrors = extract_mirror_repos(dockerfile_text)
+    sg_repos_env = ""
+    if mirrors:
+        sg_repos_env = f'ENV SOURCEGRAPH_REPOS="{",".join(mirrors)}"\n'
+
+    return f"""# {task_name} — artifact_only variant
+# No local repo clone — agent uses Sourcegraph MCP exclusively for code access.
+# Agent produces answer.json artifact; verifier scores the artifact.
+
+FROM {base_image}
+
+ENV DEBIAN_FRONTEND=noninteractive
+{sg_repos_env}
+RUN apt-get update && apt-get install -y --no-install-recommends \\
+    git \\
+    ca-certificates \\
+    python3 \\
+    curl \\
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR {workdir}
+
+# Empty workspace — agent discovers code via MCP tools only
+RUN git init && \\
+    git config user.email "agent@example.com" && \\
+    git config user.name "Agent" && \\
+    git config --global safe.directory '*'
+
+# Create log directories
+RUN mkdir -p /logs/agent /logs/verifier
+
+# Mark artifact-only mode — verifiers and eval scripts check this flag
+RUN touch /tmp/.artifact_only_mode
+
+ENTRYPOINT []
+"""
 
 
 def inject_test_guard(task_dir):
@@ -412,6 +529,7 @@ def main():
     skipped = 0
     guards_added = 0
     wrappers_copied = 0
+    artifact_generated = 0
     errors = []
     write_only_count = 0
     build_count = 0
@@ -426,9 +544,25 @@ def main():
         env_dir = task_dir / "environment"
         dockerfile = env_dir / "Dockerfile"
         sgonly = env_dir / "Dockerfile.sg_only"
+        artifact_only = env_dir / "Dockerfile.artifact_only"
 
         if sgonly.exists():
             skipped += 1
+            # Even if sg_only exists, check if artifact_only needs generation
+            # for MCP-unique suites (ccb_mcp_*)
+            if suite.startswith("ccb_mcp") and not artifact_only.exists() and dockerfile.exists():
+                try:
+                    dockerfile_text = dockerfile.read_text()
+                    art_content = generate_artifact_only_mcp(task_dir, dockerfile_text)
+                    if not dry_run:
+                        artifact_only.write_text(art_content)
+                        artifact_generated += 1
+                        if verbose:
+                            print(f"  GENERATED {task_id} (artifact_only)")
+                    else:
+                        print(f"  {'ARTIFACT-ONLY':>18} {suite:<25} {task_id}")
+                except Exception as e:
+                    errors.append((task_id, f"artifact_only: {e}"))
             continue
 
         if not dockerfile.exists():
@@ -478,13 +612,25 @@ def main():
                     if copy_wrapper(task_dir):
                         wrappers_copied += 1
 
+            # For MCP-unique suites, also generate Dockerfile.artifact_only
+            if suite.startswith("ccb_mcp") and not artifact_only.exists():
+                art_content = generate_artifact_only_mcp(task_dir, dockerfile_text)
+                if dry_run:
+                    print(f"  {'ARTIFACT-ONLY':>18} {suite:<25} {task_id}")
+                else:
+                    artifact_only.write_text(art_content)
+                    artifact_generated += 1
+                    if verbose:
+                        print(f"  GENERATED {task_id} (artifact_only)")
+
         except Exception as e:
             errors.append((task_id, str(e)))
             print(f"  ERROR {task_id}: {e}")
 
     print(f"\n{'DRY RUN - ' if dry_run else ''}Summary:")
     print(f"  Already had sg_only: {skipped}")
-    print(f"  Generated: {generated} ({write_only_count} write-only, {build_count} build-requiring)")
+    print(f"  Generated sg_only: {generated} ({write_only_count} write-only, {build_count} build-requiring)")
+    print(f"  Generated artifact_only: {artifact_generated}")
     print(f"  test.sh guards added: {guards_added}")
     print(f"  Wrappers copied: {wrappers_copied}")
     if errors:
