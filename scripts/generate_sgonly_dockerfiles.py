@@ -6,6 +6,16 @@ Build-requiring tasks: original Dockerfile + backup/truncate/marker.
 
 Also injects the verifier wrapper guard into test.sh for build-requiring tasks
 and copies sgonly_verifier_wrapper.sh into tests/.
+
+NOTE: This script injects SOURCEGRAPH_REPOS env vars for tasks that have
+explicit git clone commands in their Dockerfile (MCP-unique tasks). For SDLC
+tasks that use prebuilt images (FROM sweap-images, FROM ccb-linux-base, etc.),
+run inject_sg_repo_env.py afterward to add SOURCEGRAPH_REPO_NAME env vars
+based on task.toml repo fields and instance_to_mirror.json mappings.
+
+Workflow:
+    python3 scripts/generate_sgonly_dockerfiles.py   # create/regenerate Dockerfiles
+    python3 scripts/inject_sg_repo_env.py            # add repo env vars for prebuilt-image tasks
 """
 
 import json
