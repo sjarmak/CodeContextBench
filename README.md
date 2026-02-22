@@ -24,8 +24,6 @@ Eight suites organized by software development lifecycle phase:
 
 *ccb_test* and *ccb_document* currently have 14 and 13 tasks on disk (target 20 each); see `docs/backlog_ccb_test.json` and `docs/backlog_ccb_document.json` for the growth plan.
 
-See `docs/PRD_SDLC_SUITE_REORGANIZATION.md` for the reorganization rationale and task mapping.
-
 ## MCP-Unique Suites (Org-Scale Context Retrieval)
 
 Six additional suites measure what local-only agents *cannot* do: cross-repo discovery, symbol resolution, dependency tracing, and deep-search-driven investigation in polyrepo environments.
