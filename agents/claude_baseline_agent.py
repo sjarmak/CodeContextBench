@@ -18,6 +18,7 @@ import base64
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 from harbor.agents.installed.claude_code import ClaudeCode
@@ -428,6 +429,74 @@ class BaselineClaudeCodeAgent(ClaudeCode):
                 continue
         return ""
 
+    @staticmethod
+    def _rewrite_repo_references(text: str, sg_display: str) -> str:
+        """Replace upstream repo references in instruction body with SG mirror name.
+
+        Rewrites patterns like:
+          - **Repository**: org/repo (lang, ~NLOC)
+          - **Repository:** org/repo
+          - **Repo:** `org/repo`
+        to reference the sg-benchmarks mirror, keeping the original as context.
+        """
+        if not sg_display or not sg_display.startswith("sg-benchmarks/"):
+            return text
+
+        sg_full = f"github.com/{sg_display}"
+
+        def _replace_repository(m: re.Match) -> str:
+            prefix = m.group(1)
+            old_slug = m.group(2)
+            suffix = m.group(3)
+            return f"{prefix}{sg_full} (mirror of {old_slug}){suffix}"
+
+        text = re.sub(
+            r'(\*\*Repository\*?\*?:?\*?\*?\s*)'
+            r'([\w.-]+(?:/[\w.-]+)?)'
+            r'((?:\s+\([^)]*\))?)',
+            _replace_repository,
+            text,
+        )
+
+        def _replace_repo_backtick(m: re.Match) -> str:
+            prefix = m.group(1)
+            old_slug = m.group(2)
+            return f"{prefix}`{sg_full}` (mirror of `{old_slug}`)"
+
+        text = re.sub(
+            r'(\*\*Repo:\*\*\s*)`([\w.-]+(?:/[\w.-]+)?)`',
+            _replace_repo_backtick,
+            text,
+        )
+
+        return text
+
+    @staticmethod
+    def _inject_repo_context(text: str, sg_display: str, repo_list: list) -> str:
+        """Inject a Sourcegraph repo context line if the body lacks a **Repository** line.
+
+        Some tasks (~57) have no structured **Repository:** line, so the agent
+        only sees the mirror name in the preamble header. This adds a visible
+        context line at the top of the instruction body.
+        """
+        if re.search(r'\*\*Repo(sitory)?', text):
+            return text
+
+        if repo_list:
+            sg_names = []
+            for r in repo_list:
+                d = r[len("github.com/"):] if r.startswith("github.com/") else r
+                sg_names.append(f"`github.com/{d}`")
+            context = f"**Sourcegraph Repositories:** {', '.join(sg_names)}\n\n"
+        elif sg_display and sg_display != "the codebase":
+            display = sg_display
+            if display.startswith("github.com/"):
+                display = display[len("github.com/"):]
+            context = f"**Sourcegraph Repository:** `github.com/{display}`\n\n"
+        else:
+            return text
+
+        return context + text
 
     def _get_session_dir(self):
         """Override Harbor's _get_session_dir to handle Claude Code subagent sessions.
@@ -570,6 +639,12 @@ class BaselineClaudeCodeAgent(ClaudeCode):
 
             mcp_preamble = V5_PREAMBLE_TEMPLATE.format(
                 repo_scope=repo_scope, workflow_tail=workflow_tail
+            )
+            # Rewrite upstream repo references in instruction body to point
+            # at the sg-benchmarks mirror so the agent sees consistent names.
+            instruction = self._rewrite_repo_references(instruction, repo_display)
+            instruction = self._inject_repo_context(
+                instruction, repo_display, self._get_repo_list()
             )
             instruction = mcp_preamble + instruction
 
