@@ -11,15 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone Envoy at the target commit (before router header mutation fix)
-# PR #40856 (commit 25f893b) fixes the bug where response_headers_to_add
-# is processed multiple times for local responses due to double
-# finalizeResponseHeaders() call. We check out the parent to get the broken state.
-# The bug was introduced by PR #39534 which moved finalizeResponseHeaders()
-# into the modify_headers_ callback, causing double processing on local replies.
-RUN git init && \
-    git remote add origin https://github.com/envoyproxy/envoy.git && \
-    git fetch --depth 2 origin 25f893b44c9ac785d57f21399fb5aff540f0bef7 && \
-    git checkout 25f893b44c9ac785d57f21399fb5aff540f0bef7~1 && \
+# PR #40856 (commit 25f893b) fixes the bug; this mirror is pinned to its parent (3c500753)
+RUN git clone --depth 1 https://github.com/sg-benchmarks/envoy--3c500753.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

@@ -10,16 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone charmbracelet/wish at v0.5.0 (consuming project)
-RUN git clone https://github.com/charmbracelet/wish.git && \
-    cd wish && \
-    git checkout v0.5.0 && \
-    git log -1 --oneline | grep -E "^[a-f0-9]{7}" || echo "Pinned to tag v0.5.0"
+RUN git clone --depth 1 https://github.com/sg-benchmarks/wish--v0.5.0.git wish
 
 # Clone gliderlabs/ssh at v0.3.4 (intermediate dependency)
-RUN git clone https://github.com/gliderlabs/ssh.git && \
-    cd ssh && \
-    git checkout v0.3.4 && \
-    git log -1 --oneline | grep -E "^[a-f0-9]{7}" || echo "Pinned to tag v0.3.4"
+RUN git clone --depth 1 https://github.com/sg-benchmarks/ssh--v0.3.4.git ssh
 
 # Clone golang.org/x/crypto at vulnerable commit (June 2021)
 # This is the version referenced by gliderlabs/ssh v0.3.4: v0.0.0-20210616213533-5ff15b29337e

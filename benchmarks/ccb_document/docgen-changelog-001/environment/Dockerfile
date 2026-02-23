@@ -9,8 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ripgrep \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --filter=blob:none --no-checkout https://github.com/hashicorp/terraform.git . && \
-    git checkout a3dc571150a7651a1a4a8b302342d26089c97795 && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/terraform--a3dc5711.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone fixture repo (baseline has full local access)
-RUN git clone --depth 1 --branch v3.2.1 https://github.com/prometheus/prometheus /workspace/prometheus
+RUN git clone --depth 1 https://github.com/sg-benchmarks/prometheus--v3.2.1.git /workspace/prometheus
 
 # Initialize git identity for agent commits
 RUN git config --global user.email "agent@example.com" && \

@@ -16,8 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Clone the actual Servo repository at pinned commit
 # This ensures BOTH baseline and MCP agents have identical file access
 # Note: Servo is a large Rust codebase (~1.6GB)
-RUN git clone --filter=blob:none --no-checkout https://github.com/servo/servo.git . && \
-    git checkout be6a2f99a1e80060228f41280fd7d2178983e7ed && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/servo--be6a2f99.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

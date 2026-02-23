@@ -10,15 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Clone Envoy at v1.31.1 (same as sec-cve-002)
+# Clone Envoy at v1.31.2 (pinned mirror, replaces fallback clone)
 WORKDIR /workspace
-RUN git clone --depth 1 --branch v1.31.2 https://github.com/envoyproxy/envoy.git || \
-    git clone --depth 1 --branch v1.31.0 https://github.com/envoyproxy/envoy.git
-
-# Verify we have the correct version
-RUN cd envoy && \
-    git log --oneline -1 | grep -q "^" && \
-    echo "Checked out Envoy v1.31.1"
+RUN git clone --depth 1 https://github.com/sg-benchmarks/envoy--v1.31.2.git envoy
 
 # Create logs directory for agent output
 RUN mkdir -p /logs/agent

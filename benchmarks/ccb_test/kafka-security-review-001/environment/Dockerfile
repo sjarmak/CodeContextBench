@@ -16,9 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone Kafka at pinned tag 3.8.0
-RUN git clone --branch 3.8.0 --depth 1 https://github.com/apache/kafka.git . \
-    && git config --global user.email "test@example.com" \
-    && git config --global user.name "Test User"
+RUN git clone --depth 1 https://github.com/sg-benchmarks/kafka--3.8.0.git . && \
+    git config --global user.email "test@example.com" && \
+    git config --global user.name "Test User"
 
 # Inject defects
 COPY inject_defects.sh /tmp/inject_defects.sh

@@ -18,8 +18,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
 WORKDIR /workspace
 
 # Clone fixture repos (baseline has full local access)
-RUN git clone --depth 1 --branch 4.21.1 https://github.com/expressjs/express /workspace/express
-RUN git clone --depth 1 --branch v22.13.0 https://github.com/nodejs/node /workspace/node
+RUN git clone --depth 1 https://github.com/sg-benchmarks/express--4.21.1.git /workspace/express
+RUN git clone --depth 1 https://github.com/sg-benchmarks/node--v22.13.0.git /workspace/node
 
 # Initialize git identity for agent commits
 RUN git config --global user.email "agent@example.com" && \

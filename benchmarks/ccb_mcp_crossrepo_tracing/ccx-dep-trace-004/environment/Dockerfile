@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone all fixture repos (baseline has full local access to every repo)
-RUN git clone --depth 1 --branch v11.4.0 https://github.com/grafana/grafana /workspace/grafana
-RUN git clone --depth 1 --branch v3.3.4 https://github.com/grafana/loki /workspace/loki
+RUN git clone --depth 1 https://github.com/sg-benchmarks/grafana--v11.4.0.git /workspace/grafana
+RUN git clone --depth 1 https://github.com/sg-benchmarks/loki--v3.3.4.git /workspace/loki
 RUN git clone --depth 1 https://github.com/sg-benchmarks/grafana-mimir /workspace/mimir
 
 # Initialize git identity for agent commits

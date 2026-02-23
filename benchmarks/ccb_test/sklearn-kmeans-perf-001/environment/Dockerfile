@@ -35,10 +35,7 @@ RUN pip install --no-cache-dir \
     threadpoolctl
 
 # Clone scikit-learn at pinned commit directly into workspace
-RUN git clone https://github.com/scikit-learn/scikit-learn.git /workspace/original && \
-    cd /workspace/original && \
-    git fetch origin cb7e82dd443aa1eb24bb70a3188b067536320a40 && \
-    git checkout cb7e82dd443aa1eb24bb70a3188b067536320a40 && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/scikit-learn--cb7e82dd.git /workspace/original && \
     git submodule update --init --recursive
 
 # Create optimized copy (agent works here)

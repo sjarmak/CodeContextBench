@@ -13,8 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Clone the actual VS Code repository at pinned commit (1.96.0)
 # This ensures BOTH baseline and MCP agents have identical file access
-RUN git clone --filter=blob:none --no-checkout https://github.com/microsoft/vscode.git . && \
-    git checkout 138f619c86f1199955d53b4166bef66ef252935c && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/vscode--138f619c.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

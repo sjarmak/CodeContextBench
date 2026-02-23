@@ -7,19 +7,13 @@ RUN apk add --no-cache git bash python3
 WORKDIR /workspace
 
 # Clone kubernetes/kubernetes
-RUN git clone https://github.com/kubernetes/kubernetes.git kubernetes && \
-    cd kubernetes && \
-    git checkout 31bf3ed48b91b67e5003d8df1b3bd0b918d1fb94
+RUN git clone --depth 1 https://github.com/sg-benchmarks/kubernetes--31bf3ed4.git kubernetes
 
 # Clone kubernetes/api (synced from k/k staging)
-RUN git clone https://github.com/kubernetes/api.git api && \
-    cd api && \
-    git checkout f32ed1d60cf0787a512bebd6c06a4b84ae0b7cc7
+RUN git clone --depth 1 https://github.com/sg-benchmarks/api--f32ed1d6.git api
 
 # Clone kubernetes/apimachinery
-RUN git clone https://github.com/kubernetes/apimachinery.git apimachinery && \
-    cd apimachinery && \
-    git checkout b2e9f88ff6d4c50c13061a53b1239c7707354eda
+RUN git clone --depth 1 https://github.com/sg-benchmarks/apimachinery--b2e9f88f.git apimachinery
 
 # Verify repos exist
 RUN ls -la /workspace/ && \

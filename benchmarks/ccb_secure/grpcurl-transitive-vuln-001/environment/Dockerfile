@@ -7,17 +7,11 @@ WORKDIR /workspace
 
 # Clone grpcurl at v1.8.7 (the consuming project)
 # Commit: 25c896aa59ffc36f7d12cf5d6c18e9c8f4421bfa
-RUN git clone https://github.com/fullstorydev/grpcurl.git grpcurl && \
-    cd grpcurl && \
-    git checkout 25c896aa59ffc36f7d12cf5d6c18e9c8f4421bfa && \
-    git log -1 --format="%H %s" | head -1 | grep -q "25c896a"
+RUN git clone --depth 1 https://github.com/sg-benchmarks/grpcurl--25c896aa.git grpcurl
 
 # Clone grpc-go at v1.56.2 (the intermediate dependency)
 # This version uses golang.org/x/net v0.14.0 (vulnerable to CVE-2023-39325)
-RUN git clone https://github.com/grpc/grpc-go.git grpc-go && \
-    cd grpc-go && \
-    git checkout v1.56.2 && \
-    git log -1 --format="%H %s" | head -1 | grep -q "v1.56.2"
+RUN git clone --depth 1 https://github.com/sg-benchmarks/grpc-go--v1.56.2.git grpc-go
 
 # Clone golang.org/x/net at v0.14.0 (VULNERABLE version)
 # This version is before v0.17.0 which fixed CVE-2023-39325

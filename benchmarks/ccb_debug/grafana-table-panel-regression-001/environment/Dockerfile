@@ -10,9 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone Grafana at the target commit (v38 migration regression)
-# Commit 26d36ec contains the migration fix; we check out its parent to get the broken state
-RUN git clone --filter=blob:none --no-checkout https://github.com/grafana/grafana.git . && \
-    git checkout 26d36ec~1 && \
+# Commit 26d36ec contains the migration fix; this mirror is pinned to its parent (8449a2e4)
+RUN git clone --depth 1 https://github.com/sg-benchmarks/grafana--8449a2e4.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

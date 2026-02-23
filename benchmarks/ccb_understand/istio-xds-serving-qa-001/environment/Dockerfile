@@ -11,10 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone Istio at v1.24.3 release (pinned SHA)
-RUN git init && \
-    git remote add origin https://github.com/istio/istio.git && \
-    git fetch --depth 1 origin 44d0e58e49d0dc89e27fc4f8679c68132d46b887 && \
-    git checkout FETCH_HEAD && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/istio--44d0e58e.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

@@ -13,8 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone all fixture repos (baseline has full local access to every repo)
-RUN git clone --depth 1 --branch v22.13.0 https://github.com/nodejs/node /workspace/node
-RUN git clone --depth 1 --branch 4.21.1 https://github.com/expressjs/express /workspace/express
+RUN git clone --depth 1 https://github.com/sg-benchmarks/node--v22.13.0.git /workspace/node
+RUN git clone --depth 1 https://github.com/sg-benchmarks/express--4.21.1.git /workspace/express
 RUN git clone --depth 1 https://github.com/sg-benchmarks/lodash /workspace/lodash
 RUN git clone --depth 1 https://github.com/sg-benchmarks/prisma-prisma /workspace/prisma
 

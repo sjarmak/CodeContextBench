@@ -12,8 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Clone Prometheus at the target commit (before remote-write resharding fix)
 # Commit ba14bc4 is the broken change (deprecated per-QM counters);
 # revert commit 6806b68 fixes it
-RUN git clone --filter=blob:none --no-checkout https://github.com/prometheus/prometheus.git . && \
-    git checkout ba14bc4 && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/prometheus--ba14bc4.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

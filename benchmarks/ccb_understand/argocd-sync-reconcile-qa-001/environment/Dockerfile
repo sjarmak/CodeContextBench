@@ -9,10 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Clone Argo CD repository at v2.14.21
 WORKDIR /workspace
-RUN git init && \
-    git remote add origin https://github.com/argoproj/argo-cd.git && \
-    git fetch --depth 1 origin 206a6eeca509bbf7f239301f3d3fa498c23251a4 && \
-    git checkout FETCH_HEAD
+RUN git clone --depth 1 https://github.com/sg-benchmarks/argo-cd--206a6eec.git .
 
 # Set git config for potential commits (not needed for Q&A but follows convention)
 RUN git config --global user.email "agent@codecontextbench.dev" && \

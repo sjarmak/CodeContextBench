@@ -16,9 +16,6 @@ WORKDIR /repo
 
 # Clone Apache Kafka at specific commit (e678b4b, trunk 2026-02-16)
 # Use blobless clone + sparse-checkout for speed
-RUN git clone --filter=blob:none --no-checkout https://github.com/apache/kafka.git . && \
-    git sparse-checkout init --cone && \
-    git sparse-checkout set clients/src/main/java/org/apache/kafka/clients/consumer && \
-    git checkout e678b4b
+RUN git clone --depth 1 https://github.com/sg-benchmarks/kafka--e678b4b.git .
 
 WORKDIR /workspace

@@ -9,9 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone Django at the commit just before the ADMINS/MANAGERS migration
-# Commit e295033 is the migration commit; we check out its parent
-RUN git clone --filter=blob:none --no-checkout https://github.com/django/django.git . && \
-    git checkout e295033~1 && \
+# Commit e295033 is the migration commit; this mirror is pinned to its parent (aed303af)
+RUN git clone --depth 1 https://github.com/sg-benchmarks/django--aed303af.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

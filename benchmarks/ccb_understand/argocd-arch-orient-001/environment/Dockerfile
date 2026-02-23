@@ -11,8 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Clone Argo CD at a stable release tag
 # v2.13.2 is a recent stable release with well-established structure
-RUN git clone --filter=blob:none --no-checkout https://github.com/argoproj/argo-cd.git . && \
-    git checkout v2.13.2 && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/argo-cd--v2.13.2.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

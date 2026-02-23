@@ -31,10 +31,7 @@ RUN pip install --no-cache-dir \
     cython
 
 # Clone numpy at pinned commit directly into workspace
-RUN git clone https://github.com/numpy/numpy.git /workspace/original && \
-    cd /workspace/original && \
-    git fetch origin a639fbf5d2a4fb789967124d16f503f57bd5958b && \
-    git checkout a639fbf5d2a4fb789967124d16f503f57bd5958b && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/numpy--a639fbf5.git /workspace/original && \
     git submodule update --init --recursive
 
 # Create optimized copy (agent works here)

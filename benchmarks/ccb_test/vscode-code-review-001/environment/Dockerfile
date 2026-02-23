@@ -16,9 +16,7 @@ RUN if ! command -v node &> /dev/null; then \
     fi
 
 # Clone microsoft/vscode at pinned 1.96.0 tag (sparse checkout for relevant files)
-RUN git clone --filter=blob:none --no-checkout https://github.com/microsoft/vscode.git /workspace && \
-    cd /workspace && \
-    git checkout 1.96.0 && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/vscode--1.96.0.git /workspace && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

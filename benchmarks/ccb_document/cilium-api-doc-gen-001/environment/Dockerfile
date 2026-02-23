@@ -9,13 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone Cilium at specific commit (main 2026-02-16)
-RUN git init repo && \
-    cd repo && \
-    git remote add origin https://github.com/cilium/cilium.git && \
-    git sparse-checkout init --cone && \
-    git sparse-checkout set pkg/bpf pkg/maps pkg/datapath/maps && \
-    git fetch --depth 1 origin ad6b298dbdcb9b828a247c54a477a9cfa43eff00 && \
-    git checkout FETCH_HEAD
+RUN git clone --depth 1 https://github.com/sg-benchmarks/cilium--ad6b298d.git repo
 
 # Agent writes documentation.md to /workspace/
 # Verifier: /tests/test.sh scores against /tests/ground_truth.json

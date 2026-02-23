@@ -16,9 +16,7 @@ RUN if ! command -v node &> /dev/null; then \
     fi
 
 # Clone dotnet/aspnetcore at pinned commit (PR #64636 merge commit)
-RUN git clone --filter=blob:none --no-checkout https://github.com/dotnet/aspnetcore.git /workspace && \
-    cd /workspace && \
-    git checkout 875255737993775850f1f3650c10ddb43ef00ced && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/aspnetcore--87525573.git /workspace && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

@@ -7,6 +7,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone Kafka at the pinned version
-RUN git clone --depth 1 --branch 3.9.0 https://github.com/apache/kafka.git /workspace
+RUN git clone --depth 1 https://github.com/sg-benchmarks/kafka--3.9.0.git /workspace
 
 WORKDIR /workspace

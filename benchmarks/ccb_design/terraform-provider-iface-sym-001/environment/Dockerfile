@@ -14,14 +14,10 @@ RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
 WORKDIR /workspace
 
 # Clone hashicorp/terraform at v1.15.0-alpha20260204
-RUN git clone --depth 1 https://github.com/hashicorp/terraform.git terraform \
-    && cd terraform && git fetch --depth 1 origin f65c52c8995a627e64c82827c75edf99a9399e4b \
-    && git checkout f65c52c8995a627e64c82827c75edf99a9399e4b
+RUN git clone --depth 1 https://github.com/sg-benchmarks/terraform--f65c52c8.git terraform
 
 # Clone hashicorp/terraform-provider-aws at v6.32.1
-RUN git clone --depth 1 https://github.com/hashicorp/terraform-provider-aws.git terraform-provider-aws \
-    && cd terraform-provider-aws && git fetch --depth 1 origin e9b4629e752e76551c7bca0f317e98e43bc96a7c \
-    && git checkout e9b4629e752e76551c7bca0f317e98e43bc96a7c
+RUN git clone --depth 1 https://github.com/sg-benchmarks/terraform-provider-aws--e9b4629e.git terraform-provider-aws
 
 RUN mkdir -p /logs/verifier /logs/agent
 

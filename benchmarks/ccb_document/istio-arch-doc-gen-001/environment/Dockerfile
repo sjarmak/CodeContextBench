@@ -9,8 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone Istio at pinned commit (blobless clone — repo is large)
-RUN git clone --filter=blob:none --no-checkout https://github.com/istio/istio.git . && \
-    git checkout f8af3caeb1960d4cb1db5c4c0d4913c366625c71 && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/istio--f8af3cae.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

@@ -11,10 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone Terraform at v1.10.0 release (pinned SHA)
-RUN git init && \
-    git remote add origin https://github.com/hashicorp/terraform.git && \
-    git fetch --depth 1 origin 24236f4f0bd10ada71d70868abe15f9d88099747 && \
-    git checkout FETCH_HEAD && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/terraform--24236f4f.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

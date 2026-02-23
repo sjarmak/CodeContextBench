@@ -15,10 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # lose the metadata of contributing DRs, causing xDS pushes to be silently
 # skipped when a non-surviving DR is updated.
 # We check out the parent commit (f8c9b973) to get the broken state.
-RUN git init && \
-    git remote add origin https://github.com/istio/istio.git && \
-    git fetch --depth 1 origin f8c9b973900a13a898348c010ae3cad2de08693b && \
-    git checkout FETCH_HEAD && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/istio--f8c9b973.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

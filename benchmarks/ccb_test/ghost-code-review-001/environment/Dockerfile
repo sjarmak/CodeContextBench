@@ -16,9 +16,7 @@ RUN if ! command -v node &> /dev/null; then \
     fi
 
 # Clone TryGhost/Ghost at pinned commit (PR #26260 merge commit)
-RUN git clone --filter=blob:none --no-checkout https://github.com/TryGhost/Ghost.git /workspace && \
-    cd /workspace && \
-    git checkout b43bfc85b719ab3971b83b5ef954601bf2d95fbf && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/Ghost--b43bfc85.git /workspace && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

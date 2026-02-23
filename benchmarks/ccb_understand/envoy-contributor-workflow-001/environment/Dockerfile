@@ -9,9 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone Envoy at pinned commit (v1.32.1 stable release)
-RUN git clone https://github.com/envoyproxy/envoy.git /workspace \
-    && cd /workspace \
-    && git checkout v1.32.1
+RUN git clone --depth 1 https://github.com/sg-benchmarks/envoy--v1.32.1.git /workspace
 
 WORKDIR /workspace
 

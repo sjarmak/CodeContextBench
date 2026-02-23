@@ -11,9 +11,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone PyTorch repository at task-specific commit (no submodules needed)
-RUN git clone --no-checkout https://github.com/pytorch/pytorch.git /workspace && \
-    cd /workspace && \
-    git checkout ca2466126a00ba8fd877f5a185e40e36ddaceb87
+RUN git clone --depth 1 https://github.com/sg-benchmarks/pytorch--ca246612.git /workspace
 
 # Pre-create claude user and fix ownership so Harbor agent setup is instant
 RUN (adduser --disabled-password --gecos '' claude 2>/dev/null || adduser -D -s /bin/bash claude 2>/dev/null || true) && \

@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone Apache Kafka at a stable release tag (3.9.0 - latest stable as of Feb 2026)
-RUN git clone --depth 1 --branch 3.9.0 https://github.com/apache/kafka.git . && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/kafka--3.9.0.git . && \
     git config user.email "agent@benchmark.local" && \
     git config user.name "Agent"
 

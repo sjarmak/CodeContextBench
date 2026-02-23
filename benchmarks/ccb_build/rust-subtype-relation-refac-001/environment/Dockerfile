@@ -11,7 +11,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone Rust compiler at pinned commit (1.93.1)
-RUN git clone --filter=blob:none --no-checkout https://github.com/rust-lang/rust.git . && \
-    git checkout 01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf && \
+RUN git clone --depth 1 https://github.com/sg-benchmarks/rust--01f6ddf7.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"

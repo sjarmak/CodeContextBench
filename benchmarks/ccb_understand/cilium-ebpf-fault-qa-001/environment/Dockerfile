@@ -8,10 +8,6 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Clone Cilium at pinned commit (v1.17.9)
-RUN git init /workspace/cilium && \
-    cd /workspace/cilium && \
-    git remote add origin https://github.com/cilium/cilium.git && \
-    git fetch --depth 1 origin a2f97aa8d2de4bb360bee1e295e20556ce4166ce && \
-    git checkout FETCH_HEAD
+RUN git clone --depth 1 https://github.com/sg-benchmarks/cilium--a2f97aa8.git /workspace/cilium
 
 WORKDIR /workspace/cilium
