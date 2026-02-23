@@ -4,10 +4,10 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/numpy` — use `repo:^github.com/sg-benchmarks/numpy$` filter
-- `github.com/sg-benchmarks/pandas` — use `repo:^github.com/sg-benchmarks/pandas$` filter
-- `github.com/sg-benchmarks/scikit-learn` — use `repo:^github.com/sg-benchmarks/scikit-learn$` filter
-- `github.com/sg-benchmarks/scipy` — use `repo:^github.com/sg-benchmarks/scipy$` filter
+- `github.com/sg-evals/numpy` — use `repo:^github.com/sg-evals/numpy$` filter
+- `github.com/sg-evals/pandas` — use `repo:^github.com/sg-evals/pandas$` filter
+- `github.com/sg-evals/scikit-learn` — use `repo:^github.com/sg-evals/scikit-learn$` filter
+- `github.com/sg-evals/scipy` — use `repo:^github.com/sg-evals/scipy$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -71,7 +71,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/numpy`, `github.com/sg-benchmarks/pandas`, `github.com/sg-benchmarks/scikit-learn`, `github.com/sg-benchmarks/scipy`
+**Sourcegraph Repositories:** `github.com/sg-evals/numpy`, `github.com/sg-evals/pandas`, `github.com/sg-evals/scikit-learn`, `github.com/sg-evals/scipy`
 
 # Onboarding Audit: scipy.stats API Call Sites in pandas
 
@@ -117,7 +117,7 @@ List all files that contain `from scipy.stats import`. Your answer is evaluated 
 a closed-world oracle — completeness matters.
 
 **Important**: Use exact repo identifiers as they appear in Sourcegraph. The oracle expects `repo` values of `pandas-dev/pandas`. The `repo` field must match exactly.
-**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-benchmarks/kubernetes-client-go`). Strip this prefix in your answer — use `sg-benchmarks/kubernetes-client-go`, NOT `github.com/sg-benchmarks/kubernetes-client-go`.
+**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-evals/kubernetes-client-go`). Strip this prefix in your answer — use `sg-evals/kubernetes-client-go`, NOT `github.com/sg-evals/kubernetes-client-go`.
 
 ## Evaluation
 

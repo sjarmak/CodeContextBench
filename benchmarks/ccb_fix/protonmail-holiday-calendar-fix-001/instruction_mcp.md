@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/webclients--369fd37d`
-- Use `repo:^github.com/sg-benchmarks/webclients--369fd37d$` filter in keyword_search
-- Use `github.com/sg-benchmarks/webclients--369fd37d` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/webclients--369fd37d`
+- Use `repo:^github.com/sg-evals/webclients--369fd37d$` filter in keyword_search
+- Use `github.com/sg-evals/webclients--369fd37d` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -71,7 +71,7 @@ If MCP search returns no results:
 
 ---
 
-**Repo:** `github.com/sg-benchmarks/webclients--369fd37d` (mirror of `protonmail/webclients`)  
+**Repo:** `github.com/sg-evals/webclients--369fd37d` (mirror of `protonmail/webclients`)  
 **Base commit:** `42082399f3c51b8e9fb92e54312aafda1838ec4d`  
 **Instance ID:** `instance_protonmail__webclients-369fd37de29c14c690cb3b1c09a949189734026f`
 

@@ -116,7 +116,7 @@ discovery. This is the standard execution model for all `*_2config.sh` runs.
    MCP-Full run (baseline uses the original `Dockerfile`).
 3. `Dockerfile.sg_only` creates an empty or truncated workspace (no usable
    source code) and writes a **clone manifest** to
-   `/tmp/.sg_only_clone_manifest.json` telling the verifier which sg-benchmarks
+   `/tmp/.sg_only_clone_manifest.json` telling the verifier which sg-evals
    mirror(s) to clone at verification time.
 4. A sentinel file `/tmp/.sg_only_mode` is written at build time.
 5. The agent runs with empty/truncated source — local `Read`, `Grep`, `Glob`
@@ -129,7 +129,7 @@ discovery. This is the standard execution model for all `*_2config.sh` runs.
 **Clone manifest format** (`/tmp/.sg_only_clone_manifest.json`):
 
 ```json
-{"workdir":"/workspace","repos":[{"mirror":"sg-benchmarks/django--674eda1c","target_dir":"."}]}
+{"workdir":"/workspace","repos":[{"mirror":"sg-evals/django--674eda1c","target_dir":"."}]}
 ```
 
 Multi-repo tasks list multiple entries; code-review tasks add `"inject_defects"`.
@@ -290,7 +290,7 @@ Two Sourcegraph configuration policies control indexing:
 | Benchmarks: Main (No SCIP) | `main` | `false` | `...MTA2Ng==` |
 | Benchmarks: SCIP Enabled | `scip-enabled` | `true` | `...MTA2Nw==` |
 
-Both policies target `github.com/sg-benchmarks/*` with `GIT_TREE` type.
+Both policies target `github.com/sg-evals/*` with `GIT_TREE` type.
 
 ### Deep Search Limitation
 
@@ -301,7 +301,7 @@ branch must be swapped before running benchmarks.
 ### Pre-Flight: Branch Swap
 
 Before running SCIP-enabled benchmarks, swap the default branch on all
-sg-benchmarks repos:
+sg-evals repos:
 
 ```bash
 # Before SCIP runs (mcp-scip-remote-direct):
@@ -313,7 +313,7 @@ sg-benchmarks repos:
 ```
 
 The swap script:
-- Patches all 1,592 sg-benchmarks repos via GitHub API (`--parallel 10`)
+- Patches all 1,592 sg-evals repos via GitHub API (`--parallel 10`)
 - Skips repos already set to the target branch
 - Skips empty repos without the target branch
 - Logs results to `/tmp/scip_branch_swap/`
@@ -363,7 +363,7 @@ status in the Sourcegraph admin UI after swapping branches.
 
 ### Branch Creation Script
 
-If new repos are added to sg-benchmarks, create `scip-enabled` branches:
+If new repos are added to sg-evals, create `scip-enabled` branches:
 
 ```bash
 ./scripts/create_scip_branches.sh [--dry-run] [--parallel N]

@@ -56,7 +56,7 @@ This avoids the embedding-model dependency of LoCoBench's `semantic_similarity` 
 
 ## 3. Repo Selection
 
-All repos are **public GitHub repos already indexed in Sourcegraph**. No sg-benchmarks mirrors needed (repos are large enough that HEAD approximates the target commit for investigation purposes, and we pin specific commits in the Dockerfile).
+All repos are **public GitHub repos already indexed in Sourcegraph**. No sg-evals mirrors needed (repos are large enough that HEAD approximates the target commit for investigation purposes, and we pin specific commits in the Dockerfile).
 
 | Repo | SG Name | Language | Size | Why |
 |------|---------|----------|------|-----|
@@ -461,7 +461,7 @@ Create `configs/investigation_3config.sh` following the pattern of `pytorch_3con
 
 ```json
 "investigation": {
-  "_note": "Investigation tasks use public GitHub repos directly (already indexed in SG). No sg-benchmarks mirrors needed.",
+  "_note": "Investigation tasks use public GitHub repos directly (already indexed in SG). No sg-evals mirrors needed.",
   "tasks": {
     "inv-regression-001": {
       "repo": "grafana/grafana",
@@ -490,7 +490,7 @@ Create `configs/investigation_3config.sh` following the pattern of `pytorch_3con
 **Important SG indexing note:** Public GitHub repos are indexed at HEAD, not at the specific commit the agent works with. For investigation tasks this is acceptable because:
 1. The codebase structure and file organization rarely changes dramatically
 2. The agent needs to find patterns and trace call chains, not match exact line numbers
-3. If precise commit indexing is needed, we can create sg-benchmarks mirrors later
+3. If precise commit indexing is needed, we can create sg-evals mirrors later
 
 ## 12. Expected Results & MCP Value Hypothesis
 

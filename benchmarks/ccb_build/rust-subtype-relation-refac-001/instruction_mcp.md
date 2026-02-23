@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/rust--01f6ddf7`
-- Use `repo:^github.com/sg-benchmarks/rust--01f6ddf7$` filter in keyword_search
-- Use `github.com/sg-benchmarks/rust--01f6ddf7` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/rust--01f6ddf7`
+- Use `repo:^github.com/sg-evals/rust--01f6ddf7$` filter in keyword_search
+- Use `github.com/sg-evals/rust--01f6ddf7` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -82,7 +82,7 @@ The refactoring includes:
 
 ## Context
 
-- **Repository**: github.com/sg-benchmarks/rust--01f6ddf7 (mirror of rust-lang/rust) (Rust, ~2.2M LOC)
+- **Repository**: github.com/sg-evals/rust--01f6ddf7 (mirror of rust-lang/rust) (Rust, ~2.2M LOC)
 - **Category**: Cross-File Refactoring
 - **Difficulty**: hard
 - **Subsystem Focus**: compiler/rustc_type_ir, rustc_middle, rustc_infer, rustc_trait_selection, rustc_hir_typeck, rustc_next_trait_solver, rustc_public

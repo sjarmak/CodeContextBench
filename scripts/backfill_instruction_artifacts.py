@@ -27,17 +27,17 @@ HYBRID_MCP_MODES = {"sourcegraph_full"}
 # These match the associative arrays in the config scripts.
 TASK_SG_REPO_NAMES = {
     # crossrepo
-    "api_upgrade_01": "sg-benchmarks/etcd--d89978e8",
-    "bug_localization_01": "sg-benchmarks/scikit-learn--cb7e82dd",
-    "cross_file_reasoning_01": "sg-benchmarks/kubernetes--8c9c67c0",
-    "refactor_rename_01": "sg-benchmarks/django--674eda1c",
-    "simple_test_01": "sg-benchmarks/kubernetes--8c9c67c0",
+    "api_upgrade_01": "sg-evals/etcd--d89978e8",
+    "bug_localization_01": "sg-evals/scikit-learn--cb7e82dd",
+    "cross_file_reasoning_01": "sg-evals/kubernetes--8c9c67c0",
+    "refactor_rename_01": "sg-evals/django--674eda1c",
+    "simple_test_01": "sg-evals/kubernetes--8c9c67c0",
     # k8s_docs (all tasks share one repo)
-    "k8sdocs-001": "sg-benchmarks/kubernetes--8c9c67c0",
-    "k8sdocs-002": "sg-benchmarks/kubernetes--8c9c67c0",
-    "k8sdocs-003": "sg-benchmarks/kubernetes--8c9c67c0",
-    "k8sdocs-004": "sg-benchmarks/kubernetes--8c9c67c0",
-    "k8sdocs-005": "sg-benchmarks/kubernetes--8c9c67c0",
+    "k8sdocs-001": "sg-evals/kubernetes--8c9c67c0",
+    "k8sdocs-002": "sg-evals/kubernetes--8c9c67c0",
+    "k8sdocs-003": "sg-evals/kubernetes--8c9c67c0",
+    "k8sdocs-004": "sg-evals/kubernetes--8c9c67c0",
+    "k8sdocs-005": "sg-evals/kubernetes--8c9c67c0",
 }
 
 
@@ -73,7 +73,7 @@ def resolve_repo_display(task_path: str, task_name: str) -> str:
                 if "LOCOBENCH_PROJECT_ID=" in line:
                     proj_id = line.strip().split("LOCOBENCH_PROJECT_ID=")[-1]
                     if proj_id:
-                        return f"sg-benchmarks/locobench-{proj_id}"
+                        return f"sg-evals/locobench-{proj_id}"
 
     # SWE-bench Pro: parse task_id for org/repo/commit
     m = re.match(r"(?:instance_)?(.+?)__(.+?)-([a-f0-9]{7,40})", task_name)
@@ -81,7 +81,7 @@ def resolve_repo_display(task_path: str, task_name: str) -> str:
         org = m.group(1).replace("__", "/")
         repo = m.group(2)
         commit = m.group(3)[:8]
-        return f"sg-benchmarks/{org}--{repo}--{commit}"
+        return f"sg-evals/{org}--{repo}--{commit}"
 
     # Check other 3config script mappings by reading them dynamically
     # (dibench, largerepo, pytorch, repoqa, sweperf, tac)
@@ -98,7 +98,7 @@ def _extract_repo_from_config(config_file: Path, task_name: str) -> str:
     """Extract SOURCEGRAPH_REPO_NAME for a task from a 3config.sh script."""
     try:
         content = config_file.read_text()
-        # Look for patterns like: ["task_name"]="sg-benchmarks/repo--commit"
+        # Look for patterns like: ["task_name"]="sg-evals/repo--commit"
         pattern = rf'\["{re.escape(task_name)}"\]="([^"]+)"'
         m = re.search(pattern, content)
         if m:

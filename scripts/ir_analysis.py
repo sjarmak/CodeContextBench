@@ -319,8 +319,12 @@ def _extract_task_id_from_job(job_name: str, config_name: str, suite: str | None
     Job name format: ccb_{suite_stem}_{task_id}_{config}
     e.g. ccb_test_aspnetcore-code-review-001_sourcegraph_full → aspnetcore-code-review-001
     """
-    # Strip config suffix
-    for cfg in ("_sourcegraph_full", "_baseline"):
+    # Strip config suffix (supports both legacy and new naming conventions)
+    for cfg in (
+        "_sourcegraph_full", "_baseline",
+        "_baseline-local-direct", "_mcp-remote-direct",
+        "_baseline-local-artifact", "_mcp-remote-artifact",
+    ):
         if job_name.endswith(cfg):
             job_name = job_name[: -len(cfg)]
             break

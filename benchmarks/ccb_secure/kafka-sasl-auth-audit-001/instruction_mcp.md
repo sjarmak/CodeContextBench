@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/kafka--0753c489`
-- Use `repo:^github.com/sg-benchmarks/kafka--0753c489$` filter in keyword_search
-- Use `github.com/sg-benchmarks/kafka--0753c489` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/kafka--0753c489`
+- Use `repo:^github.com/sg-evals/kafka--0753c489$` filter in keyword_search
+- Use `github.com/sg-evals/kafka--0753c489` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -73,7 +73,7 @@ Trace the Apache Kafka SASL authentication flow from channel creation through me
 
 ## Context
 
-- **Repository**: github.com/sg-benchmarks/kafka--0753c489 (mirror of apache/kafka) (Java, ~1.2M LOC)
+- **Repository**: github.com/sg-evals/kafka--0753c489 (mirror of apache/kafka) (Java, ~1.2M LOC)
 - **Category**: Security Analysis
 - **Difficulty**: hard
 - **Subsystem Focus**: `clients/src/main/java/org/apache/kafka/common/security/` (authenticator, plain, scram, oauthbearer packages) and `clients/src/main/java/org/apache/kafka/common/network/` (channel builders)

@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/openlibrary--7f6b722a`
-- Use `repo:^github.com/sg-benchmarks/openlibrary--7f6b722a$` filter in keyword_search
-- Use `github.com/sg-benchmarks/openlibrary--7f6b722a` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/openlibrary--7f6b722a`
+- Use `repo:^github.com/sg-evals/openlibrary--7f6b722a$` filter in keyword_search
+- Use `github.com/sg-evals/openlibrary--7f6b722a` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -90,7 +90,7 @@ Work search should accept user-entered text-including edge cases such as trailin
 
 ---
 
-**Repo:** `github.com/sg-benchmarks/openlibrary--7f6b722a` (mirror of `internetarchive/openlibrary`)  
+**Repo:** `github.com/sg-evals/openlibrary--7f6b722a` (mirror of `internetarchive/openlibrary`)  
 **Base commit:** `febda3f008cb4d4e4e0568ab4d671992ceea07cf`  
 **Instance ID:** `instance_internetarchive__openlibrary-7f6b722a10f822171501d027cad60afe53337732-ve8c8d62a2b60610a3c4631f5f23ed866bada9818`
 

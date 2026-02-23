@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/istio--44d0e58e`
-- Use `repo:^github.com/sg-benchmarks/istio--44d0e58e$` filter in keyword_search
-- Use `github.com/sg-benchmarks/istio--44d0e58e` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/istio--44d0e58e`
+- Use `repo:^github.com/sg-evals/istio--44d0e58e$` filter in keyword_search
+- Use `github.com/sg-evals/istio--44d0e58e` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # Architecture Q&A: Istio Pilot xDS Serving
 
-**Repository:** github.com/sg-benchmarks/istio--44d0e58e (mirror of istio/istio)
+**Repository:** github.com/sg-evals/istio--44d0e58e (mirror of istio/istio)
 **Task Type:** Architecture Q&A (investigation only — no code changes)
 
 ## Background

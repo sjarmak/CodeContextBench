@@ -73,10 +73,18 @@ priority chain in `ccb_metrics/ground_truth.py`:
 
 Three levels of ground truth are supported:
 
-- **File-level** (`ground_truth.files`) — always populated when ground truth
-  exists. Repo-relative paths.
+- **File-level relevant files** (`ground_truth.files`) — always populated when
+  ground truth exists. These are the files considered relevant evidence for
+  solving the task (not necessarily the only valid edit targets). Repo-relative
+  paths.
 - **Symbol-level** (`ground_truth.symbols`) — optional. Function/class names
   within ground-truth files, loaded from `task_spec.json` oracle items.
+- **Expected edit files** (`ground_truth.expected_edit_files`) — optional,
+  conservative edit-target file set inferred only from high-confidence sources
+  such as `expected_changes.json` and patch-based references
+  (`reference_fix.patch`, `expected.diff`, `expected.patch`, gold patch in
+  `solve.sh`). This field is absent when edit-target semantics cannot be
+  inferred reliably.
 - **Chunk-level** (`ground_truth.chunks`) — optional. Line ranges within files,
   loaded from `expected_defects.json` annotations or similar.
 
@@ -202,17 +210,28 @@ to future schema versions.
 
 Measures whether retrieved evidence was actually *used* by the agent:
 
-- **`util_referenced_file_correctness`** = |files_written ∩ GT| / |GT|.
-  Measures whether the agent wrote to the correct files after retrieval.
+- **Primary cross-task probe:** `util_read_overlap_with_relevant_files`
+  = |files_read ∩ relevant_files| / |relevant_files|. Measures whether the
+  agent actually read relevant files (including MCP `read_file` calls, which
+  are normalized to `file_read`).
+- **Task-dependent write proxy:** `util_write_overlap_with_relevant_files_proxy`
+  = |files_written ∩ relevant_files| / |relevant_files|. Useful for some
+  fix-style tasks, but should not be treated as a universal utilization metric.
+- **Stronger optional write probe:** `util_write_overlap_with_expected_edit_files`
+  = |files_written ∩ expected_edit_files| / |expected_edit_files| when
+  `ground_truth.expected_edit_files` is available.
 - **`util_read_before_write_ratio`** = fraction of written files that were
   read by the agent before being written to. High values indicate deliberate
   evidence consumption.
 
-**Coverage**: `probe_available: false` when the agent performed no file writes
-or when no ground truth exists. The probe requires write events to measure
-utilization — read-only tasks produce no utilization signal.
+**Coverage**:
+- `probe_available: false` only when file-level ground truth is missing.
+- Read-overlap probes are still computable for read-only tasks.
+- Write-overlap probes may be null for tasks without file writes.
+- `expected_edit_probe_available: false` when `expected_edit_files` is not
+  inferable from high-confidence task metadata.
 
-**Limitations**: These probes measure file-level correctness only. They do
+**Limitations**: These probes measure file-level utilization only. They do
 not validate whether the *content* written was semantically correct (that is
 the verifier's job). Future probes may add symbol-level or API-level checks.
 

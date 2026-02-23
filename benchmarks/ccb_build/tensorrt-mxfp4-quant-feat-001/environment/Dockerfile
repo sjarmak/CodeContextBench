@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Clone the actual TensorRT-LLM repository at pinned commit
 # This ensures BOTH baseline and MCP agents have identical file access
-RUN git clone --depth 1 https://github.com/sg-benchmarks/TensorRT-LLM--b98f3fca.git . && \
+RUN git clone --depth 1 https://github.com/sg-evals/TensorRT-LLM--b98f3fca.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

@@ -192,13 +192,13 @@ def _sg_display_name(repo_name: str | None, repo_list: list[str] | None) -> str:
 def rewrite_repo_references(text: str, sg_display: str) -> str:
     """Replace original repo references in instruction body with SG mirror name.
 
-    Only rewrites for sg-benchmarks/* mirrors where the SG name differs from
+    Only rewrites for sg-evals/* mirrors where the SG name differs from
     what's in the instruction. Detects and replaces these patterns:
       - **Repository**: org/repo (lang, ~NLOC)
       - **Repository:** org/repo
       - **Repo:** `org/repo`
     """
-    if not sg_display or not sg_display.startswith("sg-benchmarks/"):
+    if not sg_display or not sg_display.startswith("sg-evals/"):
         return text
 
     sg_full = f"github.com/{sg_display}"
@@ -294,7 +294,7 @@ def process_task(task_dir: Path, dry_run: bool, verbose: bool) -> str:
     preamble = render_preamble(repo_name, repo_list)
     original = instruction.read_text()
 
-    # Rewrite repo references in instruction body for sg-benchmarks mirrors
+    # Rewrite repo references in instruction body for sg-evals mirrors
     sg_display = _sg_display_name(repo_name, repo_list)
     original = rewrite_repo_references(original, sg_display)
 

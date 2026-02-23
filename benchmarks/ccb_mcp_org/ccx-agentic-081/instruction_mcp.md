@@ -4,9 +4,9 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/kafka--0753c489` — use `repo:^github.com/sg-benchmarks/kafka--0753c489$` filter
-- `github.com/sg-benchmarks/flink--0cc95fcc` — use `repo:^github.com/sg-benchmarks/flink--0cc95fcc$` filter
-- `github.com/sg-benchmarks/camel--1006f047` — use `repo:^github.com/sg-benchmarks/camel--1006f047$` filter
+- `github.com/sg-evals/kafka--0753c489` — use `repo:^github.com/sg-evals/kafka--0753c489$` filter
+- `github.com/sg-evals/flink--0cc95fcc` — use `repo:^github.com/sg-evals/flink--0cc95fcc$` filter
+- `github.com/sg-evals/camel--1006f047` — use `repo:^github.com/sg-evals/camel--1006f047$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -70,7 +70,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/kafka--0753c489`, `github.com/sg-benchmarks/flink--0cc95fcc`, `github.com/sg-benchmarks/camel--1006f047`
+**Sourcegraph Repositories:** `github.com/sg-evals/kafka--0753c489`, `github.com/sg-evals/flink--0cc95fcc`, `github.com/sg-evals/camel--1006f047`
 
 # Agentic Correctness: Implement Kafka Consumer Following Ecosystem Patterns
 
@@ -84,12 +84,12 @@ You are working on a codebase task involving repos from the org domain.
 
 ## Available Resources
 
-The local `/workspace/` directory contains: sg-benchmarks/kafka--0753c489, sg-benchmarks/flink--0cc95fcc, sg-benchmarks/camel--1006f047.
+The local `/workspace/` directory contains: sg-evals/kafka--0753c489, sg-evals/flink--0cc95fcc, sg-evals/camel--1006f047.
 
 **Note:** Additional repositories are accessible via Sourcegraph MCP tools:
-- `sg-benchmarks/kafka--0753c489` (apache/kafka)
-- `sg-benchmarks/flink--0cc95fcc` (apache/flink)
-- `sg-benchmarks/camel--1006f047` (apache/camel)
+- `sg-evals/kafka--0753c489` (apache/kafka)
+- `sg-evals/flink--0cc95fcc` (apache/flink)
+- `sg-evals/camel--1006f047` (apache/camel)
 
 ## Output Format
 

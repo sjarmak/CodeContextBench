@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/NodeBB--8fd8079a`
-- Use `repo:^github.com/sg-benchmarks/NodeBB--8fd8079a$` filter in keyword_search
-- Use `github.com/sg-benchmarks/NodeBB--8fd8079a` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/NodeBB--8fd8079a`
+- Use `repo:^github.com/sg-evals/NodeBB--8fd8079a$` filter in keyword_search
+- Use `github.com/sg-evals/NodeBB--8fd8079a` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -83,7 +83,7 @@ In the fork/move topic modals, the category selector is assigned a `dropup` clas
 
 ---
 
-**Repo:** `github.com/sg-benchmarks/NodeBB--8fd8079a` (mirror of `NodeBB/NodeBB`)  
+**Repo:** `github.com/sg-evals/NodeBB--8fd8079a` (mirror of `NodeBB/NodeBB`)  
 **Base commit:** `8fd8079a84d8e71ab02eaa69ef15cb33fcea85c7`  
 **Instance ID:** `instance_NodeBB__NodeBB-eb49a64974ca844bca061744fb3383f5d13b02ad-vnan`
 

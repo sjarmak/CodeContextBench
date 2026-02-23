@@ -14,9 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone fixture repos (baseline has full local access)
-RUN git clone --depth 1 https://github.com/sg-benchmarks/kubernetes--v1.32.0.git /workspace/kubernetes
-RUN git clone --depth 1 https://github.com/sg-benchmarks/etcd-io-etcd.git /workspace/etcd
-RUN git clone --depth 1 https://github.com/sg-benchmarks/grafana--v11.4.0.git /workspace/grafana
+RUN git clone --depth 1 https://github.com/sg-evals/kubernetes--v1.32.0.git /workspace/kubernetes
+RUN git clone --depth 1 https://github.com/sg-evals/etcd-io-etcd.git /workspace/etcd
+RUN git clone --depth 1 https://github.com/sg-evals/grafana--v11.4.0.git /workspace/grafana
 
 # Initialize git identity for agent commits
 RUN git config --global user.email "agent@example.com" && \

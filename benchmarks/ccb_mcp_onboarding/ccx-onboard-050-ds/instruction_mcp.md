@@ -4,10 +4,10 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/etcd-io-etcd` — use `repo:^github.com/sg-benchmarks/etcd-io-etcd$` filter
-- `github.com/sg-benchmarks/kubernetes-api` — use `repo:^github.com/sg-benchmarks/kubernetes-api$` filter
-- `github.com/sg-benchmarks/kubernetes-client-go` — use `repo:^github.com/sg-benchmarks/kubernetes-client-go$` filter
-- `github.com/sg-benchmarks/kubernetes-kubernetes` — use `repo:^github.com/sg-benchmarks/kubernetes-kubernetes$` filter
+- `github.com/sg-evals/etcd-io-etcd` — use `repo:^github.com/sg-evals/etcd-io-etcd$` filter
+- `github.com/sg-evals/kubernetes-api` — use `repo:^github.com/sg-evals/kubernetes-api$` filter
+- `github.com/sg-evals/kubernetes-client-go` — use `repo:^github.com/sg-evals/kubernetes-client-go$` filter
+- `github.com/sg-evals/kubernetes-kubernetes` — use `repo:^github.com/sg-evals/kubernetes-kubernetes$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -71,7 +71,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/etcd-io-etcd`, `github.com/sg-benchmarks/kubernetes-api`, `github.com/sg-benchmarks/kubernetes-client-go`, `github.com/sg-benchmarks/kubernetes-kubernetes`
+**Sourcegraph Repositories:** `github.com/sg-evals/etcd-io-etcd`, `github.com/sg-evals/kubernetes-api`, `github.com/sg-evals/kubernetes-client-go`, `github.com/sg-evals/kubernetes-kubernetes`
 
 # End-to-End: How Kubernetes Creates a Deployment
 
@@ -95,8 +95,8 @@ For each step, cite the specific repository, file path, and function/type name.
 You are working in a Kubernetes ecosystem with the following repos:
 
 - `kubernetes/kubernetes` (the core orchestrator)
-- `sg-benchmarks/kubernetes-client-go` (go-client-library)
-- `sg-benchmarks/kubernetes-api` (api-type-definitions)
+- `sg-evals/kubernetes-client-go` (go-client-library)
+- `sg-evals/kubernetes-api` (api-type-definitions)
 - `etcd-io/etcd` (distributed-kv-store)
 
 This question is specifically designed to benefit from cross-repo synthesis. Use your
@@ -110,7 +110,7 @@ Create a file at `/workspace/answer.json` with your findings:
 {
   "chain": [
     {
-      "repo": "sg-benchmarks/kubernetes-client-go",
+      "repo": "sg-evals/kubernetes-client-go",
       "path": "relative/path/to/file.go",
       "symbol": "FunctionOrTypeName",
       "description": "What this step does in the flow"
@@ -120,8 +120,8 @@ Create a file at `/workspace/answer.json` with your findings:
 }
 ```
 
-**Important**: Use exact repo identifiers as they appear in Sourcegraph. The oracle expects `repo` values of `sg-benchmarks/kubernetes-client-go` (client layer), `kubernetes/kubernetes` (API server layer), and `etcd-io/etcd` (storage layer). The `repo` field must match these exactly.
-**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-benchmarks/kubernetes-client-go`). Strip this prefix in your answer — use `sg-benchmarks/kubernetes-client-go`, NOT `github.com/sg-benchmarks/kubernetes-client-go`.
+**Important**: Use exact repo identifiers as they appear in Sourcegraph. The oracle expects `repo` values of `sg-evals/kubernetes-client-go` (client layer), `kubernetes/kubernetes` (API server layer), and `etcd-io/etcd` (storage layer). The `repo` field must match these exactly.
+**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-evals/kubernetes-client-go`). Strip this prefix in your answer — use `sg-evals/kubernetes-client-go`, NOT `github.com/sg-evals/kubernetes-client-go`.
 
 The `chain` should contain at least 3 steps representing the 3 layers described above.
 

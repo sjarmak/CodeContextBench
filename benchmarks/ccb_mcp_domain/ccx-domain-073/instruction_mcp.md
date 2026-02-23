@@ -4,10 +4,10 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/kubernetes-kubernetes` — use `repo:^github.com/sg-benchmarks/kubernetes-kubernetes$` filter
-- `github.com/sg-benchmarks/kubernetes-client-go` — use `repo:^github.com/sg-benchmarks/kubernetes-client-go$` filter
-- `github.com/sg-benchmarks/kubernetes-api` — use `repo:^github.com/sg-benchmarks/kubernetes-api$` filter
-- `github.com/sg-benchmarks/etcd-io-etcd` — use `repo:^github.com/sg-benchmarks/etcd-io-etcd$` filter
+- `github.com/sg-evals/kubernetes-kubernetes` — use `repo:^github.com/sg-evals/kubernetes-kubernetes$` filter
+- `github.com/sg-evals/kubernetes-client-go` — use `repo:^github.com/sg-evals/kubernetes-client-go$` filter
+- `github.com/sg-evals/kubernetes-api` — use `repo:^github.com/sg-evals/kubernetes-api$` filter
+- `github.com/sg-evals/etcd-io-etcd` — use `repo:^github.com/sg-evals/etcd-io-etcd$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -71,7 +71,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/kubernetes-kubernetes`, `github.com/sg-benchmarks/kubernetes-client-go`, `github.com/sg-benchmarks/kubernetes-api`, `github.com/sg-benchmarks/etcd-io-etcd`
+**Sourcegraph Repositories:** `github.com/sg-evals/kubernetes-kubernetes`, `github.com/sg-evals/kubernetes-client-go`, `github.com/sg-evals/kubernetes-api`, `github.com/sg-evals/etcd-io-etcd`
 
 # Domain Lineage: Kubernetes Watch Event Delivery Path
 

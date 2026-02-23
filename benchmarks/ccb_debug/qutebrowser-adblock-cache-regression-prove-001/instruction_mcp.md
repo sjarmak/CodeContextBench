@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/qutebrowser--6dd402c0`
-- Use `repo:^github.com/sg-benchmarks/qutebrowser--6dd402c0$` filter in keyword_search
-- Use `github.com/sg-benchmarks/qutebrowser--6dd402c0` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/qutebrowser--6dd402c0`
+- Use `repo:^github.com/sg-evals/qutebrowser--6dd402c0$` filter in keyword_search
+- Use `github.com/sg-evals/qutebrowser--6dd402c0` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # Bug Investigation: Application Crashes When Ad-Blocker Cache Is Corrupted
 
-**Repository:** github.com/sg-benchmarks/qutebrowser--6dd402c0 (mirror of qutebrowser/qutebrowser)
+**Repository:** github.com/sg-evals/qutebrowser--6dd402c0 (mirror of qutebrowser/qutebrowser)
 **Task Type:** Find and Prove (write a regression test)
 
 ## Reported Issue

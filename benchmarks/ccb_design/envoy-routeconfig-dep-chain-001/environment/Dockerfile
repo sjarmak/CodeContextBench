@@ -7,13 +7,13 @@ RUN apk add --no-cache git bash python3
 WORKDIR /workspace
 
 # Clone istio/istio
-RUN git clone --depth 1 https://github.com/sg-benchmarks/istio--4c1f845d.git istio
+RUN git clone --depth 1 https://github.com/sg-evals/istio--4c1f845d.git istio
 
 # Clone envoyproxy/go-control-plane
-RUN git clone --depth 1 https://github.com/sg-benchmarks/go-control-plane--71637ad6.git go-control-plane
+RUN git clone --depth 1 https://github.com/sg-evals/go-control-plane--71637ad6.git go-control-plane
 
 # Clone envoyproxy/data-plane-api (protobuf definitions)
-RUN git clone --depth 1 https://github.com/sg-benchmarks/data-plane-api--84e84367.git data-plane-api
+RUN git clone --depth 1 https://github.com/sg-evals/data-plane-api--84e84367.git data-plane-api
 
 # Verify repos exist
 RUN ls -la /workspace/ && \

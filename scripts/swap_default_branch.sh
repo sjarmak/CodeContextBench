@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Swap the default branch for all sg-benchmarks repos.
+# Swap the default branch for all sg-evals repos.
 #
 # Deep Search only indexes HEAD (the default branch). To compare SCIP-enabled
 # vs control (no SCIP), swap which branch is default before running benchmarks:
@@ -10,7 +10,7 @@
 # Usage:
 #   ./scripts/swap_default_branch.sh <branch> [--dry-run] [--parallel N]
 #
-# Requires: gh CLI authenticated with write access to sg-benchmarks org.
+# Requires: gh CLI authenticated with write access to sg-evals org.
 
 set -euo pipefail
 
@@ -61,8 +61,8 @@ echo "Logs: $LOG_DIR/"
 echo ""
 
 # Fetch all repo names in the org
-echo "Fetching repo list from sg-benchmarks org..."
-REPOS=$(gh api --paginate orgs/sg-benchmarks/repos \
+echo "Fetching repo list from sg-evals org..."
+REPOS=$(gh api --paginate orgs/sg-evals/repos \
   --jq '.[].name' 2>/dev/null | sort)
 TOTAL=$(echo "$REPOS" | wc -l)
 echo "Found $TOTAL repos"
@@ -70,7 +70,7 @@ echo ""
 
 swap_branch() {
   local repo_name="$1"
-  local full_name="sg-benchmarks/$repo_name"
+  local full_name="sg-evals/$repo_name"
 
   # Get current default branch
   local current_default

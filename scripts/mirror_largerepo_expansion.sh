@@ -1,11 +1,11 @@
 #!/bin/bash
-# Mirror remaining unindexed largerepo_expansion repos to sg-benchmarks org
+# Mirror remaining unindexed largerepo_expansion repos to sg-evals org
 #
 # Clones at pinned tags, creates orphan commit to avoid shallow-pack push issues.
 # Commits and tags from configs/sg_indexing_list.json.
 #
 # Prerequisites:
-#   - gh CLI authenticated with push access to sg-benchmarks org
+#   - gh CLI authenticated with push access to sg-evals org
 #   - git configured
 #
 # Usage:
@@ -14,7 +14,7 @@
 set -euo pipefail
 
 WORK_DIR="${WORK_DIR:-/tmp/sg-largerepo-mirrors}"
-SG_ORG="sg-benchmarks"
+SG_ORG="sg-evals"
 DRY_RUN=false
 ONLY_REPO=""
 
@@ -36,7 +36,7 @@ REPOS=(
 )
 
 echo "=============================================="
-echo "Mirror largerepo_expansion repos to sg-benchmarks"
+echo "Mirror largerepo_expansion repos to sg-evals"
 echo "=============================================="
 echo "Total repos: ${#REPOS[@]}"
 echo "Work directory: ${WORK_DIR}"
@@ -99,13 +99,13 @@ for entry in "${REPOS[@]}"; do
     # Copy all files (excluding .git)
     rsync -a --exclude='.git' "$clone_dir/" "$fresh_dir/" 2>&1
     git -C "$fresh_dir" add -A 2>&1
-    git -C "$fresh_dir" -c user.email="benchmark@sg-benchmarks.dev" -c user.name="sg-benchmarks" \
+    git -C "$fresh_dir" -c user.email="benchmark@sg-evals.dev" -c user.name="sg-evals" \
         commit -m "Mirror ${github_repo} @ ${tag} (${actual_commit:0:8})" --quiet 2>&1
 
     # Clean up the shallow clone to save space
     rm -rf "$clone_dir"
 
-    # Step 3: Create the sg-benchmarks repo on GitHub
+    # Step 3: Create the sg-evals repo on GitHub
     echo "  Creating GitHub repo ${SG_ORG}/${sg_name}..."
     if ! gh repo create "${SG_ORG}/${sg_name}" --public --description "$description" 2>&1; then
         echo "  ERROR: Failed to create ${SG_ORG}/${sg_name}"
@@ -114,7 +114,7 @@ for entry in "${REPOS[@]}"; do
         continue
     fi
 
-    # Step 4: Push to sg-benchmarks
+    # Step 4: Push to sg-evals
     echo "  Pushing to ${SG_ORG}/${sg_name}..."
     git -C "$fresh_dir" remote add sg-target "https://github.com/${SG_ORG}/${sg_name}.git" 2>&1
     if ! git -C "$fresh_dir" push sg-target main --force 2>&1; then

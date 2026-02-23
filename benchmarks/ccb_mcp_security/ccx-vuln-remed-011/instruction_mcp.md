@@ -4,10 +4,10 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/expressjs-express` — use `repo:^github.com/sg-benchmarks/expressjs-express$` filter
-- `github.com/sg-benchmarks/lodash` — use `repo:^github.com/sg-benchmarks/lodash$` filter
-- `github.com/sg-benchmarks/nodejs-node` — use `repo:^github.com/sg-benchmarks/nodejs-node$` filter
-- `github.com/sg-benchmarks/prisma-prisma` — use `repo:^github.com/sg-benchmarks/prisma-prisma$` filter
+- `github.com/sg-evals/expressjs-express` — use `repo:^github.com/sg-evals/expressjs-express$` filter
+- `github.com/sg-evals/lodash` — use `repo:^github.com/sg-evals/lodash$` filter
+- `github.com/sg-evals/nodejs-node` — use `repo:^github.com/sg-evals/nodejs-node$` filter
+- `github.com/sg-evals/prisma-prisma` — use `repo:^github.com/sg-evals/prisma-prisma$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -71,7 +71,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/expressjs-express`, `github.com/sg-benchmarks/lodash`, `github.com/sg-benchmarks/nodejs-node`, `github.com/sg-benchmarks/prisma-prisma`
+**Sourcegraph Repositories:** `github.com/sg-evals/expressjs-express`, `github.com/sg-evals/lodash`, `github.com/sg-evals/nodejs-node`, `github.com/sg-evals/prisma-prisma`
 
 # CVE Remediation: Vulnerable `cookie` Package Dependency
 
@@ -86,7 +86,7 @@ that declare **`cookie` as a direct runtime dependency** (listed under
 `"dependencies"`, not `"devDependencies"`).
 
 For each match, report:
-- The repository (e.g., `sg-benchmarks/expressjs-express`)
+- The repository (e.g., `sg-evals/expressjs-express`)
 - The file path within the repository
 - The version constraint declared for `cookie`
 
@@ -113,7 +113,7 @@ Create a file at `/workspace/answer.json` with your findings:
 {
   "files": [
     {
-      "repo": "sg-benchmarks/expressjs-express",
+      "repo": "sg-evals/expressjs-express",
       "path": "relative/path/to/package.json",
       "version": "the-version-constraint"
     }
@@ -122,8 +122,8 @@ Create a file at `/workspace/answer.json` with your findings:
 }
 ```
 
-**Important**: Use exact repo identifiers as they appear in Sourcegraph. The repos to search are `nodejs/node`, `sg-benchmarks/expressjs-express`, `sg-benchmarks/lodash`, and `sg-benchmarks/prisma-prisma`. Note: the `expressjs/express` repository corresponds to `sg-benchmarks/expressjs-express` in Sourcegraph — use `sg-benchmarks/expressjs-express` as the `repo` value in your answer.
-**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-benchmarks/kubernetes-client-go`). Strip this prefix in your answer — use `sg-benchmarks/kubernetes-client-go`, NOT `github.com/sg-benchmarks/kubernetes-client-go`.
+**Important**: Use exact repo identifiers as they appear in Sourcegraph. The repos to search are `nodejs/node`, `sg-evals/expressjs-express`, `sg-evals/lodash`, and `sg-evals/prisma-prisma`. Note: the `expressjs/express` repository corresponds to `sg-evals/expressjs-express` in Sourcegraph — use `sg-evals/expressjs-express` as the `repo` value in your answer.
+**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-evals/kubernetes-client-go`). Strip this prefix in your answer — use `sg-evals/kubernetes-client-go`, NOT `github.com/sg-evals/kubernetes-client-go`.
 
 Include only entries where `cookie` appears under `"dependencies"` (not `"devDependencies"`
 or `"scripts"`). Your answer is evaluated against a closed-world oracle — completeness matters.

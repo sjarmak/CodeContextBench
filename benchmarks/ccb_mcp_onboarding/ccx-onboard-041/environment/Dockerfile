@@ -14,10 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone all fixture repos (baseline has full local access to every repo)
-RUN git clone --depth 1 https://github.com/sg-benchmarks/scikit-learn--1.6.1.git /workspace/scikit-learn
-RUN git clone --depth 1 https://github.com/sg-benchmarks/numpy--v2.2.2.git /workspace/numpy
-RUN git clone --depth 1 https://github.com/sg-benchmarks/pandas--v2.2.3.git /workspace/pandas
-RUN git clone --depth 1 https://github.com/sg-benchmarks/scipy--v1.15.1.git /workspace/scipy
+RUN git clone --depth 1 https://github.com/sg-evals/scikit-learn--1.6.1.git /workspace/scikit-learn
+RUN git clone --depth 1 https://github.com/sg-evals/numpy--v2.2.2.git /workspace/numpy
+RUN git clone --depth 1 https://github.com/sg-evals/pandas--v2.2.3.git /workspace/pandas
+RUN git clone --depth 1 https://github.com/sg-evals/scipy--v1.15.1.git /workspace/scipy
 
 # Initialize git identity for agent commits
 RUN git config --global user.email "agent@example.com" && \

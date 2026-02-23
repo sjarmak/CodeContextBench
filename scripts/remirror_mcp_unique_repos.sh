@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Re-mirror sg-benchmarks repos at Dockerfile-pinned versions.
+# Re-mirror sg-evals repos at Dockerfile-pinned versions.
 # These repos already exist on GitHub — we shallow-clone at the correct tag,
 # create an orphan commit, and force-push to overwrite.
 #
 # Usage: bash scripts/remirror_mcp_unique_repos.sh
 set -euo pipefail
 
-SG_ORG="sg-benchmarks"
+SG_ORG="sg-evals"
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -47,13 +47,13 @@ for entry in "${REPOS[@]}"; do
     git -C "$fresh_dir" init -b main 2>&1
     rsync -a --exclude='.git' "$clone_dir/" "$fresh_dir/" 2>&1
     git -C "$fresh_dir" add -A 2>&1
-    git -C "$fresh_dir" -c user.email="benchmark@sg-benchmarks.dev" -c user.name="sg-benchmarks" \
+    git -C "$fresh_dir" -c user.email="benchmark@sg-evals.dev" -c user.name="sg-evals" \
         commit -m "Re-mirror ${github_repo} @ ${tag} (${actual_commit:0:8}) — pin to Dockerfile version" --quiet 2>&1
 
     # Clean up shallow clone
     rm -rf "$clone_dir"
 
-    # Step 3: Force-push to existing sg-benchmarks repo
+    # Step 3: Force-push to existing sg-evals repo
     echo "  Force-pushing to ${SG_ORG}/${sg_name}..."
     git -C "$fresh_dir" remote add sg-target "https://github.com/${SG_ORG}/${sg_name}.git" 2>&1
     if ! git -C "$fresh_dir" push sg-target main --force 2>&1; then
@@ -77,6 +77,6 @@ echo "Succeeded: $SUCCESS"
 echo "Failed:    $FAILED"
 echo ""
 echo "Wait ~10-30 minutes for Sourcegraph indexing, then verify with:"
-echo "  - Read sg-benchmarks/expressjs-express package.json → version should be 4.21.1"
-echo "  - Read sg-benchmarks/grafana-loki pkg/loghttp/query.go → should exist"
-echo "  - Search sg-benchmarks/kubernetes-client-go dynamic/ → verify file list"
+echo "  - Read sg-evals/expressjs-express package.json → version should be 4.21.1"
+echo "  - Read sg-evals/grafana-loki pkg/loghttp/query.go → should exist"
+echo "  - Search sg-evals/kubernetes-client-go dynamic/ → verify file list"

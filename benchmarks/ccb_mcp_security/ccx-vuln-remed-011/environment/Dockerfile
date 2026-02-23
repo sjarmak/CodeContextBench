@@ -13,10 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone all fixture repos (baseline has full local access to every repo)
-RUN git clone --depth 1 https://github.com/sg-benchmarks/node--v22.13.0.git /workspace/node
-RUN git clone --depth 1 https://github.com/sg-benchmarks/express--4.21.1.git /workspace/express
-RUN git clone --depth 1 https://github.com/sg-benchmarks/lodash /workspace/lodash
-RUN git clone --depth 1 https://github.com/sg-benchmarks/prisma-prisma /workspace/prisma
+RUN git clone --depth 1 https://github.com/sg-evals/node--v22.13.0.git /workspace/node
+RUN git clone --depth 1 https://github.com/sg-evals/express--4.21.1.git /workspace/express
+RUN git clone --depth 1 https://github.com/sg-evals/lodash /workspace/lodash
+RUN git clone --depth 1 https://github.com/sg-evals/prisma-prisma /workspace/prisma
 
 # Initialize git identity for agent commits
 RUN git config --global user.email "agent@example.com" && \

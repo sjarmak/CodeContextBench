@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Create sg-benchmarks mirrors on GitHub for reproducible Sourcegraph indexing.
+"""Create sg-evals mirrors on GitHub for reproducible Sourcegraph indexing.
 
 Reads configs/mirror_creation_manifest.json and creates GitHub repos under
-the sg-benchmarks organization, pinned to specific commits.
+the sg-evals organization, pinned to specific commits.
 
 Approach per mirror:
-1. Create GitHub repo sg-benchmarks/{name} (public)
+1. Create GitHub repo sg-evals/{name} (public)
 2. Download source snapshot via GitHub archive API (no history needed)
 3. Init fresh git repo, commit all files, push as main branch
 
@@ -27,7 +27,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MANIFEST_PATH = REPO_ROOT / "configs" / "mirror_creation_manifest.json"
-ORG = "sg-benchmarks"
+ORG = "sg-evals"
 
 
 def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
@@ -62,7 +62,7 @@ def resolve_commit(upstream: str, ref: str) -> str | None:
 
 
 def create_mirror(entry: dict, dry_run: bool = False) -> tuple[bool, str]:
-    """Create a single sg-benchmarks mirror.
+    """Create a single sg-evals mirror.
 
     Returns (success, message).
     """
@@ -135,9 +135,9 @@ def create_mirror(entry: dict, dry_run: bool = False) -> tuple[bool, str]:
         src_dir = f"{workdir}/{extracted[0]}"
 
         # Init git repo and commit
-        env = {**os.environ, "GIT_AUTHOR_NAME": "sg-benchmarks",
+        env = {**os.environ, "GIT_AUTHOR_NAME": "sg-evals",
                "GIT_AUTHOR_EMAIL": "benchmarks@sourcegraph.com",
-               "GIT_COMMITTER_NAME": "sg-benchmarks",
+               "GIT_COMMITTER_NAME": "sg-evals",
                "GIT_COMMITTER_EMAIL": "benchmarks@sourcegraph.com"}
 
         r = run(["git", "init", "-b", "main"], cwd=src_dir, env=env)
@@ -171,7 +171,7 @@ def create_mirror(entry: dict, dry_run: bool = False) -> tuple[bool, str]:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Create sg-benchmarks mirrors from manifest")
+    parser = argparse.ArgumentParser(description="Create sg-evals mirrors from manifest")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done")
     parser.add_argument("--mirror", type=str, help="Create a single mirror by name")
     parser.add_argument("--skip-existing", action="store_true", default=True,

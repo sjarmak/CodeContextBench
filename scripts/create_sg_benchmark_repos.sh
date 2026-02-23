@@ -1,11 +1,11 @@
 #!/bin/bash
-# Create missing sg-benchmarks repos for SWE-bench Pro tasks
+# Create missing sg-evals repos for SWE-bench Pro tasks
 #
 # This script clones source repos at specific commits and pushes them
-# to the sg-benchmarks GitHub org so Sourcegraph can index them.
+# to the sg-evals GitHub org so Sourcegraph can index them.
 #
 # Prerequisites:
-#   - gh CLI authenticated with push access to sg-benchmarks org
+#   - gh CLI authenticated with push access to sg-evals org
 #   - git configured
 #   - Sufficient disk space (~50GB for all repos)
 #
@@ -19,7 +19,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK_DIR="${WORK_DIR:-/tmp/sg-benchmark-repos}"
-SG_ORG="sg-benchmarks"
+SG_ORG="sg-evals"
 DRY_RUN=false
 ONLY_REPO=""
 
@@ -77,7 +77,7 @@ MISSING_REPOS=(
 )
 
 echo "=============================================="
-echo "Create missing sg-benchmarks repos"
+echo "Create missing sg-evals repos"
 echo "=============================================="
 echo "Total missing: ${#MISSING_REPOS[@]}"
 echo "Work directory: ${WORK_DIR}"
@@ -143,7 +143,7 @@ create_repo() {
     # Detach HEAD and clean up
     git checkout --detach HEAD 2>/dev/null || true
 
-    # Step 3: Create the sg-benchmarks repo on GitHub
+    # Step 3: Create the sg-evals repo on GitHub
     echo "  Creating GitHub repo ${SG_ORG}/${sg_name}..."
     if gh repo view "${SG_ORG}/${sg_name}" &>/dev/null; then
         echo "  Repo already exists on GitHub, skipping creation"
@@ -155,7 +155,7 @@ create_repo() {
         }
     fi
 
-    # Step 4: Push to sg-benchmarks
+    # Step 4: Push to sg-evals
     echo "  Pushing to ${SG_ORG}/${sg_name}..."
     git remote remove sg-target 2>/dev/null || true
     git remote add sg-target "https://github.com/${SG_ORG}/${sg_name}.git"
@@ -214,7 +214,7 @@ echo "     source ~/evals/.env.local"
 echo "     curl -sS -H \"Authorization: token \$SOURCEGRAPH_ACCESS_TOKEN\" \\"
 echo "       -H \"Content-Type: application/json\" \\"
 echo "       \"\$SOURCEGRAPH_ENDPOINT/.api/graphql\" \\"
-echo "       -d '{\"query\":\"{ repository(name: \\\"github.com/sg-benchmarks/REPO_NAME\\\") { name } }\"}'"
+echo "       -d '{\"query\":\"{ repository(name: \\\"github.com/sg-evals/REPO_NAME\\\") { name } }\"}'"
 echo "  3. Re-run SWE-bench Pro MCP tasks:"
 echo "     ./configs/swebenchpro_3config.sh --full-only"
 echo "     ./configs/swebenchpro_3config.sh --full-only"

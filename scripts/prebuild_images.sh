@@ -187,11 +187,11 @@ build_one() {
     local start=$SECONDS
     local build_args=()
 
-    # If the Dockerfile clones from sg-benchmarks, inject GitHub credentials.
+    # If the Dockerfile clones from sg-evals, inject GitHub credentials.
     # Docker build containers can't access the host's git credential store,
     # so we inject a token via build-arg to authenticate HTTPS git clones.
     local dockerfile="${context_dir}/Dockerfile"
-    if grep -q "git clone.*github.com/sg-benchmarks/" "$dockerfile" 2>/dev/null; then
+    if grep -q "git clone.*github.com/sg-evals/" "$dockerfile" 2>/dev/null; then
         local gh_token=""
         if [ -f "$HOME/.git-credentials" ]; then
             gh_token=$(grep "^https://.*@github.com" "$HOME/.git-credentials" | head -1 | sed 's|https://[^:]*:\([^@]*\)@github.com.*|\1|')
@@ -204,8 +204,8 @@ build_one() {
             # Add ARG after the first FROM line (handles multi-stage builds)
             sed -i '0,/^FROM /{/^FROM /a\ARG GITHUB_TOKEN
 }' "$patched_dir/Dockerfile"
-            # Replace sg-benchmarks URLs to include token
-            sed -i "s|https://github.com/sg-benchmarks/|https://x-access-token:\${GITHUB_TOKEN}@github.com/sg-benchmarks/|g" "$patched_dir/Dockerfile"
+            # Replace sg-evals URLs to include token
+            sed -i "s|https://github.com/sg-evals/|https://x-access-token:\${GITHUB_TOKEN}@github.com/sg-evals/|g" "$patched_dir/Dockerfile"
             build_args=(--build-arg "GITHUB_TOKEN=$gh_token")
             context_dir="$patched_dir"
         fi

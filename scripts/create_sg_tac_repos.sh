@@ -1,14 +1,14 @@
 #!/bin/bash
-# Create sg-benchmarks repos for TAC tasks with pinned commits
+# Create sg-evals repos for TAC tasks with pinned commits
 #
 # TAC task repos are cloned at runtime from TAC's private GitLab.
 # This script queries the TAC GitLab API to get exact commit hashes,
 # then clones the corresponding public upstream repos at those commits
-# and pushes them to sg-benchmarks for Sourcegraph indexing.
+# and pushes them to sg-evals for Sourcegraph indexing.
 #
 # Prerequisites:
 #   - TAC server running (GitLab at the-agent-company.com:8929)
-#   - gh CLI authenticated with push access to sg-benchmarks org
+#   - gh CLI authenticated with push access to sg-evals org
 #   - git configured
 #
 # Usage:
@@ -18,7 +18,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK_DIR="${WORK_DIR:-/tmp/sg-tac-repos}"
-SG_ORG="sg-benchmarks"
+SG_ORG="sg-evals"
 DRY_RUN=false
 ONLY_REPO=""
 
@@ -67,7 +67,7 @@ declare -A TASK_MAP=(
 )
 
 echo "=============================================="
-echo "Create sg-benchmarks repos for TAC tasks"
+echo "Create sg-evals repos for TAC tasks"
 echo "=============================================="
 echo "Dry run: ${DRY_RUN}"
 echo ""
@@ -92,7 +92,7 @@ for project in "${!UPSTREAM_MAP[@]}"; do
     upstream="${UPSTREAM_MAP[$project]}"
     repo_name=$(basename "$upstream")
     echo "  ${project} -> ${upstream} @ ${short} (${commit})"
-    echo "    sg-benchmarks/${repo_name}--${short}"
+    echo "    sg-evals/${repo_name}--${short}"
     echo "    Tasks: ${TASK_MAP[$project]}"
 done
 

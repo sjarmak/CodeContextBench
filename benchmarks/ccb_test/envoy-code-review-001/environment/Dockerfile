@@ -16,7 +16,7 @@ RUN if ! command -v node &> /dev/null; then \
     fi
 
 # Clone envoyproxy/envoy at pinned v1.33.0 tag (sparse checkout for relevant files)
-RUN git clone --depth 1 https://github.com/sg-benchmarks/envoy--v1.33.0.git /workspace && \
+RUN git clone --depth 1 https://github.com/sg-evals/envoy--v1.33.0.git /workspace && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

@@ -4,10 +4,10 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/etcd-io-etcd` — use `repo:^github.com/sg-benchmarks/etcd-io-etcd$` filter
-- `github.com/sg-benchmarks/kubernetes-api` — use `repo:^github.com/sg-benchmarks/kubernetes-api$` filter
-- `github.com/sg-benchmarks/kubernetes-client-go` — use `repo:^github.com/sg-benchmarks/kubernetes-client-go$` filter
-- `github.com/sg-benchmarks/kubernetes-kubernetes` — use `repo:^github.com/sg-benchmarks/kubernetes-kubernetes$` filter
+- `github.com/sg-evals/etcd-io-etcd` — use `repo:^github.com/sg-evals/etcd-io-etcd$` filter
+- `github.com/sg-evals/kubernetes-api` — use `repo:^github.com/sg-evals/kubernetes-api$` filter
+- `github.com/sg-evals/kubernetes-client-go` — use `repo:^github.com/sg-evals/kubernetes-client-go$` filter
+- `github.com/sg-evals/kubernetes-kubernetes` — use `repo:^github.com/sg-evals/kubernetes-kubernetes$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -71,7 +71,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/etcd-io-etcd`, `github.com/sg-benchmarks/kubernetes-api`, `github.com/sg-benchmarks/kubernetes-client-go`, `github.com/sg-benchmarks/kubernetes-kubernetes`
+**Sourcegraph Repositories:** `github.com/sg-evals/etcd-io-etcd`, `github.com/sg-evals/kubernetes-api`, `github.com/sg-evals/kubernetes-client-go`, `github.com/sg-evals/kubernetes-kubernetes`
 
 # Incident Debugging: etcd DialTimeout Configuration Across Kubernetes Ecosystem
 
@@ -84,7 +84,7 @@ configuring the etcd client) and the provider side (etcd defining and using Dial
 
 **Specific question**: Find all Go source files in:
 1. `kubernetes/kubernetes` under `staging/src/k8s.io/apiserver/` that configure `DialTimeout`
-2. `etcd-io/etcd` (or `sg-benchmarks/etcd-io-etcd`) under `client/` and `server/` that define or use `DialTimeout`
+2. `etcd-io/etcd` (or `sg-evals/etcd-io-etcd`) under `client/` and `server/` that define or use `DialTimeout`
 
 **IMPORTANT**: Exclude vendored files under `vendor/` directories — these are copies,
 not authoritative sources. Also exclude test files (`_test.go`) — focus on production
@@ -127,7 +127,7 @@ Create a file at `/workspace/answer.json` with your findings:
 ```
 
 **Important**: Use canonical repo names (`kubernetes/kubernetes`, `etcd-io/etcd`).
-For Sourcegraph searches, the etcd mirror is `sg-benchmarks/etcd-io-etcd` — both names
+For Sourcegraph searches, the etcd mirror is `sg-evals/etcd-io-etcd` — both names
 are accepted. Sourcegraph MCP tools return repo names with a `github.com/` prefix —
 strip this prefix in your answer.
 

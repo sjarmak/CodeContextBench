@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/servo--be6a2f99`
-- Use `repo:^github.com/sg-benchmarks/servo--be6a2f99$` filter in keyword_search
-- Use `github.com/sg-benchmarks/servo--be6a2f99` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/servo--be6a2f99`
+- Use `repo:^github.com/sg-evals/servo--be6a2f99$` filter in keyword_search
+- Use `github.com/sg-evals/servo--be6a2f99` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # [Servo] Add scrollend DOM Event Support
 
-**Repository:** github.com/sg-benchmarks/servo--be6a2f99 (mirror of servo/servo)  
+**Repository:** github.com/sg-evals/servo--be6a2f99 (mirror of servo/servo)  
 **Difficulty:** HARD  
 **Category:** big_code_feature
 **Task Type:** Feature Implementation - Large Codebase

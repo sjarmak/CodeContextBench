@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/navidrome--9c3b4561`
-- Use `repo:^github.com/sg-benchmarks/navidrome--9c3b4561$` filter in keyword_search
-- Use `github.com/sg-benchmarks/navidrome--9c3b4561` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/navidrome--9c3b4561`
+- Use `repo:^github.com/sg-evals/navidrome--9c3b4561$` filter in keyword_search
+- Use `github.com/sg-evals/navidrome--9c3b4561` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -91,7 +91,7 @@ Start Navidrome on Windows and generate some log output. Open the log file in No
 
 ---
 
-**Repo:** `github.com/sg-benchmarks/navidrome--9c3b4561` (mirror of `navidrome/navidrome`)  
+**Repo:** `github.com/sg-evals/navidrome--9c3b4561` (mirror of `navidrome/navidrome`)  
 **Base commit:** `23bebe4e06124becf1000e88472ae71a6ca7de4c`  
 **Instance ID:** `instance_navidrome__navidrome-9c3b4561652a15846993d477003e111f0df0c585`
 

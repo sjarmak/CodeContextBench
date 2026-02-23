@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/scikit-learn--cb7e82dd`
-- Use `repo:^github.com/sg-benchmarks/scikit-learn--cb7e82dd$` filter in keyword_search
-- Use `github.com/sg-benchmarks/scikit-learn--cb7e82dd` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/scikit-learn--cb7e82dd`
+- Use `repo:^github.com/sg-evals/scikit-learn--cb7e82dd$` filter in keyword_search
+- Use `github.com/sg-evals/scikit-learn--cb7e82dd` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -70,7 +70,7 @@ If MCP search returns no results:
 ## Overview
 
 **Task ID**: ccb_sweperf-002
-**Repository**: github.com/sg-benchmarks/scikit-learn--cb7e82dd (mirror of scikit-learn)
+**Repository**: github.com/sg-evals/scikit-learn--cb7e82dd (mirror of scikit-learn)
 **Difficulty**: hard
 **Target Function**: `sklearn.cluster._k_means._kmeans_single_elkan`
 **Baseline Runtime**: 0.182000 seconds

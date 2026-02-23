@@ -29,23 +29,23 @@ BENCHMARKS = REPO_ROOT / "benchmarks"
 WRAPPER_SRC = REPO_ROOT / "scripts" / "sgonly_verifier_wrapper.sh"
 
 # Mapping from upstream GitHub repos (as they appear in Dockerfile git clone URLs)
-# to their version-pinned sg-benchmarks mirrors on Sourcegraph.
+# to their version-pinned sg-evals mirrors on Sourcegraph.
 # Used to inject SOURCEGRAPH_REPOS env var into Dockerfile.sg_only / Dockerfile.artifact_only
 # so the agent searches the correct version-pinned mirrors instead of HEAD on public repos.
 UPSTREAM_TO_MIRROR = {
-    "kubernetes/kubernetes": "sg-benchmarks/kubernetes-kubernetes",
-    "etcd-io/etcd": "sg-benchmarks/etcd-io-etcd",
-    "grafana/grafana": "sg-benchmarks/grafana",
-    "grafana/loki": "sg-benchmarks/grafana-loki",
-    "kubernetes/client-go": "sg-benchmarks/kubernetes-client-go",
-    "kubernetes/api": "sg-benchmarks/kubernetes-api",
-    "scikit-learn/scikit-learn": "sg-benchmarks/scikit-learn",
-    "numpy/numpy": "sg-benchmarks/numpy",
-    "pandas-dev/pandas": "sg-benchmarks/pandas",
-    "scipy/scipy": "sg-benchmarks/scipy",
-    "nodejs/node": "sg-benchmarks/nodejs-node",
-    "expressjs/express": "sg-benchmarks/expressjs-express",
-    "prometheus/prometheus": "sg-benchmarks/prometheus",
+    "kubernetes/kubernetes": "sg-evals/kubernetes-kubernetes",
+    "etcd-io/etcd": "sg-evals/etcd-io-etcd",
+    "grafana/grafana": "sg-evals/grafana",
+    "grafana/loki": "sg-evals/grafana-loki",
+    "kubernetes/client-go": "sg-evals/kubernetes-client-go",
+    "kubernetes/api": "sg-evals/kubernetes-api",
+    "scikit-learn/scikit-learn": "sg-evals/scikit-learn",
+    "numpy/numpy": "sg-evals/numpy",
+    "pandas-dev/pandas": "sg-evals/pandas",
+    "scipy/scipy": "sg-evals/scipy",
+    "nodejs/node": "sg-evals/nodejs-node",
+    "expressjs/express": "sg-evals/expressjs-express",
+    "prometheus/prometheus": "sg-evals/prometheus",
 }
 
 # Mapping from ccb-repo-* image tags to their underlying base image and packages.
@@ -55,73 +55,73 @@ CCB_REPO_BASE_MAP = {
     "ccb-repo-camel-1006f047": {
         "from": "eclipse-temurin:17-jdk",
         "packages": ["git", "curl", "python3", "python3-pip"],
-        "mirror": "sg-benchmarks/camel--1006f047",
+        "mirror": "sg-evals/camel--1006f047",
     },
     "ccb-repo-django-674eda1c": {
         "from": "python:3.11-slim",
         "packages": ["git", "curl"],
-        "mirror": "sg-benchmarks/django--674eda1c",
+        "mirror": "sg-evals/django--674eda1c",
     },
     "ccb-repo-django-9e7cc2b6": {
         "from": "python:3.12-bookworm",
         "packages": ["git", "curl"],
-        "mirror": "sg-benchmarks/django--9e7cc2b6",
+        "mirror": "sg-evals/django--9e7cc2b6",
     },
     "ccb-repo-k8s-8c9c67c0": {
         "from": "golang:1.23-bookworm",
         "packages": ["git", "curl", "python3", "python3-pip"],
-        "mirror": "sg-benchmarks/kubernetes--8c9c67c0",
+        "mirror": "sg-evals/kubernetes--8c9c67c0",
     },
     "ccb-repo-k8s-11602f08": {
         "from": "golang:1.23-bookworm",
         "packages": ["git", "curl", "python3", "python3-pip"],
-        "mirror": "sg-benchmarks/kubernetes--11602f08",
+        "mirror": "sg-evals/kubernetes--11602f08",
     },
     "ccb-repo-flipt-3d5a345f": {
         "from": "golang:1.23-bookworm",
         "packages": ["git", "curl"],
-        "mirror": "sg-benchmarks/flipt--3d5a345f",
+        "mirror": "sg-evals/flipt--3d5a345f",
     },
     "ccb-repo-envoy-1d0ba73a": {
         "from": "ubuntu:22.04",
         "packages": ["git", "curl", "python3", "ripgrep"],
-        "mirror": "sg-benchmarks/envoy--1d0ba73a",
+        "mirror": "sg-evals/envoy--1d0ba73a",
     },
     "ccb-repo-envoy-d7809ba2": {
         "from": "ubuntu:22.04",
         "packages": ["git", "curl", "python3", "python3-pip", "ripgrep"],
-        "mirror": "sg-benchmarks/envoy--d7809ba2",
+        "mirror": "sg-evals/envoy--d7809ba2",
     },
     "ccb-repo-kafka-0753c489": {
         "from": "eclipse-temurin:17-jdk",
         "packages": ["git", "curl"],
-        "mirror": "sg-benchmarks/kafka--0753c489",
+        "mirror": "sg-evals/kafka--0753c489",
     },
     "ccb-repo-kafka-e678b4b": {
         "from": "eclipse-temurin:21-jdk",
         "packages": ["git", "curl", "python3", "ripgrep"],
-        "mirror": "sg-benchmarks/kafka--e678b4b",
+        "mirror": "sg-evals/kafka--e678b4b",
     },
     "ccb-repo-flink-0cc95fcc": {
         "from": "eclipse-temurin:17-jdk",
         "packages": ["git", "curl", "python3", "python3-pip"],
-        "mirror": "sg-benchmarks/flink--0cc95fcc",
+        "mirror": "sg-evals/flink--0cc95fcc",
     },
     "ccb-repo-postgres-5a461dc4": {
         "from": "gcc:14-bookworm",
         "packages": ["git", "curl", "python3", "python3-pip", "bison", "flex",
                       "libreadline-dev", "zlib1g-dev"],
-        "mirror": "sg-benchmarks/postgres--5a461dc4",
+        "mirror": "sg-evals/postgres--5a461dc4",
     },
     "ccb-repo-strata-66225ca9": {
         "from": "eclipse-temurin:17-jdk",
         "packages": ["git", "curl", "python3", "python3-pip", "maven"],
-        "mirror": "sg-benchmarks/Strata--66225ca9",
+        "mirror": "sg-evals/Strata--66225ca9",
     },
     "ccb-repo-curl-09e25b9d": {
         "from": "debian:bookworm-slim",
         "packages": ["git", "curl", "python3", "build-essential", "jq", "bc"],
-        "mirror": "sg-benchmarks/curl--09e25b9d",
+        "mirror": "sg-evals/curl--09e25b9d",
     },
 }
 
@@ -129,7 +129,7 @@ CCB_REPO_BASE_MAP = {
 def extract_clone_layout(dockerfile_text):
     """Parse a baseline Dockerfile to extract clone URLs, target dirs, and commits.
 
-    Returns a list of dicts: [{"mirror": "sg-benchmarks/...", "target_dir": "." or "subdir"}]
+    Returns a list of dicts: [{"mirror": "sg-evals/...", "target_dir": "." or "subdir"}]
     Also returns inject_defects path if the Dockerfile uses COPY inject_defects.sh.
     """
     repos = []
@@ -159,10 +159,10 @@ def extract_clone_layout(dockerfile_text):
             target = target_match.group(1) if target_match else None
 
             # Determine mirror name
-            if repo_path.startswith("sg-benchmarks/"):
+            if repo_path.startswith("sg-evals/"):
                 mirror = repo_path
             else:
-                mirror = UPSTREAM_TO_MIRROR.get(repo_path, f"sg-benchmarks/{repo_path}")
+                mirror = UPSTREAM_TO_MIRROR.get(repo_path, f"sg-evals/{repo_path}")
 
             # Determine target_dir relative to workdir
             if target is None or target == '.' or target == workdir:
@@ -192,7 +192,7 @@ def extract_clone_layout(dockerfile_text):
 
 
 def _lookup_mirror_for_task(task_id):
-    """Look up the sg-benchmarks mirror for a task from inject_sg_repo_env.py data.
+    """Look up the sg-evals mirror for a task from inject_sg_repo_env.py data.
 
     Falls back to None if the mapping isn't found.
     """
@@ -220,11 +220,11 @@ def _lookup_mirror_for_task(task_id):
 
 
 def extract_mirror_repos(dockerfile_text: str) -> list:
-    """Extract upstream repos from git clone commands and map to sg-benchmarks mirrors.
+    """Extract upstream repos from git clone commands and map to sg-evals mirrors.
 
     Parses 'git clone ... https://github.com/{org}/{repo}' lines from the baseline
-    Dockerfile to determine which repos are used, then maps each to its sg-benchmarks
-    mirror name. Also handles repos already cloned from sg-benchmarks directly.
+    Dockerfile to determine which repos are used, then maps each to its sg-evals
+    mirror name. Also handles repos already cloned from sg-evals directly.
     """
     mirrors = []
     for line in dockerfile_text.splitlines():
@@ -238,8 +238,8 @@ def extract_mirror_repos(dockerfile_text: str) -> list:
             mirror = UPSTREAM_TO_MIRROR.get(upstream)
             if mirror:
                 mirrors.append(mirror)
-            elif upstream.startswith("sg-benchmarks/"):
-                # Already an sg-benchmarks repo — pass through
+            elif upstream.startswith("sg-evals/"):
+                # Already an sg-evals repo — pass through
                 mirrors.append(upstream)
     return sorted(set(mirrors))
 

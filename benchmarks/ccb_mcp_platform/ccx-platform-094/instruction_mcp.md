@@ -4,7 +4,7 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/grafana` — use `repo:^github.com/sg-benchmarks/grafana$` filter
+- `github.com/sg-evals/grafana` — use `repo:^github.com/sg-evals/grafana$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -68,7 +68,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/grafana`
+**Sourcegraph Repositories:** `github.com/sg-evals/grafana`
 
 # Platform Engineering: CODEOWNERS Infrastructure Discovery
 

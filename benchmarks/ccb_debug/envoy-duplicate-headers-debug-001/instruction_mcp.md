@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/envoy--25f893b4`
-- Use `repo:^github.com/sg-benchmarks/envoy--25f893b4$` filter in keyword_search
-- Use `github.com/sg-benchmarks/envoy--25f893b4` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/envoy--25f893b4`
+- Use `repo:^github.com/sg-evals/envoy--25f893b4$` filter in keyword_search
+- Use `github.com/sg-evals/envoy--25f893b4` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # Investigation: Duplicate Response Headers in Envoy Filter Pipeline
 
-**Repository:** github.com/sg-benchmarks/envoy--25f893b4 (mirror of envoyproxy/envoy)
+**Repository:** github.com/sg-evals/envoy--25f893b4 (mirror of envoyproxy/envoy)
 **Task Type:** Deep Causal Chain (investigation only — no code fixes)
 
 ## Scenario

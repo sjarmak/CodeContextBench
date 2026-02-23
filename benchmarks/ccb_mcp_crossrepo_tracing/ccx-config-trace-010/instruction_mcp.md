@@ -4,10 +4,10 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/etcd-io-etcd` — use `repo:^github.com/sg-benchmarks/etcd-io-etcd$` filter
-- `github.com/sg-benchmarks/kubernetes-api` — use `repo:^github.com/sg-benchmarks/kubernetes-api$` filter
-- `github.com/sg-benchmarks/kubernetes-client-go` — use `repo:^github.com/sg-benchmarks/kubernetes-client-go$` filter
-- `github.com/sg-benchmarks/kubernetes-kubernetes` — use `repo:^github.com/sg-benchmarks/kubernetes-kubernetes$` filter
+- `github.com/sg-evals/etcd-io-etcd` — use `repo:^github.com/sg-evals/etcd-io-etcd$` filter
+- `github.com/sg-evals/kubernetes-api` — use `repo:^github.com/sg-evals/kubernetes-api$` filter
+- `github.com/sg-evals/kubernetes-client-go` — use `repo:^github.com/sg-evals/kubernetes-client-go$` filter
+- `github.com/sg-evals/kubernetes-kubernetes` — use `repo:^github.com/sg-evals/kubernetes-kubernetes$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -71,7 +71,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/etcd-io-etcd`, `github.com/sg-benchmarks/kubernetes-api`, `github.com/sg-benchmarks/kubernetes-client-go`, `github.com/sg-benchmarks/kubernetes-kubernetes`
+**Sourcegraph Repositories:** `github.com/sg-evals/etcd-io-etcd`, `github.com/sg-evals/kubernetes-api`, `github.com/sg-evals/kubernetes-client-go`, `github.com/sg-evals/kubernetes-kubernetes`
 
 # Stack Trace Symbol Resolution: rest.Config
 
@@ -114,14 +114,14 @@ Create a file at `/workspace/answer.json` with your findings in the following st
 ```json
 {
   "symbols": [
-    {"repo": "sg-benchmarks/kubernetes-client-go", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
+    {"repo": "sg-evals/kubernetes-client-go", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
   ],
   "text": "Explanation of where Config is defined, the package import path, and why this is the authoritative source."
 }
 ```
 
-**Important**: The `kubernetes/client-go` repository is indexed in Sourcegraph as `sg-benchmarks/kubernetes-client-go`. Use `sg-benchmarks/kubernetes-client-go` as the `repo` value in your answer — the oracle checks for this exact identifier.
-**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-benchmarks/kubernetes-client-go`). Strip this prefix in your answer — use `sg-benchmarks/kubernetes-client-go`, NOT `github.com/sg-benchmarks/kubernetes-client-go`.
+**Important**: The `kubernetes/client-go` repository is indexed in Sourcegraph as `sg-evals/kubernetes-client-go`. Use `sg-evals/kubernetes-client-go` as the `repo` value in your answer — the oracle checks for this exact identifier.
+**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-evals/kubernetes-client-go`). Strip this prefix in your answer — use `sg-evals/kubernetes-client-go`, NOT `github.com/sg-evals/kubernetes-client-go`.
 
 Your answer is evaluated against a closed-world oracle — the exact repo, path, and symbol name matter.
 

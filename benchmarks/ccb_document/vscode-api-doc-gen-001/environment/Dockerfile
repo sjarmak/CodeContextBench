@@ -10,7 +10,7 @@ WORKDIR /workspace
 
 # Clone VS Code repository with blobless clone for faster setup
 # Commit 69d110f2 is from main branch (2026-02-16)
-RUN git clone --depth 1 https://github.com/sg-benchmarks/vscode--69d110f2.git repo
+RUN git clone --depth 1 https://github.com/sg-evals/vscode--69d110f2.git repo
 
 # Set working directory to repo root so agent can explore the codebase
 WORKDIR /workspace/repo

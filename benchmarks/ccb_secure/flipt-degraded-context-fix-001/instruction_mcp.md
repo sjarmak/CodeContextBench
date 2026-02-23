@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/flipt--3d5a345f`
-- Use `repo:^github.com/sg-benchmarks/flipt--3d5a345f$` filter in keyword_search
-- Use `github.com/sg-benchmarks/flipt--3d5a345f` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/flipt--3d5a345f`
+- Use `repo:^github.com/sg-evals/flipt--3d5a345f$` filter in keyword_search
+- Use `github.com/sg-evals/flipt--3d5a345f` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # Add Graceful Error Handling to Evaluation Server
 
-**Repository:** github.com/sg-benchmarks/flipt--3d5a345f (mirror of flipt-io/flipt)
+**Repository:** github.com/sg-evals/flipt--3d5a345f (mirror of flipt-io/flipt)
 **Your Team:** Evaluation Engine Team
 **Access Scope:** You are assigned to `internal/server/evaluation/`. Some upstream dependency files (storage interfaces, protobuf definitions) may not be available locally — they are maintained by other teams. You must work with the code available to you and infer contracts from usage patterns if source files are missing.
 

@@ -183,7 +183,7 @@ with a fail2pass gate (gold answer scores 1.0, empty answer scores 0.0).
 For MCP-Full runs, the agent's workspace is deliberately emptied or
 truncated via `Dockerfile.sg_only`. A clone manifest
 (`/tmp/.sg_only_clone_manifest.json`) tells the verifier which
-sg-benchmarks mirror(s) to clone at verification time so the verifier can
+sg-evals mirror(s) to clone at verification time so the verifier can
 still compile and test the agent's code changes against the real codebase.
 
 This design ensures:
@@ -193,7 +193,7 @@ This design ensures:
 
 ### 4.3 Repository Mirrors
 
-Repos not natively indexed in Sourcegraph use `sg-benchmarks/*` mirrors
+Repos not natively indexed in Sourcegraph use `sg-evals/*` mirrors
 on GitHub. Mirrors are created as orphan commits pinning HEAD to a
 specific tagged version, ensuring Sourcegraph indexes exactly the
 version the task targets.

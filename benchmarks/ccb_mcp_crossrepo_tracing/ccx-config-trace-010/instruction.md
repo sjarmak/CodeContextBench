@@ -39,14 +39,14 @@ Create a file at `/workspace/answer.json` with your findings in the following st
 ```json
 {
   "symbols": [
-    {"repo": "sg-benchmarks/kubernetes-client-go", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
+    {"repo": "sg-evals/kubernetes-client-go", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
   ],
   "text": "Explanation of where Config is defined, the package import path, and why this is the authoritative source."
 }
 ```
 
-**Important**: The `kubernetes/client-go` repository is indexed in Sourcegraph as `sg-benchmarks/kubernetes-client-go`. Use `sg-benchmarks/kubernetes-client-go` as the `repo` value in your answer — the oracle checks for this exact identifier.
-**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-benchmarks/kubernetes-client-go`). Strip this prefix in your answer — use `sg-benchmarks/kubernetes-client-go`, NOT `github.com/sg-benchmarks/kubernetes-client-go`.
+**Important**: The `kubernetes/client-go` repository is indexed in Sourcegraph as `sg-evals/kubernetes-client-go`. Use `sg-evals/kubernetes-client-go` as the `repo` value in your answer — the oracle checks for this exact identifier.
+**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-evals/kubernetes-client-go`). Strip this prefix in your answer — use `sg-evals/kubernetes-client-go`, NOT `github.com/sg-evals/kubernetes-client-go`.
 
 Your answer is evaluated against a closed-world oracle — the exact repo, path, and symbol name matter.
 

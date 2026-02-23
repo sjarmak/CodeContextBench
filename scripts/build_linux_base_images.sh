@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # The 5 kernel version tags required by the ccb_debug linux tasks.
-# Tag → commit mapping (for reference, mirrors on sg-benchmarks):
+# Tag → commit mapping (for reference, mirrors on sg-evals):
 #   v5.6.7    → 55b2af1c  (linux-acpi-backlight-fault-001)
 #   v3.7.6    → 07c4ee00  (linux-hda-intel-suspend-fault-001)
 #   v5.6-rc2  → 11a48a5a  (linux-iwlwifi-subdevice-fault-001)

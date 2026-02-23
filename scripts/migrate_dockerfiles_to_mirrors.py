@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Migrate Dockerfiles to clone from sg-benchmarks mirrors instead of github.com.
+"""Migrate Dockerfiles to clone from sg-evals mirrors instead of github.com.
 
 Rewrites `git clone` commands in baseline Dockerfiles so both baseline and MCP
-configs pull from the same pinned sg-benchmarks mirror repositories. Benefits:
+configs pull from the same pinned sg-evals mirror repositories. Benefits:
   1. Content consistency: baseline code = same bytes SG indexes for MCP
   2. Faster builds: --depth 1 on single-commit mirrors is much faster
   3. Reproducibility: no dependency on upstream github.com availability
@@ -35,11 +35,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 MANIFEST_PATH = REPO_ROOT / "configs" / "mirror_creation_manifest.json"
 INSTANCE_MAP_PATH = REPO_ROOT / "configs" / "instance_to_mirror.json"
 
-SG_ORG = "sg-benchmarks"
+SG_ORG = "sg-evals"
 SG_BASE = f"https://github.com/{SG_ORG}"
 
 # ─────────────────────────────────────────────────────────────
-# URL aliases: non-GitHub hosts that have sg-benchmarks mirrors
+# URL aliases: non-GitHub hosts that have sg-evals mirrors
 # ─────────────────────────────────────────────────────────────
 URL_ALIASES = {
     # go.googlesource.com/X mirrors github.com/golang/X
@@ -148,7 +148,7 @@ class CloneOp:
     org_repo: str           # normalized: "django/django"
     ref: str                # commit hash or tag
     target_dir: str         # clone destination (".", "repo-name", "/path")
-    mirror: str | None      # matched mirror name (without sg-benchmarks/ prefix)
+    mirror: str | None      # matched mirror name (without sg-evals/ prefix)
     is_parent: bool = False  # True if ref has ~1 (parent commit)
     has_sparse: bool = False # True if sparse-checkout follows
     has_worktree: bool = False
@@ -340,15 +340,15 @@ def scan_dockerfile(path: Path, mirror_lookup: dict) -> MigrationPlan:
                     mapped = URL_ALIASES.get(alias_key)
                     if mapped is None:
                         plan.flags.append(
-                            f"NO MIRROR: go.googlesource.com/{repo_name} (no sg-benchmarks mirror)"
+                            f"NO MIRROR: go.googlesource.com/{repo_name} (no sg-evals mirror)"
                         )
                         plan.can_auto_migrate = False
                         continue
                     org_repo = mapped
                     full_url_domain = "go.googlesource.com"
 
-            # Skip if this is already an sg-benchmarks URL
-            if org_repo.startswith(f"{SG_ORG}/") or "sg-benchmarks" in org_repo:
+            # Skip if this is already an sg-evals URL
+            if org_repo.startswith(f"{SG_ORG}/") or "sg-evals" in org_repo:
                 continue
 
             # Extract the ref
@@ -405,7 +405,7 @@ def scan_dockerfile(path: Path, mirror_lookup: dict) -> MigrationPlan:
                 plan.can_auto_migrate = False
             if not mirror:
                 plan.flags.append(
-                    f"NO MIRROR: {org_repo}@{clean_ref} - no sg-benchmarks mirror found"
+                    f"NO MIRROR: {org_repo}@{clean_ref} - no sg-evals mirror found"
                 )
                 plan.can_auto_migrate = False
 
@@ -761,7 +761,7 @@ def print_report(plans: list[MigrationPlan], verbose: bool = False):
     all_mirrors = sorted(set(
         op.mirror for p in plans for op in p.clone_ops if op.mirror
     ))
-    print(f"\n  Unique sg-benchmarks mirrors used: {len(all_mirrors)}")
+    print(f"\n  Unique sg-evals mirrors used: {len(all_mirrors)}")
 
     print()
     if auto and not verbose:
@@ -776,7 +776,7 @@ def print_report(plans: list[MigrationPlan], verbose: bool = False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Migrate Dockerfiles to clone from sg-benchmarks mirrors"
+        description="Migrate Dockerfiles to clone from sg-evals mirrors"
     )
     parser.add_argument(
         "--execute", action="store_true",

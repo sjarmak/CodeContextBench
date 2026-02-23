@@ -4,8 +4,8 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/wish--v0.5.0` — use `repo:^github.com/sg-benchmarks/wish--v0.5.0$` filter
-- `github.com/sg-benchmarks/ssh--v0.3.4` — use `repo:^github.com/sg-benchmarks/ssh--v0.3.4$` filter
+- `github.com/sg-evals/wish--v0.5.0` — use `repo:^github.com/sg-evals/wish--v0.5.0$` filter
+- `github.com/sg-evals/ssh--v0.3.4` — use `repo:^github.com/sg-evals/ssh--v0.3.4$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -69,7 +69,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/wish--v0.5.0`, `github.com/sg-benchmarks/ssh--v0.3.4`
+**Sourcegraph Repositories:** `github.com/sg-evals/wish--v0.5.0`, `github.com/sg-evals/ssh--v0.3.4`
 
 # Security Triage: Transitive Dependency Vulnerability Assessment
 

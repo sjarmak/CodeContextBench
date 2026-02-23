@@ -289,7 +289,7 @@ class HarborExecutor:
         if mcp_result.mcp_enabled and os.environ.get("SOURCEGRAPH_ACCESS_TOKEN"):
             env_json["SOURCEGRAPH_ACCESS_TOKEN"] = os.environ["SOURCEGRAPH_ACCESS_TOKEN"]
         
-        # Extract repo and commit from first task ID for sg-benchmarks org
+        # Extract repo and commit from first task ID for sg-evals org
         # Task ID format: instance_REPO__REPO-FULL_HASH
         # Extract: repo--HASH_FIRST_8_CHARS
         if run_spec.task_ids and len(run_spec.task_ids) > 0:

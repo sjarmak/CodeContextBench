@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Create and populate sg-benchmarks mirrors for the 8 new MCP-unique tasks.
+# Create and populate sg-evals mirrors for the 8 new MCP-unique tasks.
 #
 # Two phases:
-#   Phase 1: Create NEW repos on sg-benchmarks (gh repo create)
+#   Phase 1: Create NEW repos on sg-evals (gh repo create)
 #   Phase 2: Clone upstream at pinned tag, orphan commit, force-push
 #
 # Repos handled:
-#   - numpy/numpy @ v2.2.2             → sg-benchmarks/numpy              (NEW)
-#   - scipy/scipy @ v1.15.1            → sg-benchmarks/scipy              (NEW)
-#   - grafana/grafana @ v11.4.0        → sg-benchmarks/grafana            (NEW)
-#   - prometheus/prometheus @ v3.2.1    → sg-benchmarks/prometheus         (NEW)
+#   - numpy/numpy @ v2.2.2             → sg-evals/numpy              (NEW)
+#   - scipy/scipy @ v1.15.1            → sg-evals/scipy              (NEW)
+#   - grafana/grafana @ v11.4.0        → sg-evals/grafana            (NEW)
+#   - prometheus/prometheus @ v3.2.1    → sg-evals/prometheus         (NEW)
 #
 # Already at correct version (no action needed):
-#   - expressjs/express @ 4.21.1       → sg-benchmarks/expressjs-express  (EXISTS)
-#   - etcd-io/etcd @ v3.5.17           → sg-benchmarks/etcd-io-etcd      (EXISTS)
+#   - expressjs/express @ 4.21.1       → sg-evals/expressjs-express  (EXISTS)
+#   - etcd-io/etcd @ v3.5.17           → sg-evals/etcd-io-etcd      (EXISTS)
 #
 # Usage: bash scripts/create_mcp_expansion_mirrors.sh [--dry-run]
 set -euo pipefail
@@ -25,7 +25,7 @@ if [[ "${1:-}" == "--dry-run" ]]; then
     echo ""
 fi
 
-SG_ORG="sg-benchmarks"
+SG_ORG="sg-evals"
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -95,7 +95,7 @@ for entry in "${REPOS[@]}"; do
     git -C "$fresh_dir" init -b main --quiet 2>&1
     rsync -a --exclude='.git' "$clone_dir/" "$fresh_dir/" 2>&1
     git -C "$fresh_dir" add -A 2>&1
-    git -C "$fresh_dir" -c user.email="benchmark@sg-benchmarks.dev" -c user.name="sg-benchmarks" \
+    git -C "$fresh_dir" -c user.email="benchmark@sg-evals.dev" -c user.name="sg-evals" \
         commit -m "Mirror ${github_repo} @ ${tag} (${actual_commit:0:8}) — pinned for CCB MCP-unique tasks" --quiet 2>&1
 
     rm -rf "$clone_dir"
@@ -124,17 +124,17 @@ echo "Failed:    $FAILED"
 echo "Skipped:   $SKIPPED"
 echo ""
 echo "Already at correct version (no action taken):"
-echo "  - sg-benchmarks/expressjs-express @ 4.21.1"
-echo "  - sg-benchmarks/etcd-io-etcd @ v3.5.17"
+echo "  - sg-evals/expressjs-express @ 4.21.1"
+echo "  - sg-evals/etcd-io-etcd @ v3.5.17"
 echo ""
 if [ "$SUCCESS" -gt 0 ]; then
     echo "Wait ~10-30 minutes for Sourcegraph indexing, then verify with:"
     echo '  python3 -c "'
     echo '    mirrors = {'
-    echo '      "sg-benchmarks/numpy": ("numpy/f2py/_src_pyf.py", "numpy.distutils"),'
-    echo '      "sg-benchmarks/scipy": ("tools/generate_f2pymod.py", "numpy.distutils"),'
-    echo '      "sg-benchmarks/grafana": ("pkg/services/featuremgmt/registry.go", "auditLoggingAppPlatform"),'
-    echo '      "sg-benchmarks/prometheus": ("config/config.go", "TLSConfig"),'
+    echo '      "sg-evals/numpy": ("numpy/f2py/_src_pyf.py", "numpy.distutils"),'
+    echo '      "sg-evals/scipy": ("tools/generate_f2pymod.py", "numpy.distutils"),'
+    echo '      "sg-evals/grafana": ("pkg/services/featuremgmt/registry.go", "auditLoggingAppPlatform"),'
+    echo '      "sg-evals/prometheus": ("config/config.go", "TLSConfig"),'
     echo '    }'
     echo '    for m, (f, kw) in mirrors.items():'
     echo '      print(f"  keyword_search: repo:^github.com/{m}$ file:{f} {kw}")'

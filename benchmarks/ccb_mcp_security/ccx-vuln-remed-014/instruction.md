@@ -11,7 +11,7 @@ Your task is to **find Go source files in the Loki and Mimir repositories** that
 authentication middleware** such as `middleware.AuthenticateUser`.
 
 For each file found, report:
-- The repository (e.g., `sg-benchmarks/grafana-loki`)
+- The repository (e.g., `sg-evals/grafana-loki`)
 - The file path within the repository
 - The specific endpoint path(s) registered without authentication
 
@@ -47,7 +47,7 @@ Create a file at `/workspace/answer.json` with your findings:
 {
   "files": [
     {
-      "repo": "sg-benchmarks/grafana-loki",
+      "repo": "sg-evals/grafana-loki",
       "path": "relative/path/to/file.go",
       "endpoints": ["/endpoint/path/1", "/endpoint/path/2"]
     }
@@ -56,8 +56,8 @@ Create a file at `/workspace/answer.json` with your findings:
 }
 ```
 
-**Important**: Use exact repo identifiers as they appear in Sourcegraph. The repos to audit are `sg-benchmarks/grafana-loki` and `sg-benchmarks/grafana-mimir`. Note: the `grafana/loki` repository corresponds to `sg-benchmarks/grafana-loki` in Sourcegraph — use `sg-benchmarks/grafana-loki` as the `repo` value in your answer. The oracle checks for `pkg/loki/modules.go` in `sg-benchmarks/grafana-loki`.
-**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-benchmarks/kubernetes-client-go`). Strip this prefix in your answer — use `sg-benchmarks/kubernetes-client-go`, NOT `github.com/sg-benchmarks/kubernetes-client-go`.
+**Important**: Use exact repo identifiers as they appear in Sourcegraph. The repos to audit are `sg-evals/grafana-loki` and `sg-evals/grafana-mimir`. Note: the `grafana/loki` repository corresponds to `sg-evals/grafana-loki` in Sourcegraph — use `sg-evals/grafana-loki` as the `repo` value in your answer. The oracle checks for `pkg/loki/modules.go` in `sg-evals/grafana-loki`.
+**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-evals/kubernetes-client-go`). Strip this prefix in your answer — use `sg-evals/kubernetes-client-go`, NOT `github.com/sg-evals/kubernetes-client-go`.
 
 Your answer is evaluated against a closed-world oracle — completeness matters.
 

@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/pytorch--d18007a1`
-- Use `repo:^github.com/sg-benchmarks/pytorch--d18007a1$` filter in keyword_search
-- Use `github.com/sg-benchmarks/pytorch--d18007a1` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/pytorch--d18007a1`
+- Use `repo:^github.com/sg-evals/pytorch--d18007a1$` filter in keyword_search
+- Use `github.com/sg-evals/pytorch--d18007a1` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # [Py 3.14] Cleanup graphs for failed tracer outputs
 
-**Repository:** github.com/sg-benchmarks/pytorch--d18007a1 (mirror of pytorch)
+**Repository:** github.com/sg-evals/pytorch--d18007a1 (mirror of pytorch)
 **Difficulty:** HARD
 **Category:** cross_module_bug_fix
 

@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Clone Kubernetes at the target commit (DRA AllocationMode change)
 # Commit 2e534d6 is the change introducing multi-node AllocationMode:All
-RUN git clone --depth 1 https://github.com/sg-benchmarks/kubernetes--2e534d6.git . && \
+RUN git clone --depth 1 https://github.com/sg-evals/kubernetes--2e534d6.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

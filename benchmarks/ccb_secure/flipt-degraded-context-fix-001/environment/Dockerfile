@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone Flipt at pinned commit
-RUN git clone --depth 1 https://github.com/sg-benchmarks/flipt--3d5a345f.git . && \
+RUN git clone --depth 1 https://github.com/sg-evals/flipt--3d5a345f.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

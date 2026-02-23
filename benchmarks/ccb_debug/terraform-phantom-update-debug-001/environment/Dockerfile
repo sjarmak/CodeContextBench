@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ReadResource / PlanResourceChange, causing phantom diffs and incomplete
 # sensitive_attributes in state.
 # We check out the parent commit (9658f9df) to get the broken state.
-RUN git clone --depth 1 https://github.com/sg-benchmarks/terraform--9658f9df.git . && \
+RUN git clone --depth 1 https://github.com/sg-evals/terraform--9658f9df.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

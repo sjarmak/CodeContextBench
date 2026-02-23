@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Clone Argo CD repository at v2.14.21
 WORKDIR /workspace
-RUN git clone --depth 1 https://github.com/sg-benchmarks/argo-cd--206a6eec.git .
+RUN git clone --depth 1 https://github.com/sg-evals/argo-cd--206a6eec.git .
 
 # Set git config for potential commits (not needed for Q&A but follows convention)
 RUN git config --global user.email "agent@codecontextbench.dev" && \

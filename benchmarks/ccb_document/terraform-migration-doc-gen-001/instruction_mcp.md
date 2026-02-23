@@ -4,8 +4,8 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/terraform--7637a921` — use `repo:^github.com/sg-benchmarks/terraform--7637a921$` filter
-- `github.com/sg-benchmarks/terraform--24236f4f` — use `repo:^github.com/sg-benchmarks/terraform--24236f4f$` filter
+- `github.com/sg-evals/terraform--7637a921` — use `repo:^github.com/sg-evals/terraform--7637a921$` filter
+- `github.com/sg-evals/terraform--24236f4f` — use `repo:^github.com/sg-evals/terraform--24236f4f$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -69,7 +69,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/terraform--7637a921`, `github.com/sg-benchmarks/terraform--24236f4f`
+**Sourcegraph Repositories:** `github.com/sg-evals/terraform--7637a921`, `github.com/sg-evals/terraform--24236f4f`
 
 # Task: Terraform v1.9.0 to v1.10.0 Migration Guide
 

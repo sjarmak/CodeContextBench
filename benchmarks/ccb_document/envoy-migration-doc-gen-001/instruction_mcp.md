@@ -4,8 +4,8 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/envoy--50ea83e6` — use `repo:^github.com/sg-benchmarks/envoy--50ea83e6$` filter
-- `github.com/sg-benchmarks/envoy--7b8baff1` — use `repo:^github.com/sg-benchmarks/envoy--7b8baff1$` filter
+- `github.com/sg-evals/envoy--50ea83e6` — use `repo:^github.com/sg-evals/envoy--50ea83e6$` filter
+- `github.com/sg-evals/envoy--7b8baff1` — use `repo:^github.com/sg-evals/envoy--7b8baff1$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -69,7 +69,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/envoy--50ea83e6`, `github.com/sg-benchmarks/envoy--7b8baff1`
+**Sourcegraph Repositories:** `github.com/sg-evals/envoy--50ea83e6`, `github.com/sg-evals/envoy--7b8baff1`
 
 # Migration Guide: Envoy External Processing Filter (v1.30 → v1.31)
 

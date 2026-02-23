@@ -7,7 +7,7 @@ version bump. The `req.host` property was deprecated in Express 4.3.0 in favor o
 `req.hostname`. You need to find all source files in the Express repository that define
 or test the deprecated `req.host` property (not `req.hostname`).
 
-**Specific question**: Which source files in `sg-benchmarks/expressjs-express` reference
+**Specific question**: Which source files in `sg-evals/expressjs-express` reference
 the deprecated `req.host` property specifically (the definition, tests, and changelog)?
 
 **IMPORTANT precision trap**: `req.host` is a substring of `req.hostname` — you must
@@ -39,13 +39,13 @@ Create a file at `/workspace/answer.json` with your findings:
 ```json
 {
   "files": [
-    {"repo": "sg-benchmarks/expressjs-express", "path": "relative/path/to/file.js"}
+    {"repo": "sg-evals/expressjs-express", "path": "relative/path/to/file.js"}
   ],
   "text": "Narrative explanation of your findings, citing repos and file paths."
 }
 ```
 
-**Important**: Use repo name `sg-benchmarks/expressjs-express` or `expressjs/express`.
+**Important**: Use repo name `sg-evals/expressjs-express` or `expressjs/express`.
 **Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix. Strip this prefix in your answer.
 
 Include only files that specifically reference the deprecated `req.host` property. Your answer is evaluated against a closed-world oracle — both completeness and precision matter.

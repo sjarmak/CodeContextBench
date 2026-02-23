@@ -13,6 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone QuantLib at pinned commit (v1.41)
-RUN git clone --depth 1 https://github.com/sg-benchmarks/QuantLib--dbdcc14e.git . && \
+RUN git clone --depth 1 https://github.com/sg-evals/QuantLib--dbdcc14e.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"

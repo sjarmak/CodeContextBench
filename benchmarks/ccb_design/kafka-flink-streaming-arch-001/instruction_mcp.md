@@ -4,8 +4,8 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/kafka--0753c489` — use `repo:^github.com/sg-benchmarks/kafka--0753c489$` filter
-- `github.com/sg-benchmarks/flink--0cc95fcc` — use `repo:^github.com/sg-benchmarks/flink--0cc95fcc$` filter
+- `github.com/sg-evals/kafka--0753c489` — use `repo:^github.com/sg-evals/kafka--0753c489$` filter
+- `github.com/sg-evals/flink--0cc95fcc` — use `repo:^github.com/sg-evals/flink--0cc95fcc$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.

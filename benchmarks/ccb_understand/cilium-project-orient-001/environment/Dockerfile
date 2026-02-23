@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Clone Cilium at a stable release tag
 # v1.16.5 is a recent stable release with well-established structure
-RUN git clone --depth 1 https://github.com/sg-benchmarks/cilium--v1.16.5.git . && \
+RUN git clone --depth 1 https://github.com/sg-evals/cilium--v1.16.5.git . && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

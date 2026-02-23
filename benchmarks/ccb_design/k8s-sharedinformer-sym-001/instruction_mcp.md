@@ -4,8 +4,8 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/kubernetes--31bf3ed4` — use `repo:^github.com/sg-benchmarks/kubernetes--31bf3ed4$` filter
-- `github.com/sg-benchmarks/autoscaler--0ccfef95` — use `repo:^github.com/sg-benchmarks/autoscaler--0ccfef95$` filter
+- `github.com/sg-evals/kubernetes--31bf3ed4` — use `repo:^github.com/sg-evals/kubernetes--31bf3ed4$` filter
+- `github.com/sg-evals/autoscaler--0ccfef95` — use `repo:^github.com/sg-evals/autoscaler--0ccfef95$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -69,7 +69,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/kubernetes--31bf3ed4`, `github.com/sg-benchmarks/autoscaler--0ccfef95`
+**Sourcegraph Repositories:** `github.com/sg-evals/kubernetes--31bf3ed4`, `github.com/sg-evals/autoscaler--0ccfef95`
 
 Find all callers and usages of Kubernetes client-go's `Apps().V1().Deployments()` SharedInformer factory method across two repositories.
 

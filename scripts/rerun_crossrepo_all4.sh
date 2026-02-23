@@ -39,10 +39,10 @@ CROSSREPO_JOBS="runs/official/crossrepo_opus_20260204_133742"
 
 # Sourcegraph repo name mappings for all 4 tasks
 declare -A CROSSREPO_SG=(
-    ["api_upgrade_01"]="sg-benchmarks/etcd--d89978e8"
-    ["bug_localization_01"]="sg-benchmarks/scikit-learn--cb7e82dd"
-    ["cross_file_reasoning_01"]="sg-benchmarks/kubernetes--8c9c67c0"
-    ["refactor_rename_01"]="sg-benchmarks/django--9e8f0953"
+    ["api_upgrade_01"]="sg-evals/etcd--d89978e8"
+    ["bug_localization_01"]="sg-evals/scikit-learn--cb7e82dd"
+    ["cross_file_reasoning_01"]="sg-evals/kubernetes--8c9c67c0"
+    ["refactor_rename_01"]="sg-evals/django--9e8f0953"
 )
 
 CONFIGS=("baseline" "sourcegraph_full" "sourcegraph_full")

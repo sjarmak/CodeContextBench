@@ -13,8 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone local checkout repos (baseline config: agent has local access to these)
-RUN git clone --depth 1 https://github.com/sg-benchmarks/grafana--v11.4.0.git /workspace/grafana
-RUN git clone --depth 1 https://github.com/sg-benchmarks/loki--v3.3.4.git /workspace/loki
+RUN git clone --depth 1 https://github.com/sg-evals/grafana--v11.4.0.git /workspace/grafana
+RUN git clone --depth 1 https://github.com/sg-evals/loki--v3.3.4.git /workspace/loki
 
 # Initialize git identity for agent commits
 RUN git config --global user.email "agent@example.com" && \

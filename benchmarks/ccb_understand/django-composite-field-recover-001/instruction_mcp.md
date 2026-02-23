@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/django--674eda1c`
-- Use `repo:^github.com/sg-benchmarks/django--674eda1c$` filter in keyword_search
-- Use `github.com/sg-benchmarks/django--674eda1c` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/django--674eda1c`
+- Use `repo:^github.com/sg-evals/django--674eda1c$` filter in keyword_search
+- Use `github.com/sg-evals/django--674eda1c` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # Add Composite Field Validator for Django Forms
 
-**Repository:** github.com/sg-benchmarks/django--674eda1c (mirror of django/django)
+**Repository:** github.com/sg-evals/django--674eda1c (mirror of django/django)
 **Access Scope:** You may modify files in `django/forms/`. You may read any file to understand existing patterns.
 
 ## Context

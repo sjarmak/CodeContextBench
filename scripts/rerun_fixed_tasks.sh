@@ -50,30 +50,30 @@ K8SDOCS_JOBS="runs/official/k8s_docs_opus_${TIMESTAMP}"
 # Sourcegraph repo name mappings
 # ============================================
 declare -A CROSSREPO_SG=(
-    ["api_upgrade_01"]="sg-benchmarks/etcd--d89978e8"
-    ["bug_localization_01"]="sg-benchmarks/scikit-learn--cb7e82dd"
-    ["cross_file_reasoning_01"]="sg-benchmarks/kubernetes--8c9c67c0"
-    ["refactor_rename_01"]="sg-benchmarks/django--674eda1c"
-    ["simple_test_01"]="sg-benchmarks/kubernetes--8c9c67c0"
+    ["api_upgrade_01"]="sg-evals/etcd--d89978e8"
+    ["bug_localization_01"]="sg-evals/scikit-learn--cb7e82dd"
+    ["cross_file_reasoning_01"]="sg-evals/kubernetes--8c9c67c0"
+    ["refactor_rename_01"]="sg-evals/django--674eda1c"
+    ["simple_test_01"]="sg-evals/kubernetes--8c9c67c0"
 )
 
 declare -A LARGEREPO_SG=(
-    ["big-code-k8s-001"]="sg-benchmarks/kubernetes--latest"
-    ["big-code-servo-001"]="sg-benchmarks/servo--latest"
-    ["big-code-trt-001"]="sg-benchmarks/TensorRT-LLM--latest"
-    ["big-code-vsc-001"]="sg-benchmarks/vscode--latest"
+    ["big-code-k8s-001"]="sg-evals/kubernetes--latest"
+    ["big-code-servo-001"]="sg-evals/servo--latest"
+    ["big-code-trt-001"]="sg-evals/TensorRT-LLM--latest"
+    ["big-code-vsc-001"]="sg-evals/vscode--latest"
 )
 
 declare -A PYTORCH_SG=(
-    ["sgt-005"]="sg-benchmarks/pytorch--ca246612"
-    ["sgt-008"]="sg-benchmarks/pytorch--863edc78"
-    ["sgt-009"]="sg-benchmarks/pytorch--863edc78"
-    ["sgt-010"]="sg-benchmarks/pytorch--5811a8d7"
-    ["sgt-016"]="sg-benchmarks/pytorch--cbe1a35d"
-    ["sgt-025"]="sg-benchmarks/pytorch--e8ca8cc3"
+    ["sgt-005"]="sg-evals/pytorch--ca246612"
+    ["sgt-008"]="sg-evals/pytorch--863edc78"
+    ["sgt-009"]="sg-evals/pytorch--863edc78"
+    ["sgt-010"]="sg-evals/pytorch--5811a8d7"
+    ["sgt-016"]="sg-evals/pytorch--cbe1a35d"
+    ["sgt-025"]="sg-evals/pytorch--e8ca8cc3"
 )
 
-K8SDOCS_SG="sg-benchmarks/kubernetes--8c9c67c0"
+K8SDOCS_SG="sg-evals/kubernetes--8c9c67c0"
 
 CONFIGS=("baseline" "sourcegraph_full")
 

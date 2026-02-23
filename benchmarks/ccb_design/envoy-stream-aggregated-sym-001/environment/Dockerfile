@@ -14,10 +14,10 @@ RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
 WORKDIR /workspace
 
 # Clone envoyproxy/envoy at pinned SHA (2026-02-16)
-RUN git clone --depth 1 https://github.com/sg-benchmarks/envoy--1d0ba73a.git envoy
+RUN git clone --depth 1 https://github.com/sg-evals/envoy--1d0ba73a.git envoy
 
 # Clone grpc/grpc-go at pinned SHA (2026-02-16)
-RUN git clone --depth 1 https://github.com/sg-benchmarks/grpc-go--3be7e2d0.git grpc-go
+RUN git clone --depth 1 https://github.com/sg-evals/grpc-go--3be7e2d0.git grpc-go
 
 RUN mkdir -p /logs/verifier /logs/agent
 

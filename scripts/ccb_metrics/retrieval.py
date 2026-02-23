@@ -111,8 +111,8 @@ def _extract_org_from_repo(repo: str) -> str:
 
     >>> _extract_org_from_repo("kubernetes/kubernetes")
     'kubernetes'
-    >>> _extract_org_from_repo("sg-benchmarks/kubernetes-client-go")
-    'sg-benchmarks'
+    >>> _extract_org_from_repo("sg-evals/kubernetes-client-go")
+    'sg-evals'
     >>> _extract_org_from_repo("standalone")
     'standalone'
     """
@@ -218,18 +218,18 @@ def _check_mcp_tool_hit(tool_name: str, args: dict, oracle_item: dict) -> bool:
 
     >>> _check_mcp_tool_hit(
     ...     "mcp__sourcegraph__sg_read_file",
-    ...     {"repo": "github.com/sg-benchmarks/kubernetes-client-go", "path": "dynamic/scheme.go"},
-    ...     {"type": "file", "repo": "sg-benchmarks/kubernetes-client-go", "path": "dynamic/scheme.go"})
+    ...     {"repo": "github.com/sg-evals/kubernetes-client-go", "path": "dynamic/scheme.go"},
+    ...     {"type": "file", "repo": "sg-evals/kubernetes-client-go", "path": "dynamic/scheme.go"})
     True
     >>> _check_mcp_tool_hit(
     ...     "mcp__sourcegraph__read_file",
-    ...     {"repo": "sg-benchmarks/kubernetes-client-go", "path": "dynamic/scheme.go"},
-    ...     {"type": "file", "repo": "sg-benchmarks/kubernetes-client-go", "path": "dynamic/scheme.go"})
+    ...     {"repo": "sg-evals/kubernetes-client-go", "path": "dynamic/scheme.go"},
+    ...     {"type": "file", "repo": "sg-evals/kubernetes-client-go", "path": "dynamic/scheme.go"})
     True
     >>> _check_mcp_tool_hit(
     ...     "mcp__sourcegraph__sg_read_file",
-    ...     {"repo": "github.com/sg-benchmarks/kubernetes-client-go", "path": "dynamic/other.go"},
-    ...     {"type": "file", "repo": "sg-benchmarks/kubernetes-client-go", "path": "dynamic/scheme.go"})
+    ...     {"repo": "github.com/sg-evals/kubernetes-client-go", "path": "dynamic/other.go"},
+    ...     {"type": "file", "repo": "sg-evals/kubernetes-client-go", "path": "dynamic/scheme.go"})
     False
     """
     base = _tool_base_name(tool_name)
@@ -274,11 +274,11 @@ def _check_local_tool_hit(tool_name: str, args: dict, oracle_item: dict) -> bool
 
     >>> _check_local_tool_hit(
     ...     "Read", {"file_path": "/workspace/dynamic/scheme.go"},
-    ...     {"type": "file", "repo": "sg-benchmarks/kubernetes-client-go", "path": "dynamic/scheme.go"})
+    ...     {"type": "file", "repo": "sg-evals/kubernetes-client-go", "path": "dynamic/scheme.go"})
     True
     >>> _check_local_tool_hit(
     ...     "Read", {"file_path": "/workspace/other/file.go"},
-    ...     {"type": "file", "repo": "sg-benchmarks/kubernetes-client-go", "path": "dynamic/scheme.go"})
+    ...     {"type": "file", "repo": "sg-evals/kubernetes-client-go", "path": "dynamic/scheme.go"})
     False
     """
     if tool_name == "Read":
@@ -317,8 +317,8 @@ def _normalize_repo(repo: str) -> str:
     'grafana/grafana'
     >>> _normalize_repo("grafana/grafana")
     'grafana/grafana'
-    >>> _normalize_repo("sg-benchmarks/kubernetes-client-go")
-    'sg-benchmarks/kubernetes-client-go'
+    >>> _normalize_repo("sg-evals/kubernetes-client-go")
+    'sg-evals/kubernetes-client-go'
     """
     for prefix in _REPO_HOST_PREFIXES:
         if repo.startswith(prefix):

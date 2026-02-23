@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/linux--07cc49f6`
-- Use `repo:^github.com/sg-benchmarks/linux--07cc49f6$` filter in keyword_search
-- Use `github.com/sg-benchmarks/linux--07cc49f6` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/linux--07cc49f6`
+- Use `repo:^github.com/sg-evals/linux--07cc49f6$` filter in keyword_search
+- Use `github.com/sg-evals/linux--07cc49f6` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # Fault Localization: NFS Mount Disappears Due to Inode Revalidate Failure
 
-- **Repository**: github.com/sg-benchmarks/linux--07cc49f6 (mirror of torvalds/linux)
+- **Repository**: github.com/sg-evals/linux--07cc49f6 (mirror of torvalds/linux)
 - **Kernel Version**: 4.1.15
 - **Difficulty**: expert
 - **Category**: fault_localization

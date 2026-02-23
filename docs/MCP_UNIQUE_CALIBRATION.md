@@ -64,7 +64,7 @@ Three tasks deliberately include vendored copies in the local repo to test preci
   which requires MCP.
 
 - **CCX-config-trace-010**: `kubernetes/kubernetes` has `staging/src/k8s.io/client-go/rest/` —
-  vendored copy of the oracle. Correct answer cites `sg-benchmarks/kubernetes-client-go`.
+  vendored copy of the oracle. Correct answer cites `sg-evals/kubernetes-client-go`.
 
 - **CCX-incident-031**: `kubernetes/kubernetes` has `vendor/go.etcd.io/etcd/server/v3/storage/mvcc/` —
   vendored copy. Correct answer cites `etcd-io/etcd`.

@@ -42,7 +42,7 @@ List all files that contain `from scipy.stats import`. Your answer is evaluated 
 a closed-world oracle — completeness matters.
 
 **Important**: Use exact repo identifiers as they appear in Sourcegraph. The oracle expects `repo` values of `pandas-dev/pandas`. The `repo` field must match exactly.
-**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-benchmarks/kubernetes-client-go`). Strip this prefix in your answer — use `sg-benchmarks/kubernetes-client-go`, NOT `github.com/sg-benchmarks/kubernetes-client-go`.
+**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-evals/kubernetes-client-go`). Strip this prefix in your answer — use `sg-evals/kubernetes-client-go`, NOT `github.com/sg-evals/kubernetes-client-go`.
 
 ## Evaluation
 

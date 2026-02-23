@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit all Dockerfile.sg_only files to find repos that need sg-benchmarks mirrors.
+"""Audit all Dockerfile.sg_only files to find repos that need sg-evals mirrors.
 
 Identifies github.com/ repos (searched at HEAD = unpinned) and resolves the
 commit pin by parsing git clone/checkout commands per-repo from the Dockerfiles.
@@ -96,7 +96,7 @@ def extract_sg_repos(dockerfile_path: Path) -> tuple[list[str], list[str]]:
     if m:
         repos = [r.strip() for r in m.group(1).split(",") if r.strip()]
         for repo in repos:
-            if repo.startswith("sg-benchmarks/") or repo.startswith("sourcegraph-testing/"):
+            if repo.startswith("sg-evals/") or repo.startswith("sourcegraph-testing/"):
                 pinned.append(repo)
             elif repo.startswith("github.com/"):
                 unpinned.append(repo)
@@ -108,7 +108,7 @@ def extract_sg_repos(dockerfile_path: Path) -> tuple[list[str], list[str]]:
     m = re.search(r'ENV\s+SOURCEGRAPH_REPO_NAME[= ]"?([^"\n]+)"?', text)
     if m:
         repo = m.group(1).strip()
-        if repo.startswith("sg-benchmarks/") or repo.startswith("sourcegraph-testing/"):
+        if repo.startswith("sg-evals/") or repo.startswith("sourcegraph-testing/"):
             pinned.append(repo)
         elif repo.startswith("github.com/"):
             unpinned.append(repo)
@@ -292,7 +292,7 @@ def main():
 
     print(f"=== UNPINNED REPO AUDIT ===\n")
     print(f"Total SG repo references: {pinned_count + total_unpinned}")
-    print(f"  Already pinned (sg-benchmarks/): {pinned_count}")
+    print(f"  Already pinned (sg-evals/): {pinned_count}")
     print(f"  Unpinned (github.com/): {total_unpinned}")
     print(f"  Unique upstream repos: {len(mirror_needs) + len(set(r for r, _ in unresolved))}")
     print(f"  Mirrors needed: {total_mirrors}")
@@ -313,7 +313,7 @@ def main():
             repo_short = repo.replace("github.com/", "")
             repo_leaf = repo_short.split("/")[-1]
             pin_short = commit[:8] if len(commit) > 8 else commit
-            mirror = f"sg-benchmarks/{repo_leaf}--{pin_short}"
+            mirror = f"sg-evals/{repo_leaf}--{pin_short}"
 
             raw_entries.append({
                 "upstream": repo,

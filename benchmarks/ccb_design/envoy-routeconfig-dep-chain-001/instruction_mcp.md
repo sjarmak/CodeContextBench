@@ -4,9 +4,9 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/istio--4c1f845d` — use `repo:^github.com/sg-benchmarks/istio--4c1f845d$` filter
-- `github.com/sg-benchmarks/go-control-plane--71637ad6` — use `repo:^github.com/sg-benchmarks/go-control-plane--71637ad6$` filter
-- `github.com/sg-benchmarks/data-plane-api--84e84367` — use `repo:^github.com/sg-benchmarks/data-plane-api--84e84367$` filter
+- `github.com/sg-evals/istio--4c1f845d` — use `repo:^github.com/sg-evals/istio--4c1f845d$` filter
+- `github.com/sg-evals/go-control-plane--71637ad6` — use `repo:^github.com/sg-evals/go-control-plane--71637ad6$` filter
+- `github.com/sg-evals/data-plane-api--84e84367` — use `repo:^github.com/sg-evals/data-plane-api--84e84367$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -70,7 +70,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/istio--4c1f845d`, `github.com/sg-benchmarks/go-control-plane--71637ad6`, `github.com/sg-benchmarks/data-plane-api--84e84367`
+**Sourcegraph Repositories:** `github.com/sg-evals/istio--4c1f845d`, `github.com/sg-evals/go-control-plane--71637ad6`, `github.com/sg-evals/data-plane-api--84e84367`
 
 Trace the definition of `RouteConfiguration` through the Envoy xDS dependency chain.
 

@@ -24,8 +24,8 @@ For each, cite the specific repository, file path, and the key type/function/doc
 You are working with the Kubernetes ecosystem in a cross-org environment:
 
 - `kubernetes/kubernetes` (core orchestrator)
-- `sg-benchmarks/kubernetes-client-go` (go-client-library)
-- `sg-benchmarks/kubernetes-api` (api-type-definitions)
+- `sg-evals/kubernetes-client-go` (go-client-library)
+- `sg-evals/kubernetes-api` (api-type-definitions)
 - `etcd-io/etcd` (distributed-kv-store)
 
 This question is specifically designed to benefit from cross-repo synthesis. The
@@ -40,7 +40,7 @@ Create a file at `/workspace/answer.json` with your findings:
 {
   "files": [
     {
-      "repo": "sg-benchmarks/kubernetes-api",
+      "repo": "sg-evals/kubernetes-api",
       "path": "relative/path/to/file.go",
       "description": "What this file contains and its role in the deployment pattern"
     }
@@ -49,8 +49,8 @@ Create a file at `/workspace/answer.json` with your findings:
 }
 ```
 
-**Important**: Use exact repo identifiers as they appear in Sourcegraph. The oracle expects entries for `sg-benchmarks/kubernetes-api` (API type definitions) and `sg-benchmarks/kubernetes-client-go` (client examples and docs). The `repo` field must match these exactly.
-**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-benchmarks/kubernetes-client-go`). Strip this prefix in your answer — use `sg-benchmarks/kubernetes-client-go`, NOT `github.com/sg-benchmarks/kubernetes-client-go`.
+**Important**: Use exact repo identifiers as they appear in Sourcegraph. The oracle expects entries for `sg-evals/kubernetes-api` (API type definitions) and `sg-evals/kubernetes-client-go` (client examples and docs). The `repo` field must match these exactly.
+**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-evals/kubernetes-client-go`). Strip this prefix in your answer — use `sg-evals/kubernetes-client-go`, NOT `github.com/sg-evals/kubernetes-client-go`.
 
 The `files` list should include at least 3 files across 2+ repos that together define
 the canonical service deployment pattern.

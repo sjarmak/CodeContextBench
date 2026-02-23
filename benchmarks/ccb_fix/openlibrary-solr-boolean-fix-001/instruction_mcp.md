@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/openlibrary--92db3454`
-- Use `repo:^github.com/sg-benchmarks/openlibrary--92db3454$` filter in keyword_search
-- Use `github.com/sg-benchmarks/openlibrary--92db3454` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/openlibrary--92db3454`
+- Use `repo:^github.com/sg-evals/openlibrary--92db3454$` filter in keyword_search
+- Use `github.com/sg-evals/openlibrary--92db3454` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -85,7 +85,7 @@ The Solr service definition in `docker-compose.yml` contains `-Dsolr.max.boolean
 
 ---
 
-**Repo:** `github.com/sg-benchmarks/openlibrary--92db3454` (mirror of `internetarchive/openlibrary`)  
+**Repo:** `github.com/sg-evals/openlibrary--92db3454` (mirror of `internetarchive/openlibrary`)  
 **Base commit:** `4d2c696773853ee7fb4ec0ceb773351a52257447`  
 **Instance ID:** `instance_internetarchive__openlibrary-92db3454aeaa02f89b4cdbc3103f7e95c9759f92-v2c55207218fb8a0138425cbf7d9675272e240b90`
 

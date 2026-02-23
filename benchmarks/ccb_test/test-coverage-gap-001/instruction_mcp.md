@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/envoy--1d0ba73a`
-- Use `repo:^github.com/sg-benchmarks/envoy--1d0ba73a$` filter in keyword_search
-- Use `github.com/sg-benchmarks/envoy--1d0ba73a` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/envoy--1d0ba73a`
+- Use `repo:^github.com/sg-evals/envoy--1d0ba73a$` filter in keyword_search
+- Use `github.com/sg-evals/envoy--1d0ba73a` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # Task: Analyze Test Coverage Gaps in Envoy HTTP Connection Manager
 
-**Repository:** github.com/sg-benchmarks/envoy--1d0ba73a (mirror of envoyproxy/envoy)
+**Repository:** github.com/sg-evals/envoy--1d0ba73a (mirror of envoyproxy/envoy)
 **Output:** Write your analysis to `/workspace/coverage_analysis.md`
 
 ## Objective

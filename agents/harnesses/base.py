@@ -107,7 +107,7 @@ Use repo/file filters to keep results focused. Start narrow and widen only when 
             parts.append(self.SG_TOOL_REFERENCE)
         elif mcp_type == "deepsearch":
             parts.append("## Deep Search Guidance")
-            parts.append(f"Search `sg-benchmarks/{repo}` with Deep Search when you need cross-file understanding")
+            parts.append(f"Search `sg-evals/{repo}` with Deep Search when you need cross-file understanding")
         elif mcp_type == "deepsearch_hybrid":
             parts.append("## Deep Search Hybrid Guidance")
             parts.append("Use Deep Search for semantic exploration and local tools for verification.")
@@ -124,11 +124,11 @@ Use repo/file filters to keep results focused. Start narrow and widen only when 
         cache = self._container_env_cache
         locobench = cache.get("LOCOBENCH_PROJECT_ID") or os.environ.get("LOCOBENCH_PROJECT_ID", "")
         if locobench:
-            return f"sg-benchmarks/locobench-{locobench}"
+            return f"sg-evals/locobench-{locobench}"
 
         swebench = cache.get("SWEBENCH_REPO_COMMIT") or os.environ.get("SWEBENCH_REPO_COMMIT", "")
         if swebench:
-            return f"sg-benchmarks/{swebench}"
+            return f"sg-evals/{swebench}"
 
         return "the codebase"
 

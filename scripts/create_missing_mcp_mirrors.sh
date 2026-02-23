@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Create and populate sg-benchmarks mirrors for MCP-unique tasks that are missing.
+# Create and populate sg-evals mirrors for MCP-unique tasks that are missing.
 #
 # These repos are cloned at specific tags in baseline Dockerfiles but have no
-# corresponding sg-benchmarks mirror, so the MCP agent cannot search them at
+# corresponding sg-evals mirror, so the MCP agent cannot search them at
 # the correct version.
 #
 # Repos handled:
-#   - kubernetes/kubernetes @ v1.32.0     → sg-benchmarks/kubernetes-kubernetes  (NEW)
-#   - nodejs/node @ v22.13.0             → sg-benchmarks/nodejs-node            (NEW)
-#   - pandas-dev/pandas @ v2.2.3         → sg-benchmarks/pandas                 (NEW)
-#   - scikit-learn/scikit-learn @ 1.6.1  → sg-benchmarks/scikit-learn           (NEW)
+#   - kubernetes/kubernetes @ v1.32.0     → sg-evals/kubernetes-kubernetes  (NEW)
+#   - nodejs/node @ v22.13.0             → sg-evals/nodejs-node            (NEW)
+#   - pandas-dev/pandas @ v2.2.3         → sg-evals/pandas                 (NEW)
+#   - scikit-learn/scikit-learn @ 1.6.1  → sg-evals/scikit-learn           (NEW)
 #
 # Usage: bash scripts/create_missing_mcp_mirrors.sh [--dry-run]
 set -euo pipefail
@@ -21,7 +21,7 @@ if [[ "${1:-}" == "--dry-run" ]]; then
     echo ""
 fi
 
-SG_ORG="sg-benchmarks"
+SG_ORG="sg-evals"
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -90,7 +90,7 @@ for entry in "${REPOS[@]}"; do
     git -C "$fresh_dir" init -b main --quiet 2>&1
     rsync -a --exclude='.git' "$clone_dir/" "$fresh_dir/" 2>&1
     git -C "$fresh_dir" add -A 2>&1
-    git -C "$fresh_dir" -c user.email="benchmark@sg-benchmarks.dev" -c user.name="sg-benchmarks" \
+    git -C "$fresh_dir" -c user.email="benchmark@sg-evals.dev" -c user.name="sg-evals" \
         commit -m "Mirror ${github_repo} @ ${tag} (${actual_commit:0:8}) — pinned for CCB MCP-unique tasks" --quiet 2>&1
 
     rm -rf "$clone_dir"
@@ -120,8 +120,8 @@ echo "Skipped:   $SKIPPED"
 echo ""
 if [ "$SUCCESS" -gt 0 ]; then
     echo "Wait ~10-30 minutes for Sourcegraph indexing, then verify with:"
-    echo "  keyword_search: repo:^github.com/sg-benchmarks/kubernetes-kubernetes$ apiVersion"
-    echo "  keyword_search: repo:^github.com/sg-benchmarks/nodejs-node$ http.createServer"
-    echo "  keyword_search: repo:^github.com/sg-benchmarks/pandas$ DataFrame"
-    echo "  keyword_search: repo:^github.com/sg-benchmarks/scikit-learn$ sklearn"
+    echo "  keyword_search: repo:^github.com/sg-evals/kubernetes-kubernetes$ apiVersion"
+    echo "  keyword_search: repo:^github.com/sg-evals/nodejs-node$ http.createServer"
+    echo "  keyword_search: repo:^github.com/sg-evals/pandas$ DataFrame"
+    echo "  keyword_search: repo:^github.com/sg-evals/scikit-learn$ sklearn"
 fi

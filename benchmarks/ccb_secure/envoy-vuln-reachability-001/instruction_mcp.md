@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/envoy--v1.31.2`
-- Use `repo:^github.com/sg-benchmarks/envoy--v1.31.2$` filter in keyword_search
-- Use `github.com/sg-benchmarks/envoy--v1.31.2` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/envoy--v1.31.2`
+- Use `repo:^github.com/sg-evals/envoy--v1.31.2$` filter in keyword_search
+- Use `github.com/sg-evals/envoy--v1.31.2` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -86,7 +86,7 @@ Determine whether this function is **exploitable from external HTTP input** (i.e
 
 ## Codebase Context
 
-- **Repository**: github.com/sg-benchmarks/envoy--v1.31.2 (mirror of envoyproxy/envoy) @ v1.31.1
+- **Repository**: github.com/sg-evals/envoy--v1.31.2 (mirror of envoyproxy/envoy) @ v1.31.1
 - **Language**: C++
 - **Focus Area**: Admin interface architecture and access control
 

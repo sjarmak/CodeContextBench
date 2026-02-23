@@ -35,8 +35,8 @@ CROSSREPO_JOBS="runs/official/crossrepo_opus_${TIMESTAMP}"
 
 # Sourcegraph repo name mappings
 declare -A CROSSREPO_SG=(
-    ["api_upgrade_01"]="sg-benchmarks/etcd--d89978e8"
-    ["bug_localization_01"]="sg-benchmarks/scikit-learn--cb7e82dd"
+    ["api_upgrade_01"]="sg-evals/etcd--d89978e8"
+    ["bug_localization_01"]="sg-evals/scikit-learn--cb7e82dd"
 )
 
 CONFIGS=("baseline" "sourcegraph_full")

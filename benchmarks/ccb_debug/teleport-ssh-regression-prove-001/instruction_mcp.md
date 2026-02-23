@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/teleport--0415e422`
-- Use `repo:^github.com/sg-benchmarks/teleport--0415e422$` filter in keyword_search
-- Use `github.com/sg-benchmarks/teleport--0415e422` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/teleport--0415e422`
+- Use `repo:^github.com/sg-evals/teleport--0415e422$` filter in keyword_search
+- Use `github.com/sg-evals/teleport--0415e422` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # Bug Investigation: Multi-Device U2F Authentication Limited to Single Token
 
-**Repository:** github.com/sg-benchmarks/teleport--0415e422 (mirror of gravitational/teleport)
+**Repository:** github.com/sg-evals/teleport--0415e422 (mirror of gravitational/teleport)
 **Task Type:** Find and Prove (write a regression test)
 
 ## Reported Issue

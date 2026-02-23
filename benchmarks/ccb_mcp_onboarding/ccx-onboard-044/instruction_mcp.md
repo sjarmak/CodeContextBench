@@ -4,8 +4,8 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/rust--01f6ddf7` — use `repo:^github.com/sg-benchmarks/rust--01f6ddf7$` filter
-- `github.com/sg-benchmarks/servo--be6a2f99` — use `repo:^github.com/sg-benchmarks/servo--be6a2f99$` filter
+- `github.com/sg-evals/rust--01f6ddf7` — use `repo:^github.com/sg-evals/rust--01f6ddf7$` filter
+- `github.com/sg-evals/servo--be6a2f99` — use `repo:^github.com/sg-evals/servo--be6a2f99$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -69,7 +69,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/rust--01f6ddf7`, `github.com/sg-benchmarks/servo--be6a2f99`
+**Sourcegraph Repositories:** `github.com/sg-evals/rust--01f6ddf7`, `github.com/sg-evals/servo--be6a2f99`
 
 # Onboarding: Rust Compiler Type Inference Architecture
 
@@ -83,11 +83,11 @@ You are working on a codebase task involving repos from the onboarding domain.
 
 ## Available Resources
 
-The local `/workspace/` directory contains: sg-benchmarks/rust--01f6ddf7, sg-benchmarks/servo--be6a2f99.
+The local `/workspace/` directory contains: sg-evals/rust--01f6ddf7, sg-evals/servo--be6a2f99.
 
 **Note:** Additional repositories are accessible via Sourcegraph MCP tools:
-- `sg-benchmarks/rust--01f6ddf7` (rust-lang/rust)
-- `sg-benchmarks/servo--be6a2f99` (servo/servo)
+- `sg-evals/rust--01f6ddf7` (rust-lang/rust)
+- `sg-evals/servo--be6a2f99` (servo/servo)
 
 ## Output Format
 

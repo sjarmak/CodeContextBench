@@ -4,8 +4,8 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/containerd--317286ac` — use `repo:^github.com/sg-benchmarks/containerd--317286ac$` filter
-- `github.com/sg-benchmarks/kubernetes--8c9c67c0` — use `repo:^github.com/sg-benchmarks/kubernetes--8c9c67c0$` filter
+- `github.com/sg-evals/containerd--317286ac` — use `repo:^github.com/sg-evals/containerd--317286ac$` filter
+- `github.com/sg-evals/kubernetes--8c9c67c0` — use `repo:^github.com/sg-evals/kubernetes--8c9c67c0$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -69,7 +69,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/containerd--317286ac`, `github.com/sg-benchmarks/kubernetes--8c9c67c0`
+**Sourcegraph Repositories:** `github.com/sg-evals/containerd--317286ac`, `github.com/sg-evals/kubernetes--8c9c67c0`
 
 Trace the Kubernetes Container Runtime Interface (CRI) from its gRPC service definition to containerd's implementation
 

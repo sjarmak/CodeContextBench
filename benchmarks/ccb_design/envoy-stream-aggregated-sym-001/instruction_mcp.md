@@ -4,8 +4,8 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/envoy--1d0ba73a` — use `repo:^github.com/sg-benchmarks/envoy--1d0ba73a$` filter
-- `github.com/sg-benchmarks/grpc-go--3be7e2d0` — use `repo:^github.com/sg-benchmarks/grpc-go--3be7e2d0$` filter
+- `github.com/sg-evals/envoy--1d0ba73a` — use `repo:^github.com/sg-evals/envoy--1d0ba73a$` filter
+- `github.com/sg-evals/grpc-go--3be7e2d0` — use `repo:^github.com/sg-evals/grpc-go--3be7e2d0$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -69,7 +69,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/envoy--1d0ba73a`, `github.com/sg-benchmarks/grpc-go--3be7e2d0`
+**Sourcegraph Repositories:** `github.com/sg-evals/envoy--1d0ba73a`, `github.com/sg-evals/grpc-go--3be7e2d0`
 
 Find all callers and usages of Envoy's `StreamAggregatedResources` xDS gRPC method across two repositories.
 

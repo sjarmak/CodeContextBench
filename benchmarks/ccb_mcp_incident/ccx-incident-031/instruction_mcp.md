@@ -4,9 +4,9 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/etcd-io-etcd` — use `repo:^github.com/sg-benchmarks/etcd-io-etcd$` filter
-- `github.com/sg-benchmarks/grafana` — use `repo:^github.com/sg-benchmarks/grafana$` filter
-- `github.com/sg-benchmarks/kubernetes-kubernetes` — use `repo:^github.com/sg-benchmarks/kubernetes-kubernetes$` filter
+- `github.com/sg-evals/etcd-io-etcd` — use `repo:^github.com/sg-evals/etcd-io-etcd$` filter
+- `github.com/sg-evals/grafana` — use `repo:^github.com/sg-evals/grafana$` filter
+- `github.com/sg-evals/kubernetes-kubernetes` — use `repo:^github.com/sg-evals/kubernetes-kubernetes$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -70,7 +70,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/etcd-io-etcd`, `github.com/sg-benchmarks/grafana`, `github.com/sg-benchmarks/kubernetes-kubernetes`
+**Sourcegraph Repositories:** `github.com/sg-evals/etcd-io-etcd`, `github.com/sg-evals/grafana`, `github.com/sg-evals/kubernetes-kubernetes`
 
 # Incident Debugging: Trace Production Error to Authoritative Source
 
@@ -134,7 +134,7 @@ Create a file at `/workspace/answer.json` with your findings:
 ```
 
 **Important**: Use `etcd-io/etcd` as the exact `repo` identifier in your answer. The oracle checks for files `server/mvcc/kvstore.go` and `server/mvcc/kvstore_txn.go` in `etcd-io/etcd`. Do not cite vendored copies in `kubernetes/kubernetes`.
-**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-benchmarks/kubernetes-client-go`). Strip this prefix in your answer — use `sg-benchmarks/kubernetes-client-go`, NOT `github.com/sg-benchmarks/kubernetes-client-go`.
+**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-evals/kubernetes-client-go`). Strip this prefix in your answer — use `sg-evals/kubernetes-client-go`, NOT `github.com/sg-evals/kubernetes-client-go`.
 
 ## Evaluation
 

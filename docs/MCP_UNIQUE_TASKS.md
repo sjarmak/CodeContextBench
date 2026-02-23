@@ -97,8 +97,8 @@ baseline, truncated for MCP-Full. Common repo groupings across tasks:
 | Multi-org Go | kubernetes, etcd, grafana | Yes (3 orgs) | Go |
 | Prometheus monitoring | prometheus, alertmanager, client_golang | No (all prometheus) | Go |
 
-Repos not natively indexed in Sourcegraph use `sg-benchmarks` mirrors
-(e.g., `sg-benchmarks/kubernetes-client-go`). The Dockerfile is the
+Repos not natively indexed in Sourcegraph use `sg-evals` mirrors
+(e.g., `sg-evals/kubernetes-client-go`). The Dockerfile is the
 source of truth for which repos a task uses and at what version.
 
 ## Task Authoring
@@ -184,7 +184,7 @@ For tasks where automated curation misses items:
 3. Edit `tests/oracle_answer.json` directly:
    ```json
    {
-     "files": [{"repo": "sg-benchmarks/kubernetes-client-go", "path": "dynamic/scheme.go"}],
+     "files": [{"repo": "sg-evals/kubernetes-client-go", "path": "dynamic/scheme.go"}],
      "symbols": [],
      "chain": [],
      "text": ""
@@ -232,14 +232,14 @@ Agents write `/workspace/answer.json`:
 ```json
 {
   "files": [
-    {"repo": "sg-benchmarks/kubernetes-client-go", "path": "dynamic/scheme.go"}
+    {"repo": "sg-evals/kubernetes-client-go", "path": "dynamic/scheme.go"}
   ],
   "symbols": [
     {"repo": "kubernetes/kubernetes", "path": "pkg/foo.go", "name": "Config"}
   ],
   "chain": [
     {"repo": "grafana/grafana", "path": "pkg/tsdb/loki/api.go", "symbol": "LokiAPI"},
-    {"repo": "sg-benchmarks/grafana-loki", "path": "pkg/loghttp/query.go", "symbol": "ParseInstantQuery"}
+    {"repo": "sg-evals/grafana-loki", "path": "pkg/loghttp/query.go", "symbol": "ParseInstantQuery"}
   ],
   "text": "The Config struct is defined at rest/config.go in kubernetes-client-go..."
 }
@@ -400,24 +400,24 @@ Hybrid score = 0.6 × verifier_reward + 0.4 × rubric_score.
    - `scripts/generate_manifest.py`
    - `scripts/run_judge.py`
 
-### Add sg-benchmarks Mirrors for New Repos
+### Add sg-evals Mirrors for New Repos
 
 If a required repo is not natively indexed in Sourcegraph, create a mirror:
 
 ```bash
-# Shallow clone at stable tag, orphan commit, push to sg-benchmarks
+# Shallow clone at stable tag, orphan commit, push to sg-evals
 git clone --depth 1 --branch v1.0.0 https://github.com/org/repo /tmp/repo
 cd /tmp/repo
 git checkout --orphan orphan-v1.0.0
 git add -A
 git commit -m "Mirror: org/repo @ v1.0.0"
-git remote add sg https://github.com/sg-benchmarks/org-repo
+git remote add sg https://github.com/sg-evals/org-repo
 git push sg orphan-v1.0.0:main --force
 ```
 
 Wait for SG indexing (~hours), then verify:
 ```python
-mcp__sourcegraph__keyword_search("repo:^github.com/sg-benchmarks/org-repo$")
+mcp__sourcegraph__keyword_search("repo:^github.com/sg-evals/org-repo$")
 ```
 
 ### Cross-Host (GitHub + GitLab) — Deferred
@@ -431,7 +431,7 @@ design uses cross-org (different GitHub orgs) instead. To add cross-host:
 
 ## Design Decisions
 
-- **Q1**: Use sg-benchmarks mirrors for 7 repos not natively indexed
+- **Q1**: Use sg-evals mirrors for 7 repos not natively indexed
 - **Q2**: Focus on org-scale quantity (3-20 repos), structured oracle, customer-framed prompts
 - **Q3**: Cross-org instead of cross-host (cross-host deferred until multi-host SG available)
 - **Q4**: Closed-world exhaustive oracles via automated SG queries (no human curation)

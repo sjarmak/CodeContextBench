@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/flipt--c188284f`
-- Use `repo:^github.com/sg-benchmarks/flipt--c188284f$` filter in keyword_search
-- Use `github.com/sg-benchmarks/flipt--c188284f` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/flipt--c188284f`
+- Use `repo:^github.com/sg-evals/flipt--c188284f$` filter in keyword_search
+- Use `github.com/sg-evals/flipt--c188284f` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -87,7 +87,7 @@ Problem can be reproduced by pointing `storage.type: oci` at an AWS ECR reposito
 
 ---
 
-**Repo:** `github.com/sg-benchmarks/flipt--c188284f` (mirror of `flipt-io/flipt`)  
+**Repo:** `github.com/sg-evals/flipt--c188284f` (mirror of `flipt-io/flipt`)  
 **Base commit:** `47499077ce785f0eee0e3940ef6c074e29a664fc`  
 **Instance ID:** `instance_flipt-io__flipt-c188284ff0c094a4ee281afebebd849555ebee59`
 

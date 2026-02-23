@@ -4,10 +4,10 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/etcd-io-etcd` — use `repo:^github.com/sg-benchmarks/etcd-io-etcd$` filter
-- `github.com/sg-benchmarks/kubernetes-api` — use `repo:^github.com/sg-benchmarks/kubernetes-api$` filter
-- `github.com/sg-benchmarks/kubernetes-client-go` — use `repo:^github.com/sg-benchmarks/kubernetes-client-go$` filter
-- `github.com/sg-benchmarks/kubernetes-kubernetes` — use `repo:^github.com/sg-benchmarks/kubernetes-kubernetes$` filter
+- `github.com/sg-evals/etcd-io-etcd` — use `repo:^github.com/sg-evals/etcd-io-etcd$` filter
+- `github.com/sg-evals/kubernetes-api` — use `repo:^github.com/sg-evals/kubernetes-api$` filter
+- `github.com/sg-evals/kubernetes-client-go` — use `repo:^github.com/sg-evals/kubernetes-client-go$` filter
+- `github.com/sg-evals/kubernetes-kubernetes` — use `repo:^github.com/sg-evals/kubernetes-kubernetes$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -71,7 +71,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/etcd-io-etcd`, `github.com/sg-benchmarks/kubernetes-api`, `github.com/sg-benchmarks/kubernetes-client-go`, `github.com/sg-benchmarks/kubernetes-kubernetes`
+**Sourcegraph Repositories:** `github.com/sg-evals/etcd-io-etcd`, `github.com/sg-evals/kubernetes-api`, `github.com/sg-evals/kubernetes-client-go`, `github.com/sg-evals/kubernetes-kubernetes`
 
 # Blast Radius of a Shared Kubernetes Library
 
@@ -81,7 +81,7 @@ Your team is planning a breaking change to the `k8s.io/apimachinery/pkg/runtime`
 Before making the change, you need to assess the blast radius within the `kubernetes-client-go` library.
 
 **Specific question**: Which Go source files in the `dynamic/` package tree of the
-`sg-benchmarks/kubernetes-client-go` repository directly import `k8s.io/apimachinery/pkg/runtime`
+`sg-evals/kubernetes-client-go` repository directly import `k8s.io/apimachinery/pkg/runtime`
 (the exact package — not sub-packages like `pkg/runtime/schema`)?
 
 Find every file (including tests) in the `dynamic/` directory and its subdirectories that has an
@@ -106,14 +106,14 @@ Create a file at `/workspace/answer.json` with your findings in the following st
 ```json
 {
   "files": [
-    {"repo": "sg-benchmarks/kubernetes-client-go", "path": "relative/path/to/file.go"}
+    {"repo": "sg-evals/kubernetes-client-go", "path": "relative/path/to/file.go"}
   ],
   "text": "Narrative explanation of your findings, citing repos and file paths."
 }
 ```
 
-**Important**: Use `"repo": "sg-benchmarks/kubernetes-client-go"` exactly — this is the canonical repo identifier used by the evaluation oracle. The `kubernetes/client-go` repository corresponds to `sg-benchmarks/kubernetes-client-go` in Sourcegraph.
-**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-benchmarks/kubernetes-client-go`). Strip this prefix in your answer — use `sg-benchmarks/kubernetes-client-go`, NOT `github.com/sg-benchmarks/kubernetes-client-go`.
+**Important**: Use `"repo": "sg-evals/kubernetes-client-go"` exactly — this is the canonical repo identifier used by the evaluation oracle. The `kubernetes/client-go` repository corresponds to `sg-evals/kubernetes-client-go` in Sourcegraph.
+**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-evals/kubernetes-client-go`). Strip this prefix in your answer — use `sg-evals/kubernetes-client-go`, NOT `github.com/sg-evals/kubernetes-client-go`.
 
 Include only the `files` field. Your answer is evaluated against a closed-world oracle — completeness matters.
 

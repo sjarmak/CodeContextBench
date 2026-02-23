@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir \
     versioneer
 
 # Clone pandas at pinned commit directly into workspace
-RUN git clone --depth 1 https://github.com/sg-benchmarks/pandas--41968da5.git /workspace/original && \
+RUN git clone --depth 1 https://github.com/sg-evals/pandas--41968da5.git /workspace/original && \
     git submodule update --init --recursive
 
 # Create optimized copy (agent works here)

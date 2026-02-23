@@ -51,7 +51,7 @@ Create a file at `/workspace/answer.json` with your findings:
 ```
 
 **Important**: Use exact repo identifiers as they appear in Sourcegraph. The oracle expects `repo` values of `numpy/numpy` (array layer), `pandas-dev/pandas` (data structure layer), and `scipy/scipy` (scientific computation layer). The `repo` field must match these exactly.
-**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-benchmarks/kubernetes-client-go`). Strip this prefix in your answer — use `sg-benchmarks/kubernetes-client-go`, NOT `github.com/sg-benchmarks/kubernetes-client-go`.
+**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-evals/kubernetes-client-go`). Strip this prefix in your answer — use `sg-evals/kubernetes-client-go`, NOT `github.com/sg-evals/kubernetes-client-go`.
 **Provenance**: Your `text` narrative is evaluated for completeness. It must include repository names verbatim in `org/repo` format (e.g., `numpy/numpy`, `pandas-dev/pandas`, `scipy/scipy`) and file paths using slash notation (e.g., `numpy/_core/fromnumeric.py`), not Python module dot notation.
 
 The `chain` should contain at least 3 steps representing the 3 layers described above.

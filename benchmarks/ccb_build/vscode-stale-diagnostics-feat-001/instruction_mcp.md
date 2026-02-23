@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/vscode--138f619c`
-- Use `repo:^github.com/sg-benchmarks/vscode--138f619c$` filter in keyword_search
-- Use `github.com/sg-benchmarks/vscode--138f619c` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/vscode--138f619c`
+- Use `repo:^github.com/sg-evals/vscode--138f619c$` filter in keyword_search
+- Use `github.com/sg-evals/vscode--138f619c` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # [VS Code] Fix Stale TypeScript Diagnostics After Git Branch Switch
 
-**Repository:** github.com/sg-benchmarks/vscode--138f619c (mirror of microsoft/vscode)  
+**Repository:** github.com/sg-evals/vscode--138f619c (mirror of microsoft/vscode)  
 **Difficulty:** HARD  
 **Category:** big_code_feature
 **Task Type:** Feature Implementation - Large Codebase

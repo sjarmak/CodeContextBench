@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/flipt--9f8127f2`
-- Use `repo:^github.com/sg-benchmarks/flipt--9f8127f2$` filter in keyword_search
-- Use `github.com/sg-benchmarks/flipt--9f8127f2` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/flipt--9f8127f2`
+- Use `repo:^github.com/sg-evals/flipt--9f8127f2$` filter in keyword_search
+- Use `github.com/sg-evals/flipt--9f8127f2` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -71,7 +71,7 @@ If MCP search returns no results:
 
 ---
 
-**Repo:** `github.com/sg-benchmarks/flipt--9f8127f2` (mirror of `flipt-io/flipt`)  
+**Repo:** `github.com/sg-evals/flipt--9f8127f2` (mirror of `flipt-io/flipt`)  
 **Base commit:** `2d0ff0c91a63a1165f5ca528faa1f0785b1f730c`  
 **Instance ID:** `instance_flipt-io__flipt-9f8127f225a86245fa35dca4885c2daef824ee55`
 

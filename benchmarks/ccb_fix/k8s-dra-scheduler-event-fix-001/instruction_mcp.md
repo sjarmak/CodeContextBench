@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/kubernetes--v1.30.0`
-- Use `repo:^github.com/sg-benchmarks/kubernetes--v1.30.0$` filter in keyword_search
-- Use `github.com/sg-benchmarks/kubernetes--v1.30.0` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/kubernetes--v1.30.0`
+- Use `repo:^github.com/sg-evals/kubernetes--v1.30.0$` filter in keyword_search
+- Use `github.com/sg-evals/kubernetes--v1.30.0` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -73,7 +73,7 @@ Investigate a bug in the Kubernetes scheduler where pods requesting Dynamic Reso
 
 ## Context
 
-- **Repository**: github.com/sg-benchmarks/kubernetes--v1.30.0 (mirror of kubernetes/kubernetes) (Go, ~3.5M LOC)
+- **Repository**: github.com/sg-evals/kubernetes--v1.30.0 (mirror of kubernetes/kubernetes) (Go, ~3.5M LOC)
 - **Category**: Bug Investigation
 - **Difficulty**: hard
 - **Entry Point**: `pkg/scheduler/schedule_one.go` — `ScheduleOne()` method

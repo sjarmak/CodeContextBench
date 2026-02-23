@@ -64,8 +64,8 @@ build_task_image() {
     fi
 
     # Skip if Dockerfile doesn't need GitHub access
-    if ! grep -q "git clone.*github.com/sg-benchmarks/" "$dockerfile" 2>/dev/null; then
-        echo "SKIP $image_name (no sg-benchmarks clone)"
+    if ! grep -q "git clone.*github.com/sg-evals/" "$dockerfile" 2>/dev/null; then
+        echo "SKIP $image_name (no sg-evals clone)"
         ((SKIPPED++)) || true
         return 0
     fi
@@ -78,7 +78,7 @@ build_task_image() {
     cp -a "$task_dir/environment/." "$tmpdir/"
 
     # Patch Dockerfile: add ARG and inject token into clone URLs
-    # Replace: git clone ... https://github.com/sg-benchmarks/...
+    # Replace: git clone ... https://github.com/sg-evals/...
     # With: credential setup + git clone
     local patched="$tmpdir/Dockerfile"
 
@@ -86,8 +86,8 @@ build_task_image() {
     sed -i '0,/^FROM /{/^FROM /a\ARG GITHUB_TOKEN
 }' "$patched"
 
-    # Replace sg-benchmarks clone URLs to include token
-    sed -i "s|https://github.com/sg-benchmarks/|https://x-access-token:\${GITHUB_TOKEN}@github.com/sg-benchmarks/|g" "$patched"
+    # Replace sg-evals clone URLs to include token
+    sed -i "s|https://github.com/sg-evals/|https://x-access-token:\${GITHUB_TOKEN}@github.com/sg-evals/|g" "$patched"
 
     echo "BUILD $image_name ..."
     local start=$SECONDS
@@ -133,10 +133,10 @@ build_sgonly_image() {
     cp -a "$task_dir/environment/." "$tmpdir/"
     cp "$sgonly" "$tmpdir/Dockerfile"
 
-    if grep -q "git clone.*github.com/sg-benchmarks/" "$tmpdir/Dockerfile" 2>/dev/null; then
+    if grep -q "git clone.*github.com/sg-evals/" "$tmpdir/Dockerfile" 2>/dev/null; then
         sed -i '0,/^FROM /{/^FROM /a\ARG GITHUB_TOKEN
 }' "$tmpdir/Dockerfile"
-        sed -i "s|https://github.com/sg-benchmarks/|https://x-access-token:\${GITHUB_TOKEN}@github.com/sg-benchmarks/|g" "$tmpdir/Dockerfile"
+        sed -i "s|https://github.com/sg-evals/|https://x-access-token:\${GITHUB_TOKEN}@github.com/sg-evals/|g" "$tmpdir/Dockerfile"
 
         if docker build \
             --build-arg "GITHUB_TOKEN=$GH_TOKEN" \

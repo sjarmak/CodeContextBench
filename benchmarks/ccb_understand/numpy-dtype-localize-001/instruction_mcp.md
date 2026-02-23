@@ -4,9 +4,9 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/numpy--a639fbf5` — use `repo:^github.com/sg-benchmarks/numpy--a639fbf5$` filter
-- `github.com/sg-benchmarks/scikit-learn--cb7e82dd` — use `repo:^github.com/sg-benchmarks/scikit-learn--cb7e82dd$` filter
-- `github.com/sg-benchmarks/pandas--41968da5` — use `repo:^github.com/sg-benchmarks/pandas--41968da5$` filter
+- `github.com/sg-evals/numpy--a639fbf5` — use `repo:^github.com/sg-evals/numpy--a639fbf5$` filter
+- `github.com/sg-evals/scikit-learn--cb7e82dd` — use `repo:^github.com/sg-evals/scikit-learn--cb7e82dd$` filter
+- `github.com/sg-evals/pandas--41968da5` — use `repo:^github.com/sg-evals/pandas--41968da5$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -70,7 +70,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/numpy--a639fbf5`, `github.com/sg-benchmarks/scikit-learn--cb7e82dd`, `github.com/sg-benchmarks/pandas--41968da5`
+**Sourcegraph Repositories:** `github.com/sg-evals/numpy--a639fbf5`, `github.com/sg-evals/scikit-learn--cb7e82dd`, `github.com/sg-evals/pandas--41968da5`
 
 Find the NumPy dtype compatibility issue when pandas nullable integers flow into scikit-learn preprocessing
 

@@ -4,9 +4,9 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/django--674eda1c` — use `repo:^github.com/sg-benchmarks/django--674eda1c$` filter
-- `github.com/sg-benchmarks/flask--798e006f` — use `repo:^github.com/sg-benchmarks/flask--798e006f$` filter
-- `github.com/sg-benchmarks/requests--421b8733` — use `repo:^github.com/sg-benchmarks/requests--421b8733$` filter
+- `github.com/sg-evals/django--674eda1c` — use `repo:^github.com/sg-evals/django--674eda1c$` filter
+- `github.com/sg-evals/flask--798e006f` — use `repo:^github.com/sg-evals/flask--798e006f$` filter
+- `github.com/sg-evals/requests--421b8733` — use `repo:^github.com/sg-evals/requests--421b8733$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -70,7 +70,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/django--674eda1c`, `github.com/sg-benchmarks/flask--798e006f`, `github.com/sg-benchmarks/requests--421b8733`
+**Sourcegraph Repositories:** `github.com/sg-evals/django--674eda1c`, `github.com/sg-evals/flask--798e006f`, `github.com/sg-evals/requests--421b8733`
 
 Standardize HTTP Request class naming across Django, Flask, and requests libraries
 

@@ -354,9 +354,9 @@ class BaselineClaudeCodeAgent(ClaudeCode):
 
         Resolution order:
         1. SOURCEGRAPH_REPO_NAME env var (explicit override, highest priority)
-        2. LOCOBENCH_PROJECT_ID -> sg-benchmarks/locobench-{prefix}
+        2. LOCOBENCH_PROJECT_ID -> sg-evals/locobench-{prefix}
            (checked in host env AND _container_env_cache populated by setup())
-        3. SWEBENCH_REPO_COMMIT -> sg-benchmarks/{repo_info}
+        3. SWEBENCH_REPO_COMMIT -> sg-evals/{repo_info}
            (checked in host env AND _container_env_cache populated by setup())
         4. Fallback: "the codebase"
         """
@@ -371,19 +371,19 @@ class BaselineClaudeCodeAgent(ClaudeCode):
 
         locobench_prefix = os.environ.get("LOCOBENCH_PROJECT_ID", "") or cache.get("LOCOBENCH_PROJECT_ID", "")
         if locobench_prefix:
-            return f"sg-benchmarks/locobench-{locobench_prefix}"
+            return f"sg-evals/locobench-{locobench_prefix}"
 
         repo_info = os.environ.get("SWEBENCH_REPO_COMMIT", "") or cache.get("SWEBENCH_REPO_COMMIT", "")
         if repo_info:
-            return f"sg-benchmarks/{repo_info}"
+            return f"sg-evals/{repo_info}"
 
         return "the codebase"
 
     def _get_repo_list(self) -> list:
-        """Return list of sg-benchmarks repo names from SOURCEGRAPH_REPOS env var.
+        """Return list of sg-evals repo names from SOURCEGRAPH_REPOS env var.
 
         Multi-repo MCP-unique tasks set SOURCEGRAPH_REPOS as a comma-separated
-        list of sg-benchmarks mirror names (e.g. "sg-benchmarks/grafana,sg-benchmarks/grafana-loki").
+        list of sg-evals mirror names (e.g. "sg-evals/grafana,sg-evals/grafana-loki").
 
         Resolution order:
         1. Host env var SOURCEGRAPH_REPOS (set by config script)
@@ -437,9 +437,9 @@ class BaselineClaudeCodeAgent(ClaudeCode):
           - **Repository**: org/repo (lang, ~NLOC)
           - **Repository:** org/repo
           - **Repo:** `org/repo`
-        to reference the sg-benchmarks mirror, keeping the original as context.
+        to reference the sg-evals mirror, keeping the original as context.
         """
-        if not sg_display or not sg_display.startswith("sg-benchmarks/"):
+        if not sg_display or not sg_display.startswith("sg-evals/"):
             return text
 
         sg_full = f"github.com/{sg_display}"
@@ -614,12 +614,12 @@ class BaselineClaudeCodeAgent(ClaudeCode):
                 branch_instructions = (
                     f"\n**Branch Search Instructions**\n\n"
                     f"IMPORTANT: You must search the `{scip_branch}` branch for all "
-                    f"repositories in `github.com/sg-benchmarks/`.\n\n"
+                    f"repositories in `github.com/sg-evals/`.\n\n"
                     f"When using search and file tools, always specify the "
                     f"`{scip_branch}` branch:\n\n"
                     f"- **keyword_search / nls_search:** Include "
                     f"`rev:{scip_branch}` in your query alongside the repo filter\n"
-                    f'  Example: `repo:^github\\.com/sg-benchmarks/REPO$ '
+                    f'  Example: `repo:^github\\.com/sg-evals/REPO$ '
                     f"rev:{scip_branch} YOUR_SEARCH_TERMS`\n"
                     f"- **read_file / list_files:** Set the `revision` parameter "
                     f'to `"{scip_branch}"`\n'
@@ -664,7 +664,7 @@ class BaselineClaudeCodeAgent(ClaudeCode):
                 repo_scope=repo_scope, workflow_tail=workflow_tail
             )
             # Rewrite upstream repo references in instruction body to point
-            # at the sg-benchmarks mirror so the agent sees consistent names.
+            # at the sg-evals mirror so the agent sees consistent names.
             instruction = self._rewrite_repo_references(instruction, repo_display)
             instruction = self._inject_repo_context(
                 instruction, repo_display, self._get_repo_list()
@@ -783,12 +783,12 @@ When making Deep Search queries, you MUST explicitly reference this repository n
 - ✅ CORRECT: "In {repo_display}, where is [code]?"
 - ✅ CORRECT: "Search {repo_display} for [query]"
 - ❌ WRONG: "In the codebase, where..." (too vague, might search wrong repo)
-- ❌ WRONG: "In navidrome, where..." (searches original, not sg-benchmarks mirror)
+- ❌ WRONG: "In navidrome, where..." (searches original, not sg-evals mirror)
 
 IMPORTANT - SG-BENCHMARKS ORG:
-The Deep Search MCP is configured to search in the sg-benchmarks GitHub organization.
+The Deep Search MCP is configured to search in the sg-evals GitHub organization.
 This organization contains mirrors of all benchmark repositories with HEAD pinned to match your local working copy's commit.
-Do NOT search the original repositories - use sg-benchmarks which has the correct indexed commit.
+Do NOT search the original repositories - use sg-evals which has the correct indexed commit.
 
 Workflow requirement:
 1) Run Deep Search MCP to find relevant code and understand relationships
@@ -796,7 +796,7 @@ Workflow requirement:
 2) Open only the relevant files/regions needed to implement the fix
 3) If Deep Search returns no results, broaden the search query before opening more files
 
-Deep Search is configured for sg-benchmarks org with the correct commit, so results should match your local working copy.
+Deep Search is configured for sg-evals org with the correct commit, so results should match your local working copy.
 
 IMPORTANT: If your first search returns empty results, the repository name may differ
 from what you expect. Use `mcp__sourcegraph__sg_list_repos` (if available) to discover the correct repo name
@@ -841,10 +841,10 @@ before retrying."""
         - ✅ CORRECT: "In {repo_display}, where is [code]?"
         - ✅ CORRECT: "Search {repo_display} for [query]"
         - ❌ WRONG: "In the codebase, where..." (too vague, might search wrong repo)
-        - ❌ WRONG: "In navidrome, where..." (searches original, not sg-benchmarks mirror)
+        - ❌ WRONG: "In navidrome, where..." (searches original, not sg-evals mirror)
 
         IMPORTANT - SG-BENCHMARKS ORG:
-        The Deep Search MCP is configured to search in the sg-benchmarks GitHub organization.
+        The Deep Search MCP is configured to search in the sg-evals GitHub organization.
         This organization contains mirrors of all benchmark repositories with HEAD pinned to match your local working copy's commit.
         Deep Search results should now match your local working copy without version mismatches.
 
@@ -870,7 +870,7 @@ before retrying."""
         - Simple pattern/location verification → Local search
 
         This hybrid approach gives you the semantic understanding of Deep Search plus the speed of local tools.
-        With sg-benchmarks org configured, Deep Search results should accurately reflect your working copy.
+        With sg-evals org configured, Deep Search results should accurately reflect your working copy.
 
         IMPORTANT: If your first search returns empty results, the repository name may differ
         from what you expect. Use `mcp__sourcegraph__sg_list_repos` (if available) to discover the correct repo name
@@ -1718,19 +1718,19 @@ Follow the test-first workflow from your system instructions.
         repo_info = os.environ.get("SWEBENCH_REPO_COMMIT", "")
         repo_name = ""
         commit = ""
-        sg_benchmarks_org = "sg-benchmarks"
+        sg_benchmarks_org = "sg-evals"
         if repo_info and "--" in repo_info:
             repo_name, commit = repo_info.split("--", 1)
-            logger.info(f"BaselineClaudeCodeAgent: Deep Search MCP will use sg-benchmarks repo={repo_name}, commit={commit}")
+            logger.info(f"BaselineClaudeCodeAgent: Deep Search MCP will use sg-evals repo={repo_name}, commit={commit}")
 
-        # Deep Search MCP config - add sg-benchmarks org and repo info if available
+        # Deep Search MCP config - add sg-evals org and repo info if available
         deepsearch_config = {
             "type": "http",
             "url": deepsearch_url,
             "headers": {"Authorization": f"token {deepsearch_token}"},
         }
         
-        # Add sg-benchmarks org and repo hint to the config if we have repo info
+        # Add sg-evals org and repo hint to the config if we have repo info
         if repo_name:
             deepsearch_config["org"] = sg_benchmarks_org
             deepsearch_config["repo"] = repo_name
@@ -1861,19 +1861,19 @@ When making Deep Search queries, you MUST explicitly reference this repository n
         repo_info = os.environ.get("SWEBENCH_REPO_COMMIT", "")
         repo_name = ""
         commit = ""
-        sg_benchmarks_org = "sg-benchmarks"
+        sg_benchmarks_org = "sg-evals"
         if repo_info and "--" in repo_info:
             repo_name, commit = repo_info.split("--", 1)
-            logger.info(f"BaselineClaudeCodeAgent: Hybrid Deep Search MCP will use sg-benchmarks repo={repo_name}, commit={commit}")
+            logger.info(f"BaselineClaudeCodeAgent: Hybrid Deep Search MCP will use sg-evals repo={repo_name}, commit={commit}")
 
-        # Deep Search MCP config (same as deepsearch mode) - add sg-benchmarks org and repo info if available
+        # Deep Search MCP config (same as deepsearch mode) - add sg-evals org and repo info if available
         deepsearch_config = {
             "type": "http",
             "url": deepsearch_url,
             "headers": {"Authorization": f"token {deepsearch_token}"},
         }
         
-        # Add sg-benchmarks org and repo hint to the config if we have repo info
+        # Add sg-evals org and repo hint to the config if we have repo info
         if repo_name:
             deepsearch_config["org"] = sg_benchmarks_org
             deepsearch_config["repo"] = repo_name
@@ -1896,7 +1896,7 @@ When making Deep Search queries, you MUST explicitly reference this repository n
         await environment.upload_file(
             source_path=mcp_config_path, target_path="/logs/agent/sessions/.mcp.json"
         )
-        logger.info(f"BaselineClaudeCodeAgent: Hybrid Deep Search MCP configured at /logs/agent/sessions/ ({deepsearch_url}) with sg-benchmarks org")
+        logger.info(f"BaselineClaudeCodeAgent: Hybrid Deep Search MCP configured at /logs/agent/sessions/ ({deepsearch_url}) with sg-evals org")
 
         # Get repo display name for CLAUDE.md
         repo_display = self._get_repo_display()
@@ -1925,11 +1925,11 @@ Follow the test-first workflow from your system instructions.
         - ✅ CORRECT: "In {repo_display}, where is [code]?"
         - ✅ CORRECT: "Search {repo_display} for [query]"
         - ❌ WRONG: "In the codebase, where..." (too vague)
-        - ❌ WRONG: "In navidrome, where..." (searches original, not sg-benchmarks mirror)
+        - ❌ WRONG: "In navidrome, where..." (searches original, not sg-evals mirror)
 
         ## SG-BENCHMARKS ORG - COMMIT-MATCHED SEARCH
 
-        🎯 **Deep Search is configured to search within the **sg-benchmarks** GitHub organization.**
+        🎯 **Deep Search is configured to search within the **sg-evals** GitHub organization.**
 
         This organization contains mirrors of all benchmark repositories with:
         - HEAD pinned to the exact same commit as your local working copy
@@ -1940,7 +1940,7 @@ Follow the test-first workflow from your system instructions.
 
         Use this decision logic to pick the right tool:
 
-        ### When to Use Deep Search MCP First (sg-benchmarks org):
+        ### When to Use Deep Search MCP First (sg-evals org):
         1. **Bug localization** - "In {repo_display}, where in the code does [error/behavior] occur?"
         2. **Error path discovery** - "In {repo_display}, what code handles [specific error condition]?"
         3. **Data flow tracing** - "In {repo_display}, how does data flow from [source] to [destination]?"
@@ -2052,7 +2052,7 @@ Follow the test-first workflow from your system instructions.
 
         ## Why This Matters
 
-        With sg-benchmarks org correctly configured:
+        With sg-evals org correctly configured:
         - Deep Search results are **accurate** (same commit as your code)
         - Deep Search understands **relationships** (not just text matching)
         - You have **full tool access** (hybrid: MCP + local tools)

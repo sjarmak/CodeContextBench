@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/QuantLib--dbdcc14e`
-- Use `repo:^github.com/sg-benchmarks/QuantLib--dbdcc14e$` filter in keyword_search
-- Use `github.com/sg-benchmarks/QuantLib--dbdcc14e` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/QuantLib--dbdcc14e`
+- Use `repo:^github.com/sg-evals/QuantLib--dbdcc14e$` filter in keyword_search
+- Use `github.com/sg-evals/QuantLib--dbdcc14e` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -73,7 +73,7 @@ Trace the QuantLib pricing chain for a barrier option: instrument→pricing engi
 
 ## Context
 
-- **Repository**: github.com/sg-benchmarks/QuantLib--dbdcc14e (mirror of lballabio/QuantLib) (C++, ~450K LOC)
+- **Repository**: github.com/sg-evals/QuantLib--dbdcc14e (mirror of lballabio/QuantLib) (C++, ~450K LOC)
 - **Category**: Architectural Understanding
 - **Difficulty**: hard
 - **Subsystem Focus**: ql/instruments/, ql/pricingengines/barrier/, ql/processes/, ql/termstructures/, ql/methods/montecarlo/

@@ -4,7 +4,7 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/prometheus` — use `repo:^github.com/sg-benchmarks/prometheus$` filter
+- `github.com/sg-evals/prometheus` — use `repo:^github.com/sg-evals/prometheus$` filter
 - `github.com/sourcegraph-testing/prometheus-common` — use `repo:^github.com/sourcegraph-testing/prometheus-common$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
@@ -69,7 +69,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/prometheus`, `github.com/sourcegraph-testing/prometheus-common`
+**Sourcegraph Repositories:** `github.com/sg-evals/prometheus`, `github.com/sourcegraph-testing/prometheus-common`
 
 # Security Compliance Audit: TLS Configuration Across Prometheus Stack
 

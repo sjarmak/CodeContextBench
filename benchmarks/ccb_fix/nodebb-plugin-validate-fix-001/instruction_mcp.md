@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/nodebb--76c6e302`
-- Use `repo:^github.com/sg-benchmarks/nodebb--76c6e302$` filter in keyword_search
-- Use `github.com/sg-benchmarks/nodebb--76c6e302` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/nodebb--76c6e302`
+- Use `repo:^github.com/sg-evals/nodebb--76c6e302$` filter in keyword_search
+- Use `github.com/sg-evals/nodebb--76c6e302` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -71,7 +71,7 @@ If MCP search returns no results:
 
 ---
 
-**Repo:** `github.com/sg-benchmarks/nodebb--76c6e302` (mirror of `NodeBB/NodeBB`)  
+**Repo:** `github.com/sg-evals/nodebb--76c6e302` (mirror of `NodeBB/NodeBB`)  
 **Base commit:** `a3e1a666b876e0b3ccbb5284dd826c8c90c113b4`  
 **Instance ID:** `instance_NodeBB__NodeBB-76c6e30282906ac664f2c9278fc90999b27b1f48-vd59a5728dfc977f44533186ace531248c2917516`
 

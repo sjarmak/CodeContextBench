@@ -16,7 +16,7 @@ RUN if ! command -v node &> /dev/null; then \
     fi
 
 # Clone hashicorp/terraform at pinned v1.10.3 tag
-RUN git clone --depth 1 https://github.com/sg-benchmarks/terraform--v1.10.3.git /workspace && \
+RUN git clone --depth 1 https://github.com/sg-evals/terraform--v1.10.3.git /workspace && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

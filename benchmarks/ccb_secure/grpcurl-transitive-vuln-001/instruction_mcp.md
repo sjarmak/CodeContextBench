@@ -4,8 +4,8 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/grpcurl--25c896aa` — use `repo:^github.com/sg-benchmarks/grpcurl--25c896aa$` filter
-- `github.com/sg-benchmarks/grpc-go--v1.56.2` — use `repo:^github.com/sg-benchmarks/grpc-go--v1.56.2$` filter
+- `github.com/sg-evals/grpcurl--25c896aa` — use `repo:^github.com/sg-evals/grpcurl--25c896aa$` filter
+- `github.com/sg-evals/grpc-go--v1.56.2` — use `repo:^github.com/sg-evals/grpc-go--v1.56.2$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -69,7 +69,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/grpcurl--25c896aa`, `github.com/sg-benchmarks/grpc-go--v1.56.2`
+**Sourcegraph Repositories:** `github.com/sg-evals/grpcurl--25c896aa`, `github.com/sg-evals/grpc-go--v1.56.2`
 
 # Security Triage: Transitive Dependency Vulnerability Assessment
 

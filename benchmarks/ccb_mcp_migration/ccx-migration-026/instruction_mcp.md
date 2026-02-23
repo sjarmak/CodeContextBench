@@ -4,10 +4,10 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/envoy--v1.31.2` — use `repo:^github.com/sg-benchmarks/envoy--v1.31.2$` filter
-- `github.com/sg-benchmarks/data-plane-api--84e84367` — use `repo:^github.com/sg-benchmarks/data-plane-api--84e84367$` filter
-- `github.com/sg-benchmarks/go-control-plane--71637ad6` — use `repo:^github.com/sg-benchmarks/go-control-plane--71637ad6$` filter
-- `github.com/sg-benchmarks/grpc--957dba5e` — use `repo:^github.com/sg-benchmarks/grpc--957dba5e$` filter
+- `github.com/sg-evals/envoy--v1.31.2` — use `repo:^github.com/sg-evals/envoy--v1.31.2$` filter
+- `github.com/sg-evals/data-plane-api--84e84367` — use `repo:^github.com/sg-evals/data-plane-api--84e84367$` filter
+- `github.com/sg-evals/go-control-plane--71637ad6` — use `repo:^github.com/sg-evals/go-control-plane--71637ad6$` filter
+- `github.com/sg-evals/grpc--957dba5e` — use `repo:^github.com/sg-evals/grpc--957dba5e$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -71,7 +71,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/envoy--v1.31.2`, `github.com/sg-benchmarks/data-plane-api--84e84367`, `github.com/sg-benchmarks/go-control-plane--71637ad6`, `github.com/sg-benchmarks/grpc--957dba5e`
+**Sourcegraph Repositories:** `github.com/sg-evals/envoy--v1.31.2`, `github.com/sg-evals/data-plane-api--84e84367`, `github.com/sg-evals/go-control-plane--71637ad6`, `github.com/sg-evals/grpc--957dba5e`
 
 # Envoy Deprecated v2 API References Migration
 
@@ -85,13 +85,13 @@ You are working on a codebase task involving repos from the migration domain.
 
 ## Available Resources
 
-The local `/workspace/` directory contains: sg-benchmarks/envoy--v1.31.2, sg-benchmarks/data-plane-api--84e84367, sg-benchmarks/go-control-plane--71637ad6, sg-benchmarks/grpc--957dba5e.
+The local `/workspace/` directory contains: sg-evals/envoy--v1.31.2, sg-evals/data-plane-api--84e84367, sg-evals/go-control-plane--71637ad6, sg-evals/grpc--957dba5e.
 
 **Note:** Additional repositories are accessible via Sourcegraph MCP tools:
-- `sg-benchmarks/envoy--v1.31.2` (envoyproxy/envoy)
-- `sg-benchmarks/data-plane-api--84e84367` (envoyproxy/data-plane-api)
-- `sg-benchmarks/go-control-plane--71637ad6` (envoyproxy/go-control-plane)
-- `sg-benchmarks/grpc--957dba5e` (grpc/grpc)
+- `sg-evals/envoy--v1.31.2` (envoyproxy/envoy)
+- `sg-evals/data-plane-api--84e84367` (envoyproxy/data-plane-api)
+- `sg-evals/go-control-plane--71637ad6` (envoyproxy/go-control-plane)
+- `sg-evals/grpc--957dba5e` (grpc/grpc)
 
 ## Output Format
 

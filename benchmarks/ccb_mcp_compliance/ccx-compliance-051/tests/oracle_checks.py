@@ -31,30 +31,30 @@ from typing import Any, Dict, List, Optional
 # Agents sometimes forget to strip these; normalize before comparison.
 _HOSTING_PREFIX_RE = re.compile(r"^(?:github\.com|gitlab\.com|bitbucket\.org)/")
 
-# sg-benchmarks mirrors → upstream canonical names.
+# sg-evals mirrors → upstream canonical names.
 # Allows oracle answers and agent answers to use either name interchangeably.
 _SG_MIRROR_ALIASES = {
-    "sg-benchmarks/kubernetes-client-go": "kubernetes/client-go",
-    "sg-benchmarks/kubernetes-api": "kubernetes/api",
-    "sg-benchmarks/etcd-io-etcd": "etcd-io/etcd",
-    "sg-benchmarks/expressjs-express": "expressjs/express",
-    "sg-benchmarks/grafana-loki": "grafana/loki",
-    "sg-benchmarks/grafana-mimir": "grafana/mimir",
-    "sg-benchmarks/prisma-prisma": "prisma/prisma",
-    "sg-benchmarks/lodash": "lodash/lodash",
-    "sg-benchmarks/numpy": "numpy/numpy",
-    "sg-benchmarks/scipy": "scipy/scipy",
-    "sg-benchmarks/grafana": "grafana/grafana",
-    "sg-benchmarks/prometheus": "prometheus/prometheus",
+    "sg-evals/kubernetes-client-go": "kubernetes/client-go",
+    "sg-evals/kubernetes-api": "kubernetes/api",
+    "sg-evals/etcd-io-etcd": "etcd-io/etcd",
+    "sg-evals/expressjs-express": "expressjs/express",
+    "sg-evals/grafana-loki": "grafana/loki",
+    "sg-evals/grafana-mimir": "grafana/mimir",
+    "sg-evals/prisma-prisma": "prisma/prisma",
+    "sg-evals/lodash": "lodash/lodash",
+    "sg-evals/numpy": "numpy/numpy",
+    "sg-evals/scipy": "scipy/scipy",
+    "sg-evals/grafana": "grafana/grafana",
+    "sg-evals/prometheus": "prometheus/prometheus",
 }
 
 
 def _normalize_repo(repo: str) -> str:
-    """Strip hosting-provider prefix and resolve sg-benchmarks aliases.
+    """Strip hosting-provider prefix and resolve sg-evals aliases.
 
-    >>> _normalize_repo("github.com/sg-benchmarks/kubernetes-client-go")
+    >>> _normalize_repo("github.com/sg-evals/kubernetes-client-go")
     'kubernetes/client-go'
-    >>> _normalize_repo("sg-benchmarks/kubernetes-client-go")
+    >>> _normalize_repo("sg-evals/kubernetes-client-go")
     'kubernetes/client-go'
     >>> _normalize_repo("etcd-io/etcd")
     'etcd-io/etcd'

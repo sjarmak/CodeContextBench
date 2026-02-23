@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Create scip-enabled branches on all sg-benchmarks repos.
+# Create scip-enabled branches on all sg-evals repos.
 # Each branch points to the same commit as the repo's default branch HEAD.
 #
 # Usage:
 #   ./scripts/create_scip_branches.sh [--dry-run] [--parallel N]
 #
-# Requires: gh CLI authenticated with access to sg-benchmarks org.
+# Requires: gh CLI authenticated with access to sg-evals org.
 
 set -euo pipefail
 
@@ -38,8 +38,8 @@ echo "Logs: $LOG_DIR/"
 echo ""
 
 # Fetch all repo names in the org
-echo "Fetching repo list from sg-benchmarks org..."
-REPOS=$(gh api --paginate orgs/sg-benchmarks/repos \
+echo "Fetching repo list from sg-evals org..."
+REPOS=$(gh api --paginate orgs/sg-evals/repos \
   --jq '.[].name' 2>/dev/null | sort)
 TOTAL=$(echo "$REPOS" | wc -l)
 echo "Found $TOTAL repos"
@@ -47,7 +47,7 @@ echo ""
 
 create_branch() {
   local repo_name="$1"
-  local full_name="sg-benchmarks/$repo_name"
+  local full_name="sg-evals/$repo_name"
 
   # Get default branch HEAD SHA
   local sha

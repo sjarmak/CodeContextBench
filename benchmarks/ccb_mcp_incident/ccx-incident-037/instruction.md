@@ -9,7 +9,7 @@ configuring the etcd client) and the provider side (etcd defining and using Dial
 
 **Specific question**: Find all Go source files in:
 1. `kubernetes/kubernetes` under `staging/src/k8s.io/apiserver/` that configure `DialTimeout`
-2. `etcd-io/etcd` (or `sg-benchmarks/etcd-io-etcd`) under `client/` and `server/` that define or use `DialTimeout`
+2. `etcd-io/etcd` (or `sg-evals/etcd-io-etcd`) under `client/` and `server/` that define or use `DialTimeout`
 
 **IMPORTANT**: Exclude vendored files under `vendor/` directories — these are copies,
 not authoritative sources. Also exclude test files (`_test.go`) — focus on production
@@ -52,7 +52,7 @@ Create a file at `/workspace/answer.json` with your findings:
 ```
 
 **Important**: Use canonical repo names (`kubernetes/kubernetes`, `etcd-io/etcd`).
-For Sourcegraph searches, the etcd mirror is `sg-benchmarks/etcd-io-etcd` — both names
+For Sourcegraph searches, the etcd mirror is `sg-evals/etcd-io-etcd` — both names
 are accepted. Sourcegraph MCP tools return repo names with a `github.com/` prefix —
 strip this prefix in your answer.
 

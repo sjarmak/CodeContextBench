@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/Strata--66225ca9`
-- Use `repo:^github.com/sg-benchmarks/Strata--66225ca9$` filter in keyword_search
-- Use `github.com/sg-benchmarks/Strata--66225ca9` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/Strata--66225ca9`
+- Use `repo:^github.com/sg-evals/Strata--66225ca9$` filter in keyword_search
+- Use `github.com/sg-evals/Strata--66225ca9` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -82,7 +82,7 @@ The refactoring includes:
 
 ## Context
 
-- **Repository**: github.com/sg-benchmarks/Strata--66225ca9 (mirror of OpenGamma/Strata) (Java, ~500K LOC)
+- **Repository**: github.com/sg-evals/Strata--66225ca9 (mirror of OpenGamma/Strata) (Java, ~500K LOC)
 - **Category**: Cross-File Refactoring
 - **Difficulty**: hard
 - **Subsystem Focus**: modules/product/fxopt, modules/pricer/fxopt, modules/measure/fxopt, modules/loader/csv

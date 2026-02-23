@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/navidrome--9c3b4561`
-- Use `repo:^github.com/sg-benchmarks/navidrome--9c3b4561$` filter in keyword_search
-- Use `github.com/sg-benchmarks/navidrome--9c3b4561` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/navidrome--9c3b4561`
+- Use `repo:^github.com/sg-evals/navidrome--9c3b4561$` filter in keyword_search
+- Use `github.com/sg-evals/navidrome--9c3b4561` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # Task: Write Integration Tests for Navidrome Media Scanner
 
-**Repository:** github.com/sg-benchmarks/navidrome--9c3b4561 (mirror of navidrome/navidrome)
+**Repository:** github.com/sg-evals/navidrome--9c3b4561 (mirror of navidrome/navidrome)
 **Output:** Write your test file to `/workspace/scanner/scanner_integration_test.go`
 
 ## Objective

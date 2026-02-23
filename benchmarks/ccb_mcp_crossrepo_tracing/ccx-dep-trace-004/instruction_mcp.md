@@ -4,9 +4,9 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/grafana` — use `repo:^github.com/sg-benchmarks/grafana$` filter
-- `github.com/sg-benchmarks/grafana-loki` — use `repo:^github.com/sg-benchmarks/grafana-loki$` filter
-- `github.com/sg-benchmarks/grafana-mimir` — use `repo:^github.com/sg-benchmarks/grafana-mimir$` filter
+- `github.com/sg-evals/grafana` — use `repo:^github.com/sg-evals/grafana$` filter
+- `github.com/sg-evals/grafana-loki` — use `repo:^github.com/sg-evals/grafana-loki$` filter
+- `github.com/sg-evals/grafana-mimir` — use `repo:^github.com/sg-evals/grafana-mimir$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -70,7 +70,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/grafana`, `github.com/sg-benchmarks/grafana-loki`, `github.com/sg-benchmarks/grafana-mimir`
+**Sourcegraph Repositories:** `github.com/sg-evals/grafana`, `github.com/sg-evals/grafana-loki`, `github.com/sg-evals/grafana-mimir`
 
 # API Call Chain: Grafana to Loki Query Path
 
@@ -83,7 +83,7 @@ through to the Loki backend.
 **Specific question**: Identify the key types/functions at each hop in this HTTP call chain:
 1. In `grafana/grafana`: What is the type/struct that acts as the HTTP client for Loki queries?
    (Look in `pkg/tsdb/loki/`)
-2. In `sg-benchmarks/grafana-loki`: What is the function that parses incoming HTTP instant query
+2. In `sg-evals/grafana-loki`: What is the function that parses incoming HTTP instant query
    requests? (Look in `pkg/loghttp/`)
 
 Your answer should trace from Grafana's API layer → Loki's HTTP parsing layer.
@@ -115,10 +115,10 @@ Create a file at `/workspace/answer.json` with your findings in the following st
 
 **Important**: Use exact repo identifiers as they appear in the oracle:
 - For Grafana: `"repo": "grafana/grafana"`
-- For Loki: `"repo": "sg-benchmarks/grafana-loki"`
-**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-benchmarks/kubernetes-client-go`). Strip this prefix in your answer — use `sg-benchmarks/kubernetes-client-go`, NOT `github.com/sg-benchmarks/kubernetes-client-go`.
+- For Loki: `"repo": "sg-evals/grafana-loki"`
+**Note**: Sourcegraph MCP tools return repo names with a `github.com/` prefix (e.g., `github.com/sg-evals/kubernetes-client-go`). Strip this prefix in your answer — use `sg-evals/kubernetes-client-go`, NOT `github.com/sg-evals/kubernetes-client-go`.
 
-The `grafana/loki` repository corresponds to `sg-benchmarks/grafana-loki` in Sourcegraph.
+The `grafana/loki` repository corresponds to `sg-evals/grafana-loki` in Sourcegraph.
 
 List the chain steps in order from Grafana (caller) to Loki (callee). Your answer is evaluated
 against a closed-world oracle — precision matters.

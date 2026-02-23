@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Update Dockerfile.sg_only files to use sg-benchmarks mirrors instead of github.com/ repos.
+"""Update Dockerfile.sg_only files to use sg-evals mirrors instead of github.com/ repos.
 
 Reads the mirror_creation_manifest.json to build a task→repo→mirror mapping,
 then rewrites SOURCEGRAPH_REPO_NAME and SOURCEGRAPH_REPOS env vars in each
-Dockerfile.sg_only to point to the pinned sg-benchmarks mirrors.
+Dockerfile.sg_only to point to the pinned sg-evals mirrors.
 
 Usage:
     python3 scripts/update_sg_only_mirrors.py [--dry-run] [--verbose]
@@ -20,15 +20,15 @@ BENCHMARKS_DIR = REPO_ROOT / "benchmarks"
 
 
 def build_task_mapping(manifest: dict) -> dict[str, dict[str, str]]:
-    """Build task_id → {github_repo → sg-benchmarks/mirror} mapping.
+    """Build task_id → {github_repo → sg-evals/mirror} mapping.
 
     Returns e.g. {"ccb_fix/django-select-for-update-fix-001":
-                   {"github.com/django/django": "sg-benchmarks/django--674eda1c"}}
+                   {"github.com/django/django": "sg-evals/django--674eda1c"}}
     """
     task_map: dict[str, dict[str, str]] = {}
     for entry in manifest["mirrors"]:
         upstream = entry["upstream"]      # e.g. "github.com/django/django"
-        mirror = entry["mirror"]          # e.g. "sg-benchmarks/django--674eda1c"
+        mirror = entry["mirror"]          # e.g. "sg-evals/django--674eda1c"
         for task_id in entry["tasks"]:
             if task_id not in task_map:
                 task_map[task_id] = {}
@@ -60,7 +60,7 @@ def update_dockerfile(task_dir: Path, repo_replacements: dict[str, str],
         for repo in repos:
             # Normalize to full github.com/ form for lookup
             normalized = repo
-            if not normalized.startswith("github.com/") and not normalized.startswith("sg-benchmarks/"):
+            if not normalized.startswith("github.com/") and not normalized.startswith("sg-evals/"):
                 normalized = f"github.com/{repo}"
 
             if normalized in repo_replacements:
@@ -80,7 +80,7 @@ def update_dockerfile(task_dir: Path, repo_replacements: dict[str, str],
         repo = m_name.group(2).strip()
 
         normalized = repo
-        if not normalized.startswith("github.com/") and not normalized.startswith("sg-benchmarks/"):
+        if not normalized.startswith("github.com/") and not normalized.startswith("sg-evals/"):
             normalized = f"github.com/{repo}"
 
         if normalized in repo_replacements:
@@ -105,7 +105,7 @@ def update_dockerfile(task_dir: Path, repo_replacements: dict[str, str],
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Update Dockerfile.sg_only files to use sg-benchmarks mirrors")
+    parser = argparse.ArgumentParser(description="Update Dockerfile.sg_only files to use sg-evals mirrors")
     parser.add_argument("--dry-run", action="store_true", help="Show what would change without writing")
     parser.add_argument("--verbose", action="store_true", help="Show per-task details")
     args = parser.parse_args()

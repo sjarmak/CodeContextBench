@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/django--6b995cff`
-- Use `repo:^github.com/sg-benchmarks/django--6b995cff$` filter in keyword_search
-- Use `github.com/sg-benchmarks/django--6b995cff` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/django--6b995cff`
+- Use `repo:^github.com/sg-evals/django--6b995cff$` filter in keyword_search
+- Use `github.com/sg-evals/django--6b995cff` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -73,7 +73,7 @@ Map the Django ORM query compilation pipeline from QuerySet to SQL. Trace how a 
 
 ## Context
 
-- **Repository**: github.com/sg-benchmarks/django--6b995cff (mirror of django/django) (Python, ~350K LOC)
+- **Repository**: github.com/sg-evals/django--6b995cff (mirror of django/django) (Python, ~350K LOC)
 - **Category**: Architectural Understanding
 - **Difficulty**: hard
 - **Subsystem Focus**: django/db/models/ and django/db/backends/ — the ORM query compilation layer

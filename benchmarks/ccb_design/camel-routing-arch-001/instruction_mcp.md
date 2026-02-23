@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/camel--1006f047`
-- Use `repo:^github.com/sg-benchmarks/camel--1006f047$` filter in keyword_search
-- Use `github.com/sg-benchmarks/camel--1006f047` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/camel--1006f047`
+- Use `repo:^github.com/sg-evals/camel--1006f047$` filter in keyword_search
+- Use `github.com/sg-evals/camel--1006f047` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -73,7 +73,7 @@ Trace how Apache Camel routes a message from endpoint reception through the EIP 
 
 ## Context
 
-- **Repository**: github.com/sg-benchmarks/camel--1006f047 (mirror of apache/camel) (Java, ~2.8M LOC)
+- **Repository**: github.com/sg-evals/camel--1006f047 (mirror of apache/camel) (Java, ~2.8M LOC)
 - **Category**: Architectural Understanding
 - **Difficulty**: hard
 - **Subsystem Focus**: core/ — the Camel core routing engine (camel-api, camel-support, camel-core-processor, camel-base-engine, camel-core-reifier)

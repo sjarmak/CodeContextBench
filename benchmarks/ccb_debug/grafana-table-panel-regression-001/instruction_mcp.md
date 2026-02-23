@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/grafana--26d36ec`
-- Use `repo:^github.com/sg-benchmarks/grafana--26d36ec$` filter in keyword_search
-- Use `github.com/sg-benchmarks/grafana--26d36ec` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/grafana--26d36ec`
+- Use `repo:^github.com/sg-evals/grafana--26d36ec$` filter in keyword_search
+- Use `github.com/sg-evals/grafana--26d36ec` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -67,7 +67,7 @@ If MCP search returns no results:
 
 # Investigation: Dashboard Migration v38 Table Panel Regression
 
-**Repository:** github.com/sg-benchmarks/grafana--26d36ec (mirror of grafana/grafana)
+**Repository:** github.com/sg-evals/grafana--26d36ec (mirror of grafana/grafana)
 **Task Type:** Regression Hunt (investigation only — no code fixes)
 
 ## Scenario

@@ -4,9 +4,9 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/go-control-plane--71637ad6` — use `repo:^github.com/sg-benchmarks/go-control-plane--71637ad6$` filter
-- `github.com/sg-benchmarks/istio--2300e245` — use `repo:^github.com/sg-benchmarks/istio--2300e245$` filter
-- `github.com/sg-benchmarks/emissary--3bbdbe0f` — use `repo:^github.com/sg-benchmarks/emissary--3bbdbe0f$` filter
+- `github.com/sg-evals/go-control-plane--71637ad6` — use `repo:^github.com/sg-evals/go-control-plane--71637ad6$` filter
+- `github.com/sg-evals/istio--2300e245` — use `repo:^github.com/sg-evals/istio--2300e245$` filter
+- `github.com/sg-evals/emissary--3bbdbe0f` — use `repo:^github.com/sg-evals/emissary--3bbdbe0f$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -70,7 +70,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/go-control-plane--71637ad6`, `github.com/sg-benchmarks/istio--2300e245`, `github.com/sg-benchmarks/emissary--3bbdbe0f`
+**Sourcegraph Repositories:** `github.com/sg-evals/go-control-plane--71637ad6`, `github.com/sg-evals/istio--2300e245`, `github.com/sg-evals/emissary--3bbdbe0f`
 
 Find all concrete server implementations of the `AggregatedDiscoveryServiceServer` gRPC interface across xDS control plane repositories.
 

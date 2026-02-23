@@ -2,9 +2,9 @@
 
 **Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.
 
-**Target Repository:** `github.com/sg-benchmarks/kubernetes--v1.30.0`
-- Use `repo:^github.com/sg-benchmarks/kubernetes--v1.30.0$` filter in keyword_search
-- Use `github.com/sg-benchmarks/kubernetes--v1.30.0` as the `repo` parameter for go_to_definition/find_references/read_file
+**Target Repository:** `github.com/sg-evals/kubernetes--v1.30.0`
+- Use `repo:^github.com/sg-evals/kubernetes--v1.30.0$` filter in keyword_search
+- Use `github.com/sg-evals/kubernetes--v1.30.0` as the `repo` parameter for go_to_definition/find_references/read_file
 
 
 ## Required Workflow
@@ -73,7 +73,7 @@ Trace how a Custom Resource Definition (CRD) flows through the Kubernetes ecosys
 
 ## Context
 
-- **Repository**: github.com/sg-benchmarks/kubernetes--v1.30.0 (mirror of kubernetes/kubernetes) (Go, ~2.5M LOC)
+- **Repository**: github.com/sg-evals/kubernetes--v1.30.0 (mirror of kubernetes/kubernetes) (Go, ~2.5M LOC)
 - **Category**: Architectural Understanding (cross-repo)
 - **Difficulty**: hard
 - **Subsystem Focus**: staging/src/k8s.io/apiextensions-apiserver/, staging/src/k8s.io/client-go/, staging/src/k8s.io/apimachinery/, staging/src/k8s.io/api/

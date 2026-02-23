@@ -4,8 +4,8 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/sg-benchmarks/terraform--f65c52c8` — use `repo:^github.com/sg-benchmarks/terraform--f65c52c8$` filter
-- `github.com/sg-benchmarks/terraform-provider-aws--e9b4629e` — use `repo:^github.com/sg-benchmarks/terraform-provider-aws--e9b4629e$` filter
+- `github.com/sg-evals/terraform--f65c52c8` — use `repo:^github.com/sg-evals/terraform--f65c52c8$` filter
+- `github.com/sg-evals/terraform-provider-aws--e9b4629e` — use `repo:^github.com/sg-evals/terraform-provider-aws--e9b4629e$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -69,7 +69,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/sg-benchmarks/terraform--f65c52c8`, `github.com/sg-benchmarks/terraform-provider-aws--e9b4629e`
+**Sourcegraph Repositories:** `github.com/sg-evals/terraform--f65c52c8`, `github.com/sg-evals/terraform-provider-aws--e9b4629e`
 
 Find all implementations and usages of Terraform's `provider.Provider` interface across two repositories.
 

@@ -10,11 +10,11 @@ You are working on a codebase task involving repos from the onboarding domain.
 
 ## Available Resources
 
-The local `/workspace/` directory contains: sg-benchmarks/rust--01f6ddf7, sg-benchmarks/servo--be6a2f99.
+The local `/workspace/` directory contains: sg-evals/rust--01f6ddf7, sg-evals/servo--be6a2f99.
 
 **Note:** Additional repositories are accessible via Sourcegraph MCP tools:
-- `sg-benchmarks/rust--01f6ddf7` (rust-lang/rust)
-- `sg-benchmarks/servo--be6a2f99` (servo/servo)
+- `sg-evals/rust--01f6ddf7` (rust-lang/rust)
+- `sg-evals/servo--be6a2f99` (servo/servo)
 
 ## Output Format
 
