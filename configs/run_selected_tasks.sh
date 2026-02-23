@@ -410,7 +410,9 @@ if [ "$SKIP_PREBUILD" = false ]; then
     echo "=== Pre-building Docker images ==="
     ensure_base_images
     for bm in $(echo "${!BENCHMARK_COUNTS[@]}" | tr ' ' '\n' | sort); do
-        prebuild_images "$bm"
+        # Pass selected task IDs so prebuild only builds images for tasks we'll run
+        _task_list=$(echo "${BENCHMARK_TASK_IDS[$bm]}" | grep -v '^$' | paste -sd, -)
+        prebuild_images "$bm" --tasks "$_task_list"
     done
     echo ""
 fi

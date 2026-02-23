@@ -315,7 +315,9 @@ run_task_batch() {
 # This moves Docker build time out of the critical path (API session slots).
 if [ "$SKIP_PREBUILD" = false ]; then
     log_section "Pre-building Docker images for ${SUITE}"
-    prebuild_images "$SUITE"
+    # Pass selected task IDs so prebuild only builds images for tasks we'll run
+    _task_list=$(IFS=,; echo "${TASK_IDS[*]}")
+    prebuild_images "$SUITE" --tasks "$_task_list"
 fi
 
 BL_CONFIG=$(baseline_config_for "$FULL_CONFIG")
