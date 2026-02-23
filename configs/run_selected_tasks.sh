@@ -59,6 +59,7 @@ RUN_BASELINE=true
 RUN_FULL=true
 CATEGORY="${CATEGORY:-staging}"
 FULL_CONFIG="${FULL_CONFIG:-mcp-remote-direct}"
+_FULL_CONFIG_EXPLICIT=false
 DRY_RUN=false
 SKIP_COMPLETED=false
 SKIP_PREBUILD=false
@@ -104,6 +105,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --full-config)
             FULL_CONFIG="$2"
+            _FULL_CONFIG_EXPLICIT=true
             shift 2
             ;;
         --skip-completed)
@@ -132,6 +134,20 @@ if [ ! -f "$SELECTION_FILE" ]; then
     echo "ERROR: selected_benchmark_tasks.json not found at $SELECTION_FILE"
     echo "Run: python3 scripts/select_benchmark_tasks.py"
     exit 1
+fi
+
+# Auto-detect artifact config for MCP-unique selection files
+# MCP-unique tasks use mcp_suite (not benchmark) and REQUIRE artifact configs.
+if [ "$_FULL_CONFIG_EXPLICIT" = false ]; then
+    if python3 -c "
+import json, sys
+data = json.load(open('$SELECTION_FILE'))
+has_mcp_suite = any('mcp_suite' in t for t in data.get('tasks', []))
+sys.exit(0 if has_mcp_suite else 1)
+" 2>/dev/null; then
+        FULL_CONFIG="mcp-remote-artifact"
+        echo "Auto-detected MCP-unique selection file → using artifact configs ($FULL_CONFIG)"
+    fi
 fi
 
 load_credentials
