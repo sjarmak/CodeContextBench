@@ -292,5 +292,5 @@ sys.exit(0 if pct == 100.0 else 1)
 
 - [ERROR_CATALOG.md](ERROR_CATALOG.md) -- Known error fingerprints with root causes and fixes
 - [CONFIGS.md](CONFIGS.md) -- 2-config evaluation matrix details
-- [TASK_SELECTION.md](TASK_SELECTION.md) -- Task selection methodology and MCP benefit scoring (157 tasks, 8 SDLC suites)
+- [TASK_SELECTION.md](TASK_SELECTION.md) -- Task selection methodology and MCP benefit scoring (170 tasks, 8 SDLC suites)
 - [TASK_CATALOG.md](TASK_CATALOG.md) -- Detailed per-task reference

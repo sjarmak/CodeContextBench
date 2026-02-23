@@ -103,7 +103,7 @@ See [SCORING_SEMANTICS.md](SCORING_SEMANTICS.md) for full definitions.
 
 ## Calculation Example
 
-An agent runs all 8 suites (157 tasks) and achieves:
+An agent runs all 8 suites (170 tasks) and achieves:
 
 | Suite | Mean Reward |
 |-------|-------------|
@@ -120,4 +120,4 @@ An agent runs all 8 suites (157 tasks) and achieves:
 
 **Suites completed** = 8/8
 
-**Pass rate** = tasks with reward > 0.0 / total tasks = e.g., 125 / 157 ≈ 0.796
+**Pass rate** = tasks with reward > 0.0 / total tasks = e.g., 125 / 170 ≈ 0.735

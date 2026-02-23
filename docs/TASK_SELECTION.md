@@ -2,7 +2,7 @@
 
 ## Overview
 
-The benchmark uses **157 tasks** across **8 SDLC-phase suites**. The canonical task list is in `configs/selected_benchmark_tasks.json` (version 2.0). Tasks were selected and reorganized from legacy suites via the SDLC migration; see `docs/PRD_SDLC_SUITE_REORGANIZATION.md` for the reorganization rationale and `docs/TASK_CATALOG.md` for the full per-task reference.
+The benchmark uses **170 tasks** across **8 SDLC-phase suites**. The canonical task list is in `configs/selected_benchmark_tasks.json` (version 2.0, last updated 2026-02-23). Tasks were selected and reorganized from legacy suites via the SDLC migration, with Phase 2 backlog tasks promoted to fill `ccb_test` and `ccb_document` to their target of 20 each. See `docs/TASK_CATALOG.md` for the per-task reference.
 
 ## SDLC Suite Coverage
 
@@ -12,11 +12,11 @@ The benchmark uses **157 tasks** across **8 SDLC-phase suites**. The canonical t
 | ccb_design | Architecture & Design | 20 |
 | ccb_fix | Bug Repair | 25 |
 | ccb_build | Feature & Refactoring | 25 |
-| ccb_test | Testing & QA | 14 |
-| ccb_document | Documentation | 13 |
+| ccb_test | Testing & QA | 20 |
+| ccb_document | Documentation | 20 |
 | ccb_secure | Security & Compliance | 20 |
 | ccb_debug | Debugging & Investigation | 20 |
-| **Total** | | **157** |
+| **Total** | | **170** |
 
 ## MCP Benefit Scoring
 

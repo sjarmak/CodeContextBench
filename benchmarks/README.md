@@ -1,8 +1,8 @@
 # CodeContextBench Benchmarks
 
-157 tasks organized into 8 suites aligned with the software development lifecycle (SDLC). Each suite targets a distinct phase of engineering work. The canonical task selection is in [`selected_benchmark_tasks.json`](../configs/selected_benchmark_tasks.json).
+170 tasks organized into 8 suites aligned with the software development lifecycle (SDLC). Each suite targets a distinct phase of engineering work. The canonical task selection is in [`selected_benchmark_tasks.json`](../configs/selected_benchmark_tasks.json).
 
-See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for selection methodology and [`docs/PRD_SDLC_SUITE_REORGANIZATION.md`](../docs/PRD_SDLC_SUITE_REORGANIZATION.md) for the migration rationale.
+See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for selection methodology.
 
 ---
 
@@ -14,11 +14,11 @@ See [`docs/TASK_SELECTION.md`](../docs/TASK_SELECTION.md) for selection methodol
 | `ccb_design` | Architecture & Design | 20 | Architecture analysis, dependency graphs, change impact |
 | `ccb_fix` | Bug Repair | 25 | Diagnosing and fixing real bugs across production codebases |
 | `ccb_build` | Feature & Refactoring | 25 | New features, refactoring, dependency management |
-| `ccb_test` | Testing & QA | 14 | Code review, performance testing, code search validation |
-| `ccb_document` | Documentation | 13 | API references, architecture docs, migration guides |
+| `ccb_test` | Testing & QA | 20 | Code review, performance testing, code search validation, test generation |
+| `ccb_document` | Documentation | 20 | API references, architecture docs, migration guides, runbooks |
 | `ccb_secure` | Security & Compliance | 20 | CVE analysis, reachability, governance, access control |
 | `ccb_debug` | Debugging & Investigation | 20 | Root cause tracing, fault localization, provenance |
-| **Total** | | **157** | |
+| **Total** | | **170** | |
 
 ---
 
@@ -148,7 +148,7 @@ New feature implementation, code refactoring, and dependency management tasks.
 
 ---
 
-## ccb_test (14 tasks) — Testing & QA
+## ccb_test (20 tasks) — Testing & QA
 
 Code review with injected defects, performance testing, and code search validation.
 
@@ -171,7 +171,7 @@ Code review with injected defects, performance testing, and code search validati
 
 ---
 
-## ccb_document (13 tasks) — Documentation
+## ccb_document (20 tasks) — Documentation
 
 API reference generation, architecture documentation, and migration guide creation.
 
@@ -269,7 +269,7 @@ Each task follows this layout:
 ## Running Benchmarks
 
 ```bash
-# Run all 157 tasks across 2 configs (Baseline + MCP-Full)
+# Run all 170 tasks across 2 configs (Baseline + MCP-Full)
 bash configs/run_selected_tasks.sh
 
 # Run a single SDLC phase

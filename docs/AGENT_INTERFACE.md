@@ -66,7 +66,7 @@ Harbor produces a `result.json` for each task containing:
   "agent_info": {
     "name": "claude-code",
     "model_info": {
-      "name": "anthropic/claude-opus-4-5-20251101"
+      "name": "anthropic/claude-opus-4-6"
     }
   },
   "agent_result": {
@@ -116,24 +116,29 @@ If the run raises before or during the agent loop (e.g. setup or agent init), Ha
 
 ## Agent Configurations
 
-CodeContextBench evaluates agents under three MCP (Model Context Protocol) configurations:
+CodeContextBench evaluates agents under two MCP (Model Context Protocol) configurations:
 
-### Baseline (no MCP)
+### Baseline (`baseline-local-direct`)
 
 The agent uses only its built-in tools:
 
 - **Bash** - Run commands (tests, builds, shell operations)
 - **Read** - Read files
 - **Edit** - Edit files
+- **Grep** - Content search (ripgrep)
+- **Glob** - File pattern matching
+- **Task** - Launch sub-agents
 
-No external code search tools are available. The agent relies on local tools (Grep, Glob, shell commands) for code discovery.
+No external code search tools are available. The agent has full local source code and relies on local tools for code discovery.
 
-### SG_full (Sourcegraph keyword + NLS search + Deep Search)
+### MCP-Full (`mcp-remote-direct`)
 
-The agent receives Sourcegraph MCP tools for code discovery:
+The agent receives all 13 Sourcegraph MCP tools for code discovery. Local source code is truncated/empty (via `Dockerfile.sg_only`), forcing reliance on MCP tools:
 
 - `mcp__sourcegraph__keyword_search` - Exact string/regex search across indexed repos
 - `mcp__sourcegraph__nls_search` - Natural language semantic search
+- `mcp__sourcegraph__deepsearch` - Deep semantic code analysis
+- `mcp__sourcegraph__deepsearch_read` - Read Deep Search results
 - `mcp__sourcegraph__read_file` - Read files from the Sourcegraph index
 - `mcp__sourcegraph__list_files` - Browse directory structure
 - `mcp__sourcegraph__list_repos` - Discover available repositories
@@ -144,18 +149,9 @@ The agent receives Sourcegraph MCP tools for code discovery:
 - `mcp__sourcegraph__compare_revisions` - Compare revisions
 - `mcp__sourcegraph__get_contributor_repos` - Find contributor repositories
 
-Deep Search tools (`deepsearch`, `deepsearch_read`) are blocked in this config. All local tools (Grep, Glob, Bash) remain available.
+All local tools (Grep, Glob, Bash) remain available but return empty/useless results for source files since the workspace is truncated. Deep Search is asynchronous: it returns a polling link, and the agent must call `deepsearch_read` to retrieve results.
 
-### SG_full (Sourcegraph + Deep Search)
-
-Additionally includes:
-
-- `mcp__sourcegraph__deepsearch` - Asynchronous semantic code analysis
-- `mcp__sourcegraph__deepsearch_read` - Read Deep Search results
-
-Deep Search is asynchronous: it returns a polling link, and the agent must call `deepsearch_read` multiple times (waiting 30-60 seconds between attempts) to retrieve results.
-
-All local tools remain available.
+See [CONFIGS.md](CONFIGS.md) for the full configuration matrix including artifact evaluation variants.
 
 ## Constraints
 

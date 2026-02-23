@@ -8,23 +8,23 @@
 
 ## Overview
 
-CodeContextBench measures AI coding agent performance across 17 active
-benchmark suites. To translate raw benchmark metrics (tokens, tool calls,
-task time) into business-relevant productivity estimates, we map each
-benchmark suite to an **engineering workflow category** and apply
-conservative token-to-time conversion multipliers.
+CodeContextBench measures AI coding agent performance across 8 SDLC-phase
+suites and 6 MCP-unique suites (14 active suites total). To translate raw
+benchmark metrics (tokens, tool calls, task time) into business-relevant
+productivity estimates, we map each suite to an **engineering workflow
+category** and apply conservative token-to-time conversion multipliers.
 
 ## Workflow Categories
 
-| Category | Description | Benchmark Suites |
-|----------|-------------|-----------------|
-| Code Comprehension | Reading, understanding, and reviewing unfamiliar code | CodeReview, NLQA, NavProve |
-| Cross-Repo Navigation | Tracing dependencies across repositories or large monorepos | CrossRepo, LargeRepo |
-| Dependency Analysis | Resolving, analyzing, and installing project dependencies | DIBench, Enterprise |
-| Bug Localization | Fault localization, root-cause analysis, minimal-fix identification | LinuxFLBench, SWE-Perf, Investigation |
-| Feature Implementation | Implementing features, modifying code based on issue descriptions | SWE-bench Pro, PyTorch, TAC, Governance |
-| Onboarding | Ramping up on unfamiliar projects, reading docs, first tasks | DocGen, Onboarding |
-| Security & Compliance | Security analysis, CVE assessment, policy enforcement | Security, Governance |
+| Category | Description | SDLC Suites | MCP-Unique Suites |
+|----------|-------------|-------------|-------------------|
+| Code Comprehension | Reading, understanding, and reviewing unfamiliar code | ccb_understand, ccb_test (code review) | ccb_mcp_onboarding |
+| Cross-Repo Navigation | Tracing dependencies across repositories or large monorepos | ccb_design (dependency analysis) | ccb_mcp_crossrepo_tracing, ccb_mcp_crossorg |
+| Dependency Analysis | Resolving, analyzing, and installing project dependencies | ccb_build (dependency inference) | -- |
+| Bug Localization | Fault localization, root-cause analysis, minimal-fix identification | ccb_debug, ccb_fix | ccb_mcp_incident |
+| Feature Implementation | Implementing features, modifying code based on issue descriptions | ccb_build (features, refactoring) | -- |
+| Documentation | Generating API docs, architecture guides, migration plans | ccb_document | ccb_mcp_platform |
+| Security & Compliance | Security analysis, CVE assessment, policy enforcement | ccb_secure | ccb_mcp_security, ccb_mcp_compliance |
 
 ## Token-to-Time Conversion
 

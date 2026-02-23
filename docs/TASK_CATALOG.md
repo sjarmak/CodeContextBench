@@ -1,10 +1,8 @@
 # CodeContextBench Task Catalog
 
-A detailed reference for every benchmark task in CodeContextBench. This document covers all **157 tasks** organized across **8 SDLC-phase suites**.
+A detailed reference for benchmark tasks in CodeContextBench. This document catalogs the **170 tasks** organized across **8 SDLC-phase suites**. The selection file (`configs/selected_benchmark_tasks.json`, version 2.0, last updated 2026-02-23) contains all 170 tasks.
 
 **Selection methodology:** Tasks were chosen via stratified sampling across benchmarks, covering all SDLC phases. Each task is scored for MCP benefit using a weighted combination of context complexity (0.25), cross-file dependencies (0.30), semantic search potential (0.20), and tool-chain weight (0.25). See `docs/TASK_SELECTION.md` for full scoring methodology.
-
-**Source of truth:** `configs/selected_benchmark_tasks.json` (version 2.0, 2026-02-18).
 
 ---
 
@@ -14,8 +12,8 @@ A detailed reference for every benchmark task in CodeContextBench. This document
 2. [ccb_design (20 tasks)](#2-ccb_design--architecture--design)
 3. [ccb_fix (25 tasks)](#3-ccb_fix--bug-repair)
 4. [ccb_build (25 tasks)](#4-ccb_build--feature--refactoring)
-5. [ccb_test (14 tasks)](#5-ccb_test--testing--qa)
-6. [ccb_document (13 tasks)](#6-ccb_document--documentation)
+5. [ccb_test (20 tasks)](#5-ccb_test--testing--qa)
+6. [ccb_document (20 tasks)](#6-ccb_document--documentation)
 7. [ccb_secure (20 tasks)](#7-ccb_secure--security--compliance)
 8. [ccb_debug (20 tasks)](#8-ccb_debug--debugging--investigation)
 9. [Summary Statistics](#summary-statistics)
@@ -46,7 +44,7 @@ A detailed reference for every benchmark task in CodeContextBench. This document
 | kafka-build-orient-001 | Java | hard | apache/kafka | Codebase orientation |
 | kafka-contributor-workflow-001 | Java | hard | apache/kafka | Workflow discovery |
 | kafka-message-lifecycle-qa-001 | Java | hard | apache/kafka | Data flow explanation |
-| numpy-dtype-localize-001 | Go | hard | numpy, pandas, scikit-learn | Bug localization |
+| numpy-dtype-localize-001 | Python | hard | numpy, pandas, scikit-learn | Bug localization |
 | terraform-plan-pipeline-qa-001 | Go | hard | hashicorp/terraform | Architecture Q&A |
 | terraform-state-backend-handoff-001 | Go | hard | hashicorp/terraform | Team handoff |
 | vscode-ext-host-qa-001 | TypeScript | hard | microsoft/vscode | Debug root cause Q&A |
@@ -75,7 +73,7 @@ A detailed reference for every benchmark task in CodeContextBench. This document
 | k8s-crd-lifecycle-arch-001 | Go | hard | kubernetes/kubernetes | Architectural understanding |
 | k8s-dra-allocation-impact-001 | Go | hard | kubernetes/kubernetes | Impact analysis |
 | k8s-scheduler-arch-001 | Go | hard | kubernetes/kubernetes | Architectural understanding |
-| k8s-sharedinformer-sym-001 | C++ | hard | envoyproxy/envoy | Cross-repo symbol resolution |
+| k8s-sharedinformer-sym-001 | Go | hard | kubernetes/kubernetes | Cross-repo symbol resolution |
 | k8s-typemeta-dep-chain-001 | Go | very_hard | kubernetes/kubernetes | Dependency chain analysis |
 | kafka-flink-streaming-arch-001 | Java | hard | apache/kafka | Architectural understanding |
 | postgres-query-exec-arch-001 | C | hard | postgres/postgres | Architectural understanding |
@@ -139,7 +137,7 @@ A detailed reference for every benchmark task in CodeContextBench. This document
 | eslint-markdown-deps-install-001 | JavaScript | medium | eslint/markdown | Dependency inference |
 | flink-pricing-window-feat-001 | Java | hard | apache/flink | Feature implementation |
 | flipt-dep-refactor-001 | Go | hard | flipt-io/flipt | Enterprise dependency refactor |
-| python-http-class-naming-refac-001 | Go | hard | django, flask, requests | Cross-repo refactoring |
+| python-http-class-naming-refac-001 | Python | hard | django, flask, requests | Cross-repo refactoring |
 | iamactionhunter-deps-install-001 | Python | medium | RhinoSecurityLabs/IAMActionHunter | Dependency inference |
 | k8s-noschedule-taint-feat-001 | Go | hard | kubernetes/kubernetes | Large-codebase feature |
 | k8s-runtime-object-impl-001 | Go | hard | kubernetes/kubernetes | Interface implementation |
@@ -160,7 +158,7 @@ A detailed reference for every benchmark task in CodeContextBench. This document
 
 **Focus:** Code review with injected defects, codebase search, performance optimization profiling, and unit test writing. Tasks test the agent's ability to detect bugs, write tests, find code patterns, and optimize performance.
 
-**14 tasks** | Languages: C, C#, C++, Go, Java, JavaScript, Python, TypeScript | Difficulty: medium--hard
+**20 tasks** | Languages: C, C#, C++, Go, Java, JavaScript, Python, TypeScript | Difficulty: medium--hard
 
 | Task ID | Lang | Difficulty | Repository | Category |
 |---------|------|-----------|------------|----------|
@@ -178,6 +176,12 @@ A detailed reference for every benchmark task in CodeContextBench. This document
 | sklearn-kmeans-perf-001 | Python | hard | scikit-learn/scikit-learn | Performance optimization |
 | terraform-code-review-001 | Go | hard | hashicorp/terraform | Code review |
 | vscode-code-review-001 | TypeScript | hard | microsoft/vscode | Code review |
+| test-coverage-gap-001 | C++ | hard | envoyproxy/envoy | Coverage gap analysis |
+| test-coverage-gap-002 | Java | hard | apache/kafka | Coverage gap analysis |
+| test-integration-002 | Go | hard | navidrome/navidrome | Integration test authoring |
+| test-unitgen-go-001 | Go | hard | kubernetes/kubernetes | Unit test generation |
+| test-unitgen-py-001 | Python | medium | django/django | Unit test generation |
+| test-integration-001 | Go | hard | flipt-io/flipt | Integration test authoring |
 
 **Code review scoring:** `0.5 * detection_F1 + 0.5 * fix_score`. Each code review task clones a real open-source repository at a pinned commit, then injects realistic defects. The agent must detect defects (structured `review.json`) and fix them.
 
@@ -189,7 +193,7 @@ A detailed reference for every benchmark task in CodeContextBench. This document
 
 **Focus:** Generate accurate API documentation, architecture guides, and migration plans by reading and understanding source code. Tasks require deep codebase comprehension to produce comprehensive documentation.
 
-**13 tasks** | Languages: C++, Go, Java, TypeScript | Difficulty: hard (all tasks)
+**20 tasks** | Languages: C++, Go, Java, Python, TypeScript | Difficulty: medium--hard
 
 | Task ID | Lang | Difficulty | Repository | Category |
 |---------|------|-----------|------------|----------|
@@ -206,6 +210,13 @@ A detailed reference for every benchmark task in CodeContextBench. This document
 | k8s-fairqueuing-doc-gen-001 | Go | hard | kubernetes/kubernetes | K8s package documentation |
 | terraform-migration-doc-gen-001 | Go | hard | hashicorp/terraform | Migration guide |
 | envoy-migration-doc-gen-001 | C++ | hard | envoyproxy/envoy | Migration guide |
+| docgen-inline-001 | Python | medium | django/django | Inline docstring generation |
+| docgen-inline-002 | Java | hard | apache/kafka | Inline docstring generation |
+| docgen-changelog-001 | Go | hard | hashicorp/terraform | Changelog generation |
+| docgen-changelog-002 | Go | hard | flipt-io/flipt | Changelog generation |
+| docgen-onboard-001 | Go | hard | istio/istio | Onboarding guide |
+| docgen-runbook-001 | Go | hard | prometheus/prometheus | Runbook writing |
+| docgen-runbook-002 | C++ | hard | envoyproxy/envoy | Runbook writing |
 
 ---
 
@@ -283,11 +294,11 @@ A detailed reference for every benchmark task in CodeContextBench. This document
 | ccb_design | 20 | hard--very_hard | C, C++, Go, Java, Python | Architecture, dependency mapping |
 | ccb_fix | 25 | medium--hard | C++, Go, Java, JS, Python, TS | Bug fixes, SWE-bench Pro patches |
 | ccb_build | 25 | medium--hard | C#, C++, Go, Java, JS, Python/C++, Rust, TS | Features, refactoring, deps |
-| ccb_test | 14 | medium--hard | C, C#, C++, Go, Java, JS, Python, TS | Code review, testing, perf |
-| ccb_document | 13 | hard | C++, Go, Java, TS | API docs, arch guides, migration |
+| ccb_test | 20 | medium--hard | C, C#, C++, Go, Java, JS, Python, TS | Code review, testing, perf, coverage analysis |
+| ccb_document | 20 | medium--hard | C++, Go, Java, Python, TS | API docs, arch guides, migration, runbooks |
 | ccb_secure | 20 | medium--hard | C, C++, Go, Java, Python | CVE triage, governance, access |
 | ccb_debug | 20 | medium--expert | C, C++, Go, Python, TS | Fault localization, regression |
 
-**Total active tasks:** 157
+**Total active tasks:** 170
 **Languages covered:** C, C++, C#, Go, Java, JavaScript, Python, Rust, TypeScript
 **SDLC phases covered:** Requirements & Discovery, Architecture & Design, Bug Repair, Feature Implementation, Refactoring, Testing & QA, Documentation, Security & Compliance, Debugging & Investigation

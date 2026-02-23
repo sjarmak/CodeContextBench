@@ -71,9 +71,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Shallow clone at the specific kernel tag — much faster than full clone.
+# Stable releases (vX.Y.Z) live in the stable tree; release candidates
+# (vX.Y-rcN) live in the mainline tree. Try stable first, fall back to mainline.
 # The --no-tags flag avoids pulling all 1000+ kernel tags.
-RUN git clone --depth 1 --branch "$KERNEL_TAG" --no-tags \
-    https://github.com/torvalds/linux.git . && \
+RUN (git clone --depth 1 --branch "$KERNEL_TAG" --no-tags \
+        https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git . \
+    || git clone --depth 1 --branch "$KERNEL_TAG" --no-tags \
+        https://github.com/torvalds/linux.git .) && \
     git config user.email "agent@example.com" && \
     git config user.name "Agent"
 

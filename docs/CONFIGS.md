@@ -208,7 +208,7 @@ MCP-unique tasks use a separate selection file and support category filtering.
 ### Selection File
 
 ```bash
-# Run all 14 MCP-unique starter tasks (both configs)
+# Run all 12 MCP-unique tasks (both configs)
 configs/run_selected_tasks.sh \
   --selection-file configs/selected_mcp_unique_tasks.json
 

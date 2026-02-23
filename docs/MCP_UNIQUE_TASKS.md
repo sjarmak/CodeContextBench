@@ -63,7 +63,7 @@ cross-repo tasks — not whether MCP can access information the baseline can't.
 
 ## Suite Structure
 
-Ten suites map to use case categories A-J:
+Suites map to use case categories A-J (six active, two deferred):
 
 | Suite | Category | Description | Tasks |
 |-------|----------|-------------|-------|
@@ -78,8 +78,10 @@ Ten suites map to use case categories A-J:
 | `ccb_mcp_org` | I | Agentic coding correctness using org-wide context | 0 |
 | `ccb_mcp_platform` | J | Platform / DevTools / tribal knowledge | 3 |
 
-**Current starter pack: 20 tasks across 8 active suites.** See
-`configs/selected_mcp_unique_tasks.json` for the canonical list.
+**Full catalog: 20 tasks across 8 active suites** (categories H and I are
+deferred). Of these, 12 tasks across 6 suites have been evaluated in official
+runs; compliance and migration suites are pending first runs. See
+`configs/selected_mcp_unique_tasks.json` for the canonical selection list.
 
 ## Repo Sets
 

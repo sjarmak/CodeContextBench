@@ -26,7 +26,7 @@ Example: `configs/control_plane_ccb.yaml`
 # Same file + same task source → same experiment_id and run list.
 
 experiment_name: ccb_2config
-description: "CCB 157 tasks × baseline + sourcegraph_full"
+description: "CCB 170 tasks × baseline + sourcegraph_full"
 run_category: staging
 
 # Where to get tasks (must have .tasks[].benchmark, .tasks[].task_id, .tasks[].task_dir)

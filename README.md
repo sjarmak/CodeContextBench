@@ -16,17 +16,15 @@ Eight suites organized by software development lifecycle phase:
 | `ccb_design` | Architecture & Design | 20 | Architecture analysis, dependency graphs, change impact |
 | `ccb_fix` | Bug Repair | 25 | Diagnosing and fixing real bugs across production codebases |
 | `ccb_build` | Feature & Refactoring | 25 | New features, refactoring, dependency management |
-| `ccb_test` | Testing & QA | 20 | Code review, performance testing, code search validation |
-| `ccb_document` | Documentation | 20 | API references, architecture docs, migration guides |
+| `ccb_test` | Testing & QA | 20 | Code review, performance testing, code search validation, test generation |
+| `ccb_document` | Documentation | 20 | API references, architecture docs, migration guides, runbooks |
 | `ccb_secure` | Security & Compliance | 20 | CVE analysis, reachability, governance, access control |
 | `ccb_debug` | Debugging & Investigation | 20 | Root cause tracing, fault localization, provenance |
 | **Total** | | **170** | |
 
-*ccb_test* and *ccb_document* currently have 14 and 13 tasks on disk (target 20 each); see `docs/backlog_ccb_test.json` and `docs/backlog_ccb_document.json` for the growth plan.
-
 ## MCP-Unique Suites (Org-Scale Context Retrieval)
 
-Six additional suites measure what local-only agents *cannot* do: cross-repo discovery, symbol resolution, dependency tracing, and deep-search-driven investigation in polyrepo environments.
+Six additional suites measure cross-repo discovery, symbol resolution, dependency tracing, and deep-search-driven investigation in polyrepo environments.
 
 | Suite | Category | Tasks | Description |
 |-------|----------|------:|-------------|
@@ -37,6 +35,8 @@ Six additional suites measure what local-only agents *cannot* do: cross-repo dis
 | `ccb_mcp_crossorg` | G: Cross-Org Discovery | 2 | Interface implementations and authoritative repo identification across orgs |
 | `ccb_mcp_platform` | J: Platform Knowledge | 1 | Service template discovery and tribal knowledge |
 | **Total** | | **12** | |
+
+The table above shows the 12 tasks evaluated in official runs. The full MCP-unique catalog has 20 tasks across 8 suites (including compliance and migration, pending first runs). **Combined catalog total: 190 tasks** (170 SDLC + 20 MCP-unique).
 
 Both baseline and MCP-Full agents have access to **all repos** in each task's fixture. The only difference is the method: baseline reads code locally, MCP-Full uses Sourcegraph MCP tools (local code is truncated). This ensures we measure whether MCP tools help agents work better — not whether MCP can access repos the baseline can't.
 
@@ -64,10 +64,10 @@ benchmarks/              # Task definitions organized by SDLC phase + MCP-unique
   ccb_build/             #   Feature & Refactoring (25 tasks)
   ccb_debug/             #   Debugging & Investigation (20 tasks)
   ccb_design/            #   Architecture & Design (20 tasks)
-  ccb_document/          #   Documentation (13 tasks)
+  ccb_document/          #   Documentation (20 tasks)
   ccb_fix/               #   Bug Repair (25 tasks)
   ccb_secure/            #   Security & Compliance (20 tasks)
-  ccb_test/              #   Testing & QA (14 tasks)
+  ccb_test/              #   Testing & QA (20 tasks)
   ccb_understand/        #   Requirements & Discovery (20 tasks)
   ccb_mcp_crossrepo_tracing/  #   MCP-unique: cross-repo dependency tracing (3 tasks)
   ccb_mcp_security/      #   MCP-unique: vulnerability remediation (2 tasks)
@@ -81,10 +81,10 @@ configs/                 # Run configs and task selection
   build_2config.sh       #   Phase wrapper: Build (25 tasks)
   debug_2config.sh       #   Phase wrapper: Debug (20 tasks)
   design_2config.sh      #   Phase wrapper: Design (20 tasks)
-  document_2config.sh    #   Phase wrapper: Document (13 tasks)
+  document_2config.sh    #   Phase wrapper: Document (20 tasks)
   fix_2config.sh         #   Phase wrapper: Fix (25 tasks)
   secure_2config.sh      #   Phase wrapper: Secure (20 tasks)
-  test_2config.sh        #   Phase wrapper: Test (14 tasks)
+  test_2config.sh        #   Phase wrapper: Test (20 tasks)
   run_selected_tasks.sh  #   Unified runner for all tasks
   validate_one_per_benchmark.sh  # Pre-flight smoke (1 task per suite)
   selected_benchmark_tasks.json  # Canonical SDLC task selection with metadata
@@ -172,10 +172,10 @@ For the full multi-layer evaluation pipeline (verifier, LLM judge, statistical a
 
 ### SDLC Tasks
 
-The unified runner executes all 157 SDLC tasks across the 2-config matrix:
+The unified runner executes all 170 SDLC tasks across the 2-config matrix:
 
 ```bash
-# Run all 157 SDLC tasks across 2 configs
+# Run all 170 SDLC tasks across 2 configs
 bash configs/run_selected_tasks.sh
 
 # Run only the baseline config
@@ -197,8 +197,8 @@ bash configs/understand_2config.sh       # 20 Requirements & Discovery tasks
 bash configs/design_2config.sh           # 20 Architecture & Design tasks
 bash configs/debug_2config.sh            # 20 Debugging & Investigation tasks
 bash configs/secure_2config.sh           # 20 Security & Compliance tasks
-bash configs/test_2config.sh             # 14 Testing & QA tasks
-bash configs/document_2config.sh         # 13 Documentation tasks
+bash configs/test_2config.sh             # 20 Testing & QA tasks
+bash configs/document_2config.sh         # 20 Documentation tasks
 ```
 
 ### MCP-Unique Tasks
@@ -206,7 +206,7 @@ bash configs/document_2config.sh         # 13 Documentation tasks
 MCP-unique tasks use a separate selection file:
 
 ```bash
-# Run all 12 MCP-unique tasks across 2 configs
+# Run all MCP-unique tasks across 2 configs
 bash configs/run_selected_tasks.sh --selection-file configs/selected_mcp_unique_tasks.json
 
 # Filter by use-case category
