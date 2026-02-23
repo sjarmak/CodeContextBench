@@ -40,6 +40,7 @@ FAMILY_SHORT_NAME: Dict[str, str] = {
     "compliance-audit": "compliance",
     "cross-org-discovery": "crossorg",
     "agentic-correctness": "agentic",
+    "domain-lineage": "domain",
     "platform-knowledge": "platform",
 }
 
