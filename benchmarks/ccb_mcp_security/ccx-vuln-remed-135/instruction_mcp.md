@@ -74,7 +74,7 @@ If MCP search returns no results:
 
 ## Your Task
 
-Audit the security sandbox implementation for Chromium's renderer processes. Find all C++ source files in `chromium/chromium` that implement the sandbox: 1. The file under `sandbox/linux/` that implements `BPFBasePolicy` — the seccomp-BPF base policy for Linux sandboxing. 2. The file under `sandbox/win/src/` that defines `TargetPolicy` — the Windows sandbox policy configuration. 3. The file under `content/browser/` that configures sandbox parameters for renderer process launch (look for `SetRendererSandboxPolicy` or `GetRendererSandboxType`). 4. The file under `sandbox/policy/` that defines `SandboxType` enum and sandbox profile mappings. Report each file path and key class/function.
+Audit the security sandbox implementation for Chromium's renderer processes. Find all C++ source files in `chromium/chromium` that implement the sandbox: 1. The file under `sandbox/linux/seccomp-bpf-helpers/` that implements `BaselinePolicy` — the seccomp-BPF baseline policy for Linux sandboxing. 2. The file under `sandbox/win/src/` that implements `PolicyBase` — the Windows sandbox policy configuration (concrete implementation of `TargetPolicy`). 3. The file under `sandbox/policy/linux/` that implements `RendererProcessPolicy` — the BPF policy specific to renderer process sandboxing (look for `EvaluateSyscall`). 4. The file under `sandbox/policy/` that declares sandbox type utilities and the `SandboxType` enum mapping. Report each file path and key class/function.
 
 ## Context
 
