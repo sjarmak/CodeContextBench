@@ -8,8 +8,8 @@ Use this page first for operational work. Each path is intentionally short to mi
 
 ### Read Order
 1. `docs/ops/WORKFLOWS.md`
-2. `docs/CONFIGS.md`
-3. `docs/QA_PROCESS.md`
+2. `docs/reference/CONFIGS.md`
+3. `docs/ops/QA_PROCESS.md`
 
 ### Key Commands
 ```bash
@@ -39,7 +39,7 @@ python3 scripts/mcp_audit.py --run <run_dir>
 
 ### Read Order
 1. `docs/ERROR_CATALOG.md`
-2. `docs/QA_PROCESS.md`
+2. `docs/ops/QA_PROCESS.md`
 3. `docs/ops/TROUBLESHOOTING.md`
 
 ### Key Commands
@@ -54,7 +54,7 @@ python3 scripts/rerun_failed.py --help
 
 ### Read Order
 1. `docs/EVALUATION_PIPELINE.md`
-2. `docs/RETRIEVAL_EVAL_SPEC.md` (IR only)
+2. `docs/RETRIEVAL_EVAL_SPEC.md`
 3. `docs/SCORING_SEMANTICS.md`
 
 ### Key Commands

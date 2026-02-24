@@ -142,6 +142,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/generate_artifact_only_dockerfiles.py` - Generation script for generate artifact only dockerfiles.
 - `scripts/generate_instruction_mcp.py` - Generation script for generate instruction mcp.
 - `scripts/generate_sgonly_dockerfiles.py` - Generation script for generate sgonly dockerfiles.
+- `scripts/generate_start_here_by_task.py` - Generation script for generate start here by task.
 
 ## Migration
 
@@ -151,8 +152,6 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 
 ## Misc
 
-- `scripts/AGENTS.md` - Utility script for AGENTS.
-- `scripts/CLAUDE.md` - Utility script for CLAUDE.
 - `scripts/add_verification_metadata.py` - Utility script for add verification metadata.
 - `scripts/audit_unpinned_repos.py` - Utility script for audit unpinned repos.
 - `scripts/backfill_instruction_artifacts.py` [one_off] - Historical one-off script: backfill instruction artifacts.
@@ -166,6 +165,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/extract_analysis_metrics.py` - Utility script for extract analysis metrics.
 - `scripts/find_mcp_distracted.py` - Utility script for find mcp distracted.
 - `scripts/fix_h3_tokens.py` [one_off] - Historical one-off script: fix h3 tokens.
+- `scripts/hydrate_task_specs.py` - Utility script for hydrate task specs.
 - `scripts/icp_profiles.py` - Utility script for icp profiles.
 - `scripts/integrate_answer_json_wave1.py` - Utility script for integrate answer json wave1.
 - `scripts/integrate_answer_json_wave2.py` - Utility script for integrate answer json wave2.
@@ -174,7 +174,6 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/list_gemini_models.py` - Utility script for list gemini models.
 - `scripts/mirror_largerepo_expansion.sh` - Utility script for mirror largerepo expansion.
 - `scripts/regenerate_artifact_dockerfiles.py` - Utility script for regenerate artifact dockerfiles.
-- `scripts/registry_overrides.json` - Utility script for registry overrides.
 - `scripts/remirror_mcp_unique_repos.sh` - Utility script for remirror mcp unique repos.
 - `scripts/repair_h3_trajectories.py` [one_off] - Historical one-off script: repair h3 trajectories.
 - `scripts/rerun_crossrepo_2tasks.sh` [one_off] - Historical one-off script: rerun crossrepo 2tasks.

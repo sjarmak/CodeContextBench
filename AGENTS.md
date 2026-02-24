@@ -44,6 +44,7 @@ full operations manual.
 
 ## Maintenance
 - Root and local `AGENTS.md` / `CLAUDE.md` files are generated from sources in `docs/ops/`.
+- `docs/START_HERE_BY_TASK.md` is generated from `docs/ops/task_routes.json`.
 - Regenerate after edits (single command):
 ```bash
 python3 scripts/refresh_agent_navigation.py

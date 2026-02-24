@@ -14,6 +14,7 @@ COMMANDS = [
     [sys.executable, "scripts/sync_agent_guides.py"],
     [sys.executable, "scripts/generate_script_registry.py"],
     [sys.executable, "scripts/generate_script_index.py"],
+    [sys.executable, "scripts/generate_start_here_by_task.py"],
 ]
 
 

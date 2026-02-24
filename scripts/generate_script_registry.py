@@ -180,6 +180,8 @@ def script_entries() -> list[dict]:
     for path in sorted(SCRIPTS_DIR.iterdir()):
         if not path.is_file():
             continue
+        if path.suffix not in {".py", ".sh"}:
+            continue
         if path.name == "registry.json":
             continue
         if path.name.endswith(".pyc"):

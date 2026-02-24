@@ -27,6 +27,17 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
+def _normalize_repo(repo: str) -> str:
+    """Normalize repo name by stripping github.com/ prefix.
+
+    Agents may report repos as 'github.com/sg-evals/foo' while oracle
+    uses 'sg-evals/foo'. This normalizes both to a common form.
+    """
+    if repo.startswith("github.com/"):
+        return repo[len("github.com/"):]
+    return repo
+
+
 def check_file_set_match(
     answer_files: List[Dict[str, str]],
     oracle_files: List[Dict[str, str]],
@@ -50,7 +61,7 @@ def check_file_set_match(
     [{'repo': 'a/b', 'path': 'x.go'}]
     """
     def _key(item: Dict[str, str]) -> tuple:
-        return (item.get("repo", ""), item.get("path", ""))
+        return (_normalize_repo(item.get("repo", "")), item.get("path", ""))
 
     oracle_set = {_key(f) for f in oracle_files}
     answer_set = {_key(f) for f in answer_files}
@@ -90,7 +101,7 @@ def check_symbol_resolution(
     1.0
     """
     def _key(item: Dict[str, str]) -> tuple:
-        return (item.get("repo", ""), item.get("path", ""), item.get("symbol", ""))
+        return (_normalize_repo(item.get("repo", "")), item.get("path", ""), item.get("symbol", ""))
 
     oracle_set = {_key(s) for s in oracle_symbols}
     answer_set = {_key(s) for s in answer_symbols}
@@ -133,7 +144,7 @@ def check_dependency_chain(
     1.0
     """
     def _key(item: Dict[str, str]) -> tuple:
-        return (item.get("repo", ""), item.get("path", ""), item.get("symbol", ""))
+        return (_normalize_repo(item.get("repo", "")), item.get("path", ""), item.get("symbol", ""))
 
     oracle_keys = [_key(s) for s in oracle_chain]
     answer_keys = [_key(s) for s in answer_chain]
