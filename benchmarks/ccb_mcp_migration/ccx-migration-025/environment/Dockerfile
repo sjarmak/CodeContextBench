@@ -8,15 +8,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     python3 \
+     \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
-# Clone all fixture repos at pinned versions (baseline has full local access)
-RUN git clone --depth 1 https://github.com/sg-evals/numpy--v2.2.2.git /workspace/numpy
-RUN git clone --depth 1 https://github.com/sg-evals/scipy--v1.15.1.git /workspace/scipy
-RUN git clone --depth 1 https://github.com/sg-evals/scikit-learn--1.6.1.git /workspace/scikit-learn
-RUN git clone --depth 1 https://github.com/sg-evals/pandas--v2.2.3.git /workspace/pandas
+# Clone local checkout repos (baseline config: agent has local access to these)
+# No local checkout repos specified for this fixture
 
 # Initialize git identity for agent commits
 RUN git config --global user.email "agent@example.com" && \
@@ -25,5 +23,10 @@ RUN git config --global user.email "agent@example.com" && \
 
 # Create log directories
 RUN mkdir -p /logs/agent /logs/verifier
+
+# Pre-create claude user and set ownership at build time so Harbor's
+# runtime chown is a no-op (avoids 15-30 min delay on large repos).
+RUN (adduser --disabled-password --gecos '' claude 2>/dev/null || true) && \
+    for d in /workspace /app /testbed /logs; do [ -d "$d" ] && chown -R claude:claude "$d"; done || true
 
 ENTRYPOINT []

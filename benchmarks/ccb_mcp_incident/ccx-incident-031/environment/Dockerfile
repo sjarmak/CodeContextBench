@@ -8,14 +8,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     python3 \
+     \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
-# Clone all fixture repos (baseline has full local access to every repo)
-RUN git clone --depth 1 https://github.com/sg-evals/kubernetes--v1.32.0.git /workspace/kubernetes
-RUN git clone --depth 1 https://github.com/sg-evals/etcd-io-etcd.git /workspace/etcd
-RUN git clone --depth 1 https://github.com/sg-evals/grafana--v11.4.0.git /workspace/grafana
+# Clone local checkout repos (baseline config: agent has local access to these)
+# No local checkout repos specified for this fixture
 
 # Initialize git identity for agent commits
 RUN git config --global user.email "agent@example.com" && \
@@ -24,5 +23,10 @@ RUN git config --global user.email "agent@example.com" && \
 
 # Create log directories
 RUN mkdir -p /logs/agent /logs/verifier
+
+# Pre-create claude user and set ownership at build time so Harbor's
+# runtime chown is a no-op (avoids 15-30 min delay on large repos).
+RUN (adduser --disabled-password --gecos '' claude 2>/dev/null || true) && \
+    for d in /workspace /app /testbed /logs; do [ -d "$d" ] && chown -R claude:claude "$d"; done || true
 
 ENTRYPOINT []

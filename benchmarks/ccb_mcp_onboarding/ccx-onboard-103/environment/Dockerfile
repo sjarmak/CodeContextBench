@@ -25,4 +25,9 @@ RUN git config --global user.email "agent@example.com" && \
 # Create log directories
 RUN mkdir -p /logs/agent /logs/verifier
 
+# Pre-create claude user and set ownership at build time so Harbor's
+# runtime chown is a no-op (avoids 15-30 min delay on large repos).
+RUN (adduser --disabled-password --gecos '' claude 2>/dev/null || true) && \
+    for d in /workspace /app /testbed /logs; do [ -d "$d" ] && chown -R claude:claude "$d"; done || true
+
 ENTRYPOINT []

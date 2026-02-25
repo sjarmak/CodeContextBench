@@ -8,18 +8,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     python3 \
+     \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Node.js 22.x
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
-# Clone fixture repos (baseline has full local access)
-RUN git clone --depth 1 https://github.com/sg-evals/express--4.21.1.git /workspace/express
-RUN git clone --depth 1 https://github.com/sg-evals/node--v22.13.0.git /workspace/node
+# Clone local checkout repos (baseline config: agent has local access to these)
+# No local checkout repos specified for this fixture
 
 # Initialize git identity for agent commits
 RUN git config --global user.email "agent@example.com" && \
@@ -28,5 +23,10 @@ RUN git config --global user.email "agent@example.com" && \
 
 # Create log directories
 RUN mkdir -p /logs/agent /logs/verifier
+
+# Pre-create claude user and set ownership at build time so Harbor's
+# runtime chown is a no-op (avoids 15-30 min delay on large repos).
+RUN (adduser --disabled-password --gecos '' claude 2>/dev/null || true) && \
+    for d in /workspace /app /testbed /logs; do [ -d "$d" ] && chown -R claude:claude "$d"; done || true
 
 ENTRYPOINT []

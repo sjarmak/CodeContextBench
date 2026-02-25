@@ -126,6 +126,28 @@ CCB_REPO_BASE_MAP = {
 }
 
 
+# Block injected before ENTRYPOINT to pre-create the claude user and set
+# ownership at build time.  Harbor's runtime ``chown -R claude:claude /workspace``
+# then becomes a near-instant no-op (files already owned by claude), saving
+# 15-30 min on large-repo images (e.g. Firefox 5.4 GB workspace).
+_CHOWN_OPTIMIZATION = """\
+# Pre-create claude user and set ownership at build time so Harbor's
+# runtime chown is a no-op (avoids 15-30 min delay on large repos).
+RUN (adduser --disabled-password --gecos '' claude 2>/dev/null || true) && \\
+    for d in /workspace /app /testbed /logs; do [ -d "$d" ] && chown -R claude:claude "$d"; done || true
+"""
+
+
+def inject_chown_optimization(dockerfile_text: str) -> str:
+    """Insert the claude-user + chown block before the final ENTRYPOINT."""
+    if "adduser" in dockerfile_text and "claude" in dockerfile_text:
+        return dockerfile_text  # already has it
+    return dockerfile_text.replace(
+        "ENTRYPOINT []",
+        _CHOWN_OPTIMIZATION + "\nENTRYPOINT []",
+    )
+
+
 def extract_clone_layout(dockerfile_text):
     """Parse a baseline Dockerfile to extract clone URLs, target dirs, and commits.
 
@@ -463,7 +485,7 @@ def generate_write_only(task_dir, dockerfile_text):
     if mirrors:
         sg_repos_env = f'ENV SOURCEGRAPH_REPOS="{",".join(mirrors)}"\n'
 
-    return f"""# {task_name} — sg_only_env variant
+    return inject_chown_optimization(f"""# {task_name} — sg_only_env variant
 # No local repo clone — agent uses Sourcegraph MCP exclusively for code access.
 
 FROM {base_image}
@@ -490,7 +512,7 @@ RUN mkdir -p /logs/agent /logs/verifier
 RUN touch /tmp/.sg_only_mode
 
 ENTRYPOINT []
-"""
+""")
 
 
 def generate_ccb_linux_base_sgonly(task_dir, dockerfile_text):
@@ -502,7 +524,7 @@ def generate_ccb_linux_base_sgonly(task_dir, dockerfile_text):
     Installs gawk for verifier scripts that use awk arithmetic.
     """
     task_name = task_dir.name
-    return f"""# {task_name} — sg_only_env variant
+    return inject_chown_optimization(f"""# {task_name} — sg_only_env variant
 # No local repo clone — agent uses Sourcegraph MCP exclusively for code access.
 # Uses ubuntu:22.04 (replaces ccb-linux-base to fix Harbor test upload).
 
@@ -531,7 +553,7 @@ RUN mkdir -p /logs/agent /logs/verifier
 RUN touch /tmp/.sg_only_mode
 
 ENTRYPOINT []
-"""
+""")
 
 
 def _make_clone_manifest_json(workdir, repos, inject_defects=None):
@@ -634,7 +656,7 @@ RUN if ! command -v node > /dev/null 2>&1; then \\
         for pkg in sorted(extra_pkgs - {'nodejs_setup'}):
             extra_apt += f"    {pkg} \\\n"
 
-        return f"""# {task_name} — sg_only_env variant (v2: clone-at-verify)
+        return inject_chown_optimization(f"""# {task_name} — sg_only_env variant (v2: clone-at-verify)
 # Empty workspace — agent uses Sourcegraph MCP for code access.
 # Verifier clones mirror at verification time via clone manifest.
 
@@ -663,7 +685,7 @@ RUN echo '{manifest_json}' > /tmp/.sg_only_clone_manifest.json
 RUN touch /tmp/.sg_only_mode
 
 ENTRYPOINT []
-"""
+""")
 
     # --- SWE-bench tasks: keep FROM sweap-images, truncate source but no /repo_full/ ---
     if clone_type == 'swebench':
@@ -705,7 +727,7 @@ ENTRYPOINT []
         if extra_run_lines:
             extra_run_block = '\n' + '\n'.join(extra_run_lines) + '\n'
 
-        return f"""# {task_name} — sg_only_env variant (v2: clone-at-verify)
+        return inject_chown_optimization(f"""# {task_name} — sg_only_env variant (v2: clone-at-verify)
 # Source files truncated — agent uses Sourcegraph MCP for code access.
 # Verifier clones mirror at verification time to restore source.
 
@@ -729,7 +751,7 @@ RUN echo '{manifest_json}' > /tmp/.sg_only_clone_manifest.json
 RUN touch /tmp/.sg_only_mode && echo '{repo_dir}' > /tmp/.sg_only_workdir
 
 ENTRYPOINT []
-"""
+""")
 
     # --- Code-review tasks (inject_defects.sh): empty workspace + baked defect script ---
     if has_defect_injection(task_dir):
@@ -765,7 +787,7 @@ RUN if ! command -v node > /dev/null 2>&1; then \\
         for pkg in extra_apt_list:
             extra_apt += f"    {pkg} \\\n"
 
-        return f"""# {task_name} — sg_only_env variant (v2: clone-at-verify)
+        return inject_chown_optimization(f"""# {task_name} — sg_only_env variant (v2: clone-at-verify)
 # Empty workspace — agent uses Sourcegraph MCP for code access.
 # Verifier clones mirror, injects defects, then overlays agent changes.
 
@@ -800,7 +822,7 @@ RUN echo '{manifest_json}' > /tmp/.sg_only_clone_manifest.json
 RUN touch /tmp/.sg_only_mode
 
 ENTRYPOINT []
-"""
+""")
 
     # --- Generic inline-clone / multi-repo tasks: empty workspace + manifest ---
     if not repos:
@@ -864,7 +886,7 @@ RUN if ! command -v node > /dev/null 2>&1; then \\
     curl \\
 {extra_apt}    && rm -rf /var/lib/apt/lists/*"""
 
-    return f"""# {task_name} — sg_only_env variant (v2: clone-at-verify)
+    return inject_chown_optimization(f"""# {task_name} — sg_only_env variant (v2: clone-at-verify)
 # Empty workspace — agent uses Sourcegraph MCP for code access.
 # Verifier clones mirror(s) at verification time via clone manifest.
 
@@ -890,7 +912,7 @@ RUN echo '{manifest_json}' > /tmp/.sg_only_clone_manifest.json
 RUN touch /tmp/.sg_only_mode
 
 ENTRYPOINT []
-"""
+""")
 
 
 def generate_artifact_only_mcp(task_dir, dockerfile_text):
@@ -919,7 +941,7 @@ def generate_artifact_only_mcp(task_dir, dockerfile_text):
     if mirrors:
         sg_repos_env = f'ENV SOURCEGRAPH_REPOS="{",".join(mirrors)}"\n'
 
-    return f"""# {task_name} — artifact_only variant
+    return inject_chown_optimization(f"""# {task_name} — artifact_only variant
 # No local repo clone — agent uses Sourcegraph MCP exclusively for code access.
 # Agent produces answer.json artifact; verifier scores the artifact.
 
@@ -949,7 +971,7 @@ RUN mkdir -p /logs/agent /logs/verifier
 RUN touch /tmp/.artifact_only_mode
 
 ENTRYPOINT []
-"""
+""")
 
 
 def generate_artifact_baseline(task_dir, dockerfile_text):
@@ -993,7 +1015,7 @@ def generate_artifact_baseline(task_dir, dockerfile_text):
     else:
         content = header + '\n' + content
 
-    return content + '\n'
+    return inject_chown_optimization(content + '\n')
 
 
 def inject_test_guard(task_dir):
