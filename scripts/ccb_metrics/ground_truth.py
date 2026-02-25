@@ -518,6 +518,61 @@ def _gt_sdlc(task_dir: Path) -> Optional[TaskGroundTruth]:
     """
     task_name = task_dir.name
 
+    # ── Strategy 0: hardcoded manual GT for tasks with no structured artifacts ──
+    _SDLC_MANUAL_GT: dict[str, tuple[list[str], str, str, str]] = {
+        # (files, source, confidence, gt_type)
+        # django understand tasks
+        "django-composite-field-recover-001": (
+            ["django/forms/fields.py", "django/forms/widgets.py"],
+            "instruction_manual", "medium", "mixed",
+        ),
+        "django-template-inherit-recall-001": (
+            ["django/template/loader_tags.py", "django/template/base.py"],
+            "instruction_manual", "medium", "mixed",
+        ),
+        # django secure tasks
+        "django-policy-enforcement-001": (
+            ["django/db/models/manager.py", "django/db/models/query.py"],
+            "instruction_manual", "medium", "mixed",
+        ),
+        "django-role-based-access-001": (
+            ["django/contrib/auth/models.py", "django/contrib/auth/backends.py"],
+            "instruction_manual", "medium", "mixed",
+        ),
+        # test writing tasks
+        "test-integration-001": (
+            ["internal/server/evaluation/evaluation.go",
+             "rpc/flipt/evaluation/evaluation.proto",
+             "internal/server/evaluation/server.go"],
+            "instruction_manual", "medium", "generate",
+        ),
+        "test-unitgen-go-001": (
+            ["staging/src/k8s.io/apiserver/pkg/storage/value/value.go"],
+            "instruction_manual", "medium", "generate",
+        ),
+        # TAC search task — answer type, no meaningful file GT
+        "llamacpp-context-window-search-001": (
+            [], "instruction_manual", "low", "answer",
+        ),
+        # test writing: agent reads source, writes tests
+        "openhands-search-file-test-001": (
+            ["openhands/runtime/plugins/agent_skills/file_ops/file_ops.py"],
+            "instruction_manual", "medium", "generate",
+        ),
+    }
+
+    if task_name in _SDLC_MANUAL_GT:
+        ev_files, source, confidence, gt_type = _SDLC_MANUAL_GT[task_name]
+        return TaskGroundTruth(
+            task_id=task_name,
+            benchmark="",
+            files=ev_files,
+            source=source,
+            confidence=confidence,
+            evidence_files=ev_files if gt_type in ("evidence", "mixed") else [],
+            gt_type=gt_type,
+        )
+
     # ── Strategy 1: tests/ground_truth.json ──
     gt_file = task_dir / "tests" / "ground_truth.json"
     if gt_file.is_file():
@@ -602,7 +657,49 @@ def _gt_sdlc(task_dir: Path) -> Optional[TaskGroundTruth]:
                     confidence="low",
                 )
 
-            # Schema F: scoring_categories (document) — no files; fall through
+            # Schema F: scoring_categories (document) — generate-type task
+            if "scoring_categories" in data and isinstance(data["scoring_categories"], dict):
+                return TaskGroundTruth(
+                    task_id=task_name,
+                    benchmark="",
+                    files=[],
+                    source="ground_truth_json_scoring",
+                    confidence="low",
+                    gt_type="generate",
+                )
+
+            # Schema H: topic/criterion-based GT (docgen-changelog, docgen-inline, docgen-onboard)
+            if any(k in data for k in ("required_topics", "breaking_changes", "deprecations",
+                                        "prerequisites", "architecture", "thread_safety",
+                                        "categorization", "completeness")):
+                return TaskGroundTruth(
+                    task_id=task_name,
+                    benchmark="",
+                    files=[],
+                    source="ground_truth_json_topics",
+                    confidence="low",
+                    gt_type="generate",
+                )
+
+    # ── Strategy 1.5: tests/instance.json (DIBench-style build file GT) ──
+    instance_file = task_dir / "tests" / "instance.json"
+    if instance_file.is_file():
+        try:
+            inst_data = json.loads(instance_file.read_text(errors="replace"))
+        except (json.JSONDecodeError, OSError):
+            inst_data = None
+        if inst_data and isinstance(inst_data, dict):
+            build_files = inst_data.get("build_files", [])
+            if build_files and isinstance(build_files, list):
+                files = [f for f in build_files if isinstance(f, str)]
+                if files:
+                    return TaskGroundTruth(
+                        task_id=task_name,
+                        benchmark="",
+                        files=files,
+                        source="instance_json",
+                        confidence="high",
+                    )
 
     # ── Strategy 2: tests/expected_defects.json ──
     defects_file = task_dir / "tests" / "expected_defects.json"
@@ -770,6 +867,125 @@ def _gt_largerepo(task_dir: Path) -> Optional[TaskGroundTruth]:
     return None
 
 
+def _extract_mcp_evidence_files(data: dict) -> list[str]:
+    """Extract evidence file paths from oracle_answer.json data.
+
+    Combines files from ``files``, ``chain``, and ``symbols`` fields.
+    Uses ``repo::path`` format when the oracle spans multiple repos.
+    """
+    raw: list[tuple[str, str]] = []  # (repo, path)
+    seen: set[tuple[str, str]] = set()
+
+    for key in ("files", "chain", "symbols"):
+        for entry in data.get(key, []):
+            if not isinstance(entry, dict):
+                continue
+            repo = entry.get("repo", "")
+            path = entry.get("path", "") or entry.get("file", "")
+            if path and (repo, path) not in seen:
+                seen.add((repo, path))
+                raw.append((repo, path))
+
+    if not raw:
+        return []
+
+    repos = {r for r, _ in raw if r}
+    multi = len(repos) > 1
+    return [f"{r}::{p}" if multi and r else p for r, p in raw]
+
+
+def _classify_mcp_gt_type(oracle_type: str) -> str:
+    """Map oracle_type metadata to TaskGroundTruth.gt_type."""
+    if "keyword_presence" in oracle_type:
+        return "answer"
+    return "evidence"  # file_set_match, domain_lineage, symbol_resolution, dependency_chain
+
+
+def _gt_mcp_oracle(task_dir: Path) -> Optional[TaskGroundTruth]:
+    """Extract ground truth from MCP-unique task oracle data.
+
+    MCP tasks are evidence-type: the agent reads/finds files to answer a
+    question.  Oracle data comes from tests/oracle_answer.json (curated).
+    """
+    # --- Strategy 1: tests/oracle_answer.json ---
+    oracle_file = task_dir / "tests" / "oracle_answer.json"
+    if oracle_file.is_file():
+        try:
+            data = json.loads(oracle_file.read_text(errors="replace"))
+        except (json.JSONDecodeError, OSError):
+            data = None
+        if data and isinstance(data, dict):
+            evidence = _extract_mcp_evidence_files(data)
+            if evidence:
+                oracle_type = (data.get("_metadata") or {}).get(
+                    "oracle_type", "file_set_match"
+                )
+                gt_type = _classify_mcp_gt_type(oracle_type)
+                return TaskGroundTruth(
+                    task_id=task_dir.name,
+                    benchmark="",
+                    files=evidence,
+                    source="oracle_answer_json",
+                    confidence="high",
+                    evidence_files=evidence,
+                    gt_type=gt_type,
+                )
+
+    # --- Strategy 2: tests/ground_truth.json (tasks 113-120 range) ---
+    gt_file = task_dir / "tests" / "ground_truth.json"
+    if gt_file.is_file():
+        try:
+            gt_data = json.loads(gt_file.read_text(errors="replace"))
+        except (json.JSONDecodeError, OSError):
+            gt_data = None
+        if gt_data and isinstance(gt_data, dict):
+            evidence: list[str] = []
+            seen_f: set[str] = set()
+            # files list
+            for f in gt_data.get("files", []):
+                if isinstance(f, str) and f not in seen_f:
+                    seen_f.add(f)
+                    evidence.append(f)
+            # steps list (dep-trace tasks)
+            steps = gt_data.get("steps", [])
+            if steps and isinstance(steps, list):
+                repos_s: set[str] = set()
+                entries_s: list[tuple[str, str]] = []
+                for s in steps:
+                    if isinstance(s, dict):
+                        r = s.get("repo", "")
+                        p = s.get("file", "")
+                        if r:
+                            repos_s.add(r)
+                        if p:
+                            entries_s.append((r, p))
+                multi_s = len(repos_s) > 1
+                for r, p in entries_s:
+                    key = f"{r}::{p}" if multi_s and r else p
+                    if key not in seen_f:
+                        seen_f.add(key)
+                        evidence.append(key)
+            # file_references
+            refs = gt_data.get("file_references", [])
+            if refs and isinstance(refs, list):
+                for f in _files_from_checklist_refs(refs):
+                    if f not in seen_f:
+                        seen_f.add(f)
+                        evidence.append(f)
+            if evidence:
+                return TaskGroundTruth(
+                    task_id=task_dir.name,
+                    benchmark="",
+                    files=evidence,
+                    source="ground_truth_json",
+                    confidence="high",
+                    evidence_files=evidence,
+                    gt_type="evidence",
+                )
+
+    return None
+
+
 # File-path regex: matches paths like src/foo/bar.py, lib/utils.ts, etc.
 _FILE_PATH_RE = re.compile(
     r"(?:^|[\s`\"'])("
@@ -882,6 +1098,18 @@ _BENCHMARK_STRATEGIES = {
     "ccb_secure": _gt_sdlc,
     "ccb_test": _gt_sdlc,
     "ccb_understand": _gt_sdlc,
+    # MCP-unique suites (unified oracle extractor)
+    "ccb_mcp_compliance": _gt_mcp_oracle,
+    "ccb_mcp_crossorg": _gt_mcp_oracle,
+    "ccb_mcp_crossrepo": _gt_mcp_oracle,
+    "ccb_mcp_crossrepo_tracing": _gt_mcp_oracle,
+    "ccb_mcp_domain": _gt_mcp_oracle,
+    "ccb_mcp_incident": _gt_mcp_oracle,
+    "ccb_mcp_migration": _gt_mcp_oracle,
+    "ccb_mcp_onboarding": _gt_mcp_oracle,
+    "ccb_mcp_org": _gt_mcp_oracle,
+    "ccb_mcp_platform": _gt_mcp_oracle,
+    "ccb_mcp_security": _gt_mcp_oracle,
 }
 
 
@@ -974,6 +1202,10 @@ def _resolve_task_dir(
 
     # Build list of candidate task_id variants to try
     candidates = [task_id]
+    # Case-folded variant (CCX-foo-001 → ccx-foo-001)
+    lowered = task_id.lower()
+    if lowered != task_id:
+        candidates.append(lowered)
     # __ → - normalization (swebenchpro task_ids use __ but dirs use -)
     norm = task_id.replace("__", "-")
     if norm != task_id:
@@ -1024,3 +1256,97 @@ def load_registry(path: Path) -> dict[str, TaskGroundTruth]:
         return {}
     raw = json.loads(path.read_text())
     return {tid: TaskGroundTruth.from_dict(d) for tid, d in raw.items()}
+
+
+# ---------------------------------------------------------------------------
+# CLI: standalone registry regeneration
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        description="Regenerate configs/ground_truth_files.json from benchmark artifacts.",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Print stats without writing the registry file.",
+    )
+    parser.add_argument(
+        "--diff", action="store_true",
+        help="Show tasks added/removed/changed vs existing registry.",
+    )
+    args = parser.parse_args()
+
+    ROOT = Path(__file__).resolve().parents[2]
+    BENCHMARKS_DIR = ROOT / "benchmarks"
+    SELECTION_FILE = ROOT / "configs" / "selected_benchmark_tasks.json"
+    REGISTRY_FILE = ROOT / "configs" / "ground_truth_files.json"
+
+    if not SELECTION_FILE.is_file():
+        print(f"ERROR: {SELECTION_FILE} not found", file=sys.stderr)
+        sys.exit(1)
+
+    raw_sel = json.loads(SELECTION_FILE.read_text())
+    selected = raw_sel.get("tasks", raw_sel) if isinstance(raw_sel, dict) else raw_sel
+    if isinstance(selected, dict):
+        # Handle {task_id: {...}} format
+        selected = list(selected.values())
+    print(f"Selected tasks: {len(selected)}")
+
+    registry = build_ground_truth_registry(BENCHMARKS_DIR, selected)
+    print(f"Extracted ground truth: {len(registry)} tasks")
+
+    # Stats by source
+    by_source: dict[str, int] = {}
+    by_gt_type: dict[str, int] = {}
+    by_confidence: dict[str, int] = {}
+    for gt in registry.values():
+        by_source[gt.source] = by_source.get(gt.source, 0) + 1
+        by_gt_type[gt.gt_type] = by_gt_type.get(gt.gt_type, 0) + 1
+        by_confidence[gt.confidence] = by_confidence.get(gt.confidence, 0) + 1
+    print("\nBy source:")
+    for s, c in sorted(by_source.items(), key=lambda x: -x[1]):
+        print(f"  {s}: {c}")
+    print("\nBy gt_type:")
+    for t, c in sorted(by_gt_type.items(), key=lambda x: -x[1]):
+        print(f"  {t}: {c}")
+    print("\nBy confidence:")
+    for c, n in sorted(by_confidence.items(), key=lambda x: -x[1]):
+        print(f"  {c}: {n}")
+
+    missing = [t.get("task_id", "") for t in selected
+               if t.get("task_id", "") and t["task_id"] not in registry]
+    if missing:
+        print(f"\nStill missing ({len(missing)}):")
+        for tid in sorted(missing):
+            print(f"  {tid}")
+    else:
+        print("\nAll selected tasks have ground truth!")
+
+    if args.diff:
+        old = load_registry(REGISTRY_FILE) if REGISTRY_FILE.is_file() else {}
+        added = set(registry) - set(old)
+        removed = set(old) - set(registry)
+        changed = {t for t in set(registry) & set(old)
+                    if registry[t].to_dict() != old[t].to_dict()}
+        print(f"\nDiff vs existing: +{len(added)} -{len(removed)} ~{len(changed)}")
+        if added:
+            print(f"\n  Added ({len(added)}):")
+            for t in sorted(added):
+                print(f"    + {t} (source={registry[t].source}, gt_type={registry[t].gt_type})")
+        if changed:
+            print(f"\n  Changed ({len(changed)}):")
+            for t in sorted(changed):
+                print(f"    ~ {t} (source: {old[t].source} -> {registry[t].source})")
+        if removed:
+            print(f"\n  Removed ({len(removed)}):")
+            for t in sorted(removed):
+                print(f"    - {t}")
+
+    if not args.dry_run:
+        save_registry(registry, REGISTRY_FILE)
+        print(f"\nWrote {REGISTRY_FILE}")
+    else:
+        print("\n(dry-run: no file written)")
