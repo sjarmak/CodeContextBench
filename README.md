@@ -6,6 +6,63 @@ This repository contains **benchmark task definitions**, **evaluation configs**,
 
 ---
 
+## Quickstart (Public / First-Time Users)
+
+### Who this repo is for
+
+- Researchers evaluating coding agents on realistic software engineering tasks
+- Practitioners comparing baseline vs MCP-enabled agent configurations
+- Contributors authoring new benchmark tasks or extending evaluation tooling
+
+### What you can do without Harbor
+
+You can inspect task definitions, run validation and analysis scripts, and use the metrics/report pipeline on existing Harbor run outputs.
+
+```bash
+git clone https://github.com/sjarmak/CodeContextBench.git
+cd CodeContextBench
+
+# Fast repo sanity check (docs/config refs)
+python3 scripts/repo_health.py --quick
+
+# Explore task-based docs navigation
+sed -n '1,120p' docs/START_HERE_BY_TASK.md
+
+# Inspect available benchmark suites
+ls benchmarks
+```
+
+### What requires Harbor (benchmark execution)
+
+Running benchmark tasks requires:
+
+- [Harbor](https://github.com/laude-institute/harbor/tree/main) installed and configured
+- Docker
+- Valid agent/runtime credentials used by your Harbor setup
+- A Max subscription (for the default harness path documented in this repo)
+
+Recommended pre-run checks:
+
+```bash
+python3 scripts/check_infra.py
+python3 scripts/validate_tasks_preflight.py --all
+```
+
+Then start with a dry run:
+
+```bash
+bash configs/run_selected_tasks.sh --dry-run
+```
+
+### First places to read
+
+- `docs/START_HERE_BY_TASK.md` for task-oriented navigation
+- `docs/CONFIGS.md` for the 2-config evaluation matrix
+- `docs/EVALUATION_PIPELINE.md` for scoring and reporting outputs
+- `docs/REPO_HEALTH.md` for the pre-push health gate
+
+---
+
 ## Benchmark Suites (SDLC-Aligned)
 
 Eight suites organized by software development lifecycle phase:
@@ -170,6 +227,8 @@ For the full multi-layer evaluation pipeline (verifier, LLM judge, statistical a
 
 ## Running with Harbor
 
+This section assumes Harbor is already installed and configured. If not, start with the Quickstart section above and `python3 scripts/check_infra.py`.
+
 ### SDLC Tasks
 
 The unified runner executes all 170 SDLC tasks across the 2-config matrix:
@@ -217,8 +276,6 @@ bash configs/run_selected_tasks.sh --selection-file configs/selected_mcp_unique_
 ```
 
 All runners support `--baseline-only`, `--full-only`, `--task TASK_ID`, and `--parallel N` flags.
-
-Requires [Harbor](https://github.com/laude-institute/harbor/tree/main) installed and configured with a Max subscription.
 
 ---
 
