@@ -21,10 +21,115 @@ Exit codes:
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+
+# ---------------------------------------------------------------------------
+# Repo-name normalization
+# ---------------------------------------------------------------------------
+# Oracle uses mirror names like "sg-evals/firefox--871325b8" while agents use
+# upstream names like "mozilla-firefox/firefox" or "openjdk/jdk".  Normalise
+# both sides so that matching works regardless of which convention is used.
+
+_MIRROR_HASH_RE = re.compile(r"--[0-9a-f]{6,}$")
+
+
+def _normalize_repo(name: str) -> str:
+    """Reduce a repo identifier to its base name for fuzzy comparison.
+
+    Examples:
+        sg-evals/firefox--871325b8  -> firefox
+        sg-evals/jdk--742e735d      -> jdk
+        openjdk/jdk                 -> jdk
+        chromium/chromium           -> chromium
+        rust-lang/rust              -> rust
+        arangodb/arangodb           -> arangodb
+    """
+    # Strip leading org/ prefix (take the part after the last '/')
+    base = name.rsplit("/", 1)[-1]
+    # Strip mirror hash suffix  (--<hex>)
+    base = _MIRROR_HASH_RE.sub("", base)
+    return base.lower()
+
+
+def _match_items(
+    answer_items: List[Dict[str, str]],
+    oracle_items: List[Dict[str, str]],
+    key_fields: List[str],
+) -> tuple:
+    """Two-pass matching: exact first, then path-only fallback.
+
+    Returns (matched, missing, extra) as sets of tuples built from key_fields.
+    """
+    def _exact_key(item: Dict[str, str]) -> tuple:
+        return tuple(item.get(k, "") for k in key_fields)
+
+    def _norm_key(item: Dict[str, str]) -> tuple:
+        """Normalized key: use _normalize_repo for repo field, rest as-is."""
+        return tuple(
+            _normalize_repo(item.get(k, "")) if k == "repo" else item.get(k, "")
+            for k in key_fields
+        )
+
+    def _path_key(item: Dict[str, str]) -> tuple:
+        """Path-only key: skip repo, keep remaining fields."""
+        return tuple(item.get(k, "") for k in key_fields if k != "repo")
+
+    # Pass 1: exact (repo, path, ...) match
+    oracle_exact = {_exact_key(f): f for f in oracle_items}
+    answer_exact = {_exact_key(f): f for f in answer_items}
+    exact_matched = set(oracle_exact.keys()) & set(answer_exact.keys())
+
+    # Pass 2: normalized-repo match on remaining items
+    remaining_oracle = {k: v for k, v in oracle_exact.items() if k not in exact_matched}
+    remaining_answer = {k: v for k, v in answer_exact.items() if k not in exact_matched}
+
+    norm_oracle = {}  # norm_key -> exact_key
+    for ek, item in remaining_oracle.items():
+        norm_oracle[_norm_key(item)] = ek
+    norm_answer = {}
+    for ek, item in remaining_answer.items():
+        norm_answer[_norm_key(item)] = ek
+
+    norm_matched_oracle = set()
+    norm_matched_answer = set()
+    for nk in set(norm_oracle.keys()) & set(norm_answer.keys()):
+        norm_matched_oracle.add(norm_oracle[nk])
+        norm_matched_answer.add(norm_answer[nk])
+
+    # Pass 3: path-only fallback for still-unmatched items
+    still_oracle = {k: v for k, v in remaining_oracle.items()
+                    if k not in norm_matched_oracle}
+    still_answer = {k: v for k, v in remaining_answer.items()
+                    if k not in norm_matched_answer}
+
+    path_oracle = {}  # path_key -> exact_key
+    for ek, item in still_oracle.items():
+        pk = _path_key(item)
+        path_oracle[pk] = ek
+    path_answer = {}
+    for ek, item in still_answer.items():
+        pk = _path_key(item)
+        path_answer[pk] = ek
+
+    path_matched_oracle = set()
+    path_matched_answer = set()
+    for pk in set(path_oracle.keys()) & set(path_answer.keys()):
+        path_matched_oracle.add(path_oracle[pk])
+        path_matched_answer.add(path_answer[pk])
+
+    # Combine all matched keys (using oracle keys as canonical)
+    all_matched_oracle = exact_matched | norm_matched_oracle | path_matched_oracle
+    all_matched_answer = exact_matched | norm_matched_answer | path_matched_answer
+
+    missing = set(oracle_exact.keys()) - all_matched_oracle
+    extra = set(answer_exact.keys()) - all_matched_answer
+
+    return all_matched_oracle, missing, extra
 
 
 def check_file_set_match(
@@ -34,7 +139,8 @@ def check_file_set_match(
     """Check overlap between agent-reported files and oracle files.
 
     Each file item is a dict with at least {"repo", "path"}.
-    Matching is by (repo, path) tuple — both must match.
+    Matching uses two-pass repo normalization: exact match first, then
+    normalised-repo and path-only fallback for mirror/upstream name mismatches.
 
     Returns raw scores without thresholds.
 
@@ -46,21 +152,21 @@ def check_file_set_match(
     0.5
     >>> result["precision"]
     1.0
-    >>> result["matched"]
-    [{'repo': 'a/b', 'path': 'x.go'}]
+
+    >>> result = check_file_set_match(
+    ...     [{"repo": "openjdk/jdk", "path": "src/Foo.java"}],
+    ...     [{"repo": "sg-evals/jdk--742e735d", "path": "src/Foo.java"}],
+    ... )
+    >>> result["f1"]
+    1.0
     """
-    def _key(item: Dict[str, str]) -> tuple:
-        return (item.get("repo", ""), item.get("path", ""))
+    matched, missing, extra = _match_items(answer_files, oracle_files, ["repo", "path"])
 
-    oracle_set = {_key(f) for f in oracle_files}
-    answer_set = {_key(f) for f in answer_files}
+    n_oracle = len({(f.get("repo", ""), f.get("path", "")) for f in oracle_files})
+    n_answer = len({(f.get("repo", ""), f.get("path", "")) for f in answer_files})
 
-    matched = oracle_set & answer_set
-    missing = oracle_set - answer_set
-    extra = answer_set - oracle_set
-
-    recall = len(matched) / len(oracle_set) if oracle_set else 1.0
-    precision = len(matched) / len(answer_set) if answer_set else 0.0
+    recall = len(matched) / n_oracle if n_oracle else 1.0
+    precision = len(matched) / n_answer if n_answer else 0.0
     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
 
     return {
@@ -80,7 +186,7 @@ def check_symbol_resolution(
     """Check overlap between agent-identified symbols and oracle symbols.
 
     Each symbol item has at least {"repo", "path", "symbol"}.
-    Matching is by (repo, path, symbol) tuple.
+    Matching uses two-pass repo normalization (see _match_items).
 
     >>> result = check_symbol_resolution(
     ...     [{"repo": "a/b", "path": "x.go", "symbol": "Foo"}],
@@ -89,18 +195,15 @@ def check_symbol_resolution(
     >>> result["recall"]
     1.0
     """
-    def _key(item: Dict[str, str]) -> tuple:
-        return (item.get("repo", ""), item.get("path", ""), item.get("symbol", ""))
+    matched, missing, extra = _match_items(
+        answer_symbols, oracle_symbols, ["repo", "path", "symbol"]
+    )
 
-    oracle_set = {_key(s) for s in oracle_symbols}
-    answer_set = {_key(s) for s in answer_symbols}
+    n_oracle = len({(s.get("repo", ""), s.get("path", ""), s.get("symbol", "")) for s in oracle_symbols})
+    n_answer = len({(s.get("repo", ""), s.get("path", ""), s.get("symbol", "")) for s in answer_symbols})
 
-    matched = oracle_set & answer_set
-    missing = oracle_set - answer_set
-    extra = answer_set - oracle_set
-
-    recall = len(matched) / len(oracle_set) if oracle_set else 1.0
-    precision = len(matched) / len(answer_set) if answer_set else 0.0
+    recall = len(matched) / n_oracle if n_oracle else 1.0
+    precision = len(matched) / n_answer if n_answer else 0.0
 
     return {
         "matched": [{"repo": r, "path": p, "symbol": s} for r, p, s in sorted(matched)],
@@ -119,7 +222,7 @@ def check_dependency_chain(
 
     Each step is {"repo", "path", "symbol"}. Order matters — we check both
     set membership (did agent find the step?) and order (is the sequence
-    correct?).
+    correct?). Uses repo-name normalization for matching.
 
     >>> result = check_dependency_chain(
     ...     [{"repo": "a", "path": "x", "symbol": "f1"},
@@ -132,22 +235,42 @@ def check_dependency_chain(
     >>> result["chain_recall"]
     1.0
     """
-    def _key(item: Dict[str, str]) -> tuple:
-        return (item.get("repo", ""), item.get("path", ""), item.get("symbol", ""))
+    def _norm_key(item: Dict[str, str]) -> tuple:
+        return (_normalize_repo(item.get("repo", "")),
+                item.get("path", ""),
+                item.get("symbol", ""))
 
-    oracle_keys = [_key(s) for s in oracle_chain]
-    answer_keys = [_key(s) for s in answer_chain]
+    def _path_key(item: Dict[str, str]) -> tuple:
+        return (item.get("path", ""), item.get("symbol", ""))
 
-    oracle_set = set(oracle_keys)
-    answer_set = set(answer_keys)
+    # Use normalised keys for set matching
+    oracle_norm = [_norm_key(s) for s in oracle_chain]
+    answer_norm = [_norm_key(s) for s in answer_chain]
 
+    oracle_set = set(oracle_norm)
+    answer_set = set(answer_norm)
     matched = oracle_set & answer_set
-    missing = oracle_set - answer_set
 
-    # Check order: extract the subsequence of answer that matches oracle steps
-    # and verify it preserves the oracle ordering.
-    oracle_positions = {k: i for i, k in enumerate(oracle_keys)}
-    matched_in_order = [k for k in answer_keys if k in oracle_set]
+    # Path-only fallback for remaining items
+    remaining_oracle = oracle_set - matched
+    remaining_answer = answer_set - matched
+    path_oracle = {_path_key({"path": k[1], "symbol": k[2]}): k for k in remaining_oracle}
+    path_answer = {_path_key({"path": k[1], "symbol": k[2]}): k for k in remaining_answer}
+    path_matched = set(path_oracle.keys()) & set(path_answer.keys())
+    for pk in path_matched:
+        matched.add(path_oracle[pk])
+
+    missing_set = oracle_set - matched
+    missing = sorted(missing_set)
+
+    # Check order using normalised keys
+    oracle_positions = {k: i for i, k in enumerate(oracle_norm)}
+    matched_in_order = [k for k in answer_norm if k in matched]
+    # Also try path-only for order check
+    if not matched_in_order:
+        answer_path = [_path_key({"path": k[1], "symbol": k[2]}) for k in answer_norm]
+        oracle_path_map = {_path_key({"path": k[1], "symbol": k[2]}): k for k in oracle_norm}
+        matched_in_order = [oracle_path_map[pk] for pk in answer_path if pk in oracle_path_map]
     positions = [oracle_positions[k] for k in matched_in_order if k in oracle_positions]
     order_correct = positions == sorted(positions) and len(matched) == len(oracle_set)
 
@@ -155,7 +278,7 @@ def check_dependency_chain(
 
     return {
         "matched_steps": len(matched),
-        "missing_steps": [{"repo": r, "path": p, "symbol": s} for r, p, s in sorted(missing)],
+        "missing_steps": [{"repo": r, "path": p, "symbol": s} for r, p, s in missing],
         "order_correct": order_correct,
         "chain_recall": round(chain_recall, 4),
     }
