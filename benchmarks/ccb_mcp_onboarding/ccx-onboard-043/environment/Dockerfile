@@ -14,9 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone local checkout repos (baseline config: agent has local access to these)
-RUN git clone --depth 1 --branch 0753c489 https://github.com/sg-evals/kafka--0753c489 /workspace/kafka--0753c489
-RUN git clone --depth 1 --branch 0cc95fcc https://github.com/sg-evals/flink--0cc95fcc /workspace/flink--0cc95fcc
-RUN git clone --depth 1 --branch 1006f047 https://github.com/sg-evals/camel--1006f047 /workspace/camel--1006f047
+RUN git clone --depth 1 https://github.com/sg-evals/kafka--0753c489 /workspace/kafka--0753c489
+RUN git clone --depth 1 https://github.com/sg-evals/flink--0cc95fcc /workspace/flink--0cc95fcc
+RUN git clone --depth 1 https://github.com/sg-evals/camel--1006f047 /workspace/camel--1006f047
 
 # Initialize git identity for agent commits
 RUN git config --global user.email "agent@example.com" && \

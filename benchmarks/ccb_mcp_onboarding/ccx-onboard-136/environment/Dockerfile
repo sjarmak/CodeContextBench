@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Clone local checkout repos (baseline config: agent has local access to these)
-RUN git clone --depth 1 --branch d41da232c75a51b4a9023d8d418d7c0a5120c0e2 https://github.com/sg-evals/android-frameworks-base--d41da232 /workspace/android-frameworks-base--d41da232
+RUN git clone --depth 1 https://github.com/sg-evals/android-frameworks-base--d41da232 /workspace/android-frameworks-base--d41da232
 
 # Initialize git identity for agent commits
 RUN git config --global user.email "agent@example.com" && \

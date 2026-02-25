@@ -169,11 +169,12 @@ def build_template_vars(
     if fixture and local_repos:
         for repo_entry in fixture.get("repos", []):
             if repo_entry.get("full_name") in local_repos:
-                rev = repo_entry.get("revision", "HEAD")
                 org_repo = repo_entry["full_name"]
                 dest = f"/workspace/{org_repo.split('/')[-1]}"
+                # sg-evals mirrors are orphan repos where HEAD = pinned commit;
+                # --branch with a commit hash fails, so clone HEAD directly.
                 clone_cmds.append(
-                    f"RUN git clone --depth 1 --branch {rev} "
+                    f"RUN git clone --depth 1 "
                     f"https://github.com/{org_repo} {dest}"
                 )
     clone_commands = "\n".join(clone_cmds) if clone_cmds else (
