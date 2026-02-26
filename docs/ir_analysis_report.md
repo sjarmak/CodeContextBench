@@ -5,32 +5,32 @@
 ## Executive Summary
 
 - Context infrastructure improves retrieval quality (MRR) by **+0%** (IDE-native: 0.000 vs Context infrastructure: 0.000), p=N/A.
-- Retrieval-outcome correlation: Spearman r=0.078 (p=0.7367).
-- Analysis covers **32** task runs across 1 suite-config pairs.
+- Retrieval-outcome correlation: Spearman r=0.395 (p=0.0413).
+- Analysis covers **35** task runs across 1 suite-config pairs.
 
 ## Retrieval Quality
 
 | Config | MRR | MAP | File Recall | Context Efficiency | n |
 |--------|-----|-----|-------------|-------------------|---|
-| IDE-native | 0.482 | 0.431 | 0.494 | 0.432 | 26 |
+| IDE-native | 0.387 | 0.392 | 0.439 | 0.335 | 35 |
 
 ### Per-Suite Breakdown
 
 | Suite | Config | MRR | File Recall | n |
 |-------|--------|-----|-------------|---|
-| unknown | IDE-native | 0.482 | 0.494 | 26 |
+| unknown | IDE-native | 0.387 | 0.439 | 35 |
 
 ## Time-to-Context
 
 | Config | TTFR (s) | TTAR (s) | Steps to First |
 |--------|----------|----------|----------------|
-| IDE-native | 11.1 | 4.8 | 4 |
+| IDE-native | 11.1 | 4.9 | 4 |
 
 ## Cost Efficiency
 
 | Config | Tokens/Relevant File | Tokens Before 1st Relevant | Mean Input Tokens | Mean Files Found | n |
 |--------|---------------------|---------------------------|-------------------|-----------------|---|
-| IDE-native | 527,124 | 250,937 | 1,819,451 | 4.6 | 22 |
+| IDE-native | 535,181 | 272,639 | 1,744,723 | 3.3 | 31 |
 
 ## Statistical Methodology
 
