@@ -147,6 +147,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 
 ## Migration
 
+- `scripts/migrate_dockerfiles_clone_as_claude.py` - Migration script for migrate dockerfiles clone as claude.
 - `scripts/migrate_dockerfiles_to_mirrors.py` - Migration script for migrate dockerfiles to mirrors.
 - `scripts/migrate_to_sg_evals.sh` - Migration script for migrate to sg evals.
 - `scripts/migrate_to_sg_evals_batch2.sh` - Migration script for migrate to sg evals batch2.

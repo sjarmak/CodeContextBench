@@ -4,6 +4,7 @@ Stable specifications and policy/reference documents.
 
 ## Config / Runtime
 - `docs/reference/CONFIGS.md` - canonical config matrix spec (`docs/CONFIGS.md` is a compatibility stub)
+- `docs/reference/RESULT_DIRECTORY_SPEC.md` - **official results directory layouts, result.json schemas, task ID extraction** (read before writing any coverage scanner)
 - `docs/CONFIGS.md`
 - `docs/AGENT_INTERFACE.md`
 - `docs/WORKFLOW_METRICS.md`
