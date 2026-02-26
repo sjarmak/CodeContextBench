@@ -859,11 +859,11 @@ Major verifier bugs discovered through QA audit (Feb 6):
 
 ### 11.1 Data Availability
 
-Of 248 registered tasks, **209** are fully paired (both baseline and MCP results): **167 SDLC** tasks and **42 of 81 MCP-unique** tasks. The remaining **39 MCP-unique tasks** are missing baseline runs.
+Of 248 registered tasks, **230** are fully paired (both baseline and MCP results): **170 SDLC** tasks and **60 of 81 MCP-unique** tasks. The remaining **21 MCP-unique tasks** are pending MCP runs.
 
 ### 11.2 SDLC Suite Results (Paired Comparison)
 
-Paired baseline vs. MCP results across all 8 SDLC suites plus MCP-unique tasks (209 paired tasks total):
+Paired baseline vs. MCP results across all 8 SDLC suites plus MCP-unique tasks (230 paired tasks total):
 
 | Suite | n | Baseline Mean | MCP Mean | Delta | Baseline Time (s) | MCP Time (s) | Time Delta |
 |-------|---|--------------|----------|-------|-------------------|-------------|-----------|
@@ -871,11 +871,11 @@ Paired baseline vs. MCP results across all 8 SDLC suites plus MCP-unique tasks (
 | debug | 20 | 0.670 | 0.487 | -0.183 | 995 | 308 | -69.0% |
 | design | 20 | 0.753 | 0.718 | -0.036 | 3,141 | 176 | -94.4% |
 | document | 20 | 0.847 | 0.895 | +0.048 | 439 | 155 | -64.6% |
-| fix | 22 | 0.446 | 0.449 | +0.003 | 1,768 | 854 | -51.7% |
+| fix | 25 | 0.479 | 0.491 | +0.012 | 1,768 | 854 | -51.7% |
 | secure | 20 | 0.669 | 0.659 | -0.010 | 314 | 212 | -32.5% |
 | test | 20 | 0.480 | 0.480 | +0.000 | 253 | 180 | -29.0% |
 | understand | 20 | 0.660 | 0.851 | **+0.191** | 668 | 166 | -75.1% |
-| mcp_unique | 42 | 0.352 | 0.683 | **+0.331** | 1,662 | 428 | -74.3% |
+| mcp_unique | 60 | 0.652 | 0.702 | **+0.050** | 1,662 | 428 | -74.3% |
 
 **Overall**: Baseline mean 0.567 (n=209), MCP mean 0.621 (n=209), delta **+0.053**.
 
@@ -1027,8 +1027,9 @@ MCP runs cost **37% less** on average ($0.47 vs $0.75 per task). This is driven 
 | Output tokens vs. reward | -0.187 | 193 | Weak negative: more output does not mean better results |
 | Elapsed time vs. reward | -0.139 | 211 | Weak negative: longer runs slightly associated with lower reward |
 | MCP ratio vs. reward | +0.293 | 206 | Weak positive: more MCP usage modestly associated with better outcomes |
+| Retrieval quality vs. reward | +0.395 | 35 | Moderate positive (p=0.041): better retrieval significantly predicts better outcomes |
 
-The negative correlation between output tokens and reward (-0.187) suggests that agents generating more code are not necessarily producing better solutions — verbose output may indicate the agent is struggling. The weak MCP-reward correlation (+0.293) implies MCP tools are helpful but not deterministic: the agent's ability to formulate effective queries and interpret results matters more than simply using the tools.
+The negative correlation between output tokens and reward (-0.187) suggests that agents generating more code are not necessarily producing better solutions — verbose output may indicate the agent is struggling. The MCP-reward correlation (+0.293) implies MCP tools are helpful but not deterministic. The retrieval-outcome correlation (+0.395, p=0.041) is the strongest and only statistically significant relationship — better file retrieval quality (MRR, file recall) is a meaningful predictor of task success, though the relationship is moderate rather than strong.
 
 ---
 
