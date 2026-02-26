@@ -127,12 +127,15 @@ CCB_REPO_BASE_MAP = {
 
 
 # Block injected before ENTRYPOINT to pre-create the claude user and set
-# ownership at build time.  Harbor's runtime ``chown -R claude:claude /workspace``
-# then becomes a near-instant no-op (files already owned by claude), saving
-# 15-30 min on large-repo images (e.g. Firefox 5.4 GB workspace).
+# ownership at build time.  The agent's runtime setup (claude_baseline_agent.py)
+# probes ownership via stat and skips chown if dirs are already claude-owned.
+#
+# NOTE: For sg_only/artifact Dockerfiles this is fine (workspace is empty).
+# For BASELINE Dockerfiles with git clones, prefer the clone-as-claude pattern
+# instead: create claude user first, USER claude, then git clone.  This avoids
+# a chown -R layer that doubles image size on Docker overlay2.
 _CHOWN_OPTIMIZATION = """\
-# Pre-create claude user and set ownership at build time so Harbor's
-# runtime chown is a no-op (avoids 15-30 min delay on large repos).
+# Pre-create claude user and set ownership at build time.
 RUN (adduser --disabled-password --gecos '' claude 2>/dev/null || true) && \\
     for d in /workspace /app /testbed /logs; do [ -d "$d" ] && chown -R claude:claude "$d"; done || true
 """

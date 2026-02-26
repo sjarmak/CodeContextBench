@@ -1074,13 +1074,28 @@ before retrying."""
 
                 # The outer command:
                 # 1. Creates claude user
-                # 2. Writes system prompt and wrapper script from base64
-                # 3. Runs wrapper script as claude user (or root in hybrid SG modes)
-                # 4. Fixes permissions after run
+                # 2. Probes writability; only chowns if needed (avoids 30+ min
+                #    no-op stat() walk on large repos in Docker overlay2)
+                # 3. Writes system prompt and wrapper script from base64
+                # 4. Runs wrapper script as claude user (or root in hybrid SG modes)
+                # 5. Fixes permissions after run
                 setup_cmds = (
                     "id -u claude &>/dev/null || adduser -D -s /bin/bash claude 2>/dev/null || adduser --disabled-password --gecos '' claude 2>/dev/null || true && "
                     "chown -R claude:claude /logs 2>/dev/null || true && "
-                    "chown -R claude:claude /workspace /app /testbed 2>/dev/null || true"
+                    # Probe ownership via stat (not touch — touch succeeds as root).
+                    # If every existing workdir is already owned by claude, skip the
+                    # expensive recursive chown that can take 30+ min on overlay2.
+                    "{ _ok=1; for d in /workspace /app /testbed; do "
+                    "[ -d \"$d\" ] || continue; "
+                    "[ \"$(stat -c %U \"$d\" 2>/dev/null)\" = claude ] || _ok=0; "
+                    "done; [ \"$_ok\" = 1 ]; } && "
+                    "echo 'chown-skip: dirs already owned by claude' || "
+                    "{ echo 'chown-fix: running bounded ownership repair'; "
+                    "for d in /workspace /app /testbed; do "
+                    "[ -d \"$d\" ] || continue; "
+                    "chown claude:claude \"$d\" 2>/dev/null; "
+                    "find \"$d\" -maxdepth 1 -not -user claude -exec chown claude:claude {} + 2>/dev/null; "
+                    "done; true; }"
                 )
 
                 file_cmds = ""
