@@ -4,8 +4,8 @@
 
 **Target Repositories (version-pinned mirrors):**
 
-- `github.com/github.com/llvm/llvm-project` — use `repo:^github.com/github.com/llvm/llvm-project$` filter
-- `github.com/github.com/gcc-mirror/gcc` — use `repo:^github.com/github.com/gcc-mirror/gcc$` filter
+- `github.com/sg-evals/llvm-project--a8f3c97d` — use `repo:^github.com/sg-evals/llvm-project--a8f3c97d$` filter
+- `github.com/sg-evals/gcc--96dfb333` — use `repo:^github.com/sg-evals/gcc--96dfb333$` filter
 
 Scope ALL keyword_search/nls_search queries to these repos.
 Use the repo name as the `repo` parameter for read_file/go_to_definition/find_references.
@@ -69,7 +69,7 @@ If MCP search returns no results:
 
 ---
 
-**Sourcegraph Repositories:** `github.com/github.com/llvm/llvm-project`, `github.com/github.com/gcc-mirror/gcc`
+**Sourcegraph Repositories:** `github.com/sg-evals/llvm-project--a8f3c97d`, `github.com/sg-evals/gcc--96dfb333`
 
 # Cross-Compiler Sanitizer Tracing: ASan in LLVM vs GCC
 
