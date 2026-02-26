@@ -22,7 +22,8 @@ echo "Answer:    $ANSWER_PATH"
 echo ""
 
 # sg_only mode guard: restore full repo if verifier wrapper exists
-if [ -f /tmp/.sg_only_mode ] && [ -f /tests/sgonly_verifier_wrapper.sh ]; then
+# Skip if already sourced by test.sh (avoid double-clone for large repos)
+if [ -f /tmp/.sg_only_mode ] && [ -f /tests/sgonly_verifier_wrapper.sh ] && [ -z "${_SG_ONLY_RESTORED:-}" ]; then
     echo "sg_only mode: sourcing verifier wrapper..."
     source /tests/sgonly_verifier_wrapper.sh
 fi

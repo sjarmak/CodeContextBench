@@ -30,6 +30,13 @@ if [ ! -f /tmp/.sg_only_mode ]; then
     return 0 2>/dev/null || exit 0
 fi
 
+# Idempotency guard: skip if already sourced (avoids double-clone when
+# test.sh sources this wrapper and then eval.sh sources it again)
+if [ -n "${_SG_ONLY_RESTORED:-}" ]; then
+    return 0 2>/dev/null || exit 0
+fi
+export _SG_ONLY_RESTORED=1
+
 echo "[sg_only_verifier] Detected sg_only mode, restoring full repo..."
 
 # ---------------------------------------------------------------------------
