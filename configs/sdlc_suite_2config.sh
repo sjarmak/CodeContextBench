@@ -43,9 +43,9 @@ SUITE_STEM="${SUITE#ccb_}"
 # ============================================
 BENCHMARK_DIR="$(pwd)/benchmarks"
 AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
-MODEL="${MODEL:-anthropic/claude-opus-4-6}"
+MODEL="${MODEL:-anthropic/claude-haiku-4-5-20251001}"
 CONCURRENCY=1
-TIMEOUT_MULTIPLIER=10
+TIMEOUT_MULTIPLIER="${TIMEOUT_MULTIPLIER:-10}"
 RUN_BASELINE=true
 RUN_FULL=true
 CATEGORY="${CATEGORY:-staging}"

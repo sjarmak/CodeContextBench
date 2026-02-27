@@ -23,7 +23,7 @@ cd "$REPO_ROOT"
 export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
 SELECTION_FILE="$REPO_ROOT/configs/selected_benchmark_tasks.json"
-MODEL="${MODEL:-anthropic/claude-opus-4-6}"
+MODEL="${MODEL:-anthropic/claude-haiku-4-5-20251001}"
 AGENT_PATH="agents.claude_baseline_agent:BaselineClaudeCodeAgent"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 

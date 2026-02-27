@@ -171,6 +171,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/extract_analysis_metrics.py` - Utility script for extract analysis metrics.
 - `scripts/find_mcp_distracted.py` - Utility script for find mcp distracted.
 - `scripts/fix_h3_tokens.py` [one_off] - Historical one-off script: fix h3 tokens.
+- `scripts/handoff_monitor_scrollend.sh` - Utility script for handoff monitor scrollend.
 - `scripts/hydrate_task_specs.py` - Utility script for hydrate task specs.
 - `scripts/icp_profiles.py` - Utility script for icp profiles.
 - `scripts/integrate_answer_json_wave1.py` - Utility script for integrate answer json wave1.
@@ -179,6 +180,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/judge_demo.py` - Utility script for judge demo.
 - `scripts/list_gemini_models.py` - Utility script for list gemini models.
 - `scripts/mirror_largerepo_expansion.sh` - Utility script for mirror largerepo expansion.
+- `scripts/plan_variance_runs.py` - Utility script for plan variance runs.
 - `scripts/regenerate_artifact_dockerfiles.py` - Utility script for regenerate artifact dockerfiles.
 - `scripts/remirror_mcp_unique_repos.sh` - Utility script for remirror mcp unique repos.
 - `scripts/repair_h3_trajectories.py` [one_off] - Historical one-off script: repair h3 trajectories.
