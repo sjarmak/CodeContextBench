@@ -166,7 +166,7 @@ Tasks are drawn from established benchmarks and custom-authored challenges, then
 | Suite            | SDLC Phase                | Tasks | Difficulty Range | Languages                            |
 | ---------------- | ------------------------- | ----: | ---------------- | ------------------------------------ |
 | `ccb_understand` | Requirements & Discovery  |    20 | hard             | C++, Go, Java, Python, TS            |
-| `ccb_design`     | Architecture & Design     |    20 | hard--very_hard  | C, C++, Go, Java, Python             |
+| `ccb_design`     | Architecture & Design     |    20 | hard--expert     | C, C++, Go, Java, Python             |
 | `ccb_fix`        | Bug Repair                |    25 | medium--hard     | C++, Go, Java, JS, Python, TS        |
 | `ccb_build`      | Feature & Refactoring     |    25 | medium--hard     | C#, C++, Go, Java, JS, Rust, TS      |
 | `ccb_test`       | Testing & QA              |    20 | medium--hard     | C, C#, C++, Go, Java, JS, Python, TS |
@@ -923,7 +923,24 @@ C tasks have the highest mean reward (0.801), driven by the Linux kernel fault l
 | Hard | 136 | 0.638 | 0.611 | 89.0% |
 | Expert | 13 | 0.738 | 0.728 | 100.0% |
 
-The counterintuitive result that "hard" tasks outperform "medium" tasks reflects that difficulty ratings were assigned based on expected human effort, not agent capability. Difficulty is a task-authoring metadata field (`task.toml` / selection registry `difficulty`) set from the anticipated human effort and coordination complexity of the scenario, rather than calibrated to current model behavior. Expert tasks (all Linux kernel fault localization) score highest because they are well-structured pattern-matching problems that agents handle effectively despite the large codebase scale.
+The `hard > medium` result here is primarily a composition effect in the paired direct-run subset, not evidence that the difficulty metadata is inverted. Medium has only 21 paired tasks and is concentrated in lower-performing slices (`ccb_fix`, `ccb_build`, and `ccb_test`), while hard has 136 paired tasks spread across several higher-performing suites (`ccb_document`, `ccb_understand`, `ccb_secure`, `ccb_design`, etc.). Expert remains highest because this bucket is small (13 tasks) and dominated by Linux fault-localization tasks that currently score well under the rubric verifier.
+
+Difficulty metadata is assigned by the deterministic v2 formula used in `scripts/rescore_difficulty.py`:
+
+```text
+difficulty_score = 0.40*size_score + 0.35*complexity_score + 0.25*ground_truth_depth_score
+label = expert if score >= 0.86
+label = hard   if score >= 0.62 and < 0.86
+label = medium otherwise
+override: ccb_debug linux-* -> expert
+```
+
+Priors and task-type values used by the formula:
+
+- `size_score`: `0.70*context_norm + 0.30*files_norm`; priors if missing are `context=0.60`, `files=0.55`.
+- `complexity_score`: from `mcp_breakdown` when present (`0.50*cross_file_deps + 0.30*semantic_search_potential + 0.20*task_category_weight`), with priors `cross_file_deps=0.70`, `semantic_search_potential=0.70`.
+- `task_category_weight` defaults come from category lookup (examples: `documentation_generation=0.58`, `feature_implementation=0.76`, `cross_file_reasoning=0.84`, `fault_localization=0.92`, `dependency_chain_analysis=0.95`).
+- `ground_truth_depth_score`: base from `reward_type` lookup (e.g., `binary=0.35`, `test_ratio=0.45`, `checklist=0.78`, `ir_checklist=0.86`, `find_and_prove=0.90`) plus bonuses for GT richness (`ground_truth.json` component count, `criteria.json`, `oracle_answer.json`).
 
 ### 11.5 Reward by Codebase Size
 
