@@ -232,7 +232,7 @@ def mcnemar_test(
 
 def bootstrap_ci(
     values: List[float],
-    n_bootstrap: int = 1000,
+    n_bootstrap: int = 10000,
     ci: float = 0.95,
 ) -> Tuple[float, float, float]:
     """Percentile bootstrap confidence interval for the mean.
@@ -241,7 +241,7 @@ def bootstrap_ci(
 
     Args:
         values: Sample values.
-        n_bootstrap: Number of bootstrap resamples.
+        n_bootstrap: Number of bootstrap resamples (default: 10,000).
         ci: Confidence level.
 
     Returns:
@@ -300,7 +300,7 @@ def bootstrap_ci_dict(
 def paired_bootstrap_delta(
     values_a: List[float],
     values_b: List[float],
-    n_bootstrap: int = 1000,
+    n_bootstrap: int = 10000,
     ci: float = 0.95,
 ) -> Tuple[float, float, float, float]:
     """Paired bootstrap test for the mean delta (b - a).
@@ -310,7 +310,7 @@ def paired_bootstrap_delta(
     Args:
         values_a: Baseline measurements (paired with values_b).
         values_b: Treatment measurements (paired with values_a).
-        n_bootstrap: Number of bootstrap resamples.
+        n_bootstrap: Number of bootstrap resamples (default: 10,000).
         ci: Confidence level.
 
     Returns:
