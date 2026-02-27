@@ -190,6 +190,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/rerun_errored_tasks.sh` [one_off] - Historical one-off script: rerun errored tasks.
 - `scripts/rerun_fixed_tasks.sh` [one_off] - Historical one-off script: rerun fixed tasks.
 - `scripts/rerun_zero_mcp_tasks.sh` [one_off] - Historical one-off script: rerun zero mcp tasks.
+- `scripts/rescore_difficulty.py` - Utility script for rescore difficulty.
 - `scripts/run_judge.py` - Utility script for run judge.
 - `scripts/scan_swebench_errors.py` - Utility script for scan swebench errors.
 - `scripts/smoke_artifact_verifier.py` - Utility script for smoke artifact verifier.
