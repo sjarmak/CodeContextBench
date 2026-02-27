@@ -925,9 +925,9 @@ C tasks have the highest mean reward (0.801), driven by the Linux kernel fault l
 
 | Difficulty | n | Baseline Mean | MCP Mean | Pass Rate |
 |-----------|---|--------------|----------|-----------|
-| Medium | 26 | 0.592 | 0.667 | 69.2% |
-| Hard | 145 | 0.628 | 0.687 | 86.9% |
-| Expert | 5 | 0.800 | 0.800 | 100.0% |
+| Medium | 21 | 0.476 | 0.409 | 52.4% |
+| Hard | 136 | 0.638 | 0.611 | 89.0% |
+| Expert | 13 | 0.738 | 0.728 | 100.0% |
 
 The counterintuitive result that "hard" tasks outperform "medium" tasks reflects that difficulty ratings were assigned based on expected human effort, not agent capability. Difficulty is a task-authoring metadata field (`task.toml` / selection registry `difficulty`) set from the anticipated human effort and coordination complexity of the scenario, rather than calibrated to current model behavior. Expert tasks (all Linux kernel fault localization) score highest because they are well-structured pattern-matching problems that agents handle effectively despite the large codebase scale.
 

@@ -1,7 +1,11 @@
 # CodeContextBench: A Systematic Evaluation Framework for Assessing the Impact of Enhanced Code Intelligence on AI Coding Agent Performance
 
-**White Paper Technical Report**
+**White Paper Technical Report (Derived)**
 **Date:** February 27, 2026
+
+> Derivation note: The canonical source for technical-report content is
+> `docs/technical_reports/TECHNICAL_REPORT_V1.md`. This white-paper document is
+> a derived presentation artifact and should be updated from the canonical report.
 
 ---
 
@@ -918,11 +922,11 @@ C tasks have the highest mean reward (0.801), driven by the Linux kernel fault l
 
 ### 11.4 Reward by Difficulty
 
-| Difficulty | n | Baseline Mean | Pass Rate |
-|-----------|---|--------------|-----------|
-| Medium | 26 | 0.592 | 69.2% |
-| Hard | 145 | 0.628 | 86.9% |
-| Expert | 5 | 0.800 | 100.0% |
+| Difficulty | n | Baseline Mean | MCP Mean | Pass Rate |
+|-----------|---|--------------|----------|-----------|
+| Medium | 21 | 0.476 | 0.409 | 52.4% |
+| Hard | 136 | 0.638 | 0.611 | 89.0% |
+| Expert | 13 | 0.738 | 0.728 | 100.0% |
 
 The counterintuitive result that "hard" tasks outperform "medium" tasks reflects that difficulty ratings were assigned based on expected human effort, not agent capability. Difficulty is a task-authoring metadata field (`task.toml` / selection registry `difficulty`) set from the anticipated human effort and coordination complexity of the scenario, rather than calibrated to current model behavior. Expert tasks (all Linux kernel fault localization) score highest because they are well-structured pattern-matching problems that agents handle effectively despite the large codebase scale.
 
