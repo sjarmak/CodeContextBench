@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_incident_haiku_20260226_035617--mcp-remote-direct--mcp_CCX-incident-110_XxCjSw/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_incident_haiku_20260226_035617--mcp-remote-direct--mcp_CCX-incident-110_XxCjSw/claude-code.txt)
 
 ## Metrics
 
@@ -49,3 +50,33 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find the C++ source files managing content process lifecycle in Firefox's dom/ipc/ directory. Let me search for these key classes. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 6 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `text` | `-` | Perfect! I found all the key files. Let me now read the files to confirm the exact class definitions and create the answer file. |
+| 12 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 13 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 14 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `text` | `-` | Now I'll create the answer file with all the findings. |
+| 21 | `assistant` | `tool_use` | `Write` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `text` | `-` | Perfect! I've successfully identified and documented all the C++ source files in Firefox's dom/ipc/ directory that manage the content process lifecycle. Here's a summary of what I found:  ## Key Files Located:  1. **Cont... |

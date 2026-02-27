@@ -2,7 +2,7 @@
 
 This bundle is generated from `runs/official/` and includes only valid scored tasks (`passed`/`failed` with numeric reward).
 
-Generated: `2026-02-27T03:35:06.443867+00:00`
+Generated: `2026-02-27T13:52:05.485254+00:00`
 
 ## Local Browse
 
@@ -15,72 +15,62 @@ Historical reruns/backfills remain available in `data/official_results.json` und
 
 ## Suite/Config Summary
 
-| Suite | Config | Valid Tasks | Mean Reward | Pass Rate |
-|---|---|---:|---:|---:|
-| [ccb_build](suites/ccb_build.md) | `baseline-local-direct` | 20 | 0.527 | 0.800 |
-| [ccb_build](suites/ccb_build.md) | `mcp-remote-direct` | 25 | 0.372 | 0.640 |
-| [ccb_debug](suites/ccb_debug.md) | `baseline-local-direct` | 20 | 0.670 | 1.000 |
-| [ccb_debug](suites/ccb_debug.md) | `mcp-remote-direct` | 20 | 0.487 | 0.600 |
-| [ccb_design](suites/ccb_design.md) | `baseline-local-direct` | 20 | 0.753 | 0.950 |
-| [ccb_design](suites/ccb_design.md) | `mcp-remote-direct` | 20 | 0.718 | 1.000 |
-| [ccb_document](suites/ccb_document.md) | `baseline-local-direct` | 20 | 0.847 | 1.000 |
-| [ccb_document](suites/ccb_document.md) | `mcp-remote-direct` | 25 | 0.802 | 1.000 |
-| [ccb_fix](suites/ccb_fix.md) | `baseline-local-direct` | 28 | 0.428 | 0.571 |
-| [ccb_fix](suites/ccb_fix.md) | `mcp-remote-direct` | 28 | 0.467 | 0.571 |
-| [ccb_mcp_compliance](suites/ccb_mcp_compliance.md) | `baseline-local-artifact` | 1 | 0.375 | 1.000 |
-| [ccb_mcp_compliance](suites/ccb_mcp_compliance.md) | `baseline-local-direct` | 6 | 0.668 | 1.000 |
-| [ccb_mcp_compliance](suites/ccb_mcp_compliance.md) | `mcp-remote-artifact` | 1 | 0.742 | 1.000 |
-| [ccb_mcp_compliance](suites/ccb_mcp_compliance.md) | `mcp-remote-direct` | 21 | 0.580 | 1.000 |
-| [ccb_mcp_crossorg](suites/ccb_mcp_crossorg.md) | `baseline` | 2 | 0.750 | 1.000 |
-| [ccb_mcp_crossorg](suites/ccb_mcp_crossorg.md) | `baseline-local-artifact` | 2 | 0.062 | 0.500 |
-| [ccb_mcp_crossorg](suites/ccb_mcp_crossorg.md) | `baseline-local-direct` | 1 | 0.658 | 1.000 |
-| [ccb_mcp_crossorg](suites/ccb_mcp_crossorg.md) | `mcp` | 2 | 1.000 | 1.000 |
-| [ccb_mcp_crossorg](suites/ccb_mcp_crossorg.md) | `mcp-remote-artifact` | 2 | 0.171 | 0.500 |
-| [ccb_mcp_crossorg](suites/ccb_mcp_crossorg.md) | `mcp-remote-direct` | 4 | 0.718 | 1.000 |
-| [ccb_mcp_crossrepo](suites/ccb_mcp_crossrepo.md) | `baseline` | 3 | 0.941 | 1.000 |
-| [ccb_mcp_crossrepo](suites/ccb_mcp_crossrepo.md) | `baseline-local-artifact` | 2 | 0.000 | 0.000 |
-| [ccb_mcp_crossrepo](suites/ccb_mcp_crossrepo.md) | `baseline-local-direct` | 5 | 0.721 | 1.000 |
-| [ccb_mcp_crossrepo](suites/ccb_mcp_crossrepo.md) | `mcp` | 3 | 0.899 | 1.000 |
-| [ccb_mcp_crossrepo](suites/ccb_mcp_crossrepo.md) | `mcp-remote-artifact` | 2 | 0.287 | 1.000 |
-| [ccb_mcp_crossrepo](suites/ccb_mcp_crossrepo.md) | `mcp-remote-direct` | 17 | 0.716 | 1.000 |
-| [ccb_mcp_domain](suites/ccb_mcp_domain.md) | `baseline-local-artifact` | 3 | 0.000 | 0.000 |
-| [ccb_mcp_domain](suites/ccb_mcp_domain.md) | `baseline-local-direct` | 7 | 0.632 | 1.000 |
-| [ccb_mcp_domain](suites/ccb_mcp_domain.md) | `mcp-remote-artifact` | 3 | 0.529 | 1.000 |
-| [ccb_mcp_domain](suites/ccb_mcp_domain.md) | `mcp-remote-direct` | 26 | 0.578 | 1.000 |
-| [ccb_mcp_incident](suites/ccb_mcp_incident.md) | `baseline` | 1 | 0.500 | 1.000 |
-| [ccb_mcp_incident](suites/ccb_mcp_incident.md) | `baseline-local-artifact` | 3 | 0.167 | 0.333 |
-| [ccb_mcp_incident](suites/ccb_mcp_incident.md) | `baseline-local-direct` | 7 | 0.714 | 1.000 |
-| [ccb_mcp_incident](suites/ccb_mcp_incident.md) | `mcp` | 1 | 1.000 | 1.000 |
-| [ccb_mcp_incident](suites/ccb_mcp_incident.md) | `mcp-remote-artifact` | 3 | 0.782 | 1.000 |
-| [ccb_mcp_incident](suites/ccb_mcp_incident.md) | `mcp-remote-direct` | 25 | 0.684 | 1.000 |
-| [ccb_mcp_migration](suites/ccb_mcp_migration.md) | `baseline-local-direct` | 7 | 0.815 | 1.000 |
-| [ccb_mcp_migration](suites/ccb_mcp_migration.md) | `mcp-remote-direct` | 10 | 0.906 | 1.000 |
-| [ccb_mcp_onboarding](suites/ccb_mcp_onboarding.md) | `baseline` | 3 | 0.639 | 1.000 |
-| [ccb_mcp_onboarding](suites/ccb_mcp_onboarding.md) | `baseline-local-artifact` | 4 | 0.000 | 0.000 |
-| [ccb_mcp_onboarding](suites/ccb_mcp_onboarding.md) | `baseline-local-direct` | 4 | 0.524 | 1.000 |
-| [ccb_mcp_onboarding](suites/ccb_mcp_onboarding.md) | `mcp` | 3 | 0.778 | 1.000 |
-| [ccb_mcp_onboarding](suites/ccb_mcp_onboarding.md) | `mcp-remote-artifact` | 4 | 0.843 | 1.000 |
-| [ccb_mcp_onboarding](suites/ccb_mcp_onboarding.md) | `mcp-remote-direct` | 17 | 0.490 | 1.000 |
-| [ccb_mcp_org](suites/ccb_mcp_org.md) | `baseline-local-artifact` | 2 | 0.500 | 1.000 |
-| [ccb_mcp_org](suites/ccb_mcp_org.md) | `baseline-local-direct` | 3 | 0.404 | 1.000 |
-| [ccb_mcp_org](suites/ccb_mcp_org.md) | `mcp-remote-artifact` | 2 | 0.705 | 1.000 |
-| [ccb_mcp_org](suites/ccb_mcp_org.md) | `mcp-remote-direct` | 12 | 0.518 | 1.000 |
-| [ccb_mcp_platform](suites/ccb_mcp_platform.md) | `baseline` | 1 | 0.928 | 1.000 |
-| [ccb_mcp_platform](suites/ccb_mcp_platform.md) | `baseline-local-direct` | 4 | 0.676 | 1.000 |
-| [ccb_mcp_platform](suites/ccb_mcp_platform.md) | `mcp` | 1 | 0.928 | 1.000 |
-| [ccb_mcp_platform](suites/ccb_mcp_platform.md) | `mcp-remote-direct` | 13 | 0.574 | 1.000 |
-| [ccb_mcp_security](suites/ccb_mcp_security.md) | `baseline` | 2 | 0.500 | 1.000 |
-| [ccb_mcp_security](suites/ccb_mcp_security.md) | `baseline-local-artifact` | 4 | 0.000 | 0.000 |
-| [ccb_mcp_security](suites/ccb_mcp_security.md) | `baseline-local-direct` | 4 | 0.603 | 1.000 |
-| [ccb_mcp_security](suites/ccb_mcp_security.md) | `mcp` | 2 | 0.821 | 1.000 |
-| [ccb_mcp_security](suites/ccb_mcp_security.md) | `mcp-remote-artifact` | 4 | 0.777 | 1.000 |
-| [ccb_mcp_security](suites/ccb_mcp_security.md) | `mcp-remote-direct` | 16 | 0.705 | 1.000 |
-| [ccb_secure](suites/ccb_secure.md) | `baseline-local-direct` | 20 | 0.669 | 0.950 |
-| [ccb_secure](suites/ccb_secure.md) | `mcp-remote-direct` | 22 | 0.645 | 0.909 |
-| [ccb_test](suites/ccb_test.md) | `baseline-local-direct` | 20 | 0.480 | 0.750 |
-| [ccb_test](suites/ccb_test.md) | `mcp-remote-direct` | 31 | 0.403 | 0.613 |
-| [ccb_understand](suites/ccb_understand.md) | `baseline-local-direct` | 20 | 0.660 | 0.800 |
-| [ccb_understand](suites/ccb_understand.md) | `mcp-remote-direct` | 20 | 0.851 | 1.000 |
+| Suite | Config | Valid Tasks | Min Required | Mean Reward | Pass Rate | Coverage |
+|---|---|---:|---:|---:|---:|---|
+| [ccb_build](suites/ccb_build.md) | `baseline-local-direct` | 25 | 25 | 0.513 | 0.800 | ok |
+| [ccb_build](suites/ccb_build.md) | `mcp-remote-direct` | 25 | 25 | 0.372 | 0.640 | ok |
+| [ccb_debug](suites/ccb_debug.md) | `baseline-local-direct` | 20 | 20 | 0.670 | 1.000 | ok |
+| [ccb_debug](suites/ccb_debug.md) | `mcp-remote-direct` | 20 | 20 | 0.487 | 0.600 | ok |
+| [ccb_design](suites/ccb_design.md) | `baseline-local-direct` | 20 | 20 | 0.753 | 0.950 | ok |
+| [ccb_design](suites/ccb_design.md) | `mcp-remote-direct` | 20 | 20 | 0.718 | 1.000 | ok |
+| [ccb_document](suites/ccb_document.md) | `baseline-local-direct` | 20 | 20 | 0.847 | 1.000 | ok |
+| [ccb_document](suites/ccb_document.md) | `mcp-remote-direct` | 25 | 20 | 0.802 | 1.000 | ok |
+| [ccb_fix](suites/ccb_fix.md) | `baseline-local-direct` | 28 | 25 | 0.428 | 0.571 | ok |
+| [ccb_fix](suites/ccb_fix.md) | `mcp-remote-direct` | 28 | 25 | 0.467 | 0.571 | ok |
+| [ccb_mcp_compliance](suites/ccb_mcp_compliance.md) | `baseline-local-artifact` | 1 | 21 | 0.375 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_compliance](suites/ccb_mcp_compliance.md) | `baseline-local-direct` | 6 | 21 | 0.668 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_compliance](suites/ccb_mcp_compliance.md) | `mcp-remote-artifact` | 1 | 21 | 0.742 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_compliance](suites/ccb_mcp_compliance.md) | `mcp-remote-direct` | 21 | 21 | 0.580 | 1.000 | ok |
+| [ccb_mcp_crossorg](suites/ccb_mcp_crossorg.md) | `baseline-local-artifact` | 4 | 4 | 0.406 | 0.750 | ok |
+| [ccb_mcp_crossorg](suites/ccb_mcp_crossorg.md) | `baseline-local-direct` | 1 | 4 | 0.658 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_crossorg](suites/ccb_mcp_crossorg.md) | `mcp-remote-artifact` | 4 | 4 | 0.586 | 0.750 | ok |
+| [ccb_mcp_crossorg](suites/ccb_mcp_crossorg.md) | `mcp-remote-direct` | 4 | 4 | 0.718 | 1.000 | ok |
+| [ccb_mcp_crossrepo](suites/ccb_mcp_crossrepo.md) | `baseline-local-artifact` | 5 | 17 | 0.565 | 0.600 | FLAG: below minimum |
+| [ccb_mcp_crossrepo](suites/ccb_mcp_crossrepo.md) | `baseline-local-direct` | 5 | 17 | 0.721 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_crossrepo](suites/ccb_mcp_crossrepo.md) | `mcp-remote-artifact` | 5 | 17 | 0.654 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_crossrepo](suites/ccb_mcp_crossrepo.md) | `mcp-remote-direct` | 17 | 17 | 0.716 | 1.000 | ok |
+| [ccb_mcp_domain](suites/ccb_mcp_domain.md) | `baseline-local-artifact` | 3 | 26 | 0.000 | 0.000 | FLAG: below minimum |
+| [ccb_mcp_domain](suites/ccb_mcp_domain.md) | `baseline-local-direct` | 7 | 26 | 0.632 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_domain](suites/ccb_mcp_domain.md) | `mcp-remote-artifact` | 3 | 26 | 0.529 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_domain](suites/ccb_mcp_domain.md) | `mcp-remote-direct` | 26 | 26 | 0.578 | 1.000 | ok |
+| [ccb_mcp_incident](suites/ccb_mcp_incident.md) | `baseline-local-artifact` | 4 | 25 | 0.250 | 0.500 | FLAG: below minimum |
+| [ccb_mcp_incident](suites/ccb_mcp_incident.md) | `baseline-local-direct` | 7 | 25 | 0.714 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_incident](suites/ccb_mcp_incident.md) | `mcp-remote-artifact` | 4 | 25 | 0.837 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_incident](suites/ccb_mcp_incident.md) | `mcp-remote-direct` | 25 | 25 | 0.684 | 1.000 | ok |
+| [ccb_mcp_migration](suites/ccb_mcp_migration.md) | `baseline-local-direct` | 7 | 10 | 0.815 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_migration](suites/ccb_mcp_migration.md) | `mcp-remote-direct` | 10 | 10 | 0.906 | 1.000 | ok |
+| [ccb_mcp_onboarding](suites/ccb_mcp_onboarding.md) | `baseline-local-artifact` | 7 | 17 | 0.274 | 0.429 | FLAG: below minimum |
+| [ccb_mcp_onboarding](suites/ccb_mcp_onboarding.md) | `baseline-local-direct` | 4 | 17 | 0.524 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_onboarding](suites/ccb_mcp_onboarding.md) | `mcp-remote-artifact` | 7 | 17 | 0.815 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_onboarding](suites/ccb_mcp_onboarding.md) | `mcp-remote-direct` | 17 | 17 | 0.490 | 1.000 | ok |
+| [ccb_mcp_org](suites/ccb_mcp_org.md) | `baseline-local-artifact` | 2 | 12 | 0.500 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_org](suites/ccb_mcp_org.md) | `baseline-local-direct` | 3 | 12 | 0.404 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_org](suites/ccb_mcp_org.md) | `mcp-remote-artifact` | 2 | 12 | 0.705 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_org](suites/ccb_mcp_org.md) | `mcp-remote-direct` | 12 | 12 | 0.518 | 1.000 | ok |
+| [ccb_mcp_platform](suites/ccb_mcp_platform.md) | `baseline-local-artifact` | 1 | 13 | 0.928 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_platform](suites/ccb_mcp_platform.md) | `baseline-local-direct` | 4 | 13 | 0.676 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_platform](suites/ccb_mcp_platform.md) | `mcp-remote-artifact` | 1 | 13 | 0.928 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_platform](suites/ccb_mcp_platform.md) | `mcp-remote-direct` | 13 | 13 | 0.574 | 1.000 | ok |
+| [ccb_mcp_security](suites/ccb_mcp_security.md) | `baseline-local-artifact` | 6 | 16 | 0.167 | 0.333 | FLAG: below minimum |
+| [ccb_mcp_security](suites/ccb_mcp_security.md) | `baseline-local-direct` | 4 | 16 | 0.603 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_security](suites/ccb_mcp_security.md) | `mcp-remote-artifact` | 6 | 16 | 0.792 | 1.000 | FLAG: below minimum |
+| [ccb_mcp_security](suites/ccb_mcp_security.md) | `mcp-remote-direct` | 16 | 16 | 0.705 | 1.000 | ok |
+| [ccb_secure](suites/ccb_secure.md) | `baseline-local-direct` | 20 | 20 | 0.669 | 0.950 | ok |
+| [ccb_secure](suites/ccb_secure.md) | `mcp-remote-direct` | 22 | 20 | 0.645 | 0.909 | ok |
+| [ccb_test](suites/ccb_test.md) | `baseline-local-direct` | 20 | 20 | 0.480 | 0.750 | ok |
+| [ccb_test](suites/ccb_test.md) | `mcp-remote-direct` | 31 | 20 | 0.403 | 0.613 | ok |
+| [ccb_understand](suites/ccb_understand.md) | `baseline-local-direct` | 20 | 20 | 0.660 | 0.800 | ok |
+| [ccb_understand](suites/ccb_understand.md) | `mcp-remote-direct` | 20 | 20 | 0.851 | 1.000 | ok |
 
 <details>
 <summary>Run/Config Summary</summary>
@@ -94,6 +84,7 @@ Historical reruns/backfills remain available in `data/official_results.json` und
 | [ccb_build_haiku_022326](runs/ccb_build_haiku_022326.md) | `ccb_build` | `mcp-remote-direct` | 25 | 0.372 | 0.640 |
 | [ccb_build_haiku_20260225_234223](runs/ccb_build_haiku_20260225_234223.md) | `ccb_build` | `baseline-local-direct` | 1 | 0.820 | 1.000 |
 | [ccb_build_haiku_20260226_015500_backfill](runs/ccb_build_haiku_20260226_015500_backfill.md) | `ccb_build` | `baseline-local-direct` | 1 | 0.820 | 1.000 |
+| [ccb_build_haiku_20260227_baseline_gapfill](runs/ccb_build_haiku_20260227_baseline_gapfill.md) | `ccb_build` | `baseline-local-direct` | 5 | 0.456 | 0.800 |
 | [ccb_debug_haiku_022326](runs/ccb_debug_haiku_022326.md) | `ccb_debug` | `baseline-local-direct` | 20 | 0.670 | 1.000 |
 | [ccb_debug_haiku_022326](runs/ccb_debug_haiku_022326.md) | `ccb_debug` | `mcp-remote-direct` | 20 | 0.487 | 0.600 |
 | [ccb_design_haiku_022326](runs/ccb_design_haiku_022326.md) | `ccb_design` | `baseline-local-direct` | 13 | 0.770 | 1.000 |
@@ -126,8 +117,8 @@ Historical reruns/backfills remain available in `data/official_results.json` und
 | [ccb_mcp_compliance_haiku_20260226_205845](runs/ccb_mcp_compliance_haiku_20260226_205845.md) | `ccb_mcp_compliance` | `baseline-local-direct` | 3 | 0.700 | 1.000 |
 | [ccb_mcp_compliance_haiku_20260226_214446](runs/ccb_mcp_compliance_haiku_20260226_214446.md) | `ccb_mcp_compliance` | `baseline-local-direct` | 2 | 0.778 | 1.000 |
 | [ccb_mcp_compliance_haiku_20260226_221038](runs/ccb_mcp_compliance_haiku_20260226_221038.md) | `ccb_mcp_compliance` | `mcp-remote-direct` | 2 | 0.833 | 1.000 |
-| [ccb_mcp_crossorg_haiku_022126](runs/ccb_mcp_crossorg_haiku_022126.md) | `ccb_mcp_crossorg` | `baseline` | 2 | 0.750 | 1.000 |
-| [ccb_mcp_crossorg_haiku_022126](runs/ccb_mcp_crossorg_haiku_022126.md) | `ccb_mcp_crossorg` | `mcp` | 2 | 1.000 | 1.000 |
+| [ccb_mcp_crossorg_haiku_022126](runs/ccb_mcp_crossorg_haiku_022126.md) | `ccb_mcp_crossorg` | `baseline-local-artifact` | 2 | 0.750 | 1.000 |
+| [ccb_mcp_crossorg_haiku_022126](runs/ccb_mcp_crossorg_haiku_022126.md) | `ccb_mcp_crossorg` | `mcp-remote-artifact` | 2 | 1.000 | 1.000 |
 | [ccb_mcp_crossorg_haiku_20260224_181919](runs/ccb_mcp_crossorg_haiku_20260224_181919.md) | `ccb_mcp_crossorg` | `mcp-remote-artifact` | 2 | 0.171 | 0.500 |
 | [ccb_mcp_crossorg_haiku_20260225_011700](runs/ccb_mcp_crossorg_haiku_20260225_011700.md) | `ccb_mcp_crossorg` | `baseline-local-artifact` | 2 | 0.062 | 0.500 |
 | [ccb_mcp_crossorg_haiku_20260226_035617](runs/ccb_mcp_crossorg_haiku_20260226_035617.md) | `ccb_mcp_crossorg` | `mcp-remote-direct` | 1 | 0.800 | 1.000 |
@@ -140,8 +131,8 @@ Historical reruns/backfills remain available in `data/official_results.json` und
 | [ccb_mcp_crossrepo_haiku_20260226_035628_variance](runs/ccb_mcp_crossrepo_haiku_20260226_035628_variance.md) | `ccb_mcp_crossrepo` | `mcp-remote-direct` | 1 | 0.767 | 1.000 |
 | [ccb_mcp_crossrepo_haiku_20260226_035633_variance](runs/ccb_mcp_crossrepo_haiku_20260226_035633_variance.md) | `ccb_mcp_crossrepo` | `mcp-remote-direct` | 1 | 0.850 | 1.000 |
 | [ccb_mcp_crossrepo_haiku_20260226_205845](runs/ccb_mcp_crossrepo_haiku_20260226_205845.md) | `ccb_mcp_crossrepo` | `baseline-local-direct` | 1 | 0.867 | 1.000 |
-| [ccb_mcp_crossrepo_tracing_haiku_022126](runs/ccb_mcp_crossrepo_tracing_haiku_022126.md) | `ccb_mcp_crossrepo` | `baseline` | 3 | 0.941 | 1.000 |
-| [ccb_mcp_crossrepo_tracing_haiku_022126](runs/ccb_mcp_crossrepo_tracing_haiku_022126.md) | `ccb_mcp_crossrepo` | `mcp` | 3 | 0.899 | 1.000 |
+| [ccb_mcp_crossrepo_tracing_haiku_022126](runs/ccb_mcp_crossrepo_tracing_haiku_022126.md) | `ccb_mcp_crossrepo` | `baseline-local-artifact` | 3 | 0.941 | 1.000 |
+| [ccb_mcp_crossrepo_tracing_haiku_022126](runs/ccb_mcp_crossrepo_tracing_haiku_022126.md) | `ccb_mcp_crossrepo` | `mcp-remote-artifact` | 3 | 0.899 | 1.000 |
 | [ccb_mcp_crossrepo_tracing_haiku_20260224_181919](runs/ccb_mcp_crossrepo_tracing_haiku_20260224_181919.md) | `ccb_mcp_crossrepo` | `mcp-remote-artifact` | 2 | 0.287 | 1.000 |
 | [ccb_mcp_crossrepo_tracing_haiku_20260225_011700](runs/ccb_mcp_crossrepo_tracing_haiku_20260225_011700.md) | `ccb_mcp_crossrepo` | `baseline-local-artifact` | 2 | 0.000 | 0.000 |
 | [ccb_mcp_crossrepo_tracing_haiku_20260226_035617](runs/ccb_mcp_crossrepo_tracing_haiku_20260226_035617.md) | `ccb_mcp_crossrepo` | `mcp-remote-direct` | 3 | 0.669 | 1.000 |
@@ -162,8 +153,8 @@ Historical reruns/backfills remain available in `data/official_results.json` und
 | [ccb_mcp_domain_haiku_20260226_222632](runs/ccb_mcp_domain_haiku_20260226_222632.md) | `ccb_mcp_domain` | `mcp-remote-direct` | 1 | 0.800 | 1.000 |
 | [ccb_mcp_domain_haiku_20260226_224414](runs/ccb_mcp_domain_haiku_20260226_224414.md) | `ccb_mcp_domain` | `baseline-local-direct` | 1 | 0.800 | 1.000 |
 | [ccb_mcp_domain_haiku_20260226_224414](runs/ccb_mcp_domain_haiku_20260226_224414.md) | `ccb_mcp_domain` | `mcp-remote-direct` | 1 | 0.800 | 1.000 |
-| [ccb_mcp_incident_haiku_022126](runs/ccb_mcp_incident_haiku_022126.md) | `ccb_mcp_incident` | `baseline` | 1 | 0.500 | 1.000 |
-| [ccb_mcp_incident_haiku_022126](runs/ccb_mcp_incident_haiku_022126.md) | `ccb_mcp_incident` | `mcp` | 1 | 1.000 | 1.000 |
+| [ccb_mcp_incident_haiku_022126](runs/ccb_mcp_incident_haiku_022126.md) | `ccb_mcp_incident` | `baseline-local-artifact` | 1 | 0.500 | 1.000 |
+| [ccb_mcp_incident_haiku_022126](runs/ccb_mcp_incident_haiku_022126.md) | `ccb_mcp_incident` | `mcp-remote-artifact` | 1 | 1.000 | 1.000 |
 | [ccb_mcp_incident_haiku_20260224_181919](runs/ccb_mcp_incident_haiku_20260224_181919.md) | `ccb_mcp_incident` | `mcp-remote-artifact` | 3 | 0.782 | 1.000 |
 | [ccb_mcp_incident_haiku_20260225_011700](runs/ccb_mcp_incident_haiku_20260225_011700.md) | `ccb_mcp_incident` | `baseline-local-artifact` | 3 | 0.167 | 0.333 |
 | [ccb_mcp_incident_haiku_20260226_035617](runs/ccb_mcp_incident_haiku_20260226_035617.md) | `ccb_mcp_incident` | `mcp-remote-direct` | 6 | 0.753 | 1.000 |
@@ -185,8 +176,8 @@ Historical reruns/backfills remain available in `data/official_results.json` und
 | [ccb_mcp_migration_haiku_20260226_221038](runs/ccb_mcp_migration_haiku_20260226_221038.md) | `ccb_mcp_migration` | `mcp-remote-direct` | 3 | 0.917 | 1.000 |
 | [ccb_mcp_migration_haiku_20260226_231458](runs/ccb_mcp_migration_haiku_20260226_231458.md) | `ccb_mcp_migration` | `baseline-local-direct` | 3 | 0.639 | 1.000 |
 | [ccb_mcp_migration_haiku_20260226_231458](runs/ccb_mcp_migration_haiku_20260226_231458.md) | `ccb_mcp_migration` | `mcp-remote-direct` | 3 | 0.771 | 1.000 |
-| [ccb_mcp_onboarding_haiku_022126](runs/ccb_mcp_onboarding_haiku_022126.md) | `ccb_mcp_onboarding` | `baseline` | 3 | 0.639 | 1.000 |
-| [ccb_mcp_onboarding_haiku_022126](runs/ccb_mcp_onboarding_haiku_022126.md) | `ccb_mcp_onboarding` | `mcp` | 3 | 0.778 | 1.000 |
+| [ccb_mcp_onboarding_haiku_022126](runs/ccb_mcp_onboarding_haiku_022126.md) | `ccb_mcp_onboarding` | `baseline-local-artifact` | 3 | 0.639 | 1.000 |
+| [ccb_mcp_onboarding_haiku_022126](runs/ccb_mcp_onboarding_haiku_022126.md) | `ccb_mcp_onboarding` | `mcp-remote-artifact` | 3 | 0.778 | 1.000 |
 | [ccb_mcp_onboarding_haiku_20260224_181919](runs/ccb_mcp_onboarding_haiku_20260224_181919.md) | `ccb_mcp_onboarding` | `mcp-remote-artifact` | 4 | 0.843 | 1.000 |
 | [ccb_mcp_onboarding_haiku_20260225_011700](runs/ccb_mcp_onboarding_haiku_20260225_011700.md) | `ccb_mcp_onboarding` | `baseline-local-artifact` | 4 | 0.000 | 0.000 |
 | [ccb_mcp_onboarding_haiku_20260226_035617](runs/ccb_mcp_onboarding_haiku_20260226_035617.md) | `ccb_mcp_onboarding` | `mcp-remote-direct` | 4 | 0.501 | 1.000 |
@@ -203,8 +194,8 @@ Historical reruns/backfills remain available in `data/official_results.json` und
 | [ccb_mcp_org_haiku_20260226_035628_variance](runs/ccb_mcp_org_haiku_20260226_035628_variance.md) | `ccb_mcp_org` | `mcp-remote-direct` | 3 | 0.497 | 1.000 |
 | [ccb_mcp_org_haiku_20260226_035633_variance](runs/ccb_mcp_org_haiku_20260226_035633_variance.md) | `ccb_mcp_org` | `mcp-remote-direct` | 3 | 0.515 | 1.000 |
 | [ccb_mcp_org_haiku_20260226_205845](runs/ccb_mcp_org_haiku_20260226_205845.md) | `ccb_mcp_org` | `baseline-local-direct` | 3 | 0.404 | 1.000 |
-| [ccb_mcp_platform_haiku_022126](runs/ccb_mcp_platform_haiku_022126.md) | `ccb_mcp_platform` | `baseline` | 1 | 0.928 | 1.000 |
-| [ccb_mcp_platform_haiku_022126](runs/ccb_mcp_platform_haiku_022126.md) | `ccb_mcp_platform` | `mcp` | 1 | 0.928 | 1.000 |
+| [ccb_mcp_platform_haiku_022126](runs/ccb_mcp_platform_haiku_022126.md) | `ccb_mcp_platform` | `baseline-local-artifact` | 1 | 0.928 | 1.000 |
+| [ccb_mcp_platform_haiku_022126](runs/ccb_mcp_platform_haiku_022126.md) | `ccb_mcp_platform` | `mcp-remote-artifact` | 1 | 0.928 | 1.000 |
 | [ccb_mcp_platform_haiku_20260226_035617](runs/ccb_mcp_platform_haiku_20260226_035617.md) | `ccb_mcp_platform` | `baseline-local-direct` | 2 | 0.744 | 1.000 |
 | [ccb_mcp_platform_haiku_20260226_035617](runs/ccb_mcp_platform_haiku_20260226_035617.md) | `ccb_mcp_platform` | `mcp-remote-direct` | 3 | 0.544 | 1.000 |
 | [ccb_mcp_platform_haiku_20260226_035622_variance](runs/ccb_mcp_platform_haiku_20260226_035622_variance.md) | `ccb_mcp_platform` | `baseline-local-direct` | 2 | 0.728 | 1.000 |
@@ -216,8 +207,8 @@ Historical reruns/backfills remain available in `data/official_results.json` und
 | [ccb_mcp_platform_haiku_20260226_205845](runs/ccb_mcp_platform_haiku_20260226_205845.md) | `ccb_mcp_platform` | `baseline-local-direct` | 1 | 0.583 | 1.000 |
 | [ccb_mcp_platform_haiku_20260226_214446](runs/ccb_mcp_platform_haiku_20260226_214446.md) | `ccb_mcp_platform` | `baseline-local-direct` | 1 | 0.632 | 1.000 |
 | [ccb_mcp_platform_haiku_20260226_221038](runs/ccb_mcp_platform_haiku_20260226_221038.md) | `ccb_mcp_platform` | `mcp-remote-direct` | 1 | 0.556 | 1.000 |
-| [ccb_mcp_security_haiku_022126](runs/ccb_mcp_security_haiku_022126.md) | `ccb_mcp_security` | `baseline` | 2 | 0.500 | 1.000 |
-| [ccb_mcp_security_haiku_022126](runs/ccb_mcp_security_haiku_022126.md) | `ccb_mcp_security` | `mcp` | 2 | 0.821 | 1.000 |
+| [ccb_mcp_security_haiku_022126](runs/ccb_mcp_security_haiku_022126.md) | `ccb_mcp_security` | `baseline-local-artifact` | 2 | 0.500 | 1.000 |
+| [ccb_mcp_security_haiku_022126](runs/ccb_mcp_security_haiku_022126.md) | `ccb_mcp_security` | `mcp-remote-artifact` | 2 | 0.821 | 1.000 |
 | [ccb_mcp_security_haiku_20260224_181919](runs/ccb_mcp_security_haiku_20260224_181919.md) | `ccb_mcp_security` | `mcp-remote-artifact` | 4 | 0.777 | 1.000 |
 | [ccb_mcp_security_haiku_20260225_011700](runs/ccb_mcp_security_haiku_20260225_011700.md) | `ccb_mcp_security` | `baseline-local-artifact` | 4 | 0.000 | 0.000 |
 | [ccb_mcp_security_haiku_20260226_035617](runs/ccb_mcp_security_haiku_20260226_035617.md) | `ccb_mcp_security` | `baseline-local-direct` | 1 | 0.433 | 1.000 |

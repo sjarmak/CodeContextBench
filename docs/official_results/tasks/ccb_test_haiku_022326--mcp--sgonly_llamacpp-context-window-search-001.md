@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_test_haiku_022326--mcp--sgonly_llamacpp-context-window-search-001/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_test_haiku_022326--mcp--sgonly_llamacpp-context-window-search-001/claude-code.txt)
 
 ## Metrics
 
@@ -43,3 +44,22 @@
 | `mcp__sourcegraph__sg_commit_search` |
 | `mcp__sourcegraph__sg_commit_search` |
 | `mcp__sourcegraph__sg_keyword_search` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find the pull request that improved the context window for llama3.1 series models. Let me search the repository for this information. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_commit_search` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `text` | `-` | Let me try broader search terms: |
+| 8 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_commit_search` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `text` | `-` | Perfect! I found the pull request that improved the context window for llama3.1 series models.  **PR #8676: "llama : add support for llama 3.1 rope scaling factors"**  From the commit message, this PR: - Adds llama 3.1 r... |

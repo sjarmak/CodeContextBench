@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_test_haiku_022326--baseline--kafka-security-review-001/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_test_haiku_022326--baseline--kafka-security-review-001/claude-code.txt)
 
 ## Metrics
 
@@ -47,3 +48,29 @@
 | `TodoWrite` |
 | `Write` |
 | `TodoWrite` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll analyze the modified files in the Kafka security subsystem to identify injected defects. Let me start by reading each file. |
+| 3 | `assistant` | `tool_use` | `Read` | - |
+| 4 | `assistant` | `tool_use` | `Read` | - |
+| 5 | `assistant` | `tool_use` | `Read` | - |
+| 6 | `assistant` | `tool_use` | `Read` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `text` | `-` | Now let me analyze these files for security defects. I'll examine each one carefully. |
+| 12 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `text` | `-` | I found several critical security defects. Let me create the detailed review report: |
+| 15 | `assistant` | `tool_use` | `Write` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `text` | `-` | I've completed the security code review of the Apache Kafka PR. I found **4 critical/high-severity defects** in the security subsystem:  ## Summary of Defects  ### 1. **ScramSaslServer.java (Line 135)** - CRITICAL **Cred... |

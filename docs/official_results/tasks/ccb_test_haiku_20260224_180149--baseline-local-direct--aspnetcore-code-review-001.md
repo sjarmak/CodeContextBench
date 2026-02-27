@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_test_haiku_20260224_180149--baseline-local-direct--aspnetcore-code-review-001/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_test_haiku_20260224_180149--baseline-local-direct--aspnetcore-code-review-001/claude-code.txt)
 
 ## Metrics
 
@@ -44,3 +45,25 @@
 | `Read` |
 | `Read` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll review the two Blazor DisplayName feature files for functional bugs and compliance violations. Let me start by reading the source files. |
+| 3 | `assistant` | `tool_use` | `Read` | - |
+| 4 | `assistant` | `tool_use` | `Read` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `text` | `-` | Now I'll analyze these files for functional bugs and compliance violations. |
+| 8 | `assistant` | `tool_use` | `Read` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `assistant` | `tool_use` | `Read` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `text` | `-` | I've identified three defects in the DisplayName component and its helper. Let me analyze and document each one:  ## Analysis  **Defect 1 (DisplayName.cs:27)** - Type contract violation: The `For` parameter is declared a... |
+| 13 | `assistant` | `tool_use` | `Write` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `text` | `-` | Perfect! I've completed the code review and created the report at `/workspace/review.json`. Here's a summary of the three defects found:  ## Summary of Defects  ### 1. **Type Contract Violation (HIGH)** - DisplayName.cs:... |

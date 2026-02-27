@@ -1,6 +1,6 @@
 # ccb_mcp_crossrepo_tracing_haiku_022126
 
-## baseline
+## baseline-local-artifact
 
 - Valid tasks: `3`
 - Mean reward: `0.941`
@@ -12,7 +12,7 @@
 | [ccx-dep-trace-001](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--baseline--ccx-dep-trace-001.md) | `passed` | 0.824 | 0.000 | 11 | traj, tx |
 | [ccx-dep-trace-004](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--baseline--ccx-dep-trace-004.md) | `passed` | 1.000 | 0.000 | 8 | traj, tx |
 
-## mcp
+## mcp-remote-artifact
 
 - Valid tasks: `3`
 - Mean reward: `0.899`

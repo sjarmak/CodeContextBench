@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_test_haiku_20260224_180149--baseline-local-direct--calcom-code-review-001/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_test_haiku_20260224_180149--baseline-local-direct--calcom-code-review-001/claude-code.txt)
 
 ## Metrics
 
@@ -46,3 +47,27 @@
 | `Read` |
 | `Glob` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll review the three TypeScript files for defects related to the feature opt-in scope configuration. Let me start by reading the files. |
+| 3 | `assistant` | `tool_use` | `Read` | - |
+| 4 | `assistant` | `tool_use` | `Read` | - |
+| 5 | `assistant` | `tool_use` | `Read` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `text` | `-` | Now I'll analyze these files for defects. Let me examine the code carefully. |
+| 10 | `assistant` | `tool_use` | `Read` | - |
+| 11 | `assistant` | `tool_use` | `Glob` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `text` | `-` | Now I'll create a detailed review report. I've identified six defects across the three files. Let me prepare the report: |
+| 15 | `assistant` | `tool_use` | `Write` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `text` | `-` | Perfect! I've completed the comprehensive code review of the feature opt-in scope configuration PR. Here's a summary of the **6 defects** found:  ## Critical Defects (3)  1. **Inverted Filter in `listFeaturesForUser` (Fe... |

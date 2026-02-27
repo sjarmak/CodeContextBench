@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_compliance_haiku_20260226_035617--mcp-remote-direct--mcp_CCX-compliance-053_p3juY2/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_compliance_haiku_20260226_035617--mcp-remote-direct--mcp_CCX-compliance-053_p3juY2/claude-code.txt)
 
 ## Metrics
 
@@ -54,3 +55,66 @@
 | `mcp__sourcegraph__sg_list_files` |
 | `mcp__sourcegraph__sg_list_files` |
 | `mcp__sourcegraph__sg_list_files` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find all Java/Scala source files in the Kafka repository that produce audit log entries for authorization decisions. Let me start by searching for audit-related code. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_nls_search` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 18 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 30 | `user` | `text` | `-` | - |
+| 31 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_nls_search` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 34 | `user` | `text` | `-` | - |
+| 35 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 36 | `user` | `text` | `-` | - |
+| 37 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 38 | `user` | `text` | `-` | - |
+| 39 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 40 | `user` | `text` | `-` | - |
+| 41 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 42 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 43 | `user` | `text` | `-` | - |
+| 44 | `user` | `text` | `-` | - |
+| 45 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 46 | `user` | `text` | `-` | - |
+| 47 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_nls_search` | - |
+| 48 | `user` | `text` | `-` | - |
+| 49 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 50 | `user` | `text` | `-` | - |
+| 51 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 52 | `user` | `text` | `-` | - |
+| 53 | `assistant` | `text` | `-` | Now let me create a comprehensive report with my findings: |
+| 54 | `assistant` | `tool_use` | `Write` | - |
+| 55 | `user` | `text` | `-` | - |
+| 56 | `assistant` | `text` | `-` | Perfect! I've completed the audit logging analysis for Apache Kafka. Here's a summary of my findings:  ## Summary  I found that Apache Kafka produces audit log entries for authorization decisions through the **StandardAu... |

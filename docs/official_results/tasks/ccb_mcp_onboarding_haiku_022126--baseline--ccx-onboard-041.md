@@ -1,4 +1,4 @@
-# ccx-onboard-041 (baseline)
+# ccx-onboard-041 (baseline-local-artifact)
 
 - Run: `ccb_mcp_onboarding_haiku_022126`
 - Status: `passed`
@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_onboarding_haiku_022126--baseline--ccx-onboard-041/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_onboarding_haiku_022126--baseline--ccx-onboard-041/claude-code.txt)
 
 ## Metrics
 
@@ -49,3 +50,33 @@
 | `Read` |
 | `Write` |
 | `Read` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you audit the scipy.stats API call sites in pandas. Let me start by exploring the workspace to understand the repository structure and locate all files with `from scipy.stats import` statements. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `tool_use` | `Bash` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `Bash` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `text` | `-` | Now let me verify each of these imports by examining the context around them: |
+| 10 | `assistant` | `tool_use` | `Read` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `tool_use` | `Read` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `tool_use` | `Read` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `Read` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `text` | `-` | Perfect! I've identified all files with `from scipy.stats import` statements. Now let me create the answer file: |
+| 19 | `assistant` | `tool_use` | `Write` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `tool_use` | `Read` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `text` | `-` | ## Summary  I've completed the scipy.stats audit for pandas-dev/pandas. Here are my findings:  **Four files** contain `from scipy.stats import` statements:  1. **pandas/core/nanops.py** (lines 1622, 1629)    - Imports: `... |

@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_design_haiku_022326--baseline--envoy-routeconfig-dep-chain-001/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_design_haiku_022326--baseline--envoy-routeconfig-dep-chain-001/claude-code.txt)
 
 ## Metrics
 
@@ -53,3 +54,42 @@
 | `Read` |
 | `Bash` |
 | `Bash` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you trace the `RouteConfiguration` type through the Envoy xDS dependency chain. Let me start by exploring the repositories and finding the usage site, generated code, and protobuf definition. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `assistant` | `tool_use` | `Bash` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `Read` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `Bash` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `Grep` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `Bash` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `Read` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `Bash` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `tool_use` | `Bash` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `tool_use` | `Read` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `tool_use` | `Bash` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `Bash` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `Read` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `text` | `-` | Now let me create the chain.json file with all the traced information: |
+| 30 | `assistant` | `tool_use` | `Write` | - |
+| 31 | `user` | `text` | `-` | - |
+| 32 | `assistant` | `text` | `-` | Perfect! I've traced the `RouteConfiguration` type through the Envoy xDS dependency chain. Here's a summary of the path:  ## Trace Summary  **Step 1: Usage in Istio** (`istio/istio`) - **File**: `pilot/pkg/networking/cor... |

@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_compliance_haiku_20260226_221038--mcp-remote-direct--mcp_CCX-compliance-118_DMoIW8/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_compliance_haiku_20260226_221038--mcp-remote-direct--mcp_CCX-compliance-118_DMoIW8/claude-code.txt)
 
 ## Metrics
 
@@ -52,3 +53,52 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you audit Django's admin filter rendering pipeline. Let me systematically search for the key components. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `text` | `-` | Now let me read the key files to understand the filter rendering pipeline. |
+| 10 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `text` | `-` | Let me continue reading the filters.py to see more of the filter implementations: |
+| 15 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `text` | `-` | Now let me search for the template that renders filters in the sidebar: |
+| 18 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `text` | `-` | Let me read the template file and the admin_list.py template tags: |
+| 23 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `text` | `-` | Let me read the change_list.html template to see how filters are rendered: |
+| 28 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 29 | `user` | `text` | `-` | - |
+| 30 | `assistant` | `text` | `-` | Now let me see more of the ChangeList class to understand how filter_specs is populated: |
+| 31 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `text` | `-` | Let me search for where filter_specs is set in the ChangeList class: |
+| 34 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 35 | `user` | `text` | `-` | - |
+| 36 | `assistant` | `text` | `-` | Let me read around line 529 to see the full context: |
+| 37 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 38 | `user` | `text` | `-` | - |
+| 39 | `assistant` | `text` | `-` | Perfect! I now have a complete picture of Django's admin filter rendering pipeline. Let me compile my findings into the answer.json file. |
+| 40 | `assistant` | `tool_use` | `Write` | - |
+| 41 | `user` | `text` | `-` | - |
+| 42 | `assistant` | `text` | `-` | I've completed the audit of Django's admin filter rendering pipeline. Here's what I found:  ## Summary  I identified the complete filter rendering pipeline that controls when empty related-field filters appear in the Dja... |

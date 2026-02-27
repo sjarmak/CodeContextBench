@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_domain_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-domain-112_P5bm8r/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_domain_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-domain-112_P5bm8r/claude-code.txt)
 
 ## Metrics
 
@@ -52,3 +53,40 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you trace Firefox's Servo-based CSS style system by finding the key C++ source files. Let me search for these components in the repository. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 6 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 7 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `text` | `-` | Excellent! I've found the key files. Now let me read the header files to get the exact class and function names. |
+| 14 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `text` | `-` | Let me read the complete RestyleManager header and the moz.build file: |
+| 23 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `text` | `-` | Perfect! I now have all the information needed. Let me create the answer file with the complete findings: |
+| 28 | `assistant` | `tool_use` | `Write` | - |
+| 29 | `user` | `text` | `-` | - |
+| 30 | `assistant` | `text` | `-` | Perfect! I've successfully identified and documented all the key C++ source files in Firefox's Servo-based CSS style system. Here's what I found:  ## Summary  I've created `/workspace/answer.json` with complete informati... |

@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_compliance_haiku_20260226_035628_variance--mcp-remote-direct--mcp_ccx-compliance-057-ds_o2fJgI/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_compliance_haiku_20260226_035628_variance--mcp-remote-direct--mcp_ccx-compliance-057-ds_o2fJgI/claude-code.txt)
 
 ## Metrics
 
@@ -57,3 +58,73 @@
 | `mcp__sourcegraph__sg_keyword_search` |
 | `mcp__sourcegraph__sg_keyword_search` |
 | `mcp__sourcegraph__sg_nls_search` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find all the files that form the SSO settings control across the 4 layers. Let me start by using Deep Search to trace the `ssoSettingsApi` feature flag through the codebase. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_deepsearch` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_deepsearch_read` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `text` | `-` | Let me search for the SSO settings API feature flag directly: |
+| 8 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_nls_search` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_repos` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_nls_search` | - |
+| 27 | `user` | `text` | `-` | - |
+| 28 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 29 | `user` | `text` | `-` | - |
+| 30 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 31 | `user` | `text` | `-` | - |
+| 32 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 33 | `user` | `text` | `-` | - |
+| 34 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 35 | `user` | `text` | `-` | - |
+| 36 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 37 | `user` | `text` | `-` | - |
+| 38 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 39 | `user` | `text` | `-` | - |
+| 40 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 41 | `user` | `text` | `-` | - |
+| 42 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 43 | `user` | `text` | `-` | - |
+| 44 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 45 | `user` | `text` | `-` | - |
+| 46 | `assistant` | `text` | `-` | Now let me read some key files to get the full picture. Let me start by reading the service interface and implementation summary: |
+| 47 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 48 | `user` | `text` | `-` | - |
+| 49 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 50 | `user` | `text` | `-` | - |
+| 51 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 52 | `user` | `text` | `-` | - |
+| 53 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 54 | `user` | `text` | `-` | - |
+| 55 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 56 | `user` | `text` | `-` | - |
+| 57 | `assistant` | `text` | `-` | Now let me read the access control utilities to complete the picture: |
+| 58 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 59 | `user` | `text` | `-` | - |
+| 60 | `assistant` | `text` | `-` | Perfect! Now I have all the necessary information. Let me compile the comprehensive answer with all the files and their connections across the 4 layers. |
+| 61 | `assistant` | `tool_use` | `Write` | - |
+| 62 | `user` | `text` | `-` | - |
+| 63 | `assistant` | `text` | `-` | Perfect! I've created a comprehensive answer documenting all files that form the SSO settings control across the 4 layers. The answer is stored in `/workspace/answer.json`.  ## Summary of Findings  I've identified **31 a... |

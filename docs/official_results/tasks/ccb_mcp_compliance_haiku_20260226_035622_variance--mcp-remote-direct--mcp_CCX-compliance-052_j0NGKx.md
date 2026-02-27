@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_compliance_haiku_20260226_035622_variance--mcp-remote-direct--mcp_CCX-compliance-052_j0NGKx/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_compliance_haiku_20260226_035622_variance--mcp-remote-direct--mcp_CCX-compliance-052_j0NGKx/claude-code.txt)
 
 ## Metrics
 
@@ -52,3 +53,90 @@
 | `mcp__sourcegraph__sg_list_files` |
 | `mcp__sourcegraph__sg_list_files` |
 | `mcp__sourcegraph__sg_list_files` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you audit the access logging infrastructure in Envoy. Let me start by exploring the relevant directories and files in the repositories. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 12 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 13 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 20 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 30 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 31 | `user` | `text` | `-` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 34 | `user` | `text` | `-` | - |
+| 35 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 36 | `user` | `text` | `-` | - |
+| 37 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 38 | `user` | `text` | `-` | - |
+| 39 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 40 | `user` | `text` | `-` | - |
+| 41 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 42 | `user` | `text` | `-` | - |
+| 43 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 44 | `user` | `text` | `-` | - |
+| 45 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 46 | `user` | `text` | `-` | - |
+| 47 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 48 | `user` | `text` | `-` | - |
+| 49 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 50 | `user` | `text` | `-` | - |
+| 51 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 52 | `user` | `text` | `-` | - |
+| 53 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 54 | `user` | `text` | `-` | - |
+| 55 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 56 | `user` | `text` | `-` | - |
+| 57 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 58 | `user` | `text` | `-` | - |
+| 59 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 60 | `user` | `text` | `-` | - |
+| 61 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 62 | `user` | `text` | `-` | - |
+| 63 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 64 | `user` | `text` | `-` | - |
+| 65 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 66 | `user` | `text` | `-` | - |
+| 67 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 68 | `user` | `text` | `-` | - |
+| 69 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 70 | `user` | `text` | `-` | - |
+| 71 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 72 | `user` | `text` | `-` | - |
+| 73 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 74 | `user` | `text` | `-` | - |
+| 75 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 76 | `user` | `text` | `-` | - |
+| 77 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 78 | `user` | `text` | `-` | - |
+| 79 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 80 | `user` | `text` | `-` | - |

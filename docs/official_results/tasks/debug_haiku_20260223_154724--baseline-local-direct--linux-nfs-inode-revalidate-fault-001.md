@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/debug_haiku_20260223_154724--baseline-local-direct--linux-nfs-inode-revalidate-fault-001/trajectory.json)
+- Bundled transcript: [link](../traces/debug_haiku_20260223_154724--baseline-local-direct--linux-nfs-inode-revalidate-fault-001/claude-code.txt)
 
 ## Metrics
 
@@ -56,3 +57,90 @@
 | `Grep` |
 | `Grep` |
 | `Grep` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you localize this NFS inode revalidation bug. Let me start by analyzing the kernel source code and understanding the issue. |
+| 3 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `tool_use` | `Glob` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `Grep` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `Grep` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `text` | `-` | Let me search for the error messages from the bug report: |
+| 12 | `assistant` | `tool_use` | `Grep` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `tool_use` | `Grep` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `Grep` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `Read` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `tool_use` | `Grep` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `Grep` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `tool_use` | `Grep` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `tool_use` | `Grep` | - |
+| 27 | `user` | `text` | `-` | - |
+| 28 | `assistant` | `tool_use` | `Glob` | - |
+| 29 | `user` | `text` | `-` | - |
+| 30 | `assistant` | `tool_use` | `Task` | - |
+| 31 | `user` | `text` | `-` | Search the kernel code for: 1. Error code -512 or EIO (I/O error) 2. RPC reply handling code 3. XDR decoding errors in getattr responses 4. Any timeout or retry logic changes in RPC layer Focus on files in net/sunrpc/ an... |
+| 32 | `assistant` | `tool_use` | `Glob` | - |
+| 33 | `assistant` | `tool_use` | `Glob` | - |
+| 34 | `user` | `text` | `-` | - |
+| 35 | `user` | `text` | `-` | - |
+| 36 | `assistant` | `tool_use` | `Grep` | - |
+| 37 | `assistant` | `tool_use` | `Grep` | - |
+| 38 | `user` | `text` | `-` | - |
+| 39 | `user` | `text` | `-` | - |
+| 40 | `assistant` | `tool_use` | `Grep` | - |
+| 41 | `user` | `text` | `-` | - |
+| 42 | `assistant` | `tool_use` | `Grep` | - |
+| 43 | `user` | `text` | `-` | - |
+| 44 | `assistant` | `tool_use` | `Grep` | - |
+| 45 | `user` | `text` | `-` | - |
+| 46 | `assistant` | `tool_use` | `Grep` | - |
+| 47 | `user` | `text` | `-` | - |
+| 48 | `assistant` | `tool_use` | `Read` | - |
+| 49 | `user` | `text` | `-` | - |
+| 50 | `assistant` | `tool_use` | `Read` | - |
+| 51 | `user` | `text` | `-` | - |
+| 52 | `assistant` | `tool_use` | `Read` | - |
+| 53 | `user` | `text` | `-` | - |
+| 54 | `assistant` | `tool_use` | `Read` | - |
+| 55 | `user` | `text` | `-` | - |
+| 56 | `assistant` | `tool_use` | `Grep` | - |
+| 57 | `user` | `text` | `-` | - |
+| 58 | `assistant` | `tool_use` | `Grep` | - |
+| 59 | `user` | `text` | `-` | - |
+| 60 | `assistant` | `tool_use` | `Grep` | - |
+| 61 | `user` | `text` | `-` | - |
+| 62 | `assistant` | `tool_use` | `Grep` | - |
+| 63 | `user` | `text` | `-` | - |
+| 64 | `assistant` | `tool_use` | `Grep` | - |
+| 65 | `user` | `text` | `-` | - |
+| 66 | `assistant` | `tool_use` | `Grep` | - |
+| 67 | `user` | `text` | `-` | - |
+| 68 | `assistant` | `tool_use` | `Grep` | - |
+| 69 | `user` | `text` | `-` | - |
+| 70 | `assistant` | `tool_use` | `Bash` | - |
+| 71 | `user` | `text` | `-` | - |
+| 72 | `assistant` | `tool_use` | `Read` | - |
+| 73 | `user` | `text` | `-` | - |
+| 74 | `assistant` | `tool_use` | `Grep` | - |
+| 75 | `user` | `text` | `-` | - |
+| 76 | `assistant` | `tool_use` | `Read` | - |
+| 77 | `user` | `text` | `-` | - |
+| 78 | `assistant` | `tool_use` | `Grep` | - |
+| 79 | `user` | `text` | `-` | - |
+| 80 | `assistant` | `tool_use` | `Grep` | - |

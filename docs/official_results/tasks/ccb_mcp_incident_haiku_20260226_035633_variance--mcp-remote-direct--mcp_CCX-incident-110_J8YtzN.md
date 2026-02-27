@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_incident_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-incident-110_J8YtzN/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_incident_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-incident-110_J8YtzN/claude-code.txt)
 
 ## Metrics
 
@@ -53,3 +54,42 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you trace the content process lifecycle in Firefox's multi-process architecture. Let me search for the key files and classes you've identified. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `text` | `-` | Now let me read the header files to confirm the exact class definitions: |
+| 12 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `text` | `-` | Perfect! Now let me verify the source files as well: |
+| 21 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `text` | `-` | Perfect! I've found all the key files related to Firefox's content process lifecycle. Now let me create the answer file: |
+| 30 | `assistant` | `tool_use` | `Write` | - |
+| 31 | `user` | `text` | `-` | - |
+| 32 | `assistant` | `text` | `-` | Perfect! I've successfully identified all the key C++ files in Firefox's content process lifecycle management and created the answer file. Here's a summary of what I found:  ## Firefox Content Process Lifecycle Files (do... |

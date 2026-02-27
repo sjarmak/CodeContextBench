@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_onboarding_haiku_20260226_035628_variance--mcp-remote-direct--mcp_CCX-onboard-103_zia0OT/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_onboarding_haiku_20260226_035628_variance--mcp-remote-direct--mcp_CCX-onboard-103_zia0OT/claude-code.txt)
 
 ## Metrics
 
@@ -50,3 +51,38 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find the key files in the LLVM IR-to-Machine-Code generation pipeline. Let me search for these files in the LLVM repository using Sourcegraph. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 6 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 7 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `text` | `-` | Now let me search for the MachineFunction class definition: |
+| 14 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `text` | `-` | Let me search specifically for the MachineFunction header file: |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `text` | `-` | Now let me verify the MachineFunction class definition by reading the header file: |
+| 20 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `text` | `-` | Let me read further to find the MachineFunction class definition: |
+| 23 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `text` | `-` | Perfect! I've found all the key files in the LLVM IR-to-Machine-Code generation pipeline. Let me create the answer file with the findings: |
+| 26 | `assistant` | `tool_use` | `Write` | - |
+| 27 | `user` | `text` | `-` | - |
+| 28 | `assistant` | `text` | `-` | Perfect! I've successfully identified all the key files in the LLVM IR-to-Machine-Code generation pipeline and created a comprehensive answer file. Here's a summary of what I found:  ## Key Components Found:  1. **Select... |

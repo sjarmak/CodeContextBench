@@ -1,4 +1,4 @@
-# ccx-config-trace-010 (baseline)
+# ccx-config-trace-010 (baseline-local-artifact)
 
 - Run: `ccb_mcp_crossrepo_tracing_haiku_022126`
 - Status: `passed`
@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_crossrepo_tracing_haiku_022126--baseline--ccx-config-trace-010/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_crossrepo_tracing_haiku_022126--baseline--ccx-config-trace-010/claude-code.txt)
 
 ## Metrics
 
@@ -52,3 +53,47 @@
 | `Bash` |
 | `Bash` |
 | `Bash` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you locate the authoritative source of the `rest.Config` struct. Let me start by exploring the available repositories and finding where `Config` is actually defined. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `tool_use` | `Bash` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `Read` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `text` | `-` | Now let me check for the `DeepCopyInto` method mentioned in the stack trace: |
+| 10 | `assistant` | `tool_use` | `Bash` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `tool_use` | `Read` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `tool_use` | `Bash` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `Bash` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `Bash` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `tool_use` | `Bash` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `Bash` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `tool_use` | `Bash` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `tool_use` | `Bash` | - |
+| 27 | `user` | `text` | `-` | - |
+| 28 | `assistant` | `tool_use` | `Bash` | - |
+| 29 | `user` | `text` | `-` | - |
+| 30 | `assistant` | `tool_use` | `Bash` | - |
+| 31 | `user` | `text` | `-` | - |
+| 32 | `assistant` | `tool_use` | `Bash` | - |
+| 33 | `user` | `text` | `-` | - |
+| 34 | `assistant` | `text` | `-` | Now let me create the answer file with the findings: |
+| 35 | `assistant` | `tool_use` | `Write` | - |
+| 36 | `user` | `text` | `-` | - |
+| 37 | `assistant` | `text` | `-` | Perfect! I've successfully located the authoritative source for the `rest.Config` struct and created the answer file.  ## Summary  The `rest.Config` struct is **defined** in the **kubernetes/client-go repository** at: - ... |

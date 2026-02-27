@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_onboarding_haiku_20260225_011700--baseline-local-artifact--bl_CCX-onboard-138_i6AWyj/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_onboarding_haiku_20260225_011700--baseline-local-artifact--bl_CCX-onboard-138_i6AWyj/claude-code.txt)
 
 ## Metrics
 
@@ -54,3 +55,86 @@
 | `Glob` |
 | `Glob` |
 | `Bash` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find the key C++ source files that define the document model architecture in LibreOffice. Let me search the repository systematically for these core classes. |
+| 3 | `assistant` | `tool_use` | `Glob` | - |
+| 4 | `assistant` | `tool_use` | `Glob` | - |
+| 5 | `assistant` | `tool_use` | `Glob` | - |
+| 6 | `assistant` | `tool_use` | `Glob` | - |
+| 7 | `assistant` | `tool_use` | `Glob` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `text` | `-` | Let me check what's actually in the workspace directory: |
+| 14 | `assistant` | `tool_use` | `Bash` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `text` | `-` | Now let me search for the key files with the correct path: |
+| 17 | `assistant` | `tool_use` | `Glob` | - |
+| 18 | `assistant` | `tool_use` | `Glob` | - |
+| 19 | `assistant` | `tool_use` | `Glob` | - |
+| 20 | `assistant` | `tool_use` | `Glob` | - |
+| 21 | `assistant` | `tool_use` | `Glob` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `text` | `-` | Let me check the directory structure first: |
+| 28 | `assistant` | `tool_use` | `Bash` | - |
+| 29 | `user` | `text` | `-` | - |
+| 30 | `assistant` | `text` | `-` | Let me verify the key directories exist: |
+| 31 | `assistant` | `tool_use` | `Bash` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `text` | `-` | Now let me search more broadly for the header files: |
+| 34 | `assistant` | `tool_use` | `Bash` | - |
+| 35 | `user` | `text` | `-` | - |
+| 36 | `assistant` | `tool_use` | `Bash` | - |
+| 37 | `user` | `text` | `-` | - |
+| 38 | `assistant` | `tool_use` | `Bash` | - |
+| 39 | `user` | `text` | `-` | - |
+| 40 | `assistant` | `tool_use` | `Bash` | - |
+| 41 | `user` | `text` | `-` | - |
+| 42 | `assistant` | `tool_use` | `Bash` | - |
+| 43 | `user` | `text` | `-` | - |
+| 44 | `assistant` | `text` | `-` | Perfect! I found all 5 key files. Let me verify they contain the expected class definitions: |
+| 45 | `assistant` | `tool_use` | `Read` | - |
+| 46 | `user` | `text` | `-` | - |
+| 47 | `assistant` | `tool_use` | `Read` | - |
+| 48 | `user` | `text` | `-` | - |
+| 49 | `assistant` | `tool_use` | `Read` | - |
+| 50 | `user` | `text` | `-` | - |
+| 51 | `assistant` | `tool_use` | `Read` | - |
+| 52 | `user` | `text` | `-` | - |
+| 53 | `assistant` | `tool_use` | `Read` | - |
+| 54 | `user` | `text` | `-` | - |
+| 55 | `assistant` | `text` | `-` | Let me search for the class definitions within these files: |
+| 56 | `assistant` | `tool_use` | `Grep` | - |
+| 57 | `user` | `text` | `-` | - |
+| 58 | `assistant` | `tool_use` | `Grep` | - |
+| 59 | `user` | `text` | `-` | - |
+| 60 | `assistant` | `tool_use` | `Grep` | - |
+| 61 | `user` | `text` | `-` | - |
+| 62 | `assistant` | `tool_use` | `Grep` | - |
+| 63 | `user` | `text` | `-` | - |
+| 64 | `assistant` | `tool_use` | `Grep` | - |
+| 65 | `user` | `text` | `-` | - |
+| 66 | `assistant` | `text` | `-` | Let me search for SdDrawDocument more broadly: |
+| 67 | `assistant` | `tool_use` | `Bash` | - |
+| 68 | `user` | `text` | `-` | - |
+| 69 | `assistant` | `tool_use` | `Bash` | - |
+| 70 | `user` | `text` | `-` | - |
+| 71 | `assistant` | `tool_use` | `Bash` | - |
+| 72 | `user` | `text` | `-` | - |
+| 73 | `assistant` | `text` | `-` | Perfect! Now I have found all the key files. Let me create the answer.json file with the findings: |
+| 74 | `assistant` | `tool_use` | `Write` | - |
+| 75 | `user` | `text` | `-` | - |
+| 76 | `assistant` | `text` | `-` | Perfect! I've successfully located all five key C++ source files that define the LibreOffice document model architecture:  ## Summary of Findings  **1. SfxObjectShell** — `include/sfx2/objsh.hxx`    - Base document shell... |

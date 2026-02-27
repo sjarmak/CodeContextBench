@@ -1,4 +1,4 @@
-# ccx-explore-091-ds (baseline)
+# ccx-explore-091-ds (baseline-local-artifact)
 
 - Run: `ccb_mcp_platform_haiku_022126`
 - Status: `passed`
@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_platform_haiku_022126--baseline--ccx-explore-091-ds/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_platform_haiku_022126--baseline--ccx-explore-091-ds/claude-code.txt)
 
 ## Metrics
 
@@ -52,3 +53,53 @@
 | `Read` |
 | `Read` |
 | `Bash` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you identify the canonical patterns for deploying services in Kubernetes. Let me explore the available repositories to find the API type definitions, client-side code patterns, and documentation. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `assistant` | `tool_use` | `Bash` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `Bash` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `Bash` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `Read` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `Read` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `Bash` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `Bash` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `tool_use` | `Read` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `tool_use` | `Read` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `tool_use` | `Read` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `Bash` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `Bash` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `tool_use` | `Read` | - |
+| 30 | `user` | `text` | `-` | - |
+| 31 | `assistant` | `tool_use` | `Bash` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `tool_use` | `Bash` | - |
+| 34 | `user` | `text` | `-` | - |
+| 35 | `assistant` | `tool_use` | `Read` | - |
+| 36 | `user` | `text` | `-` | - |
+| 37 | `assistant` | `text` | `-` | Now I'll create the comprehensive answer.json file with all my findings: |
+| 38 | `assistant` | `tool_use` | `Write` | - |
+| 39 | `user` | `text` | `-` | - |
+| 40 | `assistant` | `text` | `-` | Perfect! I've successfully identified and documented the canonical patterns for deploying services in Kubernetes. Let me verify the answer file was created correctly: |
+| 41 | `assistant` | `tool_use` | `Read` | - |
+| 42 | `user` | `text` | `-` | - |
+| 43 | `assistant` | `text` | `-` | Perfect! I've successfully identified and documented the canonical patterns for deploying new services in the Kubernetes ecosystem. Here's what I found:  ## Summary  I created `/workspace/answer.json` with comprehensive ... |

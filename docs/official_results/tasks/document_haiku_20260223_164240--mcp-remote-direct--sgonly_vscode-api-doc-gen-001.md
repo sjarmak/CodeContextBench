@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/document_haiku_20260223_164240--mcp-remote-direct--sgonly_vscode-api-doc-gen-001/trajectory.json)
+- Bundled transcript: [link](../traces/document_haiku_20260223_164240--mcp-remote-direct--sgonly_vscode-api-doc-gen-001/claude-code.txt)
 
 ## Metrics
 
@@ -54,3 +55,56 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_nls_search` |
 | `mcp__sourcegraph__sg_keyword_search` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you generate comprehensive API reference documentation for the VS Code Diagnostic API. Let me start by exploring the repository structure and finding the relevant API definitions. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_nls_search` | - |
+| 24 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 30 | `user` | `text` | `-` | - |
+| 31 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 34 | `user` | `text` | `-` | - |
+| 35 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 36 | `user` | `text` | `-` | - |
+| 37 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 38 | `user` | `text` | `-` | - |
+| 39 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 40 | `user` | `text` | `-` | - |
+| 41 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 42 | `user` | `text` | `-` | - |
+| 43 | `assistant` | `text` | `-` | Now I'll create the comprehensive API reference documentation. Let me compile all the information I've gathered: |
+| 44 | `assistant` | `tool_use` | `Write` | - |
+| 45 | `user` | `text` | `-` | - |
+| 46 | `assistant` | `text` | `-` | Perfect! I've successfully generated comprehensive API reference documentation for the VS Code Diagnostic API. The documentation has been written to `/workspace/documentation.md` and includes:  ## Summary of Coverage:  #... |

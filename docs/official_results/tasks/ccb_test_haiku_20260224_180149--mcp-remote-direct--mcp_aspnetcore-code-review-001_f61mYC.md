@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_test_haiku_20260224_180149--mcp-remote-direct--mcp_aspnetcore-code-review-001_f61mYC/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_test_haiku_20260224_180149--mcp-remote-direct--mcp_aspnetcore-code-review-001_f61mYC/claude-code.txt)
 
 ## Metrics
 
@@ -49,3 +50,31 @@
 | `Write` |
 | `TodoWrite` |
 | `Read` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll review the DisplayName feature implementation by reading the two core files and analyzing them for defects. Let me start by retrieving the source files. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `text` | `-` | Now let me analyze these files for defects. I'll examine them carefully for functional bugs and compliance violations. |
+| 8 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `text` | `-` | Now let me analyze the files systematically for defects:  ## Analysis Summary  I've identified **2 critical functional bugs** in `ExpressionMemberAccessor.cs`:  ### Bug 1: Empty String Not Handled in DisplayAttribute.Get... |
+| 13 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `Write` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `tool_use` | `Read` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `text` | `-` | Perfect! I've completed the code review and produced the structured report. Here's a summary of the defects I found:  ## Review Summary  I identified **2 functional bugs** in the DisplayName feature implementation:  ### ... |

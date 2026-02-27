@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/secure_haiku_20260223_232545--mcp-remote-direct--sgonly_kafka-sasl-auth-audit-001/trajectory.json)
+- Bundled transcript: [link](../traces/secure_haiku_20260223_232545--mcp-remote-direct--sgonly_kafka-sasl-auth-audit-001/claude-code.txt)
 
 ## Metrics
 
@@ -53,3 +54,66 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll conduct a comprehensive security analysis of the Kafka SASL authentication flow. This is a complex task that requires tracing the authentication mechanisms, data flows, and authorization checks. Let me start by expl... |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `text` | `-` | Let me read the key files to understand the architecture. I'll start with the channel builders and authenticators: |
+| 20 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 27 | `user` | `text` | `-` | - |
+| 28 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 29 | `user` | `text` | `-` | - |
+| 30 | `assistant` | `text` | `-` | Now let me examine the PLAIN and SCRAM mechanisms to understand how they process untrusted data: |
+| 31 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 34 | `user` | `text` | `-` | - |
+| 35 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 36 | `user` | `text` | `-` | - |
+| 37 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 38 | `user` | `text` | `-` | - |
+| 39 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 40 | `user` | `text` | `-` | - |
+| 41 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 42 | `user` | `text` | `-` | - |
+| 43 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 44 | `user` | `text` | `-` | - |
+| 45 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 46 | `user` | `text` | `-` | - |
+| 47 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 48 | `user` | `text` | `-` | - |
+| 49 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 50 | `user` | `text` | `-` | - |
+| 51 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 52 | `user` | `text` | `-` | - |
+| 53 | `assistant` | `text` | `-` | Now let me create a comprehensive security analysis document based on my findings: |
+| 54 | `assistant` | `tool_use` | `Write` | - |
+| 55 | `user` | `text` | `-` | - |
+| 56 | `assistant` | `text` | `-` | Perfect! I've completed a comprehensive security analysis of the Kafka SASL authentication flow. Here's what I've documented:  ## Analysis Summary  I've created a detailed security analysis covering:  ### **Entry Points ... |

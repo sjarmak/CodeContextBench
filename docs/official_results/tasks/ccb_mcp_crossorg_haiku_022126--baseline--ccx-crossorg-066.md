@@ -1,4 +1,4 @@
-# ccx-crossorg-066 (baseline)
+# ccx-crossorg-066 (baseline-local-artifact)
 
 - Run: `ccb_mcp_crossorg_haiku_022126`
 - Status: `passed`
@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_crossorg_haiku_022126--baseline--ccx-crossorg-066/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_crossorg_haiku_022126--baseline--ccx-crossorg-066/claude-code.txt)
 
 ## Metrics
 
@@ -48,3 +49,34 @@
 | `Bash` |
 | `Write` |
 | `Read` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you identify the authoritative source for the `go.etcd.io/etcd/client/v3` module. Let me search through the available repositories to find the module declaration. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `assistant` | `tool_use` | `Bash` | - |
+| 5 | `assistant` | `tool_use` | `Bash` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `text` | `-` | Perfect! I found the authoritative module declaration. Let me verify the exact content: |
+| 10 | `assistant` | `tool_use` | `Read` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `text` | `-` | Now let me verify this is indeed the etcd-io/etcd repository: |
+| 13 | `assistant` | `tool_use` | `Bash` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `text` | `-` | Let me confirm the repository origin: |
+| 16 | `assistant` | `tool_use` | `Bash` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `text` | `-` | Perfect! I have all the evidence needed. Now let me create the answer file: |
+| 19 | `assistant` | `tool_use` | `Write` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `text` | `-` | Let me verify the answer file: |
+| 22 | `assistant` | `tool_use` | `Read` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `text` | `-` | ## Summary  I've successfully identified the authoritative source for the `go.etcd.io/etcd/client/v3` Go module.  **Key Findings:**  - **Authoritative Repository**: `etcd-io/etcd` (https://github.com/etcd-io/etcd) - **Mo... |

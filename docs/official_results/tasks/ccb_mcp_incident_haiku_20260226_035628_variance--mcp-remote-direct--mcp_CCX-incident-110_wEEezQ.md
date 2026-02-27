@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_incident_haiku_20260226_035628_variance--mcp-remote-direct--mcp_CCX-incident-110_wEEezQ/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_incident_haiku_20260226_035628_variance--mcp-remote-direct--mcp_CCX-incident-110_wEEezQ/claude-code.txt)
 
 ## Metrics
 
@@ -50,3 +51,34 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `Write` |
 | `Read` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you trace the content process lifecycle in Firefox by finding the relevant C++ files in the dom/ipc/ directory. Let me start by exploring the repository structure. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `text` | `-` | Perfect! I found the relevant files. Let me now read them to confirm the class definitions: |
+| 6 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `text` | `-` | Let me read a bit more to confirm the ContentParent class definition: |
+| 15 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `text` | `-` | Perfect! I've found all the relevant files. Let me create the answer file with the findings: |
+| 20 | `assistant` | `tool_use` | `Write` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `Read` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `text` | `-` | Perfect! I've successfully traced the content process lifecycle in Firefox's multi-process architecture. Here's a summary of what I found:  ## Summary  I've created `/workspace/answer.json` with complete findings on Fire... |

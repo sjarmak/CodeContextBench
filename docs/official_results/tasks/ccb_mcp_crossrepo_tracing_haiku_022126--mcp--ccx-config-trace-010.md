@@ -1,4 +1,4 @@
-# ccx-config-trace-010 (mcp)
+# ccx-config-trace-010 (mcp-remote-artifact)
 
 - Run: `ccb_mcp_crossrepo_tracing_haiku_022126`
 - Status: `passed`
@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_crossrepo_tracing_haiku_022126--mcp--ccx-config-trace-010/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_crossrepo_tracing_haiku_022126--mcp--ccx-config-trace-010/claude-code.txt)
 
 ## Metrics
 
@@ -45,3 +46,22 @@
 | `mcp__sourcegraph__sg_keyword_search` |
 | `mcp__sourcegraph__sg_read_file` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find where the `rest.Config` struct is actually defined. Let me search through the Kubernetes client-go repository using Sourcegraph MCP tools. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_repos` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `text` | `-` | Perfect! I've found the definition of the `Config` struct. Let me create the answer file with my findings. |
+| 10 | `assistant` | `tool_use` | `Write` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `text` | `-` | Done! I've located the authoritative source of the `rest.Config` struct and created the answer file.  **Summary of findings:**  - **Repository**: `sg-benchmarks/kubernetes-client-go` (the source for k8s.io/client-go) - *... |

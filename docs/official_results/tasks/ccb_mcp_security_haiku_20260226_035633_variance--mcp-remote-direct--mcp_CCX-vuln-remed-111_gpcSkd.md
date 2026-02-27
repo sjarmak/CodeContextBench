@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_security_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-vuln-remed-111_gpcSkd/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_security_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-vuln-remed-111_gpcSkd/claude-code.txt)
 
 ## Metrics
 
@@ -54,3 +55,42 @@
 | `mcp__sourcegraph__sg_keyword_search` |
 | `mcp__sourcegraph__sg_keyword_search` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you audit the TLS/SSL implementation in Firefox's NSS library. Let me start by searching for the specific files in the Firefox repository. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `text` | `-` | Perfect! I found all the target files. Now let me read each one to understand their primary protocol functions: |
+| 6 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `text` | `-` | Now let me search for the key functions in each file to identify their primary protocol roles: |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 18 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `text` | `-` | Perfect! Now I have all the information I need. Let me create the answer.json file with the findings: |
+| 28 | `assistant` | `tool_use` | `Write` | - |
+| 29 | `user` | `text` | `-` | - |
+| 30 | `assistant` | `tool_use` | `Read` | - |
+| 31 | `user` | `text` | `-` | - |
+| 32 | `assistant` | `text` | `-` | ## Summary  I've successfully audited the TLS/SSL implementation in Firefox's Network Security Services (NSS) library and created the answer.json file at `/workspace/answer.json`.  **Audit Results:**  The five core TLS/S... |

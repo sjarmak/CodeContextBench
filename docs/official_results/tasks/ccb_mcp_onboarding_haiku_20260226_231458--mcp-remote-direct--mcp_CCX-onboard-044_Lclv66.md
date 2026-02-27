@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_onboarding_haiku_20260226_231458--mcp-remote-direct--mcp_CCX-onboard-044_Lclv66/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_onboarding_haiku_20260226_231458--mcp-remote-direct--mcp_CCX-onboard-044_Lclv66/claude-code.txt)
 
 ## Metrics
 
@@ -47,3 +48,28 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find the key Rust compiler type inference files. Let me search for the specific structs and types mentioned in the task. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `text` | `-` | Perfect! I've found all three key components of the Rust compiler's type inference architecture. Let me create the answer file. |
+| 16 | `assistant` | `tool_use` | `Write` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `text` | `-` | Done! I've identified the three key components of the Rust compiler's type inference architecture and created the answer file at `/workspace/answer.json`:  **Key Findings:**  1. **InferCtxt** - `compiler/rustc_infer/src/... |

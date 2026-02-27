@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_document_haiku_022326--baseline--terraform-arch-doc-gen-001/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_document_haiku_022326--baseline--terraform-arch-doc-gen-001/claude-code.txt)
 
 ## Metrics
 
@@ -39,3 +40,15 @@
 | Tool |
 |---|
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll create comprehensive architecture documentation for Terraform's plan/apply pipeline. Let me write this to cover all the required architectural components with technical depth. |
+| 3 | `assistant` | `tool_use` | `Write` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `text` | `-` | I've successfully created comprehensive architecture documentation for Terraform's plan/apply pipeline at `/workspace/documentation.md`.  The documentation covers all required topics with technical depth:  ## What's Incl... |

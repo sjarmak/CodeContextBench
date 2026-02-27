@@ -1,6 +1,6 @@
 # ccb_mcp_crossorg_haiku_022126
 
-## baseline
+## baseline-local-artifact
 
 - Valid tasks: `2`
 - Mean reward: `0.750`
@@ -11,7 +11,7 @@
 | [ccx-crossorg-061](../tasks/ccb_mcp_crossorg_haiku_022126--baseline--ccx-crossorg-061.md) | `passed` | 0.500 | 0.000 | 61 | traj, tx |
 | [ccx-crossorg-066](../tasks/ccb_mcp_crossorg_haiku_022126--baseline--ccx-crossorg-066.md) | `passed` | 1.000 | 0.000 | 8 | traj, tx |
 
-## mcp
+## mcp-remote-artifact
 
 - Valid tasks: `2`
 - Mean reward: `1.000`

@@ -1,0 +1,91 @@
+diff --git a/changelogs/current.yaml b/changelogs/current.yaml
+index 76d47bf..3a484b7 100644
+--- a/changelogs/current.yaml
++++ b/changelogs/current.yaml
+@@ -29,6 +29,11 @@ minor_behavior_changes:
+ 
+ bug_fixes:
+ # *Changes expected to improve the state of the world and are unlikely to have negative effects*
++- area: udp
++  change: |
++    Fixed a crash in the UDP proxy filter when a cluster is updated via CDS (Cluster Discovery Service).
++    The filter now correctly updates its internal cluster info map when cluster updates occur, preventing
++    dangling pointer dereferences.
+ - area: outlier detection
+   change: |
+     Fixed :ref:`successful_active_health_check_uneject_host
+diff --git a/source/extensions/filters/udp/udp_proxy/udp_proxy_filter.cc b/source/extensions/filters/udp/udp_proxy/udp_proxy_filter.cc
+index 8d90ff4..19d2d8d 100644
+--- a/source/extensions/filters/udp/udp_proxy/udp_proxy_filter.cc
++++ b/source/extensions/filters/udp/udp_proxy/udp_proxy_filter.cc
+@@ -49,11 +49,11 @@ void UdpProxyFilter::onClusterAddOrUpdate(absl::string_view cluster_name,
+          &cluster_infos_[cluster_name]->cluster_ != &cluster);
+ 
+   if (config_->usingPerPacketLoadBalancing()) {
+-    cluster_infos_.emplace(cluster_name,
+-                           std::make_unique<PerPacketLoadBalancingClusterInfo>(*this, cluster));
++    cluster_infos_.insert_or_assign(cluster_name,
++                                     std::make_unique<PerPacketLoadBalancingClusterInfo>(*this, cluster));
+   } else {
+-    cluster_infos_.emplace(cluster_name,
+-                           std::make_unique<StickySessionClusterInfo>(*this, cluster));
++    cluster_infos_.insert_or_assign(cluster_name,
++                                     std::make_unique<StickySessionClusterInfo>(*this, cluster));
+   }
+ }
+ 
+diff --git a/test/extensions/filters/udp/udp_proxy/udp_proxy_filter_test.cc b/test/extensions/filters/udp/udp_proxy/udp_proxy_filter_test.cc
+index 5cff9ce..462837e 100644
+--- a/test/extensions/filters/udp/udp_proxy/udp_proxy_filter_test.cc
++++ b/test/extensions/filters/udp/udp_proxy/udp_proxy_filter_test.cc
+@@ -826,6 +826,50 @@ matcher:
+   EXPECT_EQ(0, config_->stats().downstream_sess_active_.value());
+ }
+ 
++// Test that cluster updates are properly handled when a cluster is updated via CDS.
++// This verifies that insert_or_assign() is used to replace stale cluster info.
++TEST_F(UdpProxyFilterTest, ClusterDynamicInfoMapUpdate) {
++  InSequence s;
++
++  setup(readConfig(R"EOF(
++stat_prefix: foo
++matcher:
++  on_no_match:
++    action:
++      name: route
++      typed_config:
++        '@type': type.googleapis.com/envoy.extensions.filters.udp.udp_proxy.v3.Route
++        cluster: fake_cluster
++  )EOF"));
++
++  // Create an initial session with the first cluster.
++  expectSessionCreate(upstream_address_);
++  test_sessions_[0].expectWriteToUpstream("hello", 0, nullptr, true);
++  recvDataFromDownstream("10.0.0.1:1000", "10.0.0.2:80", "hello");
++  EXPECT_EQ(1, config_->stats().downstream_sess_total_.value());
++  EXPECT_EQ(1, config_->stats().downstream_sess_active_.value());
++
++  // Simulate a cluster update (e.g., due to a HostSet change from CDS).
++  // This should replace the old ClusterInfo with a new one.
++  {
++    Upstream::ThreadLocalClusterCommand command = [this]() -> Upstream::ThreadLocalCluster& {
++      return factory_context_.server_factory_context_.cluster_manager_.thread_local_cluster_;
++    };
++    cluster_update_callbacks_->onClusterAddOrUpdate(
++        factory_context_.server_factory_context_.cluster_manager_.thread_local_cluster_.info()
++            ->name(),
++        command);
++  }
++
++  // After the cluster update, send another packet to verify the filter
++  // still works correctly with the updated cluster info.
++  expectSessionCreate(upstream_address_);
++  test_sessions_[1].expectWriteToUpstream("world", 0, nullptr, true);
++  recvDataFromDownstream("10.0.0.1:1001", "10.0.0.2:80", "world");
++  EXPECT_EQ(2, config_->stats().downstream_sess_total_.value());
++  EXPECT_EQ(2, config_->stats().downstream_sess_active_.value());
++}
++
+ // Hitting the maximum per-cluster connection/session circuit breaker.
+ TEST_F(UdpProxyFilterTest, MaxSessionsCircuitBreaker) {
+   InSequence s;

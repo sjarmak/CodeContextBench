@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_platform_haiku_20260226_035628_variance--mcp-remote-direct--mcp_ccx-platform-094_ZKdafM/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_platform_haiku_20260226_035628_variance--mcp-remote-direct--mcp_ccx-platform-094_ZKdafM/claude-code.txt)
 
 ## Metrics
 
@@ -54,3 +55,73 @@
 | `mcp__sourcegraph__sg_keyword_search` |
 | `mcp__sourcegraph__sg_nls_search` |
 | `mcp__sourcegraph__sg_read_file` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you map the CODEOWNERS infrastructure in the Grafana repository. Let me systematically search for all related files using Sourcegraph tools. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_nls_search` | - |
+| 10 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `text` | `-` | Let me search for more related files and scripts: |
+| 16 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_nls_search` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `text` | `-` | Now let me read some of the key files to understand the complete infrastructure: |
+| 27 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 30 | `user` | `text` | `-` | - |
+| 31 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 34 | `user` | `text` | `-` | - |
+| 35 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 36 | `user` | `text` | `-` | - |
+| 37 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 38 | `user` | `text` | `-` | - |
+| 39 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 40 | `user` | `text` | `-` | - |
+| 41 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 42 | `user` | `text` | `-` | - |
+| 43 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 44 | `user` | `text` | `-` | - |
+| 45 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 46 | `user` | `text` | `-` | - |
+| 47 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 48 | `user` | `text` | `-` | - |
+| 49 | `assistant` | `text` | `-` | Let me do a comprehensive search to ensure I haven't missed any files: |
+| 50 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 51 | `user` | `text` | `-` | - |
+| 52 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 53 | `user` | `text` | `-` | - |
+| 54 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 55 | `user` | `text` | `-` | - |
+| 56 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 57 | `user` | `text` | `-` | - |
+| 58 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 59 | `user` | `text` | `-` | - |
+| 60 | `assistant` | `text` | `-` | Now let me create the comprehensive answer file: |
+| 61 | `assistant` | `tool_use` | `Write` | - |
+| 62 | `user` | `text` | `-` | - |
+| 63 | `assistant` | `text` | `-` | Perfect! I've successfully mapped the complete CODEOWNERS infrastructure in Grafana. Here's what I found:  ## Summary  The CODEOWNERS infrastructure consists of **18 files** across YAML, JavaScript, Go, and configuration... |

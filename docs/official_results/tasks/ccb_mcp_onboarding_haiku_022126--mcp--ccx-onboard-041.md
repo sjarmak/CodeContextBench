@@ -1,4 +1,4 @@
-# ccx-onboard-041 (mcp)
+# ccx-onboard-041 (mcp-remote-artifact)
 
 - Run: `ccb_mcp_onboarding_haiku_022126`
 - Status: `passed`
@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_onboarding_haiku_022126--mcp--ccx-onboard-041/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_onboarding_haiku_022126--mcp--ccx-onboard-041/claude-code.txt)
 
 ## Metrics
 
@@ -54,3 +55,52 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_keyword_search` |
 | `mcp__sourcegraph__sg_nls_search` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you audit the scipy.stats API call sites in pandas. Let me search for all files containing `from scipy.stats import` statements in the pandas-dev/pandas repository. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `text` | `-` | Let me try a broader search for scipy.stats imports: |
+| 6 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `assistant` | `text` | `-` | Let me search for scipy imports more broadly: |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `text` | `-` | Let me try a simpler search: |
+| 12 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `text` | `-` | Let me verify the repository name: |
+| 15 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_repos` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `text` | `-` | Now let me search with the correct repo identifier: |
+| 18 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `text` | `-` | Great! I found several files. Let me verify I have all of them by searching for additional variations and double-checking the results: |
+| 21 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `text` | `-` | Let me verify I have all the files by searching for more specific patterns. I'll also need to check if there are any I might have missed: |
+| 24 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 27 | `user` | `text` | `-` | - |
+| 28 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 29 | `user` | `text` | `-` | - |
+| 30 | `assistant` | `text` | `-` | Perfect! Now let me search for any other scipy.stats imports I might have missed by using a different search approach: |
+| 31 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `text` | `-` | Let me do a final comprehensive search to ensure I haven't missed any files: |
+| 34 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_nls_search` | - |
+| 35 | `user` | `text` | `-` | - |
+| 36 | `assistant` | `text` | `-` | Let me verify the test file that I found earlier: |
+| 37 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 38 | `user` | `text` | `-` | - |
+| 39 | `assistant` | `text` | `-` | Perfect! I've now identified all the files. Let me create the answer file with my findings: |
+| 40 | `assistant` | `tool_use` | `Write` | - |
+| 41 | `user` | `text` | `-` | - |
+| 42 | `assistant` | `text` | `-` | Perfect! I've completed the audit of scipy.stats API call sites in the pandas-dev/pandas repository.   ## Summary  I found **4 Python source files** containing direct `from scipy.stats import` statements:  1. **pandas/pl... |

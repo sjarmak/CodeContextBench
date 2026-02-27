@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_compliance_haiku_20260226_221038--mcp-remote-direct--mcp_CCX-compliance-115_UoXV03/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_compliance_haiku_20260226_221038--mcp-remote-direct--mcp_CCX-compliance-115_UoXV03/claude-code.txt)
 
 ## Metrics
 
@@ -51,3 +52,34 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_keyword_search` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you audit Django's session framework for concurrency safety in the session key rotation path. Let me search for the relevant files and methods. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `text` | `-` | Now let me create a comprehensive summary document with my findings: |
+| 22 | `assistant` | `tool_use` | `Write` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `text` | `-` | Perfect! I've completed a comprehensive audit of Django's session framework for concurrency safety in the session key rotation path. Here's a summary of my findings:  ## Key Findings:  **1. cycle_key() Implementation** -... |

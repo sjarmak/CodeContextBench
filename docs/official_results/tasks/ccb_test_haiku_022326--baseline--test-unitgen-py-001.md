@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_test_haiku_022326--baseline--test-unitgen-py-001/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_test_haiku_022326--baseline--test-unitgen-py-001/claude-code.txt)
 
 ## Metrics
 
@@ -50,3 +51,36 @@
 | `Read` |
 | `Write` |
 | `Bash` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you generate comprehensive unit tests for Django's cache middleware. Let me start by examining the cache middleware implementation to understand what needs to be tested. |
+| 3 | `assistant` | `tool_use` | `Read` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `text` | `-` | Now let me check the test structure and utilities available in Django tests: |
+| 6 | `assistant` | `tool_use` | `Bash` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `assistant` | `tool_use` | `Read` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `assistant` | `tool_use` | `Bash` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `tool_use` | `Read` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `tool_use` | `Bash` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `Read` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `Read` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `text` | `-` | Now I'll create comprehensive unit tests for the cache middleware. Based on my analysis of the code, I'll cover all the key functionality: |
+| 21 | `assistant` | `tool_use` | `Write` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `text` | `-` | Perfect! I've created a comprehensive unit test file for Django's cache middleware. Let me verify the test file is properly structured: |
+| 24 | `assistant` | `tool_use` | `Bash` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `text` | `-` | Excellent! I've successfully created a comprehensive unit test file for Django's cache middleware at `/workspace/tests/test_cache_middleware.py`. Here's what's included:  ## Test Coverage Summary  ### **FetchFromCacheMid... |

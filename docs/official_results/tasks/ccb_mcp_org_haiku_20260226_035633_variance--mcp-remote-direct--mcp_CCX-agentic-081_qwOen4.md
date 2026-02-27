@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_org_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-agentic-081_qwOen4/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_org_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-agentic-081_qwOen4/claude-code.txt)
 
 ## Metrics
 
@@ -50,3 +51,35 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `Write` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you write the `InventoryConsumer` class following Kafka ecosystem patterns. Let me start by exploring the Kafka codebase to understand how these patterns are implemented. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `text` | `-` | Now let me read the ConsumerConfig file to see the constants: |
+| 14 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `text` | `-` | Now let me search for specific examples of WakeupException and shutdown handlers: |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `text` | `-` | Perfect! I now have a clear understanding of the Kafka patterns. Let me write the `InventoryConsumer` class: |
+| 20 | `assistant` | `tool_use` | `Write` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `text` | `-` | Now let me create the answer.json file documenting the files I referenced: |
+| 23 | `assistant` | `tool_use` | `Write` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `text` | `-` | Perfect! I've successfully created both files. Here's a summary of what I've delivered:  ## InventoryConsumer.java  The implementation follows Kafka ecosystem patterns with these key features:  1. **ConsumerConfig Consta... |

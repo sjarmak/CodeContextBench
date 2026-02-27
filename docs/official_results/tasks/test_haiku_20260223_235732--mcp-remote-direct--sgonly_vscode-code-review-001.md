@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/test_haiku_20260223_235732--mcp-remote-direct--sgonly_vscode-code-review-001/trajectory.json)
+- Bundled transcript: [link](../traces/test_haiku_20260223_235732--mcp-remote-direct--sgonly_vscode-code-review-001/claude-code.txt)
 
 ## Metrics
 
@@ -48,3 +49,33 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `Read` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you review the VS Code editor core changes for defects. Let me start by reading the key files mentioned in the task to understand what was changed. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `text` | `-` | Let me read the remaining files that are needed for the review: |
+| 10 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `text` | `-` | Now let me read the strings.ts file which was too large. I'll focus on the relevant sections: |
+| 15 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `text` | `-` | Let me read the section of strings.ts that contains the createRegExp function to examine it more closely: |
+| 18 | `assistant` | `tool_use` | `Read` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `text` | `-` | Based on my detailed review of the source files, I've identified the defects. Let me create the review report: |
+| 21 | `assistant` | `tool_use` | `Write` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `text` | `-` | I've completed my review of the VS Code editor core changes and identified **3 critical defects** that were introduced during the merge:  ## Summary of Defects Found  ### 1. **Multiline Regex Detection Bug** (textModelSe... |

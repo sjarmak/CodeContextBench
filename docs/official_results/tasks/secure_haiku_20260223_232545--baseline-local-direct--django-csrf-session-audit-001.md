@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/secure_haiku_20260223_232545--baseline-local-direct--django-csrf-session-audit-001/trajectory.json)
+- Bundled transcript: [link](../traces/secure_haiku_20260223_232545--baseline-local-direct--django-csrf-session-audit-001/claude-code.txt)
 
 ## Metrics
 
@@ -52,3 +53,44 @@
 | `Read` |
 | `Read` |
 | `Bash` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you analyze Django's CSRF protection and session handling pipeline. This is a comprehensive security analysis task. Let me start by exploring the repository structure and tracing the relevant components. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `tool_use` | `Bash` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `text` | `-` | Now let me read the key files to understand the security pipeline. I'll start with the CSRF middleware: |
+| 8 | `assistant` | `tool_use` | `Read` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `assistant` | `tool_use` | `Read` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `tool_use` | `Read` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `tool_use` | `Read` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `Read` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `Read` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `tool_use` | `Read` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `Read` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `tool_use` | `Read` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `text` | `-` | Now let me check for the HTTP request handling and other related components: |
+| 27 | `assistant` | `tool_use` | `Bash` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `tool_use` | `Read` | - |
+| 30 | `user` | `text` | `-` | - |
+| 31 | `assistant` | `text` | `-` | Perfect! Now I have a comprehensive understanding of the Django CSRF and session handling pipeline. Let me create the security analysis document. |
+| 32 | `assistant` | `tool_use` | `Write` | - |
+| 33 | `user` | `text` | `-` | - |
+| 34 | `assistant` | `text` | `-` | Perfect! I've completed a comprehensive security analysis of Django's CSRF protection and session handling pipeline. Here's what I documented:  ## Analysis Summary  **Written to:** `/logs/agent/solution.md`  ### Key Find... |

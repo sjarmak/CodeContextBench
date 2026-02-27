@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/test_haiku_20260223_235732--baseline-local-direct--curl-security-review-001/trajectory.json)
+- Bundled transcript: [link](../traces/test_haiku_20260223_235732--baseline-local-direct--curl-security-review-001/claude-code.txt)
 
 ## Metrics
 
@@ -53,3 +54,43 @@
 | `Write` |
 | `Bash` |
 | `Read` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you review these curl library files for security defects. Let me start by examining each file to identify the issues. |
+| 3 | `assistant` | `tool_use` | `Read` | - |
+| 4 | `assistant` | `tool_use` | `Read` | - |
+| 5 | `assistant` | `tool_use` | `Read` | - |
+| 6 | `assistant` | `tool_use` | `Read` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `text` | `-` | Let me search for specific sections in the openssl.c file that might contain defects. |
+| 12 | `assistant` | `tool_use` | `Grep` | - |
+| 13 | `assistant` | `tool_use` | `Grep` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `text` | `-` | Let me look at the specific certificate verification sections more carefully. |
+| 17 | `assistant` | `tool_use` | `Read` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `text` | `-` | Let me examine the git diff to see what changes were made. |
+| 20 | `assistant` | `tool_use` | `Bash` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `text` | `-` | Excellent! I found defects in the diff. Let me check the other files for changes. |
+| 23 | `assistant` | `tool_use` | `Bash` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `text` | `-` | Perfect! I found all the defects. Let me now create the comprehensive review report with fixes. |
+| 26 | `assistant` | `tool_use` | `Write` | - |
+| 27 | `user` | `text` | `-` | - |
+| 28 | `assistant` | `text` | `-` | Perfect! I've completed the security code review and created the report. Let me verify the review file was created correctly. |
+| 29 | `assistant` | `tool_use` | `Bash` | - |
+| 30 | `user` | `text` | `-` | - |
+| 31 | `assistant` | `tool_use` | `Read` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `text` | `-` | Perfect! I've successfully completed the security code review of the curl library files. Here's a summary of the **5 critical defects** found:  ## Summary of Defects Found  \| File \| Line \| Severity \| Issue \| \|------\|----... |

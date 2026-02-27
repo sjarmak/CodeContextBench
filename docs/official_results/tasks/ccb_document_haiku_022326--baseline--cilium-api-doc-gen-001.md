@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_document_haiku_022326--baseline--cilium-api-doc-gen-001/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_document_haiku_022326--baseline--cilium-api-doc-gen-001/claude-code.txt)
 
 ## Metrics
 
@@ -52,3 +53,42 @@
 | `Read` |
 | `Read` |
 | `Read` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you generate comprehensive API reference documentation for Cilium's eBPF map API. Let me start by exploring the `pkg/bpf` package to understand the structure and API. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `tool_use` | `Bash` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `Bash` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `Bash` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `Read` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `Read` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `Read` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `Read` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `tool_use` | `Read` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `tool_use` | `Read` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `tool_use` | `Read` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `Read` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `Read` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `text` | `-` | Now let me create comprehensive API documentation based on my analysis of the codebase. |
+| 30 | `assistant` | `tool_use` | `Write` | - |
+| 31 | `user` | `text` | `-` | - |
+| 32 | `assistant` | `text` | `-` | Perfect! I've generated comprehensive API reference documentation for Cilium's eBPF map API. The documentation has been written to `/workspace/documentation.md` and includes:  ## Documentation Coverage  ### Core Sections... |

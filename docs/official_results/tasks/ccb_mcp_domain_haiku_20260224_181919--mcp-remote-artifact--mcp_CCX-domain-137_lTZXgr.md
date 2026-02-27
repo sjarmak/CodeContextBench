@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_domain_haiku_20260224_181919--mcp-remote-artifact--mcp_CCX-domain-137_lTZXgr/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_domain_haiku_20260224_181919--mcp-remote-artifact--mcp_CCX-domain-137_lTZXgr/claude-code.txt)
 
 ## Metrics
 
@@ -53,3 +54,75 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_keyword_search` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you trace the Android View rendering pipeline by finding and examining the key source files. Let me search for these files in the Sourcegraph repository. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `text` | `-` | Now let me read the key files to identify the critical methods and classes in the rendering pipeline. |
+| 20 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 27 | `user` | `text` | `-` | - |
+| 28 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 29 | `user` | `text` | `-` | - |
+| 30 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 31 | `user` | `text` | `-` | - |
+| 32 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_nls_search` | - |
+| 33 | `user` | `text` | `-` | - |
+| 34 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 35 | `user` | `text` | `-` | - |
+| 36 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 37 | `user` | `text` | `-` | - |
+| 38 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 39 | `user` | `text` | `-` | - |
+| 40 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 41 | `user` | `text` | `-` | - |
+| 42 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 43 | `user` | `text` | `-` | - |
+| 44 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 45 | `user` | `text` | `-` | - |
+| 46 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 47 | `user` | `text` | `-` | - |
+| 48 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 49 | `user` | `text` | `-` | - |
+| 50 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 51 | `user` | `text` | `-` | - |
+| 52 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 53 | `user` | `text` | `-` | - |
+| 54 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 55 | `user` | `text` | `-` | - |
+| 56 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 57 | `user` | `text` | `-` | - |
+| 58 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 59 | `user` | `text` | `-` | - |
+| 60 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 61 | `user` | `text` | `-` | - |
+| 62 | `assistant` | `text` | `-` | Now let me write the answer.json file with all the findings I've gathered: |
+| 63 | `assistant` | `tool_use` | `Write` | - |
+| 64 | `user` | `text` | `-` | - |
+| 65 | `assistant` | `text` | `-` | Perfect! I've successfully traced the Android View rendering pipeline and created a comprehensive answer document. Here's a summary of what I found:  ## Android View Rendering Pipeline - Key Files  I've identified all 5 ... |

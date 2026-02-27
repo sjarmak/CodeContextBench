@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_understand_haiku_022426--baseline--terraform-plan-pipeline-qa-001/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_understand_haiku_022426--baseline--terraform-plan-pipeline-qa-001/claude-code.txt)
 
 ## Metrics
 
@@ -46,3 +47,26 @@
 | `Glob` |
 | `Glob` |
 | `Grep` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll investigate Terraform's plan/apply pipeline architecture by tracing through the codebase. This is a complex task that requires understanding the command flow, graph construction, provider resolution, and diff comput... |
+| 3 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `text` | `-` | Now let me begin investigating the codebase. I'll use the Explore agent to navigate the Terraform repository structure and trace the architecture. |
+| 6 | `assistant` | `tool_use` | `Task` | - |
+| 7 | `user` | `text` | `-` | I need to find and analyze the PlanCommand.Run() method in internal/command/plan.go and understand: 1. How it delegates to the backend 2. How the backend creates and invokes terraform.Context.Plan() 3. What are the key f... |
+| 8 | `assistant` | `tool_use` | `Glob` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `assistant` | `tool_use` | `Glob` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `tool_use` | `Grep` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `text` | `-` | You've hit your limit · resets 3am (UTC) |
+| 16 | `system` | `task_started` | `-` | - |

@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/test_haiku_20260223_235732--mcp-remote-direct--sgonly_test-integration-001/trajectory.json)
+- Bundled transcript: [link](../traces/test_haiku_20260223_235732--mcp-remote-direct--sgonly_test-integration-001/claude-code.txt)
 
 ## Metrics
 
@@ -56,3 +57,78 @@
 | `mcp__sourcegraph__sg_keyword_search` |
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you write integration tests for the Flipt evaluation API. Let me start by exploring the codebase to understand the API structure, handlers, and endpoints. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_nls_search` | - |
+| 20 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 30 | `user` | `text` | `-` | - |
+| 31 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 34 | `user` | `text` | `-` | - |
+| 35 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 36 | `user` | `text` | `-` | - |
+| 37 | `assistant` | `text` | `-` | Now I have a good understanding of the Flipt evaluation API structure. Let me create a comprehensive integration test file that covers the evaluation endpoints. |
+| 38 | `assistant` | `tool_use` | `Bash` | - |
+| 39 | `user` | `text` | `-` | - |
+| 40 | `assistant` | `tool_use` | `Write` | - |
+| 41 | `user` | `text` | `-` | - |
+| 42 | `assistant` | `text` | `-` | Now let me verify that the test file compiles correctly: |
+| 43 | `assistant` | `tool_use` | `Bash` | - |
+| 44 | `user` | `text` | `-` | - |
+| 45 | `assistant` | `tool_use` | `Bash` | - |
+| 46 | `user` | `text` | `-` | - |
+| 47 | `assistant` | `text` | `-` | Let me verify the test file syntax with Go's parser: |
+| 48 | `assistant` | `tool_use` | `Bash` | - |
+| 49 | `user` | `text` | `-` | - |
+| 50 | `assistant` | `tool_use` | `Bash` | - |
+| 51 | `user` | `text` | `-` | - |
+| 52 | `assistant` | `tool_use` | `Read` | - |
+| 53 | `user` | `text` | `-` | - |
+| 54 | `assistant` | `tool_use` | `Read` | - |
+| 55 | `user` | `text` | `-` | - |
+| 56 | `assistant` | `tool_use` | `Bash` | - |
+| 57 | `user` | `text` | `-` | - |
+| 58 | `assistant` | `tool_use` | `Bash` | - |
+| 59 | `user` | `text` | `-` | - |
+| 60 | `assistant` | `text` | `-` | Perfect! Let me verify the endpoints are correct by checking one more time: |
+| 61 | `assistant` | `tool_use` | `Bash` | - |
+| 62 | `user` | `text` | `-` | - |
+| 63 | `assistant` | `text` | `-` | Excellent! Let me create a final summary document showing what was written: |
+| 64 | `assistant` | `tool_use` | `Bash` | - |
+| 65 | `user` | `text` | `-` | - |
+| 66 | `assistant` | `tool_use` | `Bash` | - |
+| 67 | `user` | `text` | `-` | - |
+| 68 | `assistant` | `text` | `-` | Perfect! I've successfully written comprehensive integration tests for the Flipt evaluation API. Here's a summary:  ## ✅ Integration Test File Created  **Location:** `/workspace/integration/evaluation_integration_test.go... |

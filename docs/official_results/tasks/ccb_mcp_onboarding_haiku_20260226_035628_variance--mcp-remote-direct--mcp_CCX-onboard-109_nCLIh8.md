@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_onboarding_haiku_20260226_035628_variance--mcp-remote-direct--mcp_CCX-onboard-109_nCLIh8/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_onboarding_haiku_20260226_035628_variance--mcp-remote-direct--mcp_CCX-onboard-109_nCLIh8/claude-code.txt)
 
 ## Metrics
 
@@ -52,3 +53,44 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find these key SpiderMonkey JIT compilation pipeline files. Let me search the Firefox repository for these specific symbols and files. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 6 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 7 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `text` | `-` | Perfect! I found the key files. Let me read them to get the exact details and confirm their content: |
+| 14 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `text` | `-` | Let me also verify the IonCompileTask.cpp file: |
+| 25 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 30 | `user` | `text` | `-` | - |
+| 31 | `assistant` | `text` | `-` | Perfect! I've found all the key SpiderMonkey JIT compilation pipeline files. Let me create the answer.json file with my findings: |
+| 32 | `assistant` | `tool_use` | `Write` | - |
+| 33 | `user` | `text` | `-` | - |
+| 34 | `assistant` | `text` | `-` | Perfect! I've identified all the key C++ source files in Firefox's SpiderMonkey JavaScript engine that define the JIT compilation pipeline stages. Here's a summary of my findings:  ## SpiderMonkey JIT Compilation Pipelin... |

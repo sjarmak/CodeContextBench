@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_compliance_haiku_20260225_011700--baseline-local-artifact--bl_CCX-compliance-124_uZy48l/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_compliance_haiku_20260225_011700--baseline-local-artifact--bl_CCX-compliance-124_uZy48l/claude-code.txt)
 
 ## Metrics
 
@@ -53,3 +54,78 @@
 | `Read` |
 | `Read` |
 | `Grep` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you audit the Content Security Policy (CSP) enforcement infrastructure in Firefox. Let me start by exploring the repository structure to locate the relevant files in the `dom/security/` directory. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `assistant` | `tool_use` | `Bash` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `text` | `-` | Great! The Firefox repository is available. Now let me explore the `dom/security/` directory to find the CSP implementation files. |
+| 8 | `assistant` | `tool_use` | `Bash` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `assistant` | `text` | `-` | Perfect! I can see several CSP-related files. Let me search for more files, particularly the XPCOM interface file and other relevant CSP files. |
+| 11 | `assistant` | `tool_use` | `Bash` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `Bash` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `text` | `-` | Excellent! Now let me examine the key files to understand their structure and identify the primary classes and functions: |
+| 16 | `assistant` | `tool_use` | `Read` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `Read` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `tool_use` | `Read` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `Read` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `text` | `-` | Now let me check the CSPEvalChecker which handles script-src evaluation: |
+| 25 | `assistant` | `tool_use` | `Read` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `Read` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `text` | `-` | Let me check nsContentSecurityManager for inline script evaluation: |
+| 30 | `assistant` | `tool_use` | `Grep` | - |
+| 31 | `user` | `text` | `-` | - |
+| 32 | `assistant` | `tool_use` | `Read` | - |
+| 33 | `user` | `text` | `-` | - |
+| 34 | `assistant` | `tool_use` | `Bash` | - |
+| 35 | `user` | `text` | `-` | - |
+| 36 | `assistant` | `tool_use` | `Bash` | - |
+| 37 | `user` | `text` | `-` | - |
+| 38 | `assistant` | `tool_use` | `Bash` | - |
+| 39 | `user` | `text` | `-` | - |
+| 40 | `assistant` | `tool_use` | `Bash` | - |
+| 41 | `user` | `text` | `-` | - |
+| 42 | `assistant` | `tool_use` | `Bash` | - |
+| 43 | `user` | `text` | `-` | - |
+| 44 | `assistant` | `tool_use` | `Bash` | - |
+| 45 | `user` | `text` | `-` | - |
+| 46 | `assistant` | `tool_use` | `Read` | - |
+| 47 | `user` | `text` | `-` | - |
+| 48 | `assistant` | `tool_use` | `Bash` | - |
+| 49 | `user` | `text` | `-` | - |
+| 50 | `assistant` | `tool_use` | `Bash` | - |
+| 51 | `user` | `text` | `-` | - |
+| 52 | `assistant` | `tool_use` | `Bash` | - |
+| 53 | `user` | `text` | `-` | - |
+| 54 | `assistant` | `tool_use` | `Bash` | - |
+| 55 | `user` | `text` | `-` | - |
+| 56 | `assistant` | `tool_use` | `Read` | - |
+| 57 | `user` | `text` | `-` | - |
+| 58 | `assistant` | `tool_use` | `Read` | - |
+| 59 | `user` | `text` | `-` | - |
+| 60 | `assistant` | `tool_use` | `Read` | - |
+| 61 | `user` | `text` | `-` | - |
+| 62 | `assistant` | `text` | `-` | Now let me verify the structure of the files I found and look at the violation reporting: |
+| 63 | `assistant` | `tool_use` | `Read` | - |
+| 64 | `user` | `text` | `-` | - |
+| 65 | `assistant` | `text` | `-` | Perfect! Now I have comprehensive information about the CSP enforcement infrastructure. Let me create the answer file with all the findings: |
+| 66 | `assistant` | `tool_use` | `Write` | - |
+| 67 | `user` | `text` | `-` | - |
+| 68 | `assistant` | `text` | `-` | Perfect! I have successfully completed the audit of the Content Security Policy (CSP) enforcement infrastructure in Firefox. Here's a summary of my findings:  ## CSP Enforcement Files Found  ### Core Implementation Files... |

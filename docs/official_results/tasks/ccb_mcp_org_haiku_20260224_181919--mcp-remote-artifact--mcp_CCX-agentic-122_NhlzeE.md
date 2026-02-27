@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_org_haiku_20260224_181919--mcp-remote-artifact--mcp_CCX-agentic-122_NhlzeE/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_org_haiku_20260224_181919--mcp-remote-artifact--mcp_CCX-agentic-122_NhlzeE/claude-code.txt)
 
 ## Metrics
 
@@ -53,3 +54,62 @@
 | `mcp__sourcegraph__sg_keyword_search` |
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_keyword_search` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you implement an XPCOM component following Firefox's established patterns. Let me first search for existing examples in the Firefox codebase to understand the exact patterns used. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 30 | `user` | `text` | `-` | - |
+| 31 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 34 | `user` | `text` | `-` | - |
+| 35 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 36 | `user` | `text` | `-` | - |
+| 37 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 38 | `user` | `text` | `-` | - |
+| 39 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 40 | `user` | `text` | `-` | - |
+| 41 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 42 | `user` | `text` | `-` | - |
+| 43 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 44 | `user` | `text` | `-` | - |
+| 45 | `assistant` | `text` | `-` | Now I have a good understanding of Firefox's XPCOM component patterns. Let me create the implementation files and the answer.json documentation. |
+| 46 | `assistant` | `tool_use` | `Write` | - |
+| 47 | `user` | `text` | `-` | - |
+| 48 | `assistant` | `tool_use` | `Write` | - |
+| 49 | `user` | `text` | `-` | - |
+| 50 | `assistant` | `tool_use` | `Write` | - |
+| 51 | `user` | `text` | `-` | - |
+| 52 | `assistant` | `text` | `-` | I've successfully created an XPCOM component implementation for Firefox following the established patterns from the codebase. Here's what I've generated:  ## Files Created:  **1. MyObserverComponent.h** - Component heade... |

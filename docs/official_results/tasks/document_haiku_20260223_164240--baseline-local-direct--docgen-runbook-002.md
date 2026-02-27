@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/document_haiku_20260223_164240--baseline-local-direct--docgen-runbook-002/trajectory.json)
+- Bundled transcript: [link](../traces/document_haiku_20260223_164240--baseline-local-direct--docgen-runbook-002/claude-code.txt)
 
 ## Metrics
 
@@ -55,3 +56,90 @@
 | `Read` |
 | `Glob` |
 | `Read` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you create a comprehensive troubleshooting runbook for Envoy's connection pool management. Let me start by exploring the codebase to understand the architecture and implementation details. |
+| 3 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `tool_use` | `Read` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `Read` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `Glob` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `Glob` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `Read` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `Read` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `Grep` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `tool_use` | `Grep` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `tool_use` | `Read` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `tool_use` | `Glob` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `Read` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `Grep` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `tool_use` | `Glob` | - |
+| 30 | `user` | `text` | `-` | - |
+| 31 | `assistant` | `tool_use` | `Read` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `tool_use` | `Grep` | - |
+| 34 | `user` | `text` | `-` | - |
+| 35 | `assistant` | `tool_use` | `Glob` | - |
+| 36 | `user` | `text` | `-` | - |
+| 37 | `assistant` | `tool_use` | `Glob` | - |
+| 38 | `user` | `text` | `-` | - |
+| 39 | `assistant` | `tool_use` | `Bash` | - |
+| 40 | `user` | `text` | `-` | - |
+| 41 | `assistant` | `tool_use` | `Bash` | - |
+| 42 | `user` | `text` | `-` | - |
+| 43 | `assistant` | `tool_use` | `Read` | - |
+| 44 | `user` | `text` | `-` | - |
+| 45 | `assistant` | `tool_use` | `Bash` | - |
+| 46 | `user` | `text` | `-` | - |
+| 47 | `assistant` | `tool_use` | `Read` | - |
+| 48 | `user` | `text` | `-` | - |
+| 49 | `assistant` | `tool_use` | `Bash` | - |
+| 50 | `user` | `text` | `-` | - |
+| 51 | `assistant` | `tool_use` | `Read` | - |
+| 52 | `user` | `text` | `-` | - |
+| 53 | `assistant` | `tool_use` | `Bash` | - |
+| 54 | `user` | `text` | `-` | - |
+| 55 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 56 | `user` | `text` | `-` | - |
+| 57 | `assistant` | `tool_use` | `Bash` | - |
+| 58 | `user` | `text` | `-` | - |
+| 59 | `assistant` | `tool_use` | `Bash` | - |
+| 60 | `user` | `text` | `-` | - |
+| 61 | `assistant` | `tool_use` | `Read` | - |
+| 62 | `user` | `text` | `-` | - |
+| 63 | `assistant` | `tool_use` | `Read` | - |
+| 64 | `user` | `text` | `-` | - |
+| 65 | `assistant` | `tool_use` | `Bash` | - |
+| 66 | `user` | `text` | `-` | - |
+| 67 | `assistant` | `text` | `-` | Now let me gather more details on HTTP/1.1 specific handling and create the comprehensive runbook: |
+| 68 | `assistant` | `tool_use` | `Bash` | - |
+| 69 | `user` | `text` | `-` | - |
+| 70 | `assistant` | `tool_use` | `Bash` | - |
+| 71 | `user` | `text` | `-` | - |
+| 72 | `assistant` | `tool_use` | `Bash` | - |
+| 73 | `user` | `text` | `-` | - |
+| 74 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 75 | `user` | `text` | `-` | - |
+| 76 | `assistant` | `tool_use` | `Write` | - |
+| 77 | `user` | `text` | `-` | - |
+| 78 | `assistant` | `text` | `-` | Perfect! Let me mark the task as complete: |
+| 79 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 80 | `user` | `text` | `-` | - |

@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_test_haiku_022326--mcp--sgonly_test-unitgen-py-001/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_test_haiku_022326--mcp--sgonly_test-unitgen-py-001/claude-code.txt)
 
 ## Metrics
 
@@ -43,3 +44,21 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `Write` |
 | `Read` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you generate comprehensive unit tests for Django's cache middleware. Let me start by reading the cache middleware code to understand the implementation. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `text` | `-` | Now I'll create comprehensive unit tests for the Django cache middleware. Let me write the test file: |
+| 6 | `assistant` | `tool_use` | `Write` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `assistant` | `text` | `-` | Perfect! I've created a comprehensive unit test file for Django's cache middleware. Let me verify the file was created correctly: |
+| 9 | `assistant` | `tool_use` | `Read` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `text` | `-` | Excellent! I've successfully created a comprehensive unit test file for Django's cache middleware at `/workspace/tests/test_cache_middleware.py`. Here's a summary of what I've generated:  ## Test Coverage Overview  ### *... |

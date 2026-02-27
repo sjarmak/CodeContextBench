@@ -9,8 +9,8 @@
 | [ccb_mcp_crossrepo_haiku_20260226_035628_variance](../runs/ccb_mcp_crossrepo_haiku_20260226_035628_variance.md) | `mcp-remote-direct` | 1 | 0.767 | 1.000 |
 | [ccb_mcp_crossrepo_haiku_20260226_035633_variance](../runs/ccb_mcp_crossrepo_haiku_20260226_035633_variance.md) | `mcp-remote-direct` | 1 | 0.850 | 1.000 |
 | [ccb_mcp_crossrepo_haiku_20260226_205845](../runs/ccb_mcp_crossrepo_haiku_20260226_205845.md) | `baseline-local-direct` | 1 | 0.867 | 1.000 |
-| [ccb_mcp_crossrepo_tracing_haiku_022126](../runs/ccb_mcp_crossrepo_tracing_haiku_022126.md) | `baseline` | 3 | 0.941 | 1.000 |
-| [ccb_mcp_crossrepo_tracing_haiku_022126](../runs/ccb_mcp_crossrepo_tracing_haiku_022126.md) | `mcp` | 3 | 0.899 | 1.000 |
+| [ccb_mcp_crossrepo_tracing_haiku_022126](../runs/ccb_mcp_crossrepo_tracing_haiku_022126.md) | `baseline-local-artifact` | 3 | 0.941 | 1.000 |
+| [ccb_mcp_crossrepo_tracing_haiku_022126](../runs/ccb_mcp_crossrepo_tracing_haiku_022126.md) | `mcp-remote-artifact` | 3 | 0.899 | 1.000 |
 | [ccb_mcp_crossrepo_tracing_haiku_20260224_181919](../runs/ccb_mcp_crossrepo_tracing_haiku_20260224_181919.md) | `mcp-remote-artifact` | 2 | 0.287 | 1.000 |
 | [ccb_mcp_crossrepo_tracing_haiku_20260225_011700](../runs/ccb_mcp_crossrepo_tracing_haiku_20260225_011700.md) | `baseline-local-artifact` | 2 | 0.000 | 0.000 |
 | [ccb_mcp_crossrepo_tracing_haiku_20260226_035617](../runs/ccb_mcp_crossrepo_tracing_haiku_20260226_035617.md) | `mcp-remote-direct` | 3 | 0.669 | 1.000 |
@@ -30,17 +30,17 @@
 | [mcp_CCX-config-trace-003_iEFkPj](../tasks/ccb_mcp_crossrepo_tracing_haiku_20260226_035617--mcp-remote-direct--mcp_CCX-config-trace-003_iEFkPj.md) | — | `mcp-remote-direct` | `passed` | 0.472 | 4 | 0.947 |
 | [mcp_CCX-config-trace-003_xV8ARc](../tasks/ccb_mcp_crossrepo_tracing_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-config-trace-003_xV8ARc.md) | — | `mcp-remote-direct` | `passed` | 0.472 | 4 | 0.773 |
 | [mcp_CCX-config-trace-003_xkTKc3](../tasks/ccb_mcp_crossrepo_tracing_haiku_20260226_035628_variance--mcp-remote-direct--mcp_CCX-config-trace-003_xkTKc3.md) | — | `mcp-remote-direct` | `passed` | 0.467 | 4 | 0.947 |
-| [ccx-config-trace-010](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--baseline--ccx-config-trace-010.md) | — | `baseline` | `passed` | 1.000 | 1 | 0.000 |
-| [ccx-config-trace-010](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--mcp--ccx-config-trace-010.md) | — | `mcp` | `passed` | 1.000 | 1 | 0.750 |
-| [ccx-dep-trace-001](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--baseline--ccx-dep-trace-001.md) | — | `baseline` | `passed` | 0.824 | 1 | 0.000 |
-| [ccx-dep-trace-001](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--mcp--ccx-dep-trace-001.md) | — | `mcp` | `passed` | 0.824 | 1 | 0.857 |
+| [ccx-config-trace-010](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--baseline--ccx-config-trace-010.md) | — | `baseline-local-artifact` | `passed` | 1.000 | 1 | 0.000 |
+| [ccx-config-trace-010](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--mcp--ccx-config-trace-010.md) | — | `mcp-remote-artifact` | `passed` | 1.000 | 1 | 0.750 |
+| [ccx-dep-trace-001](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--baseline--ccx-dep-trace-001.md) | — | `baseline-local-artifact` | `passed` | 0.824 | 1 | 0.000 |
+| [ccx-dep-trace-001](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--mcp--ccx-dep-trace-001.md) | — | `mcp-remote-artifact` | `passed` | 0.824 | 1 | 0.857 |
 | [ccx-dep-trace-002](../tasks/ccb_mcp_crossrepo_tracing_haiku_20260226_205845--baseline-local-direct--ccx-dep-trace-002.md) | — | `baseline-local-direct` | `passed` | 1.000 | 1 | 0.000 |
 | [mcp_CCX-dep-trace-002_wZ1b08](../tasks/ccb_mcp_crossrepo_tracing_haiku_20260226_035622_variance--mcp-remote-direct--mcp_CCX-dep-trace-002_wZ1b08.md) | — | `mcp-remote-direct` | `passed` | 1.000 | 4 | 0.941 |
 | [mcp_CCX-dep-trace-002_liuH6e](../tasks/ccb_mcp_crossrepo_tracing_haiku_20260226_035617--mcp-remote-direct--mcp_CCX-dep-trace-002_liuH6e.md) | — | `mcp-remote-direct` | `passed` | 1.000 | 4 | 0.895 |
 | [mcp_CCX-dep-trace-002_9jCFFt](../tasks/ccb_mcp_crossrepo_tracing_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-dep-trace-002_9jCFFt.md) | — | `mcp-remote-direct` | `passed` | 0.846 | 4 | 0.923 |
 | [mcp_CCX-dep-trace-002_v4KtU5](../tasks/ccb_mcp_crossrepo_tracing_haiku_20260226_035628_variance--mcp-remote-direct--mcp_CCX-dep-trace-002_v4KtU5.md) | — | `mcp-remote-direct` | `passed` | 1.000 | 4 | 0.909 |
-| [ccx-dep-trace-004](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--baseline--ccx-dep-trace-004.md) | — | `baseline` | `passed` | 1.000 | 1 | 0.000 |
-| [ccx-dep-trace-004](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--mcp--ccx-dep-trace-004.md) | — | `mcp` | `passed` | 0.875 | 1 | 0.875 |
+| [ccx-dep-trace-004](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--baseline--ccx-dep-trace-004.md) | — | `baseline-local-artifact` | `passed` | 1.000 | 1 | 0.000 |
+| [ccx-dep-trace-004](../tasks/ccb_mcp_crossrepo_tracing_haiku_022126--mcp--ccx-dep-trace-004.md) | — | `mcp-remote-artifact` | `passed` | 0.875 | 1 | 0.875 |
 | [ccx-dep-trace-102](../tasks/ccb_mcp_crossrepo_tracing_haiku_20260226_205845--baseline-local-direct--ccx-dep-trace-102.md) | — | `baseline-local-direct` | `passed` | 0.667 | 1 | 0.000 |
 | [mcp_CCX-dep-trace-102_WJcLPU](../tasks/ccb_mcp_crossrepo_tracing_haiku_20260226_035622_variance--mcp-remote-direct--mcp_CCX-dep-trace-102_WJcLPU.md) | — | `mcp-remote-direct` | `passed` | 0.867 | 4 | 0.952 |
 | [mcp_CCX-dep-trace-102_6nybzq](../tasks/ccb_mcp_crossrepo_tracing_haiku_20260226_035617--mcp-remote-direct--mcp_CCX-dep-trace-102_6nybzq.md) | — | `mcp-remote-direct` | `passed` | 0.533 | 4 | 0.882 |

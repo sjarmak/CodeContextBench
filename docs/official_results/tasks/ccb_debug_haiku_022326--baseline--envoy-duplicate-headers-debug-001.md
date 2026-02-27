@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_debug_haiku_022326--baseline--envoy-duplicate-headers-debug-001/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_debug_haiku_022326--baseline--envoy-duplicate-headers-debug-001/claude-code.txt)
 
 ## Metrics
 
@@ -52,3 +53,90 @@
 | `Bash` |
 | `Bash` |
 | `Read` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll investigate the duplicate response headers issue in Envoy. Let me start by exploring the codebase to understand the router filter pipeline and how response headers are processed. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `tool_use` | `Bash` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `Bash` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `Bash` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `Bash` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `Bash` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `Bash` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `Bash` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `tool_use` | `Read` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `tool_use` | `Bash` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `tool_use` | `Bash` | - |
+| 24 | `user` | `text` | `-` | - |
+| 25 | `assistant` | `tool_use` | `Read` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `Bash` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `tool_use` | `Read` | - |
+| 30 | `user` | `text` | `-` | - |
+| 31 | `assistant` | `tool_use` | `Read` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `text` | `-` | Now let me check what `finalizeResponseHeaders` does: |
+| 34 | `assistant` | `tool_use` | `Bash` | - |
+| 35 | `user` | `text` | `-` | - |
+| 36 | `assistant` | `tool_use` | `Read` | - |
+| 37 | `user` | `text` | `-` | - |
+| 38 | `assistant` | `tool_use` | `Read` | - |
+| 39 | `user` | `text` | `-` | - |
+| 40 | `assistant` | `tool_use` | `Bash` | - |
+| 41 | `user` | `text` | `-` | - |
+| 42 | `assistant` | `tool_use` | `Read` | - |
+| 43 | `user` | `text` | `-` | - |
+| 44 | `assistant` | `tool_use` | `Read` | - |
+| 45 | `user` | `text` | `-` | - |
+| 46 | `assistant` | `text` | `-` | Now let me look at the header mutation filter to understand the full picture: |
+| 47 | `assistant` | `tool_use` | `Bash` | - |
+| 48 | `user` | `text` | `-` | - |
+| 49 | `assistant` | `tool_use` | `Read` | - |
+| 50 | `user` | `text` | `-` | - |
+| 51 | `assistant` | `tool_use` | `Bash` | - |
+| 52 | `user` | `text` | `-` | - |
+| 53 | `assistant` | `tool_use` | `Read` | - |
+| 54 | `user` | `text` | `-` | - |
+| 55 | `assistant` | `tool_use` | `Bash` | - |
+| 56 | `user` | `text` | `-` | - |
+| 57 | `assistant` | `tool_use` | `Read` | - |
+| 58 | `user` | `text` | `-` | - |
+| 59 | `assistant` | `tool_use` | `Bash` | - |
+| 60 | `user` | `text` | `-` | - |
+| 61 | `assistant` | `tool_use` | `Bash` | - |
+| 62 | `user` | `text` | `-` | - |
+| 63 | `assistant` | `tool_use` | `Bash` | - |
+| 64 | `user` | `text` | `-` | - |
+| 65 | `assistant` | `tool_use` | `Read` | - |
+| 66 | `user` | `text` | `-` | - |
+| 67 | `assistant` | `tool_use` | `Bash` | - |
+| 68 | `user` | `text` | `-` | - |
+| 69 | `assistant` | `tool_use` | `Read` | - |
+| 70 | `user` | `text` | `-` | - |
+| 71 | `assistant` | `tool_use` | `Read` | - |
+| 72 | `user` | `text` | `-` | - |
+| 73 | `assistant` | `text` | `-` | Now let me look at the proto definitions for understanding the append_action field: |
+| 74 | `assistant` | `tool_use` | `Bash` | - |
+| 75 | `user` | `text` | `-` | - |
+| 76 | `assistant` | `tool_use` | `Bash` | - |
+| 77 | `user` | `text` | `-` | - |
+| 78 | `assistant` | `tool_use` | `Bash` | - |
+| 79 | `user` | `text` | `-` | - |
+| 80 | `assistant` | `tool_use` | `Bash` | - |

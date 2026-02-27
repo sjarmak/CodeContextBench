@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_onboarding_haiku_20260226_231458--baseline-local-direct--ccx-onboard-044/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_onboarding_haiku_20260226_231458--baseline-local-direct--ccx-onboard-044/claude-code.txt)
 
 ## Metrics
 
@@ -53,3 +54,52 @@
 | `Bash` |
 | `Grep` |
 | `Grep` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find the key Rust compiler type inference files. Let me start by exploring the relevant directories in the rust repository. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `assistant` | `tool_use` | `Bash` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `text` | `-` | Let me check the actual structure of the workspace: |
+| 8 | `assistant` | `tool_use` | `Bash` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `assistant` | `tool_use` | `Bash` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `tool_use` | `Bash` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `tool_use` | `Bash` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `Bash` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `Bash` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `tool_use` | `Bash` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `Bash` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `text` | `-` | Now let me search for the specific structs mentioned: |
+| 25 | `assistant` | `tool_use` | `Grep` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `tool_use` | `Grep` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `assistant` | `tool_use` | `Grep` | - |
+| 30 | `user` | `text` | `-` | - |
+| 31 | `assistant` | `tool_use` | `Read` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `tool_use` | `Read` | - |
+| 34 | `user` | `text` | `-` | - |
+| 35 | `assistant` | `tool_use` | `Read` | - |
+| 36 | `user` | `text` | `-` | - |
+| 37 | `assistant` | `tool_use` | `Read` | - |
+| 38 | `user` | `text` | `-` | - |
+| 39 | `assistant` | `text` | `-` | Perfect! I've found all three key items. Let me create the answer file with the findings: |
+| 40 | `assistant` | `tool_use` | `Write` | - |
+| 41 | `user` | `text` | `-` | - |
+| 42 | `assistant` | `text` | `-` | Perfect! I've completed the task and created the answer file at `/workspace/answer.json`. Here's what I found:  ## Summary of Key Type Inference Files  **1. InferCtxt** (`compiler/rustc_infer/src/infer/mod.rs`, line 231)... |

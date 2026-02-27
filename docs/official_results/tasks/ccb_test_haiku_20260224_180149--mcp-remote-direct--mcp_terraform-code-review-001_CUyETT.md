@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_test_haiku_20260224_180149--mcp-remote-direct--mcp_terraform-code-review-001_CUyETT/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_test_haiku_20260224_180149--mcp-remote-direct--mcp_terraform-code-review-001_CUyETT/claude-code.txt)
 
 ## Metrics
 
@@ -46,3 +47,27 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `Bash` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you review the Terraform PR for defects. Let me start by reading the four files mentioned in the task to understand the code and identify any bugs. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 6 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `text` | `-` | Looking at these four files, I'll systematically analyze them for defects. Let me examine each file carefully. |
+| 12 | `assistant` | `tool_use` | `Bash` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `text` | `-` | Now I'll create the review report with the defects I've identified: |
+| 15 | `assistant` | `tool_use` | `Write` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `text` | `-` | Perfect! I've completed the code review and created a structured defect report. Here's a summary of the three defects I found:  ## Summary of Defects  ### 1. **CRITICAL: Hook Return Values Not Checked** (context_apply.go... |

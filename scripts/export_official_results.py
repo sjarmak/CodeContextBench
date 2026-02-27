@@ -9,6 +9,7 @@ Builds a static bundle from runs/official with:
 - index.html (local browser UI)
 
 Intended for publishing valid scored official runs and allowing local browsing.
+If raw runs are unavailable locally, `--serve` can still host an existing bundle.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_REPO_BLOB_BASE = "https://github.com/sjarmak/CodeContextBench/blob/main"
 if str(PROJECT_ROOT / "scripts") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
@@ -49,6 +51,7 @@ TRANSCRIPT_CANDIDATES = (
     "transcript.jsonl",
 )
 AUDIT_EVENT_LIMIT = 200
+CONVERSATION_PREVIEW_LIMIT = 80
 SDLC_SUITES = {
     "ccb_build",
     "ccb_debug",
@@ -58,6 +61,16 @@ SDLC_SUITES = {
     "ccb_secure",
     "ccb_test",
     "ccb_understand",
+}
+SDLC_MIN_VALID_TASKS = {
+    "ccb_build": 25,
+    "ccb_fix": 25,
+    "ccb_debug": 20,
+    "ccb_design": 20,
+    "ccb_document": 20,
+    "ccb_secure": 20,
+    "ccb_test": 20,
+    "ccb_understand": 20,
 }
 
 
@@ -85,6 +98,7 @@ class TaskRecord:
     search_calls_deepsearch: int | None
     tool_calls_by_name: dict[str, int] | None
     sample_tool_calls: list[dict[str, str]]
+    conversation_preview: list[dict[str, str]]
     started_at: str | None
     trace_available: dict[str, bool]
     trace_paths: dict[str, str | None]
@@ -169,6 +183,14 @@ def _benchmark_link(suite: str, canonical_name: str) -> str | None:
     if candidate.is_dir():
         return f"../../../benchmarks/{suite}/{canonical_name}"
     return None
+
+
+def _github_blob_url(repo_blob_base: str, repo_rel_path: str | None) -> str | None:
+    if not repo_rel_path:
+        return None
+    clean_base = repo_blob_base.rstrip("/")
+    clean_path = repo_rel_path.lstrip("/")
+    return f"{clean_base}/{clean_path}"
 
 
 def _is_task_result_payload(data: dict[str, Any]) -> bool:
@@ -263,6 +285,8 @@ def _parse_transcript(
             "line_count": 0,
             "json_line_count": 0,
             "tool_event_count": 0,
+            "message_event_count": 0,
+            "messages": [],
             "tool_events": [],
         }
 
@@ -273,8 +297,31 @@ def _parse_transcript(
             "line_count": 0,
             "json_line_count": 0,
             "tool_event_count": 0,
+            "message_event_count": 0,
+            "messages": [],
             "tool_events": [],
         }
+
+    message_events: list[dict[str, Any]] = []
+    sequence = 0
+
+    def _append_message(msg_type: str, subtype: str, text: str | None = None, tool: str | None = None) -> None:
+        nonlocal sequence
+        if len(message_events) >= AUDIT_EVENT_LIMIT:
+            return
+        preview = (text or "").replace("\n", " ").strip()
+        if len(preview) > 220:
+            preview = preview[:220] + "..."
+        message_events.append(
+            {
+                "sequence": sequence,
+                "type": msg_type,
+                "subtype": subtype,
+                "tool": tool,
+                "text": preview or None,
+            }
+        )
+        sequence += 1
 
     for line in lines:
         line_count += 1
@@ -287,37 +334,88 @@ def _parse_transcript(
             continue
         json_line_count += 1
 
-        if payload.get("type") != "assistant":
-            continue
+        msg_type = str(payload.get("type") or "")
         ts = payload.get("timestamp")
-        message = payload.get("message")
-        if not isinstance(message, dict):
-            continue
-        content = message.get("content")
-        if not isinstance(content, list):
+
+        if msg_type == "assistant":
+            message = payload.get("message")
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+            if isinstance(content, str):
+                _append_message("assistant", "text", content)
+                continue
+            if not isinstance(content, list):
+                continue
+            for item in content:
+                if not isinstance(item, dict):
+                    continue
+                item_type = str(item.get("type") or "")
+                if item_type == "text":
+                    _append_message("assistant", "text", str(item.get("text") or ""))
+                    continue
+                if item_type != "tool_use":
+                    continue
+                tool_name = str(item.get("name") or "unknown")
+                counts[tool_name] += 1
+                _append_message("assistant", "tool_use", tool=tool_name)
+                if len(events) < AUDIT_EVENT_LIMIT:
+                    events.append(
+                        {
+                            "timestamp": ts if isinstance(ts, str) else None,
+                            "tool": tool_name,
+                        }
+                    )
+                if len(examples) < max_examples:
+                    examples.append({"tool": tool_name})
             continue
 
-        for item in content:
-            if not isinstance(item, dict):
+        if msg_type == "user":
+            tool_use_result = payload.get("toolUseResult")
+            if isinstance(tool_use_result, dict):
+                result_content = tool_use_result.get("content")
+                if isinstance(result_content, str):
+                    _append_message("user", "tool_result", result_content)
+                elif isinstance(result_content, list):
+                    text_parts: list[str] = []
+                    for block in result_content:
+                        if isinstance(block, dict):
+                            if block.get("type") == "text":
+                                text_parts.append(str(block.get("text") or ""))
+                            elif block.get("type") == "tool_result":
+                                text_parts.append(str(block.get("content") or ""))
+                        elif isinstance(block, str):
+                            text_parts.append(block)
+                    _append_message("user", "tool_result", "\n".join(text_parts))
+                else:
+                    _append_message("user", "tool_result")
                 continue
-            if item.get("type") != "tool_use":
+
+            message = payload.get("message")
+            if not isinstance(message, dict):
                 continue
-            tool_name = str(item.get("name") or "unknown")
-            counts[tool_name] += 1
-            if len(events) < AUDIT_EVENT_LIMIT:
-                events.append(
-                    {
-                        "timestamp": ts if isinstance(ts, str) else None,
-                        "tool": tool_name,
-                    }
-                )
-            if len(examples) < max_examples:
-                examples.append({"tool": tool_name})
+            content = message.get("content")
+            if isinstance(content, str):
+                _append_message("user", "text", content)
+            elif isinstance(content, list):
+                text_parts = [
+                    str(block.get("text") or "")
+                    for block in content
+                    if isinstance(block, dict) and block.get("type") == "text"
+                ]
+                _append_message("user", "text", "\n".join(text_parts))
+            continue
+
+        if msg_type == "system":
+            subtype = str(payload.get("subtype") or "init")
+            _append_message("system", subtype)
 
     return dict(counts), examples, {
         "line_count": line_count,
         "json_line_count": json_line_count,
         "tool_event_count": sum(counts.values()),
+        "message_event_count": len(message_events),
+        "messages": message_events,
         "tool_events": events,
     }
 
@@ -500,6 +598,16 @@ def _extract_task_record(
         search_calls_deepsearch=search_calls_deepsearch,
         tool_calls_by_name=tool_calls_by_name,
         sample_tool_calls=sample_tool_calls,
+        conversation_preview=[
+            {
+                "type": str(event.get("type") or ""),
+                "subtype": str(event.get("subtype") or ""),
+                "tool": str(event.get("tool") or ""),
+                "text": str(event.get("text") or ""),
+            }
+            for event in transcript_audit.get("messages", [])[:CONVERSATION_PREVIEW_LIMIT]
+            if isinstance(event, dict)
+        ],
         started_at=started_at,
         trace_available={
             "trajectory": trace_paths["trajectory"] is not None,
@@ -565,6 +673,11 @@ def _normalize_config_for_suite(suite: str, config: str) -> str:
             return "baseline-local-direct"
         if config == "mcp":
             return "mcp-remote-direct"
+    elif suite.startswith("ccb_mcp_"):
+        if config == "baseline":
+            return "baseline-local-artifact"
+        if config == "mcp":
+            return "mcp-remote-artifact"
     return config
 
 
@@ -595,7 +708,39 @@ def _suite_from_run_dir(run_dir_name: str, prefix_map: dict[str, str]) -> str:
     return "unknown"
 
 
-def _to_task_dict(record: TaskRecord, task_page: str) -> dict[str, Any]:
+def _to_task_dict(
+    record: TaskRecord,
+    task_page: str,
+    output_dir: Path,
+    repo_blob_base: str,
+) -> dict[str, Any]:
+    canonical_name = _canonical_task_name(record.task_name)
+    benchmark_repo_path: str | None = None
+    benchmark_dir = PROJECT_ROOT / "benchmarks" / record.suite / canonical_name
+    if benchmark_dir.is_dir():
+        benchmark_repo_path = str(benchmark_dir.relative_to(PROJECT_ROOT))
+
+    task_page_repo_path: str | None = None
+    try:
+        task_page_repo_path = str((output_dir / task_page).relative_to(PROJECT_ROOT))
+    except ValueError:
+        task_page_repo_path = None
+
+    audit_repo_path: str | None = None
+    if record.audit_page:
+        try:
+            audit_repo_path = str((output_dir / record.audit_page).relative_to(PROJECT_ROOT))
+        except ValueError:
+            audit_repo_path = None
+
+    trajectory_repo_path: str | None = None
+    bundled_traj = record.bundled_trace_paths.get("trajectory")
+    if bundled_traj:
+        try:
+            trajectory_repo_path = str((output_dir / bundled_traj).relative_to(PROJECT_ROOT))
+        except ValueError:
+            trajectory_repo_path = None
+
     return {
         "suite": record.suite,
         "run_dir": record.run_dir,
@@ -626,6 +771,11 @@ def _to_task_dict(record: TaskRecord, task_page: str) -> dict[str, Any]:
         "checksums": record.checksums,
         "audit_page": record.audit_page,
         "task_page": task_page,
+        "task_page_github": _github_blob_url(repo_blob_base, task_page_repo_path),
+        "benchmark_path": benchmark_repo_path,
+        "benchmark_github": _github_blob_url(repo_blob_base, benchmark_repo_path),
+        "audit_github": _github_blob_url(repo_blob_base, audit_repo_path),
+        "trajectory_github": _github_blob_url(repo_blob_base, trajectory_repo_path),
     }
 
 
@@ -689,6 +839,21 @@ def _build_task_page(record: TaskRecord) -> str:
         for sample in record.sample_tool_calls:
             tool = sample["tool"].replace("|", "\\|")
             lines.append(f"| `{tool}` |")
+        lines.append("")
+
+    if record.conversation_preview:
+        lines.append("## Conversation Preview")
+        lines.append("")
+        lines.append("Parsed from transcript using the same message categories as the dashboard trace parser.")
+        lines.append("")
+        lines.append("| Seq | Type | Subtype | Tool | Text |")
+        lines.append("|---:|---|---|---|---|")
+        for idx, event in enumerate(record.conversation_preview, start=1):
+            kind = event.get("type", "").replace("|", "\\|")
+            subtype = event.get("subtype", "").replace("|", "\\|")
+            tool = event.get("tool", "").replace("|", "\\|")
+            text = event.get("text", "").replace("|", "\\|")
+            lines.append(f"| {idx} | `{kind}` | `{subtype}` | `{tool or '-'}` | {text or '-'} |")
         lines.append("")
 
     return "\n".join(lines)
@@ -874,12 +1039,14 @@ def _build_root_readme(suite_summaries: list[dict[str, Any]], run_summaries: lis
     lines.append("")
     lines.append("## Suite/Config Summary")
     lines.append("")
-    lines.append("| Suite | Config | Valid Tasks | Mean Reward | Pass Rate |")
-    lines.append("|---|---|---:|---:|---:|")
+    lines.append("| Suite | Config | Valid Tasks | Min Required | Mean Reward | Pass Rate | Coverage |")
+    lines.append("|---|---|---:|---:|---:|---:|---|")
     for row in suite_summaries:
+        coverage_flag = "FLAG: below minimum" if row.get("below_minimum_valid_tasks") else "ok"
         lines.append(
             f"| [{row['suite']}](suites/{row['suite']}.md) | `{row['config']}` | "
-            f"{row['task_count']} | {row['mean_reward']:.3f} | {row['pass_rate']:.3f} |"
+            f"{row['task_count']} | {row.get('min_required_valid_tasks', '-')} | "
+            f"{row['mean_reward']:.3f} | {row['pass_rate']:.3f} | {coverage_flag} |"
         )
     lines.append("")
     lines.append("<details>")
@@ -919,6 +1086,16 @@ def _dedupe_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(best.values(), key=lambda t: (t["suite"], t["config"], t["task_name"]))
 
 
+def _suite_min_required_valid_tasks(suite: str, rows: list[dict[str, Any]]) -> int:
+    explicit = SDLC_MIN_VALID_TASKS.get(suite)
+    if explicit is not None:
+        return explicit
+    # For non-SDLC suites, require parity with the best-covered config in-suite.
+    if not rows:
+        return 0
+    return max(int(r.get("task_count", 0)) for r in rows)
+
+
 def _build_index_html() -> str:
     return """<!doctype html>
 <html lang=\"en\"> 
@@ -947,6 +1124,10 @@ def _build_index_html() -> str:
     <h1>Official Results Browser</h1>
     <div class=\"controls\">
       <select id=\"suiteFilter\"><option value=\"\">All suites</option></select>
+      <select id=\"datasetFilter\">
+        <option value=\"all\">All task runs</option>
+        <option value=\"latest\">Latest per suite+config+task</option>
+      </select>
       <select id=\"runFilter\"><option value=\"\">All runs</option></select>
       <select id=\"configFilter\"><option value=\"\">All configs</option></select>
       <select id=\"statusFilter\"><option value=\"\">All statuses</option><option>passed</option><option>failed</option></select>
@@ -960,6 +1141,7 @@ def _build_index_html() -> str:
   <script>
     const rowsEl = document.getElementById('rows');
     const suiteFilter = document.getElementById('suiteFilter');
+    const datasetFilter = document.getElementById('datasetFilter');
     const runFilter = document.getElementById('runFilter');
     const configFilter = document.getElementById('configFilter');
     const statusFilter = document.getElementById('statusFilter');
@@ -968,15 +1150,18 @@ def _build_index_html() -> str:
     function fmt(v, d=3) { return (v===null || v===undefined) ? '-' : Number(v).toFixed(d); }
 
     fetch('data/official_results.json').then(r => r.json()).then(data => {
-      const tasks = data.tasks || [];
-      const suites = [...new Set(tasks.map(t => t.suite || 'unknown'))].sort();
-      const runs = [...new Set(tasks.map(t => t.run_dir))].sort();
-      const configs = [...new Set(tasks.map(t => t.config))].sort();
+      const allTasks = data.all_tasks || data.tasks || [];
+      const dedupedTasks = data.tasks || [];
+      const suites = [...new Set(allTasks.map(t => t.suite || 'unknown'))].sort();
+      const runs = [...new Set(allTasks.map(t => t.run_dir))].sort();
+      const configs = [...new Set(allTasks.map(t => t.config))].sort();
       suites.forEach(s => suiteFilter.add(new Option(s, s)));
       runs.forEach(r => runFilter.add(new Option(r, r)));
       configs.forEach(c => configFilter.add(new Option(c, c)));
 
       const render = () => {
+        const dataset = datasetFilter.value || 'all';
+        const tasks = dataset === 'latest' ? dedupedTasks : allTasks;
         const sfu = suiteFilter.value;
         const rf = runFilter.value;
         const cf = configFilter.value;
@@ -990,11 +1175,16 @@ def _build_index_html() -> str:
           .forEach(t => {
             const tr = document.createElement('tr');
             const trace = `${t.trace_available.trajectory ? 'traj ' : ''}${t.trace_available.transcript ? 'tx' : ''}`.trim() || '-';
+            const repoLink = t.task_page_github ? `<a href=\"${t.task_page_github}\" target=\"_blank\" rel=\"noopener\">repo</a>` : '';
+            const benchmarkLink = t.benchmark_github ? `<a href=\"${t.benchmark_github}\" target=\"_blank\" rel=\"noopener\">benchmark</a>` : '';
+            const trajLink = t.trajectory_github ? `<a href=\"${t.trajectory_github}\" target=\"_blank\" rel=\"noopener\">trajectory</a>` : '';
+            const auditLink = t.audit_github ? `<a href=\"${t.audit_github}\" target=\"_blank\" rel=\"noopener\">audit</a>` : '';
+            const extras = [repoLink, benchmarkLink, trajLink, auditLink].filter(Boolean).join(' | ');
             tr.innerHTML = `
               <td class=\"mono\">${t.suite || 'unknown'}</td>
               <td class=\"mono\">${t.run_dir}</td>
               <td class=\"mono\">${t.config}</td>
-              <td><a href=\"${t.task_page}\">${t.task_name}</a></td>
+              <td><a href=\"${t.task_page}\">${t.task_name}</a>${extras ? `<div style=\"margin-top:4px;font-size:12px\">${extras}</div>` : ''}</td>
               <td><span class=\"pill ${t.status}\">${t.status}</span></td>
               <td>${fmt(t.reward,3)}</td>
               <td>${fmt(t.mcp_ratio,3)}</td>
@@ -1006,6 +1196,7 @@ def _build_index_html() -> str:
       };
 
       suiteFilter.addEventListener('change', render);
+      datasetFilter.addEventListener('change', render);
       runFilter.addEventListener('change', render);
       configFilter.addEventListener('change', render);
       statusFilter.addEventListener('change', render);
@@ -1033,6 +1224,7 @@ def build_export(
     output_dir: Path,
     run_filter: set[str] | None,
     max_examples: int,
+    repo_blob_base: str,
 ) -> dict[str, Any]:
     prefix_map = load_prefix_map(PROJECT_ROOT)
     manifest_path = runs_dir / "MANIFEST.json"
@@ -1076,7 +1268,16 @@ def build_export(
                         dst = traces_dir / task_slug / "trajectory.json"
                         dst.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(src, dst)
-                        bundled_trace_paths["trajectory"] = rel
+                bundled_trace_paths["trajectory"] = rel
+                if record.trace_paths.get("transcript"):
+                    src_tx = PROJECT_ROOT / record.trace_paths["transcript"]
+                    if src_tx.is_file():
+                        tx_name = src_tx.name
+                        rel_tx = f"traces/{task_slug}/{tx_name}"
+                        dst_tx = traces_dir / task_slug / tx_name
+                        dst_tx.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(src_tx, dst_tx)
+                        bundled_trace_paths["transcript"] = rel_tx
                 record.bundled_trace_paths = bundled_trace_paths
 
                 audit_page_rel = f"audits/{task_slug}.json"
@@ -1086,7 +1287,12 @@ def build_export(
                 task_page_path = tasks_dir / f"{task_slug}.md"
                 _write_text(task_page_path, _build_task_page(record))
 
-                task_dict = _to_task_dict(record, task_page_rel)
+                task_dict = _to_task_dict(
+                    record,
+                    task_page_rel,
+                    output_dir,
+                    repo_blob_base,
+                )
                 tasks_out.append(task_dict)
 
     run_summaries: list[dict[str, Any]] = []
@@ -1171,11 +1377,21 @@ def build_export(
                     "is_mcp_config": is_mcp_config(config),
                 }
             )
+    summary_rows_by_suite: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in suite_summaries:
+        summary_rows_by_suite[str(row["suite"])].append(row)
+    for suite, rows in summary_rows_by_suite.items():
+        min_required = _suite_min_required_valid_tasks(suite, rows)
+        for row in rows:
+            row["min_required_valid_tasks"] = min_required
+            row["below_minimum_valid_tasks"] = int(row["task_count"]) < min_required
+
     suite_summaries.sort(key=lambda x: (x["suite"], x["config"]))
 
     data = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "runs_dir": str(runs_dir),
+        "repo_blob_base": repo_blob_base,
         "suite_count": len(by_suite),
         "run_count": len({r["run_dir"] for r in run_summaries}),
         "task_count": len(deduped_tasks),
@@ -1229,6 +1445,11 @@ def parse_args() -> argparse.Namespace:
         default=8008,
         help="Port for --serve (default: 8008)",
     )
+    parser.add_argument(
+        "--repo-blob-base",
+        default=DEFAULT_REPO_BLOB_BASE,
+        help="GitHub blob base URL for repo links (default: CodeContextBench main branch).",
+    )
     return parser.parse_args()
 
 
@@ -1238,7 +1459,14 @@ def main() -> int:
     output_dir = Path(args.output_dir).resolve()
 
     if not runs_dir.is_dir():
+        existing_json = output_dir / "data" / "official_results.json"
+        if args.serve and existing_json.is_file():
+            print(f"[WARN] runs dir not found: {runs_dir}")
+            print(f"[WARN] serving existing bundle without regeneration: {output_dir}")
+            _serve_directory(output_dir, args.port)
+            return 0
         print(f"[FAIL] runs dir not found: {runs_dir}")
+        print("[HINT] Pass --runs-dir to a local official runs checkout, or run with --serve to host an existing docs bundle.")
         return 2
 
     run_filter = set(args.run) if args.run else None
@@ -1248,6 +1476,7 @@ def main() -> int:
         output_dir=output_dir,
         run_filter=run_filter,
         max_examples=max(0, args.max_trace_examples),
+        repo_blob_base=args.repo_blob_base,
     )
 
     print(f"[OK] Wrote export bundle to: {output_dir}")

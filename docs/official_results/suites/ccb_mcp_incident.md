@@ -4,8 +4,8 @@
 
 | Run | Config | Valid Tasks | Mean Reward | Pass Rate |
 |---|---|---:|---:|---:|
-| [ccb_mcp_incident_haiku_022126](../runs/ccb_mcp_incident_haiku_022126.md) | `baseline` | 1 | 0.500 | 1.000 |
-| [ccb_mcp_incident_haiku_022126](../runs/ccb_mcp_incident_haiku_022126.md) | `mcp` | 1 | 1.000 | 1.000 |
+| [ccb_mcp_incident_haiku_022126](../runs/ccb_mcp_incident_haiku_022126.md) | `baseline-local-artifact` | 1 | 0.500 | 1.000 |
+| [ccb_mcp_incident_haiku_022126](../runs/ccb_mcp_incident_haiku_022126.md) | `mcp-remote-artifact` | 1 | 1.000 | 1.000 |
 | [ccb_mcp_incident_haiku_20260224_181919](../runs/ccb_mcp_incident_haiku_20260224_181919.md) | `mcp-remote-artifact` | 3 | 0.782 | 1.000 |
 | [ccb_mcp_incident_haiku_20260225_011700](../runs/ccb_mcp_incident_haiku_20260225_011700.md) | `baseline-local-artifact` | 3 | 0.167 | 0.333 |
 | [ccb_mcp_incident_haiku_20260226_035617](../runs/ccb_mcp_incident_haiku_20260226_035617.md) | `mcp-remote-direct` | 6 | 0.753 | 1.000 |
@@ -20,8 +20,8 @@
 
 | Task | Benchmark | Config | Status | Reward | Runs | MCP Ratio |
 |---|---|---|---|---:|---:|---:|
-| [ccx-incident-031](../tasks/ccb_mcp_incident_haiku_022126--baseline--ccx-incident-031.md) | [source](../../../benchmarks/ccb_mcp_incident/ccx-incident-031) | `baseline` | `passed` | 0.500 | 1 | 0.000 |
-| [ccx-incident-031](../tasks/ccb_mcp_incident_haiku_022126--mcp--ccx-incident-031.md) | [source](../../../benchmarks/ccb_mcp_incident/ccx-incident-031) | `mcp` | `passed` | 1.000 | 1 | 0.833 |
+| [ccx-incident-031](../tasks/ccb_mcp_incident_haiku_022126--baseline--ccx-incident-031.md) | [source](../../../benchmarks/ccb_mcp_incident/ccx-incident-031) | `baseline-local-artifact` | `passed` | 0.500 | 1 | 0.000 |
+| [ccx-incident-031](../tasks/ccb_mcp_incident_haiku_022126--mcp--ccx-incident-031.md) | [source](../../../benchmarks/ccb_mcp_incident/ccx-incident-031) | `mcp-remote-artifact` | `passed` | 1.000 | 1 | 0.833 |
 | [ccx-incident-032](../tasks/ccb_mcp_incident_haiku_20260226_205845--baseline-local-direct--ccx-incident-032.md) | [source](../../../benchmarks/ccb_mcp_incident/ccx-incident-032) | `baseline-local-direct` | `passed` | 0.469 | 1 | 0.000 |
 | [mcp_CCX-incident-032_3kc8CS](../tasks/ccb_mcp_incident_haiku_20260226_035617--mcp-remote-direct--mcp_CCX-incident-032_3kc8CS.md) | [source](../../../benchmarks/ccb_mcp_incident/ccx-incident-032) | `mcp-remote-direct` | `passed` | 0.494 | 4 | 0.933 |
 | [mcp_CCX-incident-032_3wlI0S](../tasks/ccb_mcp_incident_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-incident-032_3wlI0S.md) | [source](../../../benchmarks/ccb_mcp_incident/ccx-incident-032) | `mcp-remote-direct` | `passed` | 0.361 | 4 | 0.938 |

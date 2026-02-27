@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/test_haiku_20260224_011816--mcp-remote-direct--sgonly_aspnetcore-code-review-001/trajectory.json)
+- Bundled transcript: [link](../traces/test_haiku_20260224_011816--mcp-remote-direct--sgonly_aspnetcore-code-review-001/claude-code.txt)
 
 ## Metrics
 
@@ -46,3 +47,26 @@
 | `mcp__sourcegraph__sg_list_files` |
 | `Read` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll analyze the DisplayName component for defects. Let me start by reading the two source files. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `text` | `-` | I'll read these files from Sourcegraph to analyze them for defects. |
+| 8 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_list_files` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `assistant` | `text` | `-` | Now let me analyze these files for defects. I've already read the content, so let me carefully review the code for functional bugs and compliance violations. |
+| 11 | `assistant` | `tool_use` | `Read` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `text` | `-` | Based on my code review, I've identified two significant defects. Let me create the review report: |
+| 14 | `assistant` | `tool_use` | `Write` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `text` | `-` | I've completed my analysis of the DisplayName component code and identified two critical defects in the review report:  ## Summary of Defects Found  **1. Hot Reload Display Name Bug (DisplayName.cs, Line 46) — Severity: ... |

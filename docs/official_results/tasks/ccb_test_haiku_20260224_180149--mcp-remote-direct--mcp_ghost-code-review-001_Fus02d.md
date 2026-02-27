@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_test_haiku_20260224_180149--mcp-remote-direct--mcp_ghost-code-review-001_Fus02d/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_test_haiku_20260224_180149--mcp-remote-direct--mcp_ghost-code-review-001_Fus02d/claude-code.txt)
 
 ## Metrics
 
@@ -43,3 +44,22 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you review the comment likes feature for defects. Let me start by reading the three files to identify any functional bugs or compliance violations. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `text` | `-` | Looking at the three files, I'll identify the defects systematically. |
+| 10 | `assistant` | `tool_use` | `Write` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `text` | `-` | I've completed the code review and created a structured report identifying **2 defects** in the comment likes feature PR:  ## Summary of Defects  ### 1. **Incorrect Cache Control Headers** (comment-likes.js:10) - **Sever... |

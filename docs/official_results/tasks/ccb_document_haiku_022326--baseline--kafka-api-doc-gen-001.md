@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_document_haiku_022326--baseline--kafka-api-doc-gen-001/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_document_haiku_022326--baseline--kafka-api-doc-gen-001/claude-code.txt)
 
 ## Metrics
 
@@ -51,3 +52,36 @@
 | `Bash` |
 | `TodoWrite` |
 | `Bash` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you generate comprehensive API reference documentation for Kafka's KafkaConsumer. Let me start by creating a plan and exploring the available resources. |
+| 3 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `tool_use` | `Bash` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `Bash` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `text` | `-` | Now I'll create comprehensive API reference documentation for the KafkaConsumer API based on the detailed requirements you've specified. |
+| 12 | `assistant` | `tool_use` | `Write` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `Bash` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `Bash` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `tool_use` | `Bash` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `tool_use` | `Bash` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `text` | `-` | Perfect! I've successfully created comprehensive API reference documentation for Apache Kafka's `KafkaConsumer`. Here's what was delivered:  ## Documentation Summary  **File Location**: `/workspace/documentation.md` **To... |

@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/test_haiku_20260223_235732--mcp-remote-direct--sgonly_calcom-code-review-001/trajectory.json)
+- Bundled transcript: [link](../traces/test_haiku_20260223_235732--mcp-remote-direct--sgonly_calcom-code-review-001/claude-code.txt)
 
 ## Metrics
 
@@ -48,3 +49,29 @@
 | `Write` |
 | `TodoWrite` |
 | `Read` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll review the three TypeScript files for defects. Let me start by reading them from the repository. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `text` | `-` | Now let me analyze these files carefully for defects. |
+| 10 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `text` | `-` | Let me analyze each file systematically for defects:  **Issue 1: FeatureOptInService.ts (Lines 152-184)** - Auto-opt-in transformation not reflected in returned states  The code applies auto-opt-in transformation (lines ... |
+| 13 | `assistant` | `tool_use` | `Write` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `Read` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `text` | `-` | ## Code Review Complete  I've completed the review of the three TypeScript files and identified **4 defects** spanning functional bugs and compliance violations. The review report has been written to `/workspace/review.j... |

@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_compliance_haiku_20260226_214446--baseline-local-direct--ccx-compliance-115/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_compliance_haiku_20260226_214446--baseline-local-direct--ccx-compliance-115/claude-code.txt)
 
 ## Metrics
 
@@ -52,3 +53,37 @@
 | `Read` |
 | `Read` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you audit Django's session framework for concurrency safety in the session key rotation path. Let me start by exploring the codebase structure. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `tool_use` | `Bash` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `Bash` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `Grep` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `Read` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `tool_use` | `Read` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `tool_use` | `Read` | - |
+| 16 | `user` | `text` | `-` | - |
+| 17 | `assistant` | `tool_use` | `Read` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `tool_use` | `Read` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `text` | `-` | Now let me check the base_session.py file to see the model definition: |
+| 22 | `assistant` | `tool_use` | `Read` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `text` | `-` | Perfect! Now I have all the information needed. Let me create the answer file: |
+| 25 | `assistant` | `tool_use` | `Write` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `assistant` | `text` | `-` | Perfect! I've completed the compliance audit of Django's session framework for concurrency safety in the session key rotation path. Here's a summary of my findings:  ## Key Findings:  ### 1. **cycle_key() Implementation*... |

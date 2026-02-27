@@ -7,6 +7,7 @@
 | [ccb_build_haiku_022326](../runs/ccb_build_haiku_022326.md) | `baseline-local-direct` | 19 | 0.511 | 0.789 |
 | [ccb_build_haiku_022326](../runs/ccb_build_haiku_022326.md) | `mcp-remote-direct` | 25 | 0.372 | 0.640 |
 | [ccb_build_haiku_20260226_015500_backfill](../runs/ccb_build_haiku_20260226_015500_backfill.md) | `baseline-local-direct` | 1 | 0.820 | 1.000 |
+| [ccb_build_haiku_20260227_baseline_gapfill](../runs/ccb_build_haiku_20260227_baseline_gapfill.md) | `baseline-local-direct` | 5 | 0.456 | 0.800 |
 
 ## Tasks
 
@@ -14,6 +15,7 @@
 |---|---|---|---|---:|---:|---:|
 | [bustub-hyperloglog-impl-001](../tasks/ccb_build_haiku_022326--baseline--bustub-hyperloglog-impl-001.md) | [source](../../../benchmarks/ccb_build/bustub-hyperloglog-impl-001) | `baseline-local-direct` | `passed` | 0.167 | 2 | 0.000 |
 | [sgonly_bustub-hyperloglog-impl-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_bustub-hyperloglog-impl-001.md) | [source](../../../benchmarks/ccb_build/bustub-hyperloglog-impl-001) | `mcp-remote-direct` | `failed` | 0.000 | 2 | 0.100 |
+| [camel-fix-protocol-feat-001](../tasks/ccb_build_haiku_20260227_baseline_gapfill--baseline-local-direct--camel-fix-protocol-feat-001.md) | [source](../../../benchmarks/ccb_build/camel-fix-protocol-feat-001) | `baseline-local-direct` | `passed` | 0.220 | 1 | 0.000 |
 | [sgonly_camel-fix-protocol-feat-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_camel-fix-protocol-feat-001.md) | [source](../../../benchmarks/ccb_build/camel-fix-protocol-feat-001) | `mcp-remote-direct` | `passed` | 0.130 | 2 | 0.500 |
 | [cgen-deps-install-001](../tasks/ccb_build_haiku_022326--baseline--cgen-deps-install-001.md) | [source](../../../benchmarks/ccb_build/cgen-deps-install-001) | `baseline-local-direct` | `failed` | 0.000 | 2 | 0.000 |
 | [sgonly_cgen-deps-install-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_cgen-deps-install-001.md) | [source](../../../benchmarks/ccb_build/cgen-deps-install-001) | `mcp-remote-direct` | `failed` | 0.000 | 2 | 0.929 |
@@ -27,6 +29,7 @@
 | [sgonly_envoy-grpc-server-impl-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_envoy-grpc-server-impl-001.md) | [source](../../../benchmarks/ccb_build/envoy-grpc-server-impl-001) | `mcp-remote-direct` | `passed` | 0.440 | 2 | 0.938 |
 | [eslint-markdown-deps-install-001](../tasks/ccb_build_haiku_022326--baseline--eslint-markdown-deps-install-001.md) | [source](../../../benchmarks/ccb_build/eslint-markdown-deps-install-001) | `baseline-local-direct` | `passed` | 1.000 | 2 | 0.000 |
 | [sgonly_eslint-markdown-deps-install-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_eslint-markdown-deps-install-001.md) | [source](../../../benchmarks/ccb_build/eslint-markdown-deps-install-001) | `mcp-remote-direct` | `failed` | 0.000 | 2 | 0.711 |
+| [flink-pricing-window-feat-001](../tasks/ccb_build_haiku_20260227_baseline_gapfill--baseline-local-direct--flink-pricing-window-feat-001.md) | [source](../../../benchmarks/ccb_build/flink-pricing-window-feat-001) | `baseline-local-direct` | `passed` | 0.480 | 1 | 0.000 |
 | [sgonly_flink-pricing-window-feat-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_flink-pricing-window-feat-001.md) | [source](../../../benchmarks/ccb_build/flink-pricing-window-feat-001) | `mcp-remote-direct` | `passed` | 0.510 | 2 | 0.565 |
 | [flipt-dep-refactor-001](../tasks/ccb_build_haiku_022326--baseline--flipt-dep-refactor-001.md) | [source](../../../benchmarks/ccb_build/flipt-dep-refactor-001) | `baseline-local-direct` | `passed` | 0.700 | 2 | 0.000 |
 | [sgonly_flipt-dep-refactor-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_flipt-dep-refactor-001.md) | [source](../../../benchmarks/ccb_build/flipt-dep-refactor-001) | `mcp-remote-direct` | `passed` | 0.030 | 2 | 0.418 |
@@ -34,9 +37,11 @@
 | [sgonly_flipt-flagexists-refactor-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_flipt-flagexists-refactor-001.md) | [source](../../../benchmarks/ccb_build/flipt-flagexists-refactor-001) | `mcp-remote-direct` | `passed` | 0.750 | 2 | 0.352 |
 | [iamactionhunter-deps-install-001](../tasks/ccb_build_haiku_022326--baseline--iamactionhunter-deps-install-001.md) | [source](../../../benchmarks/ccb_build/iamactionhunter-deps-install-001) | `baseline-local-direct` | `passed` | 1.000 | 2 | 0.000 |
 | [sgonly_iamactionhunter-deps-install-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_iamactionhunter-deps-install-001.md) | [source](../../../benchmarks/ccb_build/iamactionhunter-deps-install-001) | `mcp-remote-direct` | `passed` | 1.000 | 2 | 0.390 |
+| [k8s-noschedule-taint-feat-001](../tasks/ccb_build_haiku_20260227_baseline_gapfill--baseline-local-direct--k8s-noschedule-taint-feat-001.md) | [source](../../../benchmarks/ccb_build/k8s-noschedule-taint-feat-001) | `baseline-local-direct` | `passed` | 0.700 | 1 | 0.000 |
 | [sgonly_k8s-noschedule-taint-feat-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_k8s-noschedule-taint-feat-001.md) | [source](../../../benchmarks/ccb_build/k8s-noschedule-taint-feat-001) | `mcp-remote-direct` | `passed` | 0.500 | 2 | 0.279 |
 | [k8s-runtime-object-impl-001](../tasks/ccb_build_haiku_022326--baseline--k8s-runtime-object-impl-001.md) | [source](../../../benchmarks/ccb_build/k8s-runtime-object-impl-001) | `baseline-local-direct` | `passed` | 0.110 | 2 | 0.000 |
 | [sgonly_k8s-runtime-object-impl-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_k8s-runtime-object-impl-001.md) | [source](../../../benchmarks/ccb_build/k8s-runtime-object-impl-001) | `mcp-remote-direct` | `passed` | 0.120 | 2 | 0.831 |
+| [k8s-score-normalizer-refac-001](../tasks/ccb_build_haiku_20260227_baseline_gapfill--baseline-local-direct--k8s-score-normalizer-refac-001.md) | [source](../../../benchmarks/ccb_build/k8s-score-normalizer-refac-001) | `baseline-local-direct` | `passed` | 0.880 | 1 | 0.000 |
 | [sgonly_k8s-score-normalizer-refac-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_k8s-score-normalizer-refac-001.md) | [source](../../../benchmarks/ccb_build/k8s-score-normalizer-refac-001) | `mcp-remote-direct` | `passed` | 0.780 | 2 | 0.385 |
 | [kafka-batch-accumulator-refac-001](../tasks/ccb_build_haiku_022326--baseline--kafka-batch-accumulator-refac-001.md) | [source](../../../benchmarks/ccb_build/kafka-batch-accumulator-refac-001) | `baseline-local-direct` | `passed` | 0.320 | 2 | 0.000 |
 | [sgonly_kafka-batch-accumulator-refac-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_kafka-batch-accumulator-refac-001.md) | [source](../../../benchmarks/ccb_build/kafka-batch-accumulator-refac-001) | `mcp-remote-direct` | `passed` | 0.680 | 2 | 0.333 |
@@ -46,6 +51,7 @@
 | [sgonly_python-http-class-naming-refac-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_python-http-class-naming-refac-001.md) | [source](../../../benchmarks/ccb_build/python-http-class-naming-refac-001) | `mcp-remote-direct` | `passed` | 0.880 | 2 | 0.293 |
 | [rust-subtype-relation-refac-001](../tasks/ccb_build_haiku_20260226_015500_backfill--baseline-local-direct--rust-subtype-relation-refac-001.md) | [source](../../../benchmarks/ccb_build/rust-subtype-relation-refac-001) | `baseline-local-direct` | `passed` | 0.820 | 2 | 0.000 |
 | [sgonly_rust-subtype-relation-refac-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_rust-subtype-relation-refac-001.md) | [source](../../../benchmarks/ccb_build/rust-subtype-relation-refac-001) | `mcp-remote-direct` | `passed` | 0.710 | 2 | 0.464 |
+| [servo-scrollend-event-feat-001](../tasks/ccb_build_haiku_20260227_baseline_gapfill--baseline-local-direct--servo-scrollend-event-feat-001.md) | [source](../../../benchmarks/ccb_build/servo-scrollend-event-feat-001) | `baseline-local-direct` | `failed` | 0.000 | 1 | 0.000 |
 | [sgonly_servo-scrollend-event-feat-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_servo-scrollend-event-feat-001.md) | [source](../../../benchmarks/ccb_build/servo-scrollend-event-feat-001) | `mcp-remote-direct` | `failed` | 0.000 | 2 | 0.544 |
 | [similar-asserts-deps-install-001](../tasks/ccb_build_haiku_022326--baseline--similar-asserts-deps-install-001.md) | [source](../../../benchmarks/ccb_build/similar-asserts-deps-install-001) | `baseline-local-direct` | `passed` | 1.000 | 2 | 0.000 |
 | [sgonly_similar-asserts-deps-install-001](../tasks/ccb_build_haiku_022326--mcp--sgonly_similar-asserts-deps-install-001.md) | [source](../../../benchmarks/ccb_build/similar-asserts-deps-install-001) | `mcp-remote-direct` | `passed` | 1.000 | 2 | 0.500 |
@@ -60,8 +66,12 @@
 
 ## Multi-Run Variance
 
-Tasks with multiple valid runs (1 task/config pairs).
+Tasks with multiple valid runs (5 task/config pairs).
 
 | Task | Benchmark | Config | Runs | Mean | Std | Individual Rewards |
 |---|---|---|---:|---:|---:|---|
+| camel-fix-protocol-feat-001 | [source](../../../benchmarks/ccb_build/camel-fix-protocol-feat-001) | `baseline-local-direct` | 2 | 0.315 | 0.134 | 0.410, 0.220 |
+| flink-pricing-window-feat-001 | [source](../../../benchmarks/ccb_build/flink-pricing-window-feat-001) | `baseline-local-direct` | 2 | 0.300 | 0.255 | 0.120, 0.480 |
+| k8s-noschedule-taint-feat-001 | [source](../../../benchmarks/ccb_build/k8s-noschedule-taint-feat-001) | `baseline-local-direct` | 2 | 0.700 | 0.000 | 0.700, 0.700 |
+| k8s-score-normalizer-refac-001 | [source](../../../benchmarks/ccb_build/k8s-score-normalizer-refac-001) | `baseline-local-direct` | 2 | 0.730 | 0.212 | 0.580, 0.880 |
 | rust-subtype-relation-refac-001 | [source](../../../benchmarks/ccb_build/rust-subtype-relation-refac-001) | `baseline-local-direct` | 2 | 0.820 | 0.000 | 0.820, 0.820 |

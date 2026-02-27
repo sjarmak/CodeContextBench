@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_onboarding_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-onboard-043_66LMZK/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_onboarding_haiku_20260226_035633_variance--mcp-remote-direct--mcp_CCX-onboard-043_66LMZK/claude-code.txt)
 
 ## Metrics
 
@@ -50,3 +51,36 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `Write` |
 | `Read` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find the key Kafka Streams architecture files. Let me search for the core classes in the Kafka Streams repository. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `user` | `text` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `text` | `-` | Now let me search specifically for the Topology class in the streams module: |
+| 10 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `assistant` | `text` | `-` | Let me read the Topology.java file to see if it's a class or interface: |
+| 13 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 14 | `user` | `text` | `-` | - |
+| 15 | `assistant` | `text` | `-` | Perfect! Now let me verify the class definitions by reading the StreamsBuilder and KafkaStreams files: |
+| 16 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `text` | `-` | Perfect! I have found all the key Kafka Streams architecture files. Now let me create the answer file: |
+| 21 | `assistant` | `tool_use` | `Write` | - |
+| 22 | `user` | `text` | `-` | - |
+| 23 | `assistant` | `text` | `-` | Now let me verify the answer file was created correctly: |
+| 24 | `assistant` | `tool_use` | `Read` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `text` | `-` | Perfect! I've successfully completed the onboarding task. Here's a summary of the findings:  ## Kafka Streams Core Architecture  I've identified the three key Java classes that form the core of the Kafka Streams architec... |

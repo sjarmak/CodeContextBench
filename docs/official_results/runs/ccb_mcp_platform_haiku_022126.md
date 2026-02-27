@@ -1,6 +1,6 @@
 # ccb_mcp_platform_haiku_022126
 
-## baseline
+## baseline-local-artifact
 
 - Valid tasks: `1`
 - Mean reward: `0.928`
@@ -10,7 +10,7 @@
 |---|---|---:|---:|---:|---|
 | [ccx-explore-091-ds](../tasks/ccb_mcp_platform_haiku_022126--baseline--ccx-explore-091-ds.md) | `passed` | 0.928 | 0.000 | 19 | traj, tx |
 
-## mcp
+## mcp-remote-artifact
 
 - Valid tasks: `1`
 - Mean reward: `0.928`

@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_test_haiku_20260224_180149--mcp-remote-direct--mcp_vscode-code-review-001_YRYOVM/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_test_haiku_20260224_180149--mcp-remote-direct--mcp_vscode-code-review-001_YRYOVM/claude-code.txt)
 
 ## Metrics
 
@@ -50,3 +51,36 @@
 | `TodoWrite` |
 | `Write` |
 | `TodoWrite` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you review this VS Code pull request for defects. Let me start by reading the relevant files from the Sourcegraph repository to identify bugs. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 6 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 7 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `text` | `-` | Let me read the strings.ts file in sections to understand the createRegExp function: |
+| 14 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `text` | `-` | Now let me analyze the code carefully for defects. Let me create a todo list to track the bugs I need to find: |
+| 19 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `text` | `-` | Based on my analysis of the code, I've identified several defects. Let me create the review report: |
+| 22 | `assistant` | `tool_use` | `Write` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `tool_use` | `TodoWrite` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `text` | `-` | Perfect! I've completed the code review and identified 4 defects in the VS Code pull request. Here's a summary:  ## Review Summary  I've found and documented 4 defects across 3 files, expressed as unified diffs in `/work... |

@@ -1,6 +1,6 @@
 # ccb_mcp_incident_haiku_022126
 
-## baseline
+## baseline-local-artifact
 
 - Valid tasks: `1`
 - Mean reward: `0.500`
@@ -10,7 +10,7 @@
 |---|---|---:|---:|---:|---|
 | [ccx-incident-031](../tasks/ccb_mcp_incident_haiku_022126--baseline--ccx-incident-031.md) | `passed` | 0.500 | 0.000 | 15 | traj, tx |
 
-## mcp
+## mcp-remote-artifact
 
 - Valid tasks: `1`
 - Mean reward: `1.000`

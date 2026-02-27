@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_onboarding_haiku_20260224_181919--mcp-remote-artifact--mcp_CCX-onboard-134_NTB10y/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_onboarding_haiku_20260224_181919--mcp-remote-artifact--mcp_CCX-onboard-134_NTB10y/claude-code.txt)
 
 ## Metrics
 
@@ -52,3 +53,43 @@
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
 | `mcp__sourcegraph__sg_read_file` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find the key C++ source files that define Chromium's multi-process architecture. Let me search for each of these symbols in the Chromium repository. |
+| 3 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 4 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 5 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 6 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 7 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `user` | `text` | `-` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `user` | `text` | `-` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `text` | `-` | Let me search more specifically for the content.mojom.Renderer interface file: |
+| 14 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `text` | `-` | Let me try a different search approach: |
+| 17 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_keyword_search` | - |
+| 18 | `user` | `text` | `-` | - |
+| 19 | `assistant` | `text` | `-` | Now let me read the key files to verify the exact definitions and get more details: |
+| 20 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 21 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 22 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 23 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 24 | `assistant` | `tool_use` | `mcp__sourcegraph__sg_read_file` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `user` | `text` | `-` | - |
+| 27 | `user` | `text` | `-` | - |
+| 28 | `user` | `text` | `-` | - |
+| 29 | `user` | `text` | `-` | - |
+| 30 | `assistant` | `text` | `-` | Perfect! I have found all the key files in Chromium's multi-process architecture. Let me write the comprehensive answer to the output file: |
+| 31 | `assistant` | `tool_use` | `Write` | - |
+| 32 | `user` | `text` | `-` | - |
+| 33 | `assistant` | `text` | `-` | Perfect! I have successfully identified and documented all the key C++ source files in Chromium's multi-process architecture. Here's a summary of what I found:  ## Key Files in Chromium's Multi-Process Architecture  1. *... |

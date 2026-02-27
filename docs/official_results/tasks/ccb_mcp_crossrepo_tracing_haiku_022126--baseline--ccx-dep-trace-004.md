@@ -1,4 +1,4 @@
-# ccx-dep-trace-004 (baseline)
+# ccx-dep-trace-004 (baseline-local-artifact)
 
 - Run: `ccb_mcp_crossrepo_tracing_haiku_022126`
 - Status: `passed`
@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_crossrepo_tracing_haiku_022126--baseline--ccx-dep-trace-004/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_crossrepo_tracing_haiku_022126--baseline--ccx-dep-trace-004/claude-code.txt)
 
 ## Metrics
 
@@ -48,3 +49,31 @@
 | `Bash` |
 | `Read` |
 | `Write` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you trace the API call chain from Grafana to Loki. Let me start by exploring the relevant directories in both repositories. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `assistant` | `tool_use` | `Bash` | - |
+| 5 | `user` | `text` | `-` | - |
+| 6 | `user` | `text` | `-` | - |
+| 7 | `assistant` | `tool_use` | `Read` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `Read` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `tool_use` | `Read` | - |
+| 12 | `user` | `text` | `-` | - |
+| 13 | `assistant` | `text` | `-` | Let me trace where `ParseInstantQuery` is called in Loki to complete the chain: |
+| 14 | `assistant` | `tool_use` | `Bash` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `Read` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `text` | `-` | Perfect! I now have a complete understanding of the HTTP call chain. Let me create the answer file with my findings. |
+| 19 | `assistant` | `tool_use` | `Write` | - |
+| 20 | `user` | `text` | `-` | - |
+| 21 | `assistant` | `text` | `-` | Perfect! I've successfully traced the API call chain from Grafana to Loki for instant log queries. Here's a summary of my findings:  ## API Call Chain Summary  **Grafana Side (grafana/grafana):** - The `LokiAPI` struct i... |

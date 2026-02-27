@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/ccb_mcp_compliance_haiku_20260226_035622_variance--baseline-local-direct--ccx-compliance-051/trajectory.json)
+- Bundled transcript: [link](../traces/ccb_mcp_compliance_haiku_20260226_035622_variance--baseline-local-direct--ccx-compliance-051/claude-code.txt)
 
 ## Metrics
 
@@ -54,3 +55,90 @@
 | `Bash` |
 | `Read` |
 | `Grep` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | I'll help you find all Go source files related to TLS configuration in the Prometheus stack. Let me start by exploring the workspace and locating the prometheus/prometheus repository. |
+| 3 | `assistant` | `tool_use` | `Bash` | - |
+| 4 | `user` | `text` | `-` | - |
+| 5 | `assistant` | `text` | `-` | The workspace is empty. Let me clone the prometheus/prometheus repository. |
+| 6 | `assistant` | `tool_use` | `Bash` | - |
+| 7 | `system` | `task_started` | `-` | - |
+| 8 | `user` | `text` | `-` | - |
+| 9 | `assistant` | `tool_use` | `TaskOutput` | - |
+| 10 | `user` | `text` | `-` | - |
+| 11 | `assistant` | `text` | `-` | Now let me search for TLS-related configuration in the prometheus repository. I'll look for Go files that contain TLS configuration, certificates, and HTTPS-related code. |
+| 12 | `assistant` | `tool_use` | `Bash` | - |
+| 13 | `user` | `text` | `-` | - |
+| 14 | `assistant` | `tool_use` | `Grep` | - |
+| 15 | `user` | `text` | `-` | - |
+| 16 | `assistant` | `tool_use` | `Grep` | - |
+| 17 | `user` | `text` | `-` | - |
+| 18 | `assistant` | `tool_use` | `Grep` | - |
+| 19 | `user` | `text` | `-` | - |
+| 20 | `assistant` | `tool_use` | `Grep` | - |
+| 21 | `user` | `text` | `-` | - |
+| 22 | `assistant` | `tool_use` | `Grep` | - |
+| 23 | `user` | `text` | `-` | - |
+| 24 | `assistant` | `tool_use` | `Bash` | - |
+| 25 | `user` | `text` | `-` | - |
+| 26 | `assistant` | `tool_use` | `Read` | - |
+| 27 | `user` | `text` | `-` | - |
+| 28 | `assistant` | `tool_use` | `Grep` | - |
+| 29 | `user` | `text` | `-` | - |
+| 30 | `assistant` | `tool_use` | `Bash` | - |
+| 31 | `user` | `text` | `-` | - |
+| 32 | `assistant` | `tool_use` | `Bash` | - |
+| 33 | `user` | `text` | `-` | - |
+| 34 | `assistant` | `tool_use` | `Bash` | - |
+| 35 | `user` | `text` | `-` | - |
+| 36 | `assistant` | `tool_use` | `Bash` | - |
+| 37 | `user` | `text` | `-` | - |
+| 38 | `assistant` | `tool_use` | `Bash` | - |
+| 39 | `user` | `text` | `-` | - |
+| 40 | `assistant` | `tool_use` | `Grep` | - |
+| 41 | `user` | `text` | `-` | - |
+| 42 | `assistant` | `tool_use` | `Bash` | - |
+| 43 | `user` | `text` | `-` | - |
+| 44 | `assistant` | `tool_use` | `Bash` | - |
+| 45 | `user` | `text` | `-` | - |
+| 46 | `assistant` | `tool_use` | `Bash` | - |
+| 47 | `user` | `text` | `-` | - |
+| 48 | `assistant` | `tool_use` | `Bash` | - |
+| 49 | `user` | `text` | `-` | - |
+| 50 | `assistant` | `tool_use` | `Bash` | - |
+| 51 | `user` | `text` | `-` | - |
+| 52 | `assistant` | `tool_use` | `Bash` | - |
+| 53 | `user` | `text` | `-` | - |
+| 54 | `assistant` | `tool_use` | `Bash` | - |
+| 55 | `user` | `text` | `-` | - |
+| 56 | `assistant` | `tool_use` | `Bash` | - |
+| 57 | `user` | `text` | `-` | - |
+| 58 | `assistant` | `tool_use` | `Read` | - |
+| 59 | `user` | `text` | `-` | - |
+| 60 | `assistant` | `tool_use` | `Bash` | - |
+| 61 | `user` | `text` | `-` | - |
+| 62 | `assistant` | `tool_use` | `Bash` | - |
+| 63 | `user` | `text` | `-` | - |
+| 64 | `assistant` | `tool_use` | `Bash` | - |
+| 65 | `user` | `text` | `-` | - |
+| 66 | `assistant` | `tool_use` | `Bash` | - |
+| 67 | `user` | `text` | `-` | - |
+| 68 | `assistant` | `tool_use` | `Bash` | - |
+| 69 | `user` | `text` | `-` | - |
+| 70 | `assistant` | `tool_use` | `Read` | - |
+| 71 | `user` | `text` | `-` | - |
+| 72 | `assistant` | `text` | `-` | Now let me compile the complete list of all files related to TLS configuration. Let me create a comprehensive summary by searching for any remaining files I might have missed. |
+| 73 | `assistant` | `tool_use` | `Bash` | - |
+| 74 | `user` | `text` | `-` | - |
+| 75 | `assistant` | `tool_use` | `Bash` | - |
+| 76 | `user` | `text` | `-` | - |
+| 77 | `assistant` | `tool_use` | `Bash` | - |
+| 78 | `user` | `text` | `-` | - |
+| 79 | `assistant` | `text` | `-` | Now let me create the comprehensive answer file with all the TLS configuration-related files I've identified. |
+| 80 | `assistant` | `tool_use` | `Write` | - |

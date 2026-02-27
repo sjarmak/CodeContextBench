@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/test_haiku_20260224_011816--mcp-remote-direct--sgonly_terraform-code-review-001/trajectory.json)
+- Bundled transcript: [link](../traces/test_haiku_20260224_011816--mcp-remote-direct--sgonly_terraform-code-review-001/claude-code.txt)
 
 ## Metrics
 
@@ -27,3 +28,12 @@
 | `result.json` SHA256 | `7ee31ed1c67338e6745f8b23fd4e2070dbe68da97f2f9cbc4d5f06bf63cb0acb` |
 | `trajectory.json` SHA256 | `0abcfedfa1753b54d6a9c5969fdfd7fd0432209e01de3f9f698a9d2da289d954` |
 | transcript SHA256 | `2dc22a56297082fe125e8dbdd97831e668c8a92775271c7e2aa33b493dceccd2` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | You've hit your limit · resets 3am (UTC) |

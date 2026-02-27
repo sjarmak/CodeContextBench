@@ -7,6 +7,7 @@
 - Trajectory available: `True`
 - Transcript available: `True`
 - Bundled trajectory: [link](../traces/understand_haiku_20260224_001815--mcp-remote-direct--sgonly_k8s-cri-containerd-reason-001/trajectory.json)
+- Bundled transcript: [link](../traces/understand_haiku_20260224_001815--mcp-remote-direct--sgonly_k8s-cri-containerd-reason-001/claude-code.txt)
 
 ## Metrics
 
@@ -27,3 +28,12 @@
 | `result.json` SHA256 | `9efec80ba97109b317614e07f82102635d2d755370c0e9b2b72fac8ee61cf893` |
 | `trajectory.json` SHA256 | `10833163655b8189064e2c2d9e9c5415cf12d895dd5d10d98f30020c46c7bbab` |
 | transcript SHA256 | `989f0d3a79b658407364992fba2500d99cbfdeed1725c781c4c60cc9b8bb6a2d` |
+
+## Conversation Preview
+
+Parsed from transcript using the same message categories as the dashboard trace parser.
+
+| Seq | Type | Subtype | Tool | Text |
+|---:|---|---|---|---|
+| 1 | `system` | `init` | `-` | - |
+| 2 | `assistant` | `text` | `-` | You've hit your limit · resets 3am (UTC) |
