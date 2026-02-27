@@ -13,13 +13,12 @@
 
 ## mcp-remote-direct
 
-- Valid tasks: `4`
-- Mean reward: `0.476`
-- Pass rate: `0.750`
+- Valid tasks: `3`
+- Mean reward: `0.635`
+- Pass rate: `1.000`
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [mcp_CCX-platform-119_D8c0J6](../tasks/ccb_mcp_platform_haiku_20260226_035628_variance--mcp-remote-direct--mcp_CCX-platform-119_D8c0J6.md) | `failed` | 0.000 | 0.929 | 14 | traj, tx |
 | [mcp_CCX-platform-104_JgYbvY](../tasks/ccb_mcp_platform_haiku_20260226_035628_variance--mcp-remote-direct--mcp_CCX-platform-104_JgYbvY.md) | `passed` | 0.583 | 0.923 | 13 | traj, tx |
 | [mcp_ccx-platform-094_ZKdafM](../tasks/ccb_mcp_platform_haiku_20260226_035628_variance--mcp-remote-direct--mcp_ccx-platform-094_ZKdafM.md) | `passed` | 0.571 | 0.964 | 28 | traj, tx |
 | [mcp_ccx-platform-100_owSuo7](../tasks/ccb_mcp_platform_haiku_20260226_035628_variance--mcp-remote-direct--mcp_ccx-platform-100_owSuo7.md) | `passed` | 0.750 | 0.875 | 40 | traj, tx |

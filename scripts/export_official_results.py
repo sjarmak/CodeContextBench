@@ -143,6 +143,34 @@ def _task_name_from_dir(task_dir: Path) -> str:
     return name
 
 
+def _canonical_task_name(name: str) -> str:
+    """Normalize a raw task_name to its canonical benchmark ID.
+
+    Strips mcp_/bl_/sgonly_ prefixes and 6-char random suffixes that Harbor
+    appends to wrapper task IDs.  Lowercases CCX- prefix for directory matching.
+    """
+    if name.startswith("mcp_"):
+        name = name[4:]
+        name = re.sub(r"_[A-Za-z0-9]{6}$", "", name)
+    elif name.startswith("bl_"):
+        name = name[3:]
+        name = re.sub(r"_[A-Za-z0-9]{6}$", "", name)
+    elif name.startswith("sgonly_"):
+        name = name[7:]
+    # Canonical benchmark dirs use lowercase ccx-
+    if name.startswith("CCX-"):
+        name = "ccx-" + name[4:]
+    return name
+
+
+def _benchmark_link(suite: str, canonical_name: str) -> str | None:
+    """Return a relative path to the benchmark task folder if it exists."""
+    candidate = PROJECT_ROOT / "benchmarks" / suite / canonical_name
+    if candidate.is_dir():
+        return f"benchmarks/{suite}/{canonical_name}"
+    return None
+
+
 def _is_task_result_payload(data: dict[str, Any]) -> bool:
     if not isinstance(data, dict):
         return False
@@ -158,13 +186,17 @@ def _iter_task_dirs(config_dir: Path) -> list[Path]:
     for result_path in sorted(config_dir.rglob("result.json")):
         if any(part in SKIP_DIR_PARTS for part in result_path.parts):
             continue
+        # Skip trial dirs containing a __broken_verifier marker file
+        trial_dir = result_path.parent
+        if (trial_dir / "__broken_verifier").exists():
+            continue
         try:
             payload = json.loads(result_path.read_text())
         except Exception:
             continue
         if not _is_task_result_payload(payload):
             continue
-        task_dirs.append(result_path.parent)
+        task_dirs.append(trial_dir)
     return task_dirs
 
 
@@ -705,9 +737,18 @@ def _build_run_page(run_dir: str, config_tasks: dict[str, list[dict[str, Any]]])
     return "\n".join(lines)
 
 
-def _build_suite_page(suite: str, run_config_tasks: dict[tuple[str, str], list[dict[str, Any]]]) -> str:
+def _build_suite_page(
+    suite: str,
+    run_config_tasks: dict[tuple[str, str], list[dict[str, Any]]],
+    all_suite_tasks: list[dict[str, Any]] | None = None,
+    run_history: dict[str, dict] | None = None,
+) -> str:
     lines: list[str] = []
     lines.append(f"# {suite}")
+    lines.append("")
+
+    # ---- Run/Config summary (unchanged) ----
+    lines.append("## Run/Config Summary")
     lines.append("")
     lines.append("| Run | Config | Valid Tasks | Mean Reward | Pass Rate |")
     lines.append("|---|---|---:|---:|---:|")
@@ -720,24 +761,96 @@ def _build_suite_page(suite: str, run_config_tasks: dict[tuple[str, str], list[d
             f"| [{run_dir}](../runs/{_slug(run_dir)}.md) | `{config}` | {len(tasks)} | {mean_reward:.3f} | {pass_rate:.3f} |"
         )
     lines.append("")
+
+    # ---- Consolidated Tasks table (sorted by canonical task name) ----
     lines.append("## Tasks")
     lines.append("")
-    lines.append("| Run | Config | Task | Status | Reward | MCP Ratio |")
-    lines.append("|---|---|---|---|---:|---:|")
-    rows: list[dict[str, Any]] = []
-    for (_run_config, tasks) in run_config_tasks.items():
-        rows.extend(tasks)
-    for task in sorted(rows, key=lambda t: (t["run_dir"], t["config"], t["task_name"])):
+
+    # Collect all tasks from deduped view, grouped by (canonical_name, config)
+    deduped_rows: list[dict[str, Any]] = []
+    for _rc, tasks in run_config_tasks.items():
+        deduped_rows.extend(tasks)
+
+    # Count runs per (canonical_name, config) from all_suite_tasks if available
+    run_counts: dict[tuple[str, str], int] = defaultdict(int)
+    if all_suite_tasks:
+        for t in all_suite_tasks:
+            if t.get("suite") == suite:
+                cn = _canonical_task_name(t["task_name"])
+                run_counts[(cn, t["config"])] += 1
+
+    lines.append("| Task | Benchmark | Config | Status | Reward | Runs | MCP Ratio |")
+    lines.append("|---|---|---|---|---:|---:|---:|")
+
+    for task in sorted(deduped_rows, key=lambda t: (_canonical_task_name(t["task_name"]), t["config"])):
+        cn = _canonical_task_name(task["task_name"])
+        bm_link = _benchmark_link(suite, cn)
+        bm_cell = f"[source](../../{bm_link})" if bm_link else "—"
+        n_runs = run_counts.get((cn, task["config"]), 1)
+        runs_cell = str(n_runs) if n_runs > 1 else "1"
+
         lines.append(
-            "| "
-            f"`{task['run_dir']}` | "
+            f"| [{task['task_name']}](../{task['task_page']}) | "
+            f"{bm_cell} | "
             f"`{task['config']}` | "
-            f"[{task['task_name']}](../{task['task_page']}) | "
             f"`{task['status']}` | "
             f"{task['reward']:.3f} | "
+            f"{runs_cell} | "
             f"{_fmt_float(task['mcp_ratio'])} |"
         )
     lines.append("")
+
+    # ---- Multi-Run Variance section ----
+    # Use MANIFEST run_history if available
+    rh = run_history or {}
+    variance_rows: list[dict[str, Any]] = []
+    for rh_key, tasks_data in rh.items():
+        parts = rh_key.split("/")
+        if len(parts) != 2:
+            continue
+        rh_suite, rh_config = parts
+        if rh_suite != suite:
+            continue
+        for task_name, info in tasks_data.items():
+            if info.get("n_runs", 1) <= 1:
+                continue
+            rewards = [r["reward"] for r in info.get("runs", [])]
+            cn = task_name.lower() if task_name.startswith("CCX-") else task_name
+            bm_link = _benchmark_link(suite, cn)
+            variance_rows.append({
+                "task_name": task_name,
+                "canonical_name": cn,
+                "config": rh_config,
+                "n_runs": info["n_runs"],
+                "mean_reward": info.get("mean_reward", 0.0),
+                "std_reward": info.get("std_reward", 0.0),
+                "rewards": rewards,
+                "run_dirs": [r.get("run_dir", "?") for r in info.get("runs", [])],
+                "bm_link": bm_link,
+            })
+
+    if variance_rows:
+        variance_rows.sort(key=lambda r: (r["canonical_name"], r["config"]))
+        lines.append("## Multi-Run Variance")
+        lines.append("")
+        lines.append(f"Tasks with multiple valid runs ({len(variance_rows)} task/config pairs).")
+        lines.append("")
+        lines.append("| Task | Benchmark | Config | Runs | Mean | Std | Individual Rewards |")
+        lines.append("|---|---|---|---:|---:|---:|---|")
+        for vr in variance_rows:
+            bm_cell = f"[source](../../{vr['bm_link']})" if vr["bm_link"] else "—"
+            rewards_str = ", ".join(f"{r:.3f}" for r in vr["rewards"])
+            lines.append(
+                f"| {vr['task_name']} | "
+                f"{bm_cell} | "
+                f"`{vr['config']}` | "
+                f"{vr['n_runs']} | "
+                f"{vr['mean_reward']:.3f} | "
+                f"{vr['std_reward']:.3f} | "
+                f"{rewards_str} |"
+            )
+        lines.append("")
+
     return "\n".join(lines)
 
 
@@ -1023,12 +1136,24 @@ def build_export(
     run_summaries.sort(key=lambda x: (x["run_dir"], x["config"]))
     deduped_tasks = _dedupe_tasks(tasks_out)
 
+    # Load MANIFEST run_history for multi-run variance data
+    manifest_run_history: dict[str, dict] = {}
+    if manifest_path.is_file():
+        try:
+            manifest_data = json.loads(manifest_path.read_text())
+            manifest_run_history = manifest_data.get("run_history", {})
+        except (json.JSONDecodeError, OSError):
+            pass
+
     by_suite: dict[str, dict[tuple[str, str], list[dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
     for task in deduped_tasks:
         by_suite[task["suite"]][(task["run_dir"], task["config"])].append(task)
 
     for suite, run_config_tasks in sorted(by_suite.items()):
-        _write_text(suite_pages_dir / f"{suite}.md", _build_suite_page(suite, run_config_tasks))
+        _write_text(
+            suite_pages_dir / f"{suite}.md",
+            _build_suite_page(suite, run_config_tasks, all_suite_tasks=tasks_out, run_history=manifest_run_history),
+        )
 
         config_buckets: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for (_run_dir, config), tasks in run_config_tasks.items():

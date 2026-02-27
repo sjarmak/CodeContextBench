@@ -176,6 +176,8 @@ def scan_config_dir(config_path: Path) -> dict[str, dict]:
         # or could be task dirs directly (task_name__hash)
         if "__" in batch_dir.name and not batch_dir.name.startswith("20"):
             # This looks like a direct task dir (task_name__hash)
+            if (batch_dir / "__broken_verifier").exists():
+                continue
             result_file = batch_dir / "result.json"
             if result_file.exists():
                 try:
@@ -198,6 +200,8 @@ def scan_config_dir(config_path: Path) -> dict[str, dict]:
                     continue
                 # Skip dirs that look like timestamps (batch metadata)
                 if trial_dir.name.startswith("20"):
+                    continue
+                if (trial_dir / "__broken_verifier").exists():
                     continue
                 result_file = trial_dir / "result.json"
                 if result_file.exists():
@@ -232,6 +236,8 @@ def scan_config_dir_all_runs(config_path: Path) -> dict[str, list[dict]]:
         if not batch_dir.is_dir():
             continue
         if "__" in batch_dir.name and not batch_dir.name.startswith("20"):
+            if (batch_dir / "__broken_verifier").exists():
+                continue
             result_file = batch_dir / "result.json"
             if result_file.exists():
                 try:
@@ -252,6 +258,8 @@ def scan_config_dir_all_runs(config_path: Path) -> dict[str, list[dict]]:
                 if not trial_dir.is_dir():
                     continue
                 if trial_dir.name.startswith("20"):
+                    continue
+                if (trial_dir / "__broken_verifier").exists():
                     continue
                 result_file = trial_dir / "result.json"
                 if result_file.exists():
@@ -490,12 +498,28 @@ def load_selected_tasks(path: Path) -> dict[str, set[str]]:
         return {}
 
 
+def _has_broken_verifier(entry: dict) -> bool:
+    """Check if a trial directory contains a __broken_verifier marker.
+
+    These trials had verifier bugs (e.g., missing dependencies, bad test
+    scripts) that produced 0.0 rewards regardless of agent output quality.
+    They should be excluded from both dedup and run_history.
+    """
+    trial_dir = entry.get("trial_dir")
+    if trial_dir is None:
+        return False
+    return (Path(trial_dir) / "__broken_verifier").exists()
+
+
 def _is_valid_run(entry: dict) -> bool:
     """Check if a run entry represents a valid (non-errored) execution.
 
     Timed-out tasks where the verifier still produced a valid reward are
     treated as valid runs (the agent did meaningful work before timing out).
+    Trials with __broken_verifier markers are always excluded.
     """
+    if _has_broken_verifier(entry):
+        return False
     data = entry["data"]
     exception = data.get("exception_info")
     if exception is not None:
