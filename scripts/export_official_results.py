@@ -1280,6 +1280,7 @@ def build_export(
     run_filter: set[str] | None,
     max_examples: int,
     repo_blob_base: str,
+    manifest_only: bool,
 ) -> dict[str, Any]:
     prefix_map = load_prefix_map(PROJECT_ROOT)
     manifest_path = runs_dir / "MANIFEST.json"
@@ -1291,7 +1292,7 @@ def build_export(
     run_dirs = top_level_run_dirs(runs_dir)
     if run_filter:
         run_dirs = [r for r in run_dirs if r.name in run_filter]
-    if tracked is not None and tracked:
+    if manifest_only and tracked is not None and tracked:
         run_dirs = [r for r in run_dirs if r.name in tracked]
 
     tasks_out: list[dict[str, Any]] = []
@@ -1505,6 +1506,11 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_REPO_BLOB_BASE,
         help="GitHub blob base URL for repo links (default: CodeContextBench main branch).",
     )
+    parser.add_argument(
+        "--manifest-only",
+        action="store_true",
+        help="Limit export to run directories referenced by MANIFEST run_history.",
+    )
     return parser.parse_args()
 
 
@@ -1532,6 +1538,7 @@ def main() -> int:
         run_filter=run_filter,
         max_examples=max(0, args.max_trace_examples),
         repo_blob_base=args.repo_blob_base,
+        manifest_only=args.manifest_only,
     )
 
     print(f"[OK] Wrote export bundle to: {output_dir}")
