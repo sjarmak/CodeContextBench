@@ -2,10 +2,10 @@
 set -euo pipefail
 
 [ -f /tmp/.sg_only_mode ] && [ -f /tests/sgonly_verifier_wrapper.sh ] && source /tests/sgonly_verifier_wrapper.sh
-
 SCORE=0
 TOTAL=6
 WORKSPACE="${VERIFY_REPO:-/workspace}"
+git config --global --add safe.directory "$WORKSPACE" 2>/dev/null || true
 
 # Check 1: Old symbol removed from primary definition
 OLD_DEF_COUNT=$( (grep -r 'class _engine\|type _engine struct\|def _engine\|function _engine' "$WORKSPACE/pandas/core/indexes/" 2>/dev/null | grep -v 'alias\|compat\|deprecated\|backward\|#.*_engine\|//.*_engine' || true) | wc -l)
@@ -55,8 +55,17 @@ fi
 # Check 6: Code changes were actually made (git diff check)
 cd "$WORKSPACE"
 CHANGED_FILES=$(git diff --name-only 2>/dev/null | wc -l)
-COMMITTED_FILES=$(git log --oneline --name-only -1 2>/dev/null | tail -n +2 | wc -l)
-TOTAL_CHANGES=$((CHANGED_FILES + COMMITTED_FILES))
+STAGED_FILES=$(git diff --cached --name-only 2>/dev/null | wc -l)
+# Only count committed files beyond the initial clone commit
+TOTAL_COMMITS=$(git rev-list --count HEAD 2>/dev/null || echo 0)
+COMMITTED_FILES=0
+if [ "$TOTAL_COMMITS" -gt 1 ]; then
+    FIRST_COMMIT=$(git rev-list --max-parents=0 HEAD 2>/dev/null | head -1)
+    if [ -n "$FIRST_COMMIT" ]; then
+        COMMITTED_FILES=$(git diff --name-only "$FIRST_COMMIT..HEAD" 2>/dev/null | wc -l)
+    fi
+fi
+TOTAL_CHANGES=$((CHANGED_FILES + STAGED_FILES + COMMITTED_FILES))
 if [ "$TOTAL_CHANGES" -ge 2 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: Multiple files changed ($TOTAL_CHANGES)"
