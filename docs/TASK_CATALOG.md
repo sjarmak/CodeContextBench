@@ -1,6 +1,6 @@
 # CodeContextBench Task Catalog
 
-A detailed reference for benchmark tasks in CodeContextBench. This document catalogs the **170 tasks** organized across **8 SDLC-phase suites**. The selection file (`configs/selected_benchmark_tasks.json`, version 2.0, last updated 2026-02-23) contains all 170 tasks.
+A detailed reference for benchmark tasks in CodeContextBench. This document catalogs the **199 tasks** organized across **9 SDLC-phase suites**. The selection file (`configs/selected_benchmark_tasks.json`, version 2.0, last updated 2026-02-28) contains all 199 SDLC tasks (294 total including MCP-unique suites).
 
 **Selection methodology:** Tasks were chosen via stratified sampling across benchmarks, covering all SDLC phases. Each task is scored for MCP benefit using a weighted combination of context complexity (0.25), cross-file dependencies (0.30), semantic search potential (0.20), and tool-chain weight (0.25). See `docs/TASK_SELECTION.md` for full scoring methodology.
 
@@ -8,15 +8,16 @@ A detailed reference for benchmark tasks in CodeContextBench. This document cata
 
 ## Table of Contents
 
-1. [ccb_understand (20 tasks)](#1-ccb_understand--requirements--discovery)
+1. [ccb_understand (34 tasks)](#1-ccb_understand--requirements--discovery)
 2. [ccb_design (20 tasks)](#2-ccb_design--architecture--design)
 3. [ccb_fix (25 tasks)](#3-ccb_fix--bug-repair)
-4. [ccb_build (25 tasks)](#4-ccb_build--feature--refactoring)
-5. [ccb_test (20 tasks)](#5-ccb_test--testing--qa)
-6. [ccb_document (20 tasks)](#6-ccb_document--documentation)
-7. [ccb_secure (20 tasks)](#7-ccb_secure--security--compliance)
-8. [ccb_debug (20 tasks)](#8-ccb_debug--debugging--investigation)
-9. [Summary Statistics](#summary-statistics)
+4. [ccb_feature (20 tasks)](#4-ccb_feature--feature-implementation)
+5. [ccb_refactor (20 tasks)](#5-ccb_refactor--cross-file-refactoring)
+6. [ccb_test (20 tasks)](#6-ccb_test--testing--qa)
+7. [ccb_document (20 tasks)](#7-ccb_document--documentation)
+8. [ccb_secure (20 tasks)](#8-ccb_secure--security--compliance)
+9. [ccb_debug (20 tasks)](#9-ccb_debug--debugging--investigation)
+10. [Summary Statistics](#summary-statistics)
 
 ---
 
@@ -118,43 +119,69 @@ A detailed reference for benchmark tasks in CodeContextBench. This document cata
 
 ---
 
-## 4. ccb_build -- Feature & Refactoring
+## 4. ccb_feature -- Feature Implementation
 
-**Focus:** Feature implementation, cross-file refactoring, dependency installation, and interface implementation. Tasks span from adding missing build dependencies to implementing new features in 1GB+ codebases.
+**Focus:** Feature implementation, interface implementation, and adding new capabilities to large codebases. Tasks range from implementing new API endpoints and middleware to adding features in 1GB+ monorepos.
 
-**25 tasks** | Languages: C#, C++, Go, Java, JavaScript, Python/C++, Rust, TypeScript | Difficulty: medium--hard
+**20 tasks** | Languages: C, C++, Go, Java, Python, Python/C++, Rust, TypeScript | Difficulty: hard--expert
 
 | Task ID | Lang | Difficulty | Repository | Category |
 |---------|------|-----------|------------|----------|
 | bustub-hyperloglog-impl-001 | C++ | hard | cmu-db/bustub | Feature implementation |
-| camel-fix-protocol-feat-001 | Java | hard | apache/camel | Feature implementation |
-| cgen-deps-install-001 | Python | medium | inducer/cgen | Dependency inference |
-| codecoverage-deps-install-001 | C# | medium | irongut/CodeCoverageSummary | Dependency inference |
-| flipt-flagexists-refactor-001 | Go | hard | flipt-io/flipt | Enterprise dependency refactor |
-| dotenv-expand-deps-install-001 | JavaScript | medium | motdotla/dotenv-expand | Dependency inference |
-| dotnetkoans-deps-install-001 | C# | medium | DotNetKoans/DotNetKoans | Dependency inference |
+| camel-fix-protocol-feat-001 | Java | expert | apache/camel | Feature implementation |
+| cilium-policy-audit-logger-feat-001 | Go | hard | cilium/cilium | Feature implementation |
+| cilium-policy-quota-feat-001 | Go | expert | cilium/cilium | Feature implementation |
+| curl-http3-priority-feat-001 | C | expert | curl/curl | Feature implementation |
+| django-rate-limit-middleware-feat-001 | Python | hard | django/django | Feature implementation |
+| envoy-custom-header-filter-feat-001 | C++ | expert | envoyproxy/envoy | Feature implementation |
 | envoy-grpc-server-impl-001 | Go | hard | envoyproxy/go-control-plane | Interface implementation |
-| eslint-markdown-deps-install-001 | JavaScript | medium | eslint/markdown | Dependency inference |
-| flink-pricing-window-feat-001 | Java | hard | apache/flink | Feature implementation |
-| flipt-dep-refactor-001 | Go | hard | flipt-io/flipt | Enterprise dependency refactor |
-| python-http-class-naming-refac-001 | Python | hard | django, flask, requests | Cross-repo refactoring |
-| iamactionhunter-deps-install-001 | Python | medium | RhinoSecurityLabs/IAMActionHunter | Dependency inference |
+| flink-pricing-window-feat-001 | Java | expert | apache/flink | Feature implementation |
 | k8s-noschedule-taint-feat-001 | Go | hard | kubernetes/kubernetes | Large-codebase feature |
 | k8s-runtime-object-impl-001 | Go | hard | kubernetes/kubernetes | Interface implementation |
-| k8s-score-normalizer-refac-001 | Go | hard | kubernetes/kubernetes | Cross-file refactoring |
-| kafka-batch-accumulator-refac-001 | Java | hard | apache/kafka | Cross-file refactoring |
-| pcap-parser-deps-install-001 | Rust | medium | rusticata/pcap-parser | Dependency inference |
-| rust-subtype-relation-refac-001 | Rust | hard | rust-lang/rust | Cross-file refactoring |
+| numpy-rolling-median-feat-001 | Python | expert | numpy/numpy | Feature implementation |
+| pandas-merge-asof-indicator-feat-001 | Python | hard | pandas-dev/pandas | Feature implementation |
+| prometheus-silence-bulk-api-feat-001 | Go | hard | prometheus/prometheus | Feature implementation |
+| pytorch-gradient-noise-feat-001 | Python | hard | pytorch/pytorch | Feature implementation |
 | servo-scrollend-event-feat-001 | Rust | hard | servo/servo | Large-codebase feature |
-| similar-asserts-deps-install-001 | Rust | medium | mitsuhiko/similar-asserts | Dependency inference |
-| strata-cds-tranche-feat-001 | Java | hard | OpenGamma/Strata | Feature implementation |
-| strata-fx-european-refac-001 | Java | hard | OpenGamma/Strata | Cross-file refactoring |
+| strata-cds-tranche-feat-001 | Java | expert | OpenGamma/Strata | Feature implementation |
 | tensorrt-mxfp4-quant-feat-001 | Python, C++ | hard | NVIDIA/TensorRT-LLM | Large-codebase feature |
+| terraform-compact-diff-fmt-feat-001 | Go | hard | hashicorp/terraform | Feature implementation |
 | vscode-stale-diagnostics-feat-001 | TypeScript | hard | microsoft/vscode | Large-codebase feature |
 
 ---
 
-## 5. ccb_test -- Testing & QA
+## 5. ccb_refactor -- Cross-File Refactoring
+
+**Focus:** Symbol renaming, module extraction, and cross-file restructuring. Tasks require identifying all references to a symbol across multiple files and consistently renaming or extracting them while maintaining compilation.
+
+**20 tasks** | Languages: C, C++, Go, Java, Python, Rust | Difficulty: hard--expert
+
+| Task ID | Lang | Difficulty | Repository | Category |
+|---------|------|-----------|------------|----------|
+| cilium-endpoint-manager-refac-001 | Go | expert | cilium/cilium | Cross-file refactoring |
+| curl-multi-process-refac-001 | C | hard | curl/curl | Cross-file refactoring |
+| django-request-factory-refac-001 | Python | hard | django/django | Cross-file refactoring |
+| envoy-listener-manager-refac-001 | C++ | expert | envoyproxy/envoy | Cross-file refactoring |
+| etcd-raft-storage-refac-001 | Go | hard | etcd-io/etcd | Cross-file refactoring |
+| flipt-dep-refactor-001 | Go | hard | flipt-io/flipt | Enterprise dependency refactor |
+| flipt-flagexists-refactor-001 | Go | hard | flipt-io/flipt | Enterprise dependency refactor |
+| istio-discovery-server-refac-001 | Go | hard | istio/istio | Cross-file refactoring |
+| k8s-score-normalizer-refac-001 | Go | hard | kubernetes/kubernetes | Cross-file refactoring |
+| kafka-batch-accumulator-refac-001 | Java | hard | apache/kafka | Cross-file refactoring |
+| kubernetes-scheduler-profile-refac-001 | Go | hard | kubernetes/kubernetes | Cross-file refactoring |
+| numpy-array-dispatch-refac-001 | Python | expert | numpy/numpy | Cross-file refactoring |
+| pandas-index-engine-refac-001 | Python | hard | pandas-dev/pandas | Cross-file refactoring |
+| prometheus-query-engine-refac-001 | Go | hard | prometheus/prometheus | Cross-file refactoring |
+| python-http-class-naming-refac-001 | Python | hard | django, flask, requests | Cross-repo refactoring |
+| pytorch-optimizer-foreach-refac-001 | Python | expert | pytorch/pytorch | Cross-file refactoring |
+| rust-subtype-relation-refac-001 | Rust | hard | rust-lang/rust | Cross-file refactoring |
+| scikit-learn-estimator-tags-refac-001 | Python | expert | scikit-learn/scikit-learn | Cross-file refactoring |
+| strata-fx-european-refac-001 | Java | hard | OpenGamma/Strata | Cross-file refactoring |
+| terraform-eval-context-refac-001 | Go | hard | hashicorp/terraform | Cross-file refactoring |
+
+---
+
+## 6. ccb_test -- Testing & QA
 
 **Focus:** Code review with injected defects, codebase search, performance optimization profiling, and unit test writing. Tasks test the agent's ability to detect bugs, write tests, find code patterns, and optimize performance.
 
@@ -189,7 +216,7 @@ A detailed reference for benchmark tasks in CodeContextBench. This document cata
 
 ---
 
-## 6. ccb_document -- Documentation
+## 7. ccb_document -- Documentation
 
 **Focus:** Generate accurate API documentation, architecture guides, and migration plans by reading and understanding source code. Tasks require deep codebase comprehension to produce comprehensive documentation.
 
@@ -220,7 +247,7 @@ A detailed reference for benchmark tasks in CodeContextBench. This document cata
 
 ---
 
-## 7. ccb_secure -- Security & Compliance
+## 8. ccb_secure -- Security & Compliance
 
 **Focus:** Security vulnerability triage (CVE analysis), reachability assessment, transitive dependency analysis, governance compliance (access control, audit trails, policy enforcement), and sensitive file exclusion.
 
@@ -251,7 +278,7 @@ A detailed reference for benchmark tasks in CodeContextBench. This document cata
 
 ---
 
-## 8. ccb_debug -- Debugging & Investigation
+## 9. ccb_debug -- Debugging & Investigation
 
 **Focus:** Deep debugging, fault localization, regression hunting, causal chain tracing, and navigation-verified regression proving. Includes Linux kernel fault localization (expert difficulty) and navigation-verified tasks where the agent must both locate a bug and write a regression test.
 
@@ -290,15 +317,16 @@ A detailed reference for benchmark tasks in CodeContextBench. This document cata
 
 | Suite | Tasks | Difficulty Range | Languages | Description |
 |-------|-------|-----------------|-----------|-------------|
-| ccb_understand | 20 | hard | C++, Go, Java, Python, TS | Comprehension, Q&A, onboarding |
+| ccb_understand | 34 | hard | C++, Go, Java, Python, TS | Comprehension, Q&A, onboarding |
 | ccb_design | 20 | hard--very_hard | C, C++, Go, Java, Python | Architecture, dependency mapping |
 | ccb_fix | 25 | medium--hard | C++, Go, Java, JS, Python, TS | Bug fixes, SWE-bench Pro patches |
-| ccb_build | 25 | medium--hard | C#, C++, Go, Java, JS, Python/C++, Rust, TS | Features, refactoring, deps |
+| ccb_feature | 20 | hard--expert | C, C++, Go, Java, Python, Python/C++, Rust, TS | Feature implementation, interface impl |
+| ccb_refactor | 20 | hard--expert | C, C++, Go, Java, Python, Rust | Cross-file renaming, module extraction |
 | ccb_test | 20 | medium--hard | C, C#, C++, Go, Java, JS, Python, TS | Code review, testing, perf, coverage analysis |
 | ccb_document | 20 | medium--hard | C++, Go, Java, Python, TS | API docs, arch guides, migration, runbooks |
 | ccb_secure | 20 | medium--hard | C, C++, Go, Java, Python | CVE triage, governance, access |
 | ccb_debug | 20 | medium--expert | C, C++, Go, Python, TS | Fault localization, regression |
 
-**Total active tasks:** 170
+**Total active tasks:** 199 (SDLC) + 95 (MCP-unique) = 294
 **Languages covered:** C, C++, C#, Go, Java, JavaScript, Python, Rust, TypeScript
 **SDLC phases covered:** Requirements & Discovery, Architecture & Design, Bug Repair, Feature Implementation, Refactoring, Testing & QA, Documentation, Security & Compliance, Debugging & Investigation

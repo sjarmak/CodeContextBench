@@ -8,8 +8,8 @@
 
 ## Overview
 
-CodeContextBench measures AI coding agent performance across 8 SDLC-phase
-suites and 10 MCP-unique suites (18 active suites total). To translate raw
+CodeContextBench measures AI coding agent performance across 9 SDLC-phase
+suites and 11 MCP-unique suites (20 active suites total). To translate raw
 benchmark metrics (tokens, tool calls, task time) into business-relevant
 productivity estimates, we map each suite to an **engineering workflow
 category** and apply conservative token-to-time conversion multipliers.
@@ -20,9 +20,9 @@ category** and apply conservative token-to-time conversion multipliers.
 |----------|-------------|-------------|-------------------|
 | Code Comprehension | Reading, understanding, and reviewing unfamiliar code | ccb_understand, ccb_test (code review) | ccb_mcp_onboarding |
 | Cross-Repo Navigation | Tracing dependencies across repositories or large monorepos | ccb_design (dependency analysis) | ccb_mcp_crossrepo_tracing, ccb_mcp_crossorg |
-| Dependency Analysis | Resolving, analyzing, and installing project dependencies | ccb_build (dependency inference) | -- |
 | Bug Localization | Fault localization, root-cause analysis, minimal-fix identification | ccb_debug, ccb_fix | ccb_mcp_incident |
-| Feature Implementation | Implementing features, modifying code based on issue descriptions | ccb_build (features, refactoring) | -- |
+| Feature Implementation | Implementing features, modifying code based on issue descriptions | ccb_feature | -- |
+| Cross-File Refactoring | Renaming, extracting, and restructuring code across files | ccb_refactor | -- |
 | Documentation | Generating API docs, architecture guides, migration plans | ccb_document | ccb_mcp_platform |
 | Security & Compliance | Security analysis, CVE assessment, policy enforcement | ccb_secure | ccb_mcp_security, ccb_mcp_compliance |
 

@@ -35,7 +35,7 @@ Config names encode three independent dimensions:
 | `mcp-remote-artifact` | MCP | Source deleted | `review.json` | `artifact_full` | `Dockerfile.artifact_only` |
 | `mcp-scip-remote-artifact` | MCP + SCIP | Source deleted | `review.json` | `artifact_full` | `Dockerfile.artifact_only` |
 
-**Standard SDLC suites** (`ccb_build`, `ccb_debug`, etc.) use
+**Standard SDLC suites** (`ccb_feature`, `ccb_refactor`, `ccb_debug`, etc.) use
 `baseline-local-direct` + `mcp-remote-direct`. The agent produces code changes
 and the verifier checks git diffs / test results.
 

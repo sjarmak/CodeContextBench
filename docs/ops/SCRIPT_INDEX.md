@@ -106,6 +106,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 
 ## Infra & Mirrors
 
+- `scripts/build_daytona_registry.py` - Infrastructure or mirror management script for build daytona registry.
 - `scripts/build_linux_base_images.sh` - Infrastructure or mirror management script for build linux base images.
 - `scripts/create_mcp_expansion_mirrors.sh` - Infrastructure or mirror management script for create mcp expansion mirrors.
 - `scripts/create_missing_mcp_mirrors.sh` - Infrastructure or mirror management script for create missing mcp mirrors.
@@ -164,6 +165,8 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/check_harness_readiness.py` - Utility script for check harness readiness.
 - `scripts/compute_bootstrap_cis.py` - Utility script for compute bootstrap cis.
 - `scripts/control_plane.py` - Utility script for control plane.
+- `scripts/daytona_poc_runner.py` - Utility script for daytona poc runner.
+- `scripts/daytona_runner.py` - Utility script for daytona runner.
 - `scripts/dependeval_eval_dr.py` - Utility script for dependeval eval dr.
 - `scripts/dependeval_eval_me.py` - Utility script for dependeval eval me.
 - `scripts/docgen_quality_sweep.py` - Utility script for docgen quality sweep.
@@ -181,6 +184,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/list_gemini_models.py` - Utility script for list gemini models.
 - `scripts/mirror_largerepo_expansion.sh` - Utility script for mirror largerepo expansion.
 - `scripts/plan_variance_runs.py` - Utility script for plan variance runs.
+- `scripts/push_base_images_ghcr.sh` - Utility script for push base images ghcr.
 - `scripts/regenerate_artifact_dockerfiles.py` - Utility script for regenerate artifact dockerfiles.
 - `scripts/remirror_mcp_unique_repos.sh` - Utility script for remirror mcp unique repos.
 - `scripts/repair_h3_trajectories.py` [one_off] - Historical one-off script: repair h3 trajectories.
@@ -192,6 +196,8 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/rerun_zero_mcp_tasks.sh` [one_off] - Historical one-off script: rerun zero mcp tasks.
 - `scripts/rescore_difficulty.py` - Utility script for rescore difficulty.
 - `scripts/run_judge.py` - Utility script for run judge.
+- `scripts/scaffold_feature_tasks.py` - Utility script for scaffold feature tasks.
+- `scripts/scaffold_refactor_tasks.py` - Utility script for scaffold refactor tasks.
 - `scripts/scan_swebench_errors.py` - Utility script for scan swebench errors.
 - `scripts/smoke_artifact_verifier.py` - Utility script for smoke artifact verifier.
 - `scripts/verify_retrieval_eval_smoke.py` - Utility script for verify retrieval eval smoke.

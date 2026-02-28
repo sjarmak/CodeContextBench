@@ -58,7 +58,7 @@ bash configs/validate_one_per_benchmark.sh --smoke-runtime --smoke-timeout-sec 3
 
 # Override timeout-heavy suites (format: suite=seconds,suite=seconds)
 bash configs/validate_one_per_benchmark.sh --smoke-runtime --smoke-timeout-sec 300 \
-  --smoke-timeout-overrides "ccb_build=900,ccb_fix=900,ccb_design=600"
+  --smoke-timeout-overrides "ccb_feature=900,ccb_refactor=900,ccb_fix=900,ccb_design=600"
 ```
 
 **Usage:**
@@ -67,10 +67,10 @@ bash configs/validate_one_per_benchmark.sh --smoke-runtime --smoke-timeout-sec 3
 python3 scripts/validate_tasks_preflight.py --all
 
 # Validate a specific suite
-python3 scripts/validate_tasks_preflight.py --suite ccb_build
+python3 scripts/validate_tasks_preflight.py --suite ccb_feature
 
 # Validate a single task
-python3 scripts/validate_tasks_preflight.py --task benchmarks/ccb_build/eslint-markdown-deps-install-001
+python3 scripts/validate_tasks_preflight.py --task benchmarks/ccb_feature/envoy-grpc-server-impl-001
 
 # Runtime smoke for a single task (no agent)
 python3 scripts/validate_tasks_preflight.py --task benchmarks/ccb_understand/terraform-plan-pipeline-qa-001 --smoke-runtime

@@ -43,16 +43,17 @@ Tasks that error (agent crash, timeout, container failure) count as **reward = 0
 
 ## Per-Benchmark Completeness
 
-To qualify for a suite's leaderboard, a submission must include results for **all** tasks in that suite. The 8 SDLC suites and required task counts are:
+To qualify for a suite's leaderboard, a submission must include results for **all** tasks in that suite. The 9 SDLC suites and required task counts are:
 
 | Suite | Tasks | Reward Type |
 |-------|------:|-------------|
-| ccb_understand | 20 | varies by task |
+| ccb_understand | 34 | varies by task |
 | ccb_design | 20 | varies by task |
 | ccb_fix | 25 | varies by task |
-| ccb_build | 25 | varies by task |
-| ccb_test | 14 | varies by task |
-| ccb_document | 13 | varies by task |
+| ccb_feature | 20 | varies by task |
+| ccb_refactor | 20 | varies by task |
+| ccb_test | 20 | varies by task |
+| ccb_document | 20 | varies by task |
 | ccb_secure | 20 | varies by task |
 | ccb_debug | 20 | varies by task |
 
@@ -68,7 +69,7 @@ The **CCB Aggregate Score** is the unweighted (macro) average of per-benchmark m
 ccb_aggregate = sum(per_benchmark_mean_rewards) / N_qualifying_benchmarks
 ```
 
-All suites carry equal weight regardless of task count. The aggregate score is computed over suites where the submission has complete results. A submission with complete results for 7 of 8 suites gets an aggregate over those 7. Submissions with more complete suites are ranked higher when scores are close.
+All suites carry equal weight regardless of task count. The aggregate score is computed over suites where the submission has complete results. A submission with complete results for 8 of 9 suites gets an aggregate over those 8. Submissions with more complete suites are ranked higher when scores are close.
 
 ## Tie-Breaking
 
@@ -103,21 +104,22 @@ See [SCORING_SEMANTICS.md](SCORING_SEMANTICS.md) for full definitions.
 
 ## Calculation Example
 
-An agent runs all 8 suites (170 tasks) and achieves:
+An agent runs all 9 suites (199 tasks) and achieves:
 
 | Suite | Mean Reward |
 |-------|-------------|
 | ccb_understand | 0.550 |
 | ccb_design | 0.400 |
 | ccb_fix | 0.320 |
-| ccb_build | 0.380 |
+| ccb_feature | 0.380 |
+| ccb_refactor | 0.350 |
 | ccb_test | 0.500 |
 | ccb_document | 0.620 |
 | ccb_secure | 0.450 |
 | ccb_debug | 0.410 |
 
-**CCB Aggregate Score** = sum of means / 8 = **0.461**
+**CCB Aggregate Score** = sum of means / 9 = **0.442**
 
-**Suites completed** = 8/8
+**Suites completed** = 9/9
 
-**Pass rate** = tasks with reward > 0.0 / total tasks = e.g., 125 / 170 ≈ 0.735
+**Pass rate** = tasks with reward > 0.0 / total tasks = e.g., 145 / 199 ≈ 0.729

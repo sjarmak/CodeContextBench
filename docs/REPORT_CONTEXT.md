@@ -29,19 +29,20 @@ augmented with Sourcegraph MCP (Model Context Protocol) tools.
 
 ### 2.1 Task Taxonomy
 
-CodeContextBench organizes **182 tasks** into two task families:
+CodeContextBench organizes **294 tasks** into two task families:
 
-**SDLC-Phase Suites (170 tasks):** Eight suites aligned to software
+**SDLC-Phase Suites (199 tasks):** Nine suites aligned to software
 development lifecycle phases. Tasks are drawn from established benchmarks
 (SWE-bench Pro, DIBench, TheAgentCompany) and custom-authored challenges
 targeting specific SDLC activities.
 
 | Suite | Phase | Tasks | Difficulty | Languages |
 |-------|-------|------:|------------|-----------|
-| `ccb_understand` | Requirements & Discovery | 20 | hard | C++, Go, Java, Python, TS |
+| `ccb_understand` | Requirements & Discovery | 34 | hard | C++, Go, Java, Python, TS |
 | `ccb_design` | Architecture & Design | 20 | hard--very_hard | C, C++, Go, Java, Python |
 | `ccb_fix` | Bug Repair | 25 | medium--hard | C++, Go, Java, JS, Python, TS |
-| `ccb_build` | Feature & Refactoring | 25 | medium--hard | C#, C++, Go, Java, JS, Rust, TS |
+| `ccb_feature` | Feature Implementation | 20 | medium--hard | C, C++, Go, Java, Python, Rust, TS |
+| `ccb_refactor` | Cross-File Refactoring | 20 | hard--expert | C, C++, Go, Java, Python, Rust |
 | `ccb_test` | Testing & QA | 20 | medium--hard | C, C#, C++, Go, Java, JS, Python, TS |
 | `ccb_document` | Documentation | 20 | hard | C++, Go, Java, Python, TS |
 | `ccb_secure` | Security & Compliance | 20 | medium--hard | C, C++, Go, Java, Python |
