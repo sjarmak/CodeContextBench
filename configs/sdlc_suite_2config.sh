@@ -293,6 +293,7 @@ _sdlc_run_single() {
         --jobs-dir "$jobs_subdir" \
         -n $CONCURRENCY \
         --timeout-multiplier $TIMEOUT_MULTIPLIER \
+        ${HARBOR_ENV:+--env "$HARBOR_ENV"} \
         2>&1 | tee "${jobs_subdir}/${task_id}.log" \
         || {
             echo "WARNING: Task $task_id ($config) failed (exit code: $?)"
