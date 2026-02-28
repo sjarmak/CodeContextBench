@@ -505,7 +505,7 @@ def _files_from_checklist_refs(file_references: list) -> list[str]:
 def _gt_sdlc(task_dir: Path) -> Optional[TaskGroundTruth]:
     """Unified ground truth extractor for SDLC phase suites.
 
-    Handles multiple GT schemas found in ccb_build/debug/design/document/
+    Handles multiple GT schemas found in ccb_feature/ccb_refactor/debug/design/document/
     fix/secure/test/understand.  Priority order:
 
     1. tests/ground_truth.json  (multiple schemas)
@@ -1090,7 +1090,8 @@ _BENCHMARK_STRATEGIES = {
     "ccb_tac": _gt_tac,
     "ccb_largerepo": _gt_largerepo,
     # SDLC phase suites (unified extractor)
-    "ccb_build": _gt_sdlc,
+    "ccb_feature": _gt_sdlc,
+    "ccb_refactor": _gt_sdlc,
     "ccb_debug": _gt_sdlc,
     "ccb_design": _gt_sdlc,
     "ccb_document": _gt_sdlc,

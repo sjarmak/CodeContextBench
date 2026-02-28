@@ -27,7 +27,7 @@ MANIFEST_PATH = PROJECT_ROOT / "runs" / "official" / "MANIFEST.json"
 
 # SDLC suites (170 tasks across 8 suites)
 SDLC_SUITES = [
-    "ccb_build", "ccb_debug", "ccb_design", "ccb_document",
+    "ccb_feature", "ccb_refactor", "ccb_debug", "ccb_design", "ccb_document",
     "ccb_fix", "ccb_secure", "ccb_test", "ccb_understand",
 ]
 

@@ -40,6 +40,8 @@ STAGING_DIR = PROJECT_ROOT / "runs" / "staging"
 OFFICIAL_DIR = PROJECT_ROOT / "runs" / "official"
 VALIDATE_SCRIPT = PROJECT_ROOT / "scripts" / "validate_task_run.py"
 MANIFEST_SCRIPT = PROJECT_ROOT / "scripts" / "generate_manifest.py"
+EXPORT_OFFICIAL_RESULTS_SCRIPT = PROJECT_ROOT / "scripts" / "export_official_results.py"
+OFFICIAL_RESULTS_DIR = PROJECT_ROOT / "docs" / "official_results"
 EXTRACT_METRICS_SCRIPT = PROJECT_ROOT / "scripts" / "extract_task_metrics.py"
 SELECTED_TASKS_FILE = PROJECT_ROOT / "configs" / "selected_benchmark_tasks.json"
 
@@ -417,6 +419,7 @@ def cmd_promote(
     max_warnings: int,
     promote_all: bool,
     regenerate: bool,
+    export_official_results: bool,
 ):
     """Validate and promote staging runs."""
     if promote_all:
@@ -527,6 +530,8 @@ def cmd_promote(
     if not execute and promoted:
         print(f"\nUse --execute to perform the promotion.")
 
+    manifest_regenerated = False
+
     # Regenerate MANIFEST after promotion
     if execute and promoted and regenerate:
         print(f"\nRegenerating MANIFEST.json...")
@@ -539,6 +544,7 @@ def cmd_promote(
             )
             if proc.returncode == 0:
                 print(f"  {GREEN}MANIFEST regenerated.{RESET}")
+                manifest_regenerated = True
                 # Show summary from stdout
                 for line in proc.stdout.strip().split("\n")[-3:]:
                     print(f"  {line}")
@@ -548,6 +554,48 @@ def cmd_promote(
                     print(f"  {proc.stderr[:200]}")
         except (subprocess.TimeoutExpired, OSError) as e:
             print(f"  {RED}MANIFEST generation failed: {e}{RESET}")
+
+    # Auto-refresh docs/official_results after successful promotion.
+    if execute and promoted and export_official_results:
+        if not regenerate:
+            print(
+                f"\n{YELLOW}Skipping official results export:{RESET} "
+                "--no-regenerate was set, so MANIFEST may be stale."
+            )
+        elif not manifest_regenerated:
+            print(
+                f"\n{YELLOW}Skipping official results export:{RESET} "
+                "MANIFEST regeneration did not complete successfully."
+            )
+        else:
+            print("\nExporting docs/official_results...")
+            try:
+                proc = subprocess.run(
+                    [
+                        sys.executable,
+                        str(EXPORT_OFFICIAL_RESULTS_SCRIPT),
+                        "--runs-dir",
+                        str(OFFICIAL_DIR),
+                        "--output-dir",
+                        str(OFFICIAL_RESULTS_DIR),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=1200,
+                )
+                if proc.returncode == 0:
+                    print(f"  {GREEN}Official results export complete.{RESET}")
+                    for line in proc.stdout.strip().split("\n")[-6:]:
+                        if line.strip():
+                            print(f"  {line}")
+                else:
+                    print(
+                        f"  {YELLOW}Official results export returned code {proc.returncode}{RESET}"
+                    )
+                    if proc.stderr:
+                        print(f"  {proc.stderr[:400]}")
+            except (subprocess.TimeoutExpired, OSError) as e:
+                print(f"  {RED}Official results export failed: {e}{RESET}")
 
 
 def main():
@@ -570,6 +618,11 @@ Examples:
     parser.add_argument("--all", action="store_true", help="Promote all eligible staging runs")
     parser.add_argument("--max-warnings", type=int, default=10, help="Max allowed warnings (default: 10)")
     parser.add_argument("--no-regenerate", action="store_true", help="Skip MANIFEST regeneration")
+    parser.add_argument(
+        "--no-export-official-results",
+        action="store_true",
+        help="Skip docs/official_results export after successful promotion",
+    )
 
     args = parser.parse_args()
 
@@ -588,6 +641,7 @@ Examples:
         max_warnings=args.max_warnings,
         promote_all=args.all,
         regenerate=not args.no_regenerate,
+        export_official_results=not args.no_export_official_results,
     )
 
 

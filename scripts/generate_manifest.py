@@ -29,7 +29,9 @@ SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__v1_hinted
 # Map on-disk dir prefixes to MANIFEST suite names
 DIR_PREFIX_TO_SUITE = {
     # Current SDLC official run prefixes (e.g. ccb_document_haiku_20260224_174311)
-    "ccb_build_": "ccb_build",
+    "ccb_feature_": "ccb_feature",
+    "ccb_refactor_": "ccb_refactor",
+    "ccb_build_": "ccb_build",  # legacy run dirs
     "ccb_debug_": "ccb_debug",
     "ccb_design_": "ccb_design",
     "ccb_document_": "ccb_document",
@@ -38,7 +40,9 @@ DIR_PREFIX_TO_SUITE = {
     "ccb_test_": "ccb_test",
     "ccb_understand_": "ccb_understand",
     # SDLC phase suite prefixes (new naming: {phase}_{model}_{timestamp})
-    "build_": "ccb_build",
+    "feature_": "ccb_feature",
+    "refactor_": "ccb_refactor",
+    "build_": "ccb_build",  # legacy run dirs
     "debug_": "ccb_debug",
     "design_": "ccb_design",
     "document_": "ccb_document",

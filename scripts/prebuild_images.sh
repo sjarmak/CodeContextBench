@@ -5,8 +5,8 @@
 #
 # Usage:
 #   ./scripts/prebuild_images.sh [SUITE...] [OPTIONS]
-#   ./scripts/prebuild_images.sh ccb_build ccb_fix
-#   ./scripts/prebuild_images.sh ccb_build --tasks task1,task2,task3
+#   ./scripts/prebuild_images.sh ccb_feature ccb_fix
+#   ./scripts/prebuild_images.sh ccb_feature --tasks task1,task2,task3
 #   ./scripts/prebuild_images.sh --tasks @/tmp/task_list.txt
 #   ./scripts/prebuild_images.sh                     # all 8 suites
 #   PREBUILD_JOBS=12 ./scripts/prebuild_images.sh
@@ -72,7 +72,7 @@ if [ -n "$TASKS_FILTER" ]; then
 fi
 
 if [ ${#SUITES[@]} -eq 0 ]; then
-    SUITES=(ccb_build ccb_debug ccb_design ccb_document ccb_fix ccb_secure ccb_test ccb_understand)
+    SUITES=(ccb_feature ccb_refactor ccb_debug ccb_design ccb_document ccb_fix ccb_secure ccb_test ccb_understand)
 fi
 
 # ============================================

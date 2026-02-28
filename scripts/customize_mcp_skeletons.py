@@ -33,13 +33,13 @@ DUAL_MODE_TASK_IDS = {81, 82, 83, 113, 114, 115, 116, 117, 118, 119, 120, 122, 1
 # Map adapted task IDs to their parent SDLC task paths (for copying direct verifiers)
 PARENT_TASK_MAP = {
     113: "ccb_debug/grafana-table-panel-regression-001",
-    114: "ccb_build/kafka-batch-accumulator-refac-001",
+    114: "ccb_refactor/kafka-batch-accumulator-refac-001",
     115: "ccb_secure/django-cross-team-boundary-001",
     116: "ccb_design/k8s-typemeta-dep-chain-001",
-    117: "ccb_build/k8s-score-normalizer-refac-001",
+    117: "ccb_refactor/k8s-score-normalizer-refac-001",
     118: "ccb_secure/django-repo-scoped-access-001",
-    119: "ccb_build/flink-pricing-window-feat-001",
-    120: "ccb_build/strata-fx-european-refac-001",
+    119: "ccb_feature/flink-pricing-window-feat-001",
+    120: "ccb_refactor/strata-fx-european-refac-001",
 }
 
 # Repo set definitions: sg_repos (for artifact_only/MCP search), clone_repos (for sg_only manifest)

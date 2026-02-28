@@ -3,7 +3,7 @@
 # Docker build containers can't access the host's git credential store, so
 # this script patches Dockerfiles on the fly to include a GitHub token.
 #
-# Usage: bash scripts/prebuild_with_credentials.sh [--suite ccb_build] [--task task-name]
+# Usage: bash scripts/prebuild_with_credentials.sh [--suite ccb_feature] [--task task-name]
 #        Defaults to all SDLC suites.
 
 set -euo pipefail
@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ ${#SUITES[@]} -eq 0 ]; then
-    SUITES=(ccb_build ccb_debug ccb_design ccb_document ccb_fix ccb_secure ccb_test ccb_understand)
+    SUITES=(ccb_feature ccb_refactor ccb_debug ccb_design ccb_document ccb_fix ccb_secure ccb_test ccb_understand)
 fi
 
 # Extract GitHub PAT from .git-credentials

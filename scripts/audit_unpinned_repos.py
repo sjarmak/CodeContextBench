@@ -21,7 +21,7 @@ BENCHMARKS_DIR = REPO_ROOT / "benchmarks"
 # images, go.googlesource.com URLs, ~1 parent-commit notation, etc.)
 MANUAL_OVERRIDES: dict[str, dict[str, tuple[str, str]]] = {
     # crossrepo base image — commits from instance_to_mirror.json
-    "ccb_build/python-http-class-naming-refac-001": {
+    "ccb_refactor/python-http-class-naming-refac-001": {
         "github.com/django/django": ("674eda1c03a3187905f48afee0f15226aa62fdf3", "crossrepo base image"),
         "github.com/pallets/flask": ("798e006f435887adceb6aab9b57cde8e20276793", "crossrepo base image"),
         "github.com/psf/requests": ("421b8733cf17e4dee8be237e7412b095772c2323", "crossrepo base image"),

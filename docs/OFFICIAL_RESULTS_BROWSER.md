@@ -18,13 +18,28 @@ Suite-level views and top-level summaries are deduplicated to one canonical row
 per `suite + config + task_name` (latest by task `started_at`). Full historical
 rows are preserved in `data/official_results.json` as `all_tasks`.
 
-For SDLC suites (`ccb_build`, `ccb_debug`, `ccb_design`, `ccb_document`,
+For SDLC suites (`ccb_feature`, `ccb_refactor`, `ccb_debug`, `ccb_design`, `ccb_document`,
 `ccb_fix`, `ccb_secure`, `ccb_test`, `ccb_understand`), legacy config labels
 are normalized during export:
 - `baseline` -> `baseline-local-direct`
 - `mcp` -> `mcp-remote-direct`
 
+For MCP-unique suites (`ccb_mcp_*`), legacy config labels are normalized to
+artifact-mode configs:
+- `baseline` -> `baseline-local-artifact`
+- `mcp` -> `mcp-remote-artifact`
+
 ## Usage
+
+If you promote runs with:
+
+```bash
+python3 scripts/promote_run.py --execute <staging_run_name>
+```
+
+`docs/official_results` is refreshed automatically after successful promotion
+and MANIFEST regeneration. Use `--no-export-official-results` to skip that
+step when needed.
 
 ```bash
 python3 scripts/export_official_results.py \

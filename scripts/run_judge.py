@@ -57,7 +57,9 @@ SKIP_PATTERNS = [
 # Map run directory name prefix -> benchmark suite name
 DIR_PREFIX_TO_SUITE: dict[str, str] = {
     # SDLC phase suites
-    "build_": "ccb_build",
+    "feature_": "ccb_feature",
+    "refactor_": "ccb_refactor",
+    "build_": "ccb_build",  # legacy run dirs
     "debug_": "ccb_debug",
     "design_": "ccb_design",
     "document_": "ccb_document",

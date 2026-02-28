@@ -29,7 +29,9 @@ SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived"
 
 DIR_PREFIX_TO_SUITE = {
     # SDLC phase suite prefixes (new naming: {phase}_{model}_{timestamp})
-    "build_": "ccb_build",
+    "feature_": "ccb_feature",
+    "refactor_": "ccb_refactor",
+    "build_": "ccb_build",  # legacy run dirs
     "debug_": "ccb_debug",
     "design_": "ccb_design",
     "document_": "ccb_document",

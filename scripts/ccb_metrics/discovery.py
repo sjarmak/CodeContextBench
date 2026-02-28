@@ -59,7 +59,8 @@ _CCB_SUITE_PREFIXES = [
     "ccb_mcp_org",
     "ccb_mcp_platform",
     # SDLC suites
-    "ccb_build",
+    "ccb_feature",
+    "ccb_refactor",
     "ccb_debug",
     "ccb_design",
     "ccb_document",

@@ -75,9 +75,9 @@ python3 scripts/daytona_runner.py --task cgen-deps-install-001 --dry-run
 python3 scripts/daytona_runner.py --task cgen-deps-install-001
 
 # 4. Run a full suite
-python3 scripts/daytona_runner.py --suite ccb_build --parallel 4
+python3 scripts/daytona_runner.py --suite ccb_feature --parallel 4
 
-# 5. Run all 283 tasks
+# 5. Run all 294 tasks
 python3 scripts/daytona_runner.py --all --parallel 8
 ```
 
@@ -109,7 +109,7 @@ The runner supports several ways to select which tasks to run:
 --tasks cgen-deps-install-001,flipt-dep-refactor-001
 
 # Full suite (only Daytona-ready tasks)
---suite ccb_build
+--suite ccb_feature
 
 # All ready tasks across all suites
 --all
@@ -124,7 +124,7 @@ Browse available tasks:
 python3 scripts/daytona_runner.py --list-suites
 
 # List tasks in a suite
-python3 scripts/daytona_runner.py --list-tasks --suite ccb_build
+python3 scripts/daytona_runner.py --list-tasks --suite ccb_feature
 
 # List all tasks
 python3 scripts/daytona_runner.py --list-tasks
@@ -213,7 +213,7 @@ With `--parallel N`, steps 1-9 run concurrently across N sandboxes using a threa
 
 ## Task Readiness
 
-All 283 tasks across 19 suites are Daytona-ready. Base images are sourced from:
+All 294 tasks across 20 suites are Daytona-ready. Base images are sourced from:
 
 - **Standard public images** (197 tasks): `python:*`, `golang:*`, `gcc:*`, `ubuntu:*`, etc. from Docker Hub
 - **Pre-built repo images** (70 tasks): `ghcr.io/sourcegraph/ccb-repo-*` on GitHub Container Registry

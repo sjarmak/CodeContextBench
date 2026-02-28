@@ -33,7 +33,7 @@ from ccb_metrics.ground_truth import _resolve_task_dir, _files_from_patch  # typ
 # ---------------------------------------------------------------------------
 
 _NL_SUITES = {"ccb_document", "ccb_understand", "ccb_design"}
-_CODE_SUITES = {"ccb_fix", "ccb_build", "ccb_swebenchpro", "ccb_pytorch"}
+_CODE_SUITES = {"ccb_fix", "ccb_feature", "ccb_refactor", "ccb_swebenchpro", "ccb_pytorch"}
 _CODE_REVIEW_SUITES = {"ccb_test", "ccb_secure"}
 
 
@@ -566,7 +566,7 @@ def _discover_from_dir(
                 if files:
                     return OracleBundle(context_files=files, confidence="high")
 
-            # Code tasks with 'files' schema (ccb_build/ccb_fix/ccb_design)
+            # Code tasks with 'files' schema (ccb_feature/ccb_refactor/ccb_fix/ccb_design)
             if isinstance(data, dict) and "files" in data:
                 files = [f for f in data.get("files", []) if isinstance(f, str)]
                 if files:

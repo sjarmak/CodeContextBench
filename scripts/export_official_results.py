@@ -60,7 +60,8 @@ AUDIT_EVENT_LIMIT = 200
 CONVERSATION_PREVIEW_LIMIT = 80
 TASK_PAGE_EVENT_LIMIT = 400
 SDLC_SUITES = {
-    "ccb_build",
+    "ccb_feature",
+    "ccb_refactor",
     "ccb_debug",
     "ccb_design",
     "ccb_document",
@@ -70,7 +71,8 @@ SDLC_SUITES = {
     "ccb_understand",
 }
 SDLC_MIN_VALID_TASKS = {
-    "ccb_build": 25,
+    "ccb_feature": 20,
+    "ccb_refactor": 20,
     "ccb_fix": 25,
     "ccb_debug": 20,
     "ccb_design": 20,
