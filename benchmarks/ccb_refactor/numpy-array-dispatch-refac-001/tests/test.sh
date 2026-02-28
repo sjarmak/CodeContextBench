@@ -8,7 +8,7 @@ TOTAL=6
 WORKSPACE="${VERIFY_REPO:-/workspace}"
 
 # Check 1: Old symbol removed from primary definition
-OLD_DEF_COUNT=$(grep -r 'def array_function_dispatch' "$WORKSPACE/numpy/" 2>/dev/null | grep -v 'alias\|compat\|deprecated\|backward\|#.*array_function_dispatch' | wc -l)
+OLD_DEF_COUNT=$( (grep -r 'def array_function_dispatch' "$WORKSPACE/numpy/" 2>/dev/null | grep -v 'alias\|compat\|deprecated\|backward\|#.*array_function_dispatch' || true) | wc -l)
 if [ "$OLD_DEF_COUNT" -eq 0 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: Old symbol definition removed"
@@ -17,7 +17,7 @@ else
 fi
 
 # Check 2: New symbol exists in definition
-NEW_DEF_COUNT=$(grep -r 'def dispatch_array_function\|dispatch_array_function' "$WORKSPACE/numpy/" 2>/dev/null | wc -l)
+NEW_DEF_COUNT=$( (grep -r 'def dispatch_array_function\|dispatch_array_function' "$WORKSPACE/numpy/" 2>/dev/null || true) | wc -l)
 if [ "$NEW_DEF_COUNT" -gt 0 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: New symbol \"dispatch_array_function\" found ($NEW_DEF_COUNT occurrences)"
@@ -26,7 +26,7 @@ else
 fi
 
 # Check 3: Old symbol reference count reduced (allowing aliases/deprecation)
-OLD_REF_COUNT=$(grep -r 'array_function_dispatch' "$WORKSPACE/numpy/" 2>/dev/null | grep -v 'test\|_test\|spec\|alias\|compat\|deprecated\|backward\|#.*array_function_dispatch\|\.pyc' | wc -l)
+OLD_REF_COUNT=$( (grep -r 'array_function_dispatch' "$WORKSPACE/numpy/" 2>/dev/null | grep -v 'test\|_test\|spec\|alias\|compat\|deprecated\|backward\|#.*array_function_dispatch\|\.pyc' || true) | wc -l)
 if [ "$OLD_REF_COUNT" -le 3 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: Old symbol references minimized ($OLD_REF_COUNT remaining, max 3)"
@@ -35,7 +35,7 @@ else
 fi
 
 # Check 4: New symbol used across multiple files
-NEW_FILE_COUNT=$(grep -rl 'dispatch_array_function' "$WORKSPACE/numpy/" 2>/dev/null | wc -l)
+NEW_FILE_COUNT=$( (grep -rl 'dispatch_array_function' "$WORKSPACE/numpy/" 2>/dev/null || true) | wc -l)
 if [ "$NEW_FILE_COUNT" -ge 2 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: New symbol used across $NEW_FILE_COUNT files"
@@ -44,7 +44,7 @@ else
 fi
 
 # Check 5: New symbol call sites meet threshold
-NEW_REF_COUNT=$(grep -r 'dispatch_array_function' "$WORKSPACE/numpy/" 2>/dev/null | wc -l)
+NEW_REF_COUNT=$( (grep -r 'dispatch_array_function' "$WORKSPACE/numpy/" 2>/dev/null || true) | wc -l)
 if [ "$NEW_REF_COUNT" -ge 20 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: New symbol has $NEW_REF_COUNT references (>= 20)"

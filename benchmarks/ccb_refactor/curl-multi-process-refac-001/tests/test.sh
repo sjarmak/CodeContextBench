@@ -8,7 +8,7 @@ TOTAL=6
 WORKSPACE="${VERIFY_REPO:-/workspace}"
 
 # Check 1: Old symbol removed from primary definition
-OLD_DEF_COUNT=$(grep -r 'process_pending_handles' "$WORKSPACE/lib/" 2>/dev/null | grep -v 'multi_activate_pending\|alias\|compat\|deprecated\|backward\|/\*.*process_pending_handles\|//.*process_pending_handles' | wc -l)
+OLD_DEF_COUNT=$( (grep -r 'process_pending_handles' "$WORKSPACE/lib/" 2>/dev/null | grep -v 'multi_activate_pending\|alias\|compat\|deprecated\|backward\|/\*.*process_pending_handles\|//.*process_pending_handles' || true) | wc -l)
 if [ "$OLD_DEF_COUNT" -eq 0 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: Old symbol definition removed"
@@ -17,7 +17,7 @@ else
 fi
 
 # Check 2: New symbol exists in definition
-NEW_DEF_COUNT=$(grep -r 'multi_activate_pending' "$WORKSPACE/lib/" 2>/dev/null | wc -l)
+NEW_DEF_COUNT=$( (grep -r 'multi_activate_pending' "$WORKSPACE/lib/" 2>/dev/null || true) | wc -l)
 if [ "$NEW_DEF_COUNT" -gt 0 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: New symbol \"multi_activate_pending\" found ($NEW_DEF_COUNT occurrences)"
@@ -26,7 +26,7 @@ else
 fi
 
 # Check 3: Old symbol completely gone (no non-comment references)
-OLD_REF_COUNT=$(grep -r 'process_pending_handles' "$WORKSPACE/lib/" 2>/dev/null | grep -v 'multi_activate_pending\|test\|_test\|spec\|alias\|compat\|deprecated\|/\*.*process_pending_handles\|//.*process_pending_handles' | wc -l)
+OLD_REF_COUNT=$( (grep -r 'process_pending_handles' "$WORKSPACE/lib/" 2>/dev/null | grep -v 'multi_activate_pending\|test\|_test\|spec\|alias\|compat\|deprecated\|/\*.*process_pending_handles\|//.*process_pending_handles' || true) | wc -l)
 if [ "$OLD_REF_COUNT" -le 3 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: Old symbol references minimized ($OLD_REF_COUNT remaining, max 3)"
@@ -35,7 +35,7 @@ else
 fi
 
 # Check 4: New symbol used in multiple places (function def + call sites)
-NEW_REF_COUNT=$(grep -r 'multi_activate_pending' "$WORKSPACE/lib/" 2>/dev/null | wc -l)
+NEW_REF_COUNT=$( (grep -r 'multi_activate_pending' "$WORKSPACE/lib/" 2>/dev/null || true) | wc -l)
 if [ "$NEW_REF_COUNT" -ge 2 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: New symbol has $NEW_REF_COUNT references (>= 2)"

@@ -41,6 +41,12 @@ done
 COMMIT_COUNT=0
 if [ -n "$ORIGIN_REF" ]; then
     COMMIT_COUNT=$(git log --oneline "$ORIGIN_REF..HEAD" 2>/dev/null | wc -l)
+    # Guard: if commit count is very high, these are repo-setup commits
+    # (e.g., tagged release ahead of origin/master), not agent work
+    if [ "$COMMIT_COUNT" -gt 5 ]; then
+        echo "[info] $COMMIT_COUNT commits from $ORIGIN_REF..HEAD — baseline offset, not agent work"
+        COMMIT_COUNT=0
+    fi
 fi
 
 HAS_CHANGES=0

@@ -8,7 +8,7 @@ TOTAL=6
 WORKSPACE="${VERIFY_REPO:-/workspace}"
 
 # Check 1: Old symbol removed from primary definition
-OLD_DEF_COUNT=$(grep -r 'class _get_tags\|type _get_tags struct\|def _get_tags\|function _get_tags' "$WORKSPACE/sklearn/" 2>/dev/null | grep -v 'alias\|compat\|deprecated\|backward\|#.*_get_tags\|//.*_get_tags' | wc -l)
+OLD_DEF_COUNT=$( (grep -r 'class _get_tags\|type _get_tags struct\|def _get_tags\|function _get_tags' "$WORKSPACE/sklearn/" 2>/dev/null | grep -v 'alias\|compat\|deprecated\|backward\|#.*_get_tags\|//.*_get_tags' || true) | wc -l)
 if [ "$OLD_DEF_COUNT" -eq 0 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: Old symbol definition removed"
@@ -17,7 +17,7 @@ else
 fi
 
 # Check 2: New symbol exists in definition
-NEW_DEF_COUNT=$(grep -r 'class _estimator_tags\|type _estimator_tags struct\|def _estimator_tags\|function _estimator_tags\|_estimator_tags' "$WORKSPACE/sklearn/" 2>/dev/null | wc -l)
+NEW_DEF_COUNT=$( (grep -r 'class _estimator_tags\|type _estimator_tags struct\|def _estimator_tags\|function _estimator_tags\|_estimator_tags' "$WORKSPACE/sklearn/" 2>/dev/null || true) | wc -l)
 if [ "$NEW_DEF_COUNT" -gt 0 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: New symbol \"_estimator_tags\" found ($NEW_DEF_COUNT occurrences)"
@@ -26,7 +26,7 @@ else
 fi
 
 # Check 3: Old symbol reference count reduced (allowing aliases/deprecation)
-OLD_REF_COUNT=$(grep -r '_get_tags' "$WORKSPACE/sklearn/" 2>/dev/null | grep -v 'test\|_test\|spec\|alias\|compat\|deprecated\|backward\|#.*_get_tags\|//.*_get_tags\|\.pyc' | wc -l)
+OLD_REF_COUNT=$( (grep -r '_get_tags' "$WORKSPACE/sklearn/" 2>/dev/null | grep -v 'test\|_test\|spec\|alias\|compat\|deprecated\|backward\|#.*_get_tags\|//.*_get_tags\|\.pyc' || true) | wc -l)
 if [ "$OLD_REF_COUNT" -le 3 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: Old symbol references minimized ($OLD_REF_COUNT remaining, max 3)"
@@ -35,7 +35,7 @@ else
 fi
 
 # Check 4: New symbol used across multiple files
-NEW_FILE_COUNT=$(grep -rl '_estimator_tags' "$WORKSPACE/sklearn/" 2>/dev/null | wc -l)
+NEW_FILE_COUNT=$( (grep -rl '_estimator_tags' "$WORKSPACE/sklearn/" 2>/dev/null || true) | wc -l)
 if [ "$NEW_FILE_COUNT" -ge 2 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: New symbol used across $NEW_FILE_COUNT files"
@@ -44,7 +44,7 @@ else
 fi
 
 # Check 5: New symbol call sites meet threshold
-NEW_REF_COUNT=$(grep -r '_estimator_tags' "$WORKSPACE/sklearn/" 2>/dev/null | wc -l)
+NEW_REF_COUNT=$( (grep -r '_estimator_tags' "$WORKSPACE/sklearn/" 2>/dev/null || true) | wc -l)
 if [ "$NEW_REF_COUNT" -ge 25 ]; then
     SCORE=$((SCORE + 1))
     echo "PASS: New symbol has $NEW_REF_COUNT references (>= 25)"
