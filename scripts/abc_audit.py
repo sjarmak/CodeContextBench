@@ -955,6 +955,15 @@ def audit_suite(suite: str, dimension: Optional[Dimension] = None) -> AuditRepor
             ))
             continue
 
+        # R.2 doesn't apply to MCP-unique suites: instructions intentionally
+        # reference Sourcegraph MCP tools (that's the point of these tasks).
+        if cid == "R.2" and suite.startswith("ccb_mcp_"):
+            report.results.append(CriterionResult(
+                criterion_id=cid, status=Status.SKIP,
+                evidence="MCP-unique suite: MCP tool references in instructions are by design",
+            ))
+            continue
+
         # Run automated check
         if cid in TASK_CHECKS:
             result = TASK_CHECKS[cid](tasks)
