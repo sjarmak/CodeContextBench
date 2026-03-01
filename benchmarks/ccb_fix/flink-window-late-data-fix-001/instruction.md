@@ -20,7 +20,7 @@ When using event-time session windows with `allowedLateness(Time.seconds(0))` an
 2. **Fix the late element handling**:
    - Ensure late elements for merging windows check whether the element could be merged into an existing (non-expired) window BEFORE marking as late
    - OR ensure the side output path correctly emits the element via the registered OutputTag
-   - The fix should be in `flink-streaming-java/src/main/java/org/apache/flink/streaming/runtime/operators/windowing/`
+   - The fix should be in `flink-runtime/src/main/java/org/apache/flink/streaming/runtime/operators/windowing/`
 
 3. **Ensure correct OutputTag wiring**:
    - Verify that `sideOutput()` receives the correct `OutputTag<T>` for late data
@@ -32,8 +32,8 @@ When using event-time session windows with `allowedLateness(Time.seconds(0))` an
    - Verify: late element appears in the side output stream, not silently dropped
 
 ## Key Reference Files
-- `flink-streaming-java/src/main/java/org/apache/flink/streaming/runtime/operators/windowing/WindowOperator.java` — main window operator
-- `flink-streaming-java/src/main/java/org/apache/flink/streaming/runtime/operators/windowing/EvictingWindowOperator.java` — evicting variant
+- `flink-runtime/src/main/java/org/apache/flink/streaming/runtime/operators/windowing/WindowOperator.java` — main window operator
+- `flink-runtime/src/main/java/org/apache/flink/streaming/runtime/operators/windowing/EvictingWindowOperator.java` — evicting variant
 - `flink-runtime/src/main/java/org/apache/flink/streaming/api/windowing/assigners/MergingWindowAssigner.java` — merging window base
 - `flink-streaming-java/src/main/java/org/apache/flink/streaming/api/datastream/SingleOutputStreamOperator.java` — sideOutputLateData API
 - `flink-runtime/src/main/java/org/apache/flink/streaming/api/operators/AbstractStreamOperator.java` — base operator with output handling

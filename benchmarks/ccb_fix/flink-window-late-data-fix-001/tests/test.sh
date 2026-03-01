@@ -7,7 +7,7 @@ SCORE=0
 TOTAL=6
 WORKSPACE="${VERIFY_REPO:-/workspace}"
 
-WINDOW_OP_DIR="$WORKSPACE/flink-streaming-java/src/main/java/org/apache/flink/streaming/runtime/operators/windowing"
+WINDOW_OP_DIR="$WORKSPACE/flink-runtime/src/main/java/org/apache/flink/streaming/runtime/operators/windowing"
 WINDOW_TEST_DIR="$WORKSPACE/flink-streaming-java/src/test/java/org/apache/flink/streaming/runtime/operators/windowing"
 
 # Check 1: WindowOperator.processElement modified (late element handling)

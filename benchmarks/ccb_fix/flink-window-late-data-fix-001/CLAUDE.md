@@ -5,8 +5,8 @@
 Fix silent late data dropping in Flink's merging window operator side output path.
 
 ## Key Reference Files
-- `flink-streaming-java/src/main/java/org/apache/flink/streaming/runtime/operators/windowing/WindowOperator.java` — main target
-- `flink-streaming-java/src/main/java/org/apache/flink/streaming/runtime/operators/windowing/EvictingWindowOperator.java` — evicting variant
+- `flink-runtime/src/main/java/org/apache/flink/streaming/runtime/operators/windowing/WindowOperator.java` — main target
+- `flink-runtime/src/main/java/org/apache/flink/streaming/runtime/operators/windowing/EvictingWindowOperator.java` — evicting variant
 - `flink-runtime/src/main/java/org/apache/flink/streaming/api/windowing/assigners/MergingWindowAssigner.java` — merge base
 - `flink-streaming-java/src/test/java/org/apache/flink/streaming/runtime/operators/windowing/WindowOperatorTest.java` — tests
 
