@@ -118,7 +118,26 @@ def compare_file_sets(
         path_matched_oracle.add(oracle_by_path[path])
         path_matched_agent.add(agent_by_path[path])
 
-    total_matched = len(matched) + len(path_matched_oracle)
+    oracle_remaining2 = oracle_remaining - path_matched_oracle
+    agent_remaining2 = agent_remaining - path_matched_agent
+
+    # Pass 3: path-suffix fallback — handles monorepo staging paths
+    # e.g., "pkg/apis/meta/v1/types.go" matches
+    #        "staging/src/k8s.io/apimachinery/pkg/apis/meta/v1/types.go"
+    suffix_matched_oracle = set()
+    suffix_matched_agent = set()
+    if oracle_remaining2 and agent_remaining2:
+        for okey in list(oracle_remaining2):
+            for akey in list(agent_remaining2):
+                opath, apath = okey[1], akey[1]
+                if (opath.endswith("/" + apath.rsplit("/", 1)[-1])
+                        and (apath.endswith(opath) or opath.endswith(apath))):
+                    suffix_matched_oracle.add(okey)
+                    suffix_matched_agent.add(akey)
+                    break
+
+    total_matched = (len(matched) + len(path_matched_oracle)
+                     + len(suffix_matched_oracle))
     n_oracle = len(oracle_keys)
     n_agent = len(agent_keys)
 
@@ -128,8 +147,8 @@ def compare_file_sets(
           if (recall + precision) > 0 else 0.0)
 
     # Divergence
-    oracle_only = oracle_remaining - path_matched_oracle
-    agent_only = agent_remaining - path_matched_agent
+    oracle_only = oracle_remaining2 - suffix_matched_oracle
+    agent_only = agent_remaining2 - suffix_matched_agent
 
     return {
         "recall": round(recall, 4),
