@@ -132,6 +132,9 @@ def _match_items(
     return all_matched_oracle, missing, extra
 
 
+_TIER_WEIGHTS: Dict[str, float] = {"required": 2.0, "sufficient": 1.0}
+
+
 def check_file_set_match(
     answer_files: List[Dict[str, str]],
     oracle_files: List[Dict[str, str]],
@@ -142,7 +145,14 @@ def check_file_set_match(
     Matching uses two-pass repo normalization: exact match first, then
     normalised-repo and path-only fallback for mirror/upstream name mismatches.
 
-    Returns raw scores without thresholds.
+    Returns raw scores without thresholds. When oracle files carry a "tier"
+    field ("required" or "sufficient"), also computes weighted scores:
+      - weighted_recall: recall weighted by tier (required=2x, sufficient=1x)
+      - weighted_f1:     F1 using weighted_recall and unweighted precision
+      - required_recall: recall restricted to "required"-tier files only
+
+    All added fields are backward-compatible — callers that ignore them are
+    unaffected. _get_primary_score prefers weighted_f1 when available.
 
     >>> result = check_file_set_match(
     ...     [{"repo": "a/b", "path": "x.go"}],
@@ -159,6 +169,16 @@ def check_file_set_match(
     ... )
     >>> result["f1"]
     1.0
+
+    >>> result = check_file_set_match(
+    ...     [{"repo": "a/b", "path": "x.go"}],
+    ...     [{"repo": "a/b", "path": "x.go", "tier": "required"},
+    ...      {"repo": "a/b", "path": "y.go", "tier": "sufficient"}],
+    ... )
+    >>> result["required_recall"]
+    1.0
+    >>> result["weighted_recall"]  # matched required(2) / total(3) = 0.6667
+    0.6667
     """
     matched, missing, extra = _match_items(answer_files, oracle_files, ["repo", "path"])
 
@@ -169,7 +189,7 @@ def check_file_set_match(
     precision = len(matched) / n_answer if n_answer else 0.0
     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
 
-    return {
+    result: Dict[str, Any] = {
         "recall": round(recall, 4),
         "precision": round(precision, 4),
         "f1": round(f1, 4),
@@ -177,6 +197,37 @@ def check_file_set_match(
         "missing": [{"repo": r, "path": p} for r, p in sorted(missing)],
         "extra": [{"repo": r, "path": p} for r, p in sorted(extra)],
     }
+
+    # Weighted scoring — only when oracle carries tier annotations
+    has_tiers = any("tier" in f for f in oracle_files)
+    if has_tiers:
+        # Build weight map keyed by oracle's exact (repo, path) tuples.
+        # _match_items returns oracle exact keys so the lookup is direct.
+        weight_map: Dict[tuple, float] = {
+            (f.get("repo", ""), f.get("path", "")): _TIER_WEIGHTS.get(f.get("tier", "sufficient"), 1.0)
+            for f in oracle_files
+        }
+        total_weight = sum(weight_map.values()) or 1.0
+        matched_weight = sum(weight_map.get(k, 1.0) for k in matched)
+
+        weighted_recall = matched_weight / total_weight
+        weighted_f1 = (
+            (2 * precision * weighted_recall / (precision + weighted_recall))
+            if (precision + weighted_recall) > 0
+            else 0.0
+        )
+
+        required_keys = {k for k, w in weight_map.items() if w > 1.0}
+        required_matched = required_keys & set(matched)
+        required_recall = len(required_matched) / len(required_keys) if required_keys else None
+
+        result["weighted_recall"] = round(weighted_recall, 4)
+        result["weighted_f1"] = round(weighted_f1, 4)
+        result["required_recall"] = round(required_recall, 4) if required_recall is not None else None
+        result["required_total"] = len(required_keys)
+        result["required_matched"] = len(required_matched)
+
+    return result
 
 
 def check_symbol_resolution(
@@ -462,9 +513,17 @@ def check_test_ratio(
 
 
 def _get_primary_score(check_result: Dict[str, Any], check_type: str) -> float:
-    """Extract the primary score from a check result for composite scoring."""
+    """Extract the primary score from a check result for composite scoring.
+
+    For file_set_match, prefers weighted_f1 (available when oracle has tier
+    annotations) over plain f1, so required-tier files count more heavily.
+    """
+    if check_type == "file_set_match":
+        # Use weighted_f1 when tiers are present, else fall back to f1
+        value = check_result.get("weighted_f1", check_result.get("f1", 0))
+        return float(value)
+
     score_keys = {
-        "file_set_match": "f1",
         "symbol_resolution": "recall",
         "dependency_chain": "chain_recall",
         "provenance": "provenance_score",
