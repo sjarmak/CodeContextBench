@@ -587,8 +587,9 @@ def _output_tables(suites, config_arms, decompositions, combined_decomps,
         frac_pos = sum(1 for d in deltas if d > 0.001) / n
         frac_neg = sum(1 for d in deltas if d < -0.001) / n
 
+        std_d = statistics.stdev(deltas) if n > 1 else 0.0
         print(f"  {short:<18} {n:>6} {statistics.mean(deltas):>+8.4f} "
-              f"{statistics.stdev(deltas):>8.4f} {min(deltas):>+8.4f} "
+              f"{std_d:>8.4f} {min(deltas):>+8.4f} "
               f"{max(deltas):>+8.4f} {frac_pos:>7.2f} {frac_neg:>7.2f}")
 
     # ---- Interpretation ----
