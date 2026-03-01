@@ -38,6 +38,24 @@ from typing import Any, Dict, List, Optional
 _MIRROR_HASH_RE = re.compile(r"--[0-9a-f]{6,}$")
 
 
+def _coerce_file_entry(entry) -> Dict[str, str]:
+    """Coerce a file entry to {"repo": ..., "path": ...} dict format.
+
+    Handles string entries like "sg-evals/kubernetes--v1.32.0/pkg/file.go"
+    where the first two path components are the repo.
+    """
+    if isinstance(entry, dict):
+        return entry
+    if isinstance(entry, str):
+        parts = entry.split("/", 2)
+        if len(parts) >= 3:
+            return {"repo": f"{parts[0]}/{parts[1]}", "path": parts[2]}
+        elif len(parts) == 2:
+            return {"repo": parts[0], "path": parts[1]}
+        return {"repo": "", "path": entry}
+    return {"repo": "", "path": str(entry)}
+
+
 def _normalize_repo(name: str) -> str:
     """Reduce a repo identifier to its base name for fuzzy comparison.
 
@@ -180,6 +198,10 @@ def check_file_set_match(
     >>> result["weighted_recall"]  # matched required(2) / total(3) = 0.6667
     0.6667
     """
+    # Coerce string entries to dicts (handles legacy oracle format)
+    oracle_files = [_coerce_file_entry(f) for f in oracle_files]
+    answer_files = [_coerce_file_entry(f) for f in answer_files]
+
     matched, missing, extra = _match_items(answer_files, oracle_files, ["repo", "path"])
 
     n_oracle = len({(f.get("repo", ""), f.get("path", "")) for f in oracle_files})

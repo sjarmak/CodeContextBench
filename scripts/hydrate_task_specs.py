@@ -40,6 +40,26 @@ def load_json(path: str) -> Dict[str, Any]:
         return json.load(f)
 
 
+def _normalize_file_entry(entry) -> Dict[str, str]:
+    """Convert a file entry to {"repo": ..., "path": ...} dict format.
+
+    Handles both dict entries (already correct) and string entries like
+    "sg-evals/kubernetes--v1.32.0/pkg/apis/rbac/v1alpha1/file.go" where
+    the first two path components are the repo and the rest is the file path.
+    """
+    if isinstance(entry, dict):
+        return entry
+    if isinstance(entry, str):
+        parts = entry.split("/", 2)
+        if len(parts) >= 3:
+            return {"repo": f"{parts[0]}/{parts[1]}", "path": parts[2]}
+        elif len(parts) == 2:
+            return {"repo": parts[0], "path": parts[1]}
+        else:
+            return {"repo": "", "path": entry}
+    return {"repo": "", "path": str(entry)}
+
+
 def build_checks(oracle_check_types: List[str], oracle_answer: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Build evaluation checks array from oracle_check_types and oracle data."""
     checks = []
@@ -104,6 +124,19 @@ def hydrate_task(task_entry: Dict[str, Any], dry_run: bool) -> str:
     oracle_check_types = task_entry.get("oracle_check_types", [])
 
     task_dir = os.path.join(BENCHMARKS_DIR, task_dir_rel)
+
+    # Auto-infer check types from oracle data when not specified
+    if not oracle_check_types:
+        oracle_path_peek = os.path.join(task_dir, "tests", "oracle_answer.json")
+        if os.path.isfile(oracle_path_peek):
+            peek = load_json(oracle_path_peek)
+            if peek.get("files"):
+                oracle_check_types.append("file_set_match")
+            if peek.get("symbols"):
+                oracle_check_types.append("symbol_resolution")
+                oracle_check_types.append("keyword_presence")
+            if peek.get("chain"):
+                oracle_check_types.append("dependency_chain")
     spec_path = os.path.join(task_dir, "tests", "task_spec.json")
     oracle_path = os.path.join(task_dir, "tests", "oracle_answer.json")
 
@@ -124,7 +157,7 @@ def hydrate_task(task_entry: Dict[str, Any], dry_run: bool) -> str:
     symbols = oracle_answer.get("symbols", [])
     chain = oracle_answer.get("chain", [])
 
-    oracle["required_files"] = files
+    oracle["required_files"] = [_normalize_file_entry(f) for f in files]
     oracle["required_symbols"] = symbols
     oracle["required_references"] = oracle.get("required_references", [])
 
