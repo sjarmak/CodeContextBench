@@ -140,6 +140,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 ## Validation
 
 - `scripts/validate_enterprise_readiness.py` - Validation script for validate enterprise readiness.
+- `scripts/validate_on_contextbench.py` - Validation script for validate on contextbench.
 
 ## Generation
 
@@ -167,7 +168,9 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/backfill_triage_from_manifest.py` [one_off] - Historical one-off script: backfill triage from manifest.
 - `scripts/check_harness_readiness.py` - Utility script for check harness readiness.
 - `scripts/compute_bootstrap_cis.py` - Utility script for compute bootstrap cis.
+- `scripts/context_retrieval_agent.py` - Utility script for context retrieval agent.
 - `scripts/control_plane.py` - Utility script for control plane.
+- `scripts/cross_validate_oracles.py` - Utility script for cross validate oracles.
 - `scripts/daytona_poc_runner.py` - Utility script for daytona poc runner.
 - `scripts/daytona_runner.py` - Utility script for daytona runner.
 - `scripts/dependeval_eval_dr.py` - Utility script for dependeval eval dr.
