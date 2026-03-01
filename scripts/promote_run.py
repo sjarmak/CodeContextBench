@@ -101,10 +101,11 @@ def should_skip(name: str) -> bool:
 
 
 def find_task_dirs(config_path: Path) -> list[Path]:
-    """Find task directories, handling both layouts.
+    """Find task directories, handling all Harbor layouts.
 
     Layout v1: config/task_name__hash/result.json
     Layout v2: config/batch_timestamp/task_name__hash/result.json
+    Layout v3: config/ccb_suite_taskname_configname/task_name__hash/result.json
     """
     task_dirs = []
     if not config_path.is_dir():
@@ -116,14 +117,19 @@ def find_task_dirs(config_path: Path) -> list[Path]:
         if not entry.is_dir() or should_skip(entry.name):
             continue
 
-        if batch_ts_re.match(entry.name):
+        if "__" in entry.name:
+            # Layout v1: direct task dir (task_name__hash)
+            task_dirs.append(entry)
+        elif batch_ts_re.match(entry.name):
             # Layout v2: batch timestamp dir — look inside for task dirs
             for sub in sorted(entry.iterdir()):
                 if sub.is_dir() and "__" in sub.name and not should_skip(sub.name):
                     task_dirs.append(sub)
-        elif "__" in entry.name:
-            # Layout v1: direct task dir
-            task_dirs.append(entry)
+        else:
+            # Layout v3: Harbor batch dir (ccb_suite_task_config) — look inside
+            for sub in sorted(entry.iterdir()):
+                if sub.is_dir() and "__" in sub.name and not should_skip(sub.name):
+                    task_dirs.append(sub)
 
     return task_dirs
 
