@@ -88,13 +88,141 @@ def download_data(data_dir: Path = DATA_DIR) -> None:
         log.info("Already exists: %s", verified_path)
 
 
+def _infer_language(instance_id: str, task: Dict) -> str:
+    """Infer primary language from task metadata."""
+    # Try explicit field first
+    lang = task.get("language", "")
+    if lang:
+        return lang.lower()
+    # Infer from repo name patterns
+    repo = task.get("repo", task.get("repo_url", ""))
+    iid = instance_id.lower()
+    lang_hints = {
+        "django": "python", "flask": "python", "scikit": "python",
+        "pandas": "python", "numpy": "python", "sympy": "python",
+        "requests": "python", "sphinx": "python", "pytest": "python",
+        "astropy": "python", "matplotlib": "python", "pylint": "python",
+        "spring": "java", "kafka": "java",
+        "rust": "rust", "servo": "rust",
+        "react": "javascript", "express": "javascript", "node": "javascript",
+        "typescript": "typescript", "angular": "typescript",
+        "rails": "ruby",
+        "go": "go", "kubernetes": "go",
+    }
+    for pattern, lang in lang_hints.items():
+        if pattern in iid or pattern in repo.lower():
+            return lang
+    return "unknown"
+
+
+def _gold_context_size(task: Dict) -> str:
+    """Categorize gold context complexity: small/medium/large."""
+    files = task.get("files", [])
+    if isinstance(files, str):
+        try:
+            files = json.loads(files)
+        except json.JSONDecodeError:
+            files = []
+    n = len(files) if isinstance(files, list) else 0
+
+    # Also count from patch
+    patch = task.get("patch", "")
+    patch_files = set()
+    if patch:
+        for line in patch.split("\n"):
+            if line.startswith("--- a/") or line.startswith("+++ b/"):
+                p = line[6:].strip()
+                if p and p != "/dev/null":
+                    patch_files.add(p)
+    n = max(n, len(patch_files))
+
+    if n <= 2:
+        return "small"
+    elif n <= 5:
+        return "medium"
+    else:
+        return "large"
+
+
+def stratified_sample(
+    tasks: List[Dict[str, Any]],
+    n: int,
+    seed: int = 42,
+) -> List[Dict[str, Any]]:
+    """Stratified sampling across language, context complexity.
+
+    Ensures coverage across programming languages and gold context sizes.
+    """
+    rng = random.Random(seed)
+
+    # Group by (language, complexity)
+    strata: Dict[Tuple, List[Dict]] = {}
+    for task in tasks:
+        iid = task.get("instance_id", "")
+        lang = _infer_language(iid, task)
+        complexity = _gold_context_size(task)
+        key = (lang, complexity)
+        strata.setdefault(key, []).append(task)
+
+    # Proportional allocation with minimum 1 per non-empty stratum
+    n_strata = len(strata)
+    if n_strata == 0:
+        return []
+
+    # Allocate proportionally
+    total = sum(len(v) for v in strata.values())
+    allocation = {}
+    remaining = n
+    for key, group in sorted(strata.items(), key=lambda x: len(x[1]), reverse=True):
+        share = max(1, round(n * len(group) / total))
+        share = min(share, len(group), remaining)
+        allocation[key] = share
+        remaining -= share
+        if remaining <= 0:
+            break
+
+    # Distribute any remainder to largest strata
+    for key in sorted(strata.keys(), key=lambda k: len(strata[k]), reverse=True):
+        if remaining <= 0:
+            break
+        can_add = len(strata[key]) - allocation.get(key, 0)
+        if can_add > 0:
+            add = min(can_add, remaining)
+            allocation[key] = allocation.get(key, 0) + add
+            remaining -= add
+
+    # Sample from each stratum
+    sampled = []
+    for key, count in allocation.items():
+        group = strata[key]
+        sampled.extend(rng.sample(group, min(count, len(group))))
+
+    rng.shuffle(sampled)
+    log.info(
+        "Stratified sample: %d tasks from %d strata (requested %d)",
+        len(sampled), len(allocation), n,
+    )
+    for key, count in sorted(allocation.items()):
+        log.info("  %s: %d tasks", key, count)
+
+    return sampled
+
+
 def load_tasks(
     data_dir: Path = DATA_DIR,
     verified: bool = False,
     sample: int = 0,
+    stratified: bool = True,
     seed: int = 42,
 ) -> List[Dict[str, Any]]:
     """Load ContextBench tasks from parquet.
+
+    Args:
+        data_dir: Path to data directory with parquet files.
+        verified: Use verified subset (500) vs full (1136).
+        sample: Number of tasks to sample (0 = all).
+        stratified: Use stratified sampling across language/complexity.
+        seed: Random seed.
 
     Returns list of dicts with: instance_id, repo, commit, problem_statement,
     patch, gold_files, etc.
@@ -125,9 +253,12 @@ def load_tasks(
     log.info("Loaded %d tasks from %s", len(tasks), fname)
 
     if sample > 0 and sample < len(tasks):
-        rng = random.Random(seed)
-        tasks = rng.sample(tasks, sample)
-        log.info("Sampled %d tasks (seed=%d)", len(tasks), seed)
+        if stratified:
+            tasks = stratified_sample(tasks, sample, seed)
+        else:
+            rng = random.Random(seed)
+            tasks = rng.sample(tasks, sample)
+            log.info("Random sampled %d tasks (seed=%d)", len(tasks), seed)
 
     return tasks
 
@@ -533,40 +664,271 @@ def main() -> int:
     if gold_path.exists():
         cb_metrics = evaluate_trajectories(gold_path, traj_path, cb_results_path)
 
-    # Write summary report
-    report = {
-        "model": args.model,
-        "backend": args.backend,
-        "n_tasks_attempted": len(tasks),
-        "n_tasks_completed": len(trajectories),
-        "total_cost_usd": round(total_cost, 4),
-        "avg_cost_per_task": round(total_cost / len(trajectories), 4) if trajectories else 0,
-        "simple_file_metrics": simple_metrics,
-        "contextbench_metrics": cb_metrics,
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-    }
-    report_path = out_dir / "validation_report.json"
+    # Build calibration report with error profile and bias analysis
+    report = build_calibration_report(
+        evaluated_tasks, trajectories, simple_metrics,
+        cb_metrics=cb_metrics,
+        model=args.model,
+        backend=args.backend,
+        total_cost=total_cost,
+        n_attempted=len(tasks),
+    )
+
+    report_path = out_dir / "calibration_report.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n")
 
     # Print summary
-    print(f"\n{'=' * 60}")
-    print(f"ContextBench Validation Report")
-    print(f"{'=' * 60}")
-    print(f"Model: {args.model}")
-    print(f"Backend: {args.backend}")
-    print(f"Tasks: {len(trajectories)}/{len(tasks)} completed")
-    print(f"Cost: ${total_cost:.4f} (avg ${total_cost/len(trajectories):.4f}/task)")
-    print(f"\nFile-level metrics (simple):")
-    print(f"  Recall:    {simple_metrics['file_recall']:.4f}")
-    print(f"  Precision: {simple_metrics['file_precision']:.4f}")
-    print(f"  F1:        {simple_metrics['file_f1']:.4f}")
+    print(f"\n{'=' * 70}")
+    print("Oracle Agent Calibration Report (ContextBench)")
+    print(f"{'=' * 70}")
+    print(f"Model: {args.model} | Backend: {args.backend}")
+    print(f"Tasks: {len(trajectories)}/{len(tasks)} completed | Cost: ${total_cost:.2f}")
+
+    sm = report["file_metrics"]
+    print(f"\nFile-Level Performance:")
+    print(f"  Recall:    {sm['recall']:.4f}")
+    print(f"  Precision: {sm['precision']:.4f}")
+    print(f"  F1:        {sm['f1']:.4f}")
+
+    # Go/no-go
+    threshold = report["go_no_go"]
+    status = "PASS" if threshold["pass"] else "FAIL"
+    print(f"\nGo/No-Go: {status}")
+    print(f"  File recall >= {threshold['file_recall_threshold']}: "
+          f"{threshold['file_recall_met']}")
+
+    # Bias analysis
+    if report.get("bias_analysis", {}).get("by_language"):
+        print(f"\nBy Language:")
+        for lang, m in sorted(report["bias_analysis"]["by_language"].items()):
+            print(f"  {lang:12s}: recall={m['recall']:.3f} precision={m['precision']:.3f} "
+                  f"f1={m['f1']:.3f} (n={m['n']})")
+
+    if report.get("bias_analysis", {}).get("by_complexity"):
+        print(f"\nBy Context Complexity:")
+        for comp, m in sorted(report["bias_analysis"]["by_complexity"].items()):
+            print(f"  {comp:8s}: recall={m['recall']:.3f} precision={m['precision']:.3f} "
+                  f"f1={m['f1']:.3f} (n={m['n']})")
+
+    if report.get("systematic_gaps"):
+        print(f"\nSystematic Gaps (file categories missed):")
+        for gap in report["systematic_gaps"][:5]:
+            print(f"  - {gap['category']}: missed {gap['miss_rate']:.0%} "
+                  f"({gap['missed']}/{gap['total']})")
+
     if cb_metrics:
-        print(f"\nContextBench metrics: see {cb_results_path}")
-    print(f"\nFull report: {report_path}")
+        print(f"\nContextBench evaluator results: see {cb_results_path}")
+    print(f"\nCalibration report: {report_path}")
     print(f"Trajectories: {traj_path}")
-    print(f"{'=' * 60}")
+    print(f"{'=' * 70}")
+
+    # Paper-ready statement
+    if threshold["pass"]:
+        print(f"\nPaper-ready statement:")
+        print(f'  "Our oracle achieves {sm["recall"]:.0%} file-level recall and '
+              f'{sm["precision"]:.0%} precision against human expert annotations '
+              f'on a calibration set of {sm["n"]} ContextBench tasks, providing '
+              f'a quantified error profile for ground truth completeness."')
 
     return 0
+
+
+def build_calibration_report(
+    tasks: List[Dict],
+    trajectories: List[Dict],
+    simple_metrics: Dict[str, float],
+    cb_metrics: Dict = None,
+    model: str = "",
+    backend: str = "",
+    total_cost: float = 0,
+    n_attempted: int = 0,
+) -> Dict[str, Any]:
+    """Build the calibration report with error profile and bias analysis.
+
+    This is the key artifact: a quantified error profile that lets us
+    interpret oracle-generated ground truth through measured limitations.
+    """
+    # Per-task detail with language/complexity metadata
+    per_task_detail = []
+    by_language: Dict[str, List[Dict]] = {}
+    by_complexity: Dict[str, List[Dict]] = {}
+    missed_categories: Dict[str, Dict] = {}  # category -> {missed, total}
+
+    for task, traj in zip(tasks, trajectories):
+        iid = task.get("instance_id", "")
+        lang = _infer_language(iid, task)
+        complexity = _gold_context_size(task)
+
+        # Compute per-task metrics
+        gold_files = _extract_gold_files(task)
+        pred_files = set(traj.get("traj_data", {}).get("pred_files", []))
+        gold_norm = {f.lstrip("/") for f in gold_files if f}
+        pred_norm = {f.lstrip("/") for f in pred_files if f}
+
+        inter = gold_norm & pred_norm
+        recall = len(inter) / len(gold_norm) if gold_norm else 0
+        precision = len(inter) / len(pred_norm) if pred_norm else 0
+        f1 = (2 * recall * precision / (recall + precision)
+              if (recall + precision) > 0 else 0)
+
+        detail = {
+            "instance_id": iid,
+            "language": lang,
+            "complexity": complexity,
+            "recall": round(recall, 4),
+            "precision": round(precision, 4),
+            "f1": round(f1, 4),
+            "n_gold": len(gold_norm),
+            "n_pred": len(pred_norm),
+            "n_matched": len(inter),
+            "missed": sorted(gold_norm - pred_norm),
+            "extra": sorted(pred_norm - gold_norm),
+        }
+        per_task_detail.append(detail)
+
+        by_language.setdefault(lang, []).append(detail)
+        by_complexity.setdefault(complexity, []).append(detail)
+
+        # Track missed file categories
+        for missed_file in gold_norm - pred_norm:
+            cat = _categorize_file(missed_file)
+            missed_categories.setdefault(cat, {"missed": 0, "total": 0})
+            missed_categories[cat]["missed"] += 1
+        for gold_file in gold_norm:
+            cat = _categorize_file(gold_file)
+            missed_categories.setdefault(cat, {"missed": 0, "total": 0})
+            missed_categories[cat]["total"] += 1
+
+    # Aggregate by language
+    lang_metrics = {}
+    for lang, details in sorted(by_language.items()):
+        lang_metrics[lang] = _aggregate_metrics(details)
+
+    # Aggregate by complexity
+    comp_metrics = {}
+    for comp, details in sorted(by_complexity.items()):
+        comp_metrics[comp] = _aggregate_metrics(details)
+
+    # Systematic gaps (file categories with high miss rates)
+    gaps = []
+    for cat, counts in sorted(missed_categories.items()):
+        if counts["total"] >= 3:  # minimum sample
+            miss_rate = counts["missed"] / counts["total"]
+            if miss_rate > 0.3:  # flag if >30% miss rate
+                gaps.append({
+                    "category": cat,
+                    "miss_rate": round(miss_rate, 4),
+                    "missed": counts["missed"],
+                    "total": counts["total"],
+                })
+    gaps.sort(key=lambda g: g["miss_rate"], reverse=True)
+
+    # Go/no-go threshold
+    file_recall = simple_metrics.get("file_recall", 0)
+    FILE_RECALL_THRESHOLD = 0.60  # Minimum to proceed
+    go = file_recall >= FILE_RECALL_THRESHOLD
+
+    return {
+        "calibration_metadata": {
+            "model": model,
+            "backend": backend,
+            "n_attempted": n_attempted,
+            "n_completed": len(trajectories),
+            "total_cost_usd": round(total_cost, 4),
+            "avg_cost_per_task": round(total_cost / len(trajectories), 4) if trajectories else 0,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "contextbench_subset": "verified" if len(tasks) <= 500 else "full",
+        },
+        "file_metrics": {
+            "recall": simple_metrics.get("file_recall", 0),
+            "precision": simple_metrics.get("file_precision", 0),
+            "f1": simple_metrics.get("file_f1", 0),
+            "n": simple_metrics.get("n_evaluated", 0),
+        },
+        "go_no_go": {
+            "pass": go,
+            "file_recall_threshold": FILE_RECALL_THRESHOLD,
+            "file_recall_met": file_recall >= FILE_RECALL_THRESHOLD,
+            "recommendation": (
+                "PROCEED: Oracle meets calibration threshold."
+                if go else
+                "ITERATE: Oracle below threshold. Improve agent before deploying."
+            ),
+        },
+        "bias_analysis": {
+            "by_language": lang_metrics,
+            "by_complexity": comp_metrics,
+        },
+        "systematic_gaps": gaps,
+        "domain_gap_warning": (
+            "ContextBench tasks are single-repo issue resolution. "
+            "CCB polyrepo tasks (cross-repo dependency tracing, org-scale discovery) "
+            "are structurally different. Oracle calibration numbers for those task "
+            "types should be treated as extrapolations. Consider a small human "
+            "annotation effort (10-15 polyrepo tasks) to extend calibration."
+        ),
+        "contextbench_evaluator_metrics": cb_metrics or {},
+        "per_task": per_task_detail,
+    }
+
+
+def _extract_gold_files(task: Dict) -> Set[str]:
+    """Extract gold file set from a ContextBench task."""
+    gold_files = set()
+    files_raw = task.get("files", [])
+    if isinstance(files_raw, str):
+        try:
+            files_raw = json.loads(files_raw)
+        except json.JSONDecodeError:
+            files_raw = []
+    if isinstance(files_raw, list):
+        for f in files_raw:
+            if isinstance(f, str):
+                gold_files.add(f)
+            elif isinstance(f, dict):
+                gold_files.add(f.get("path", ""))
+    patch = task.get("patch", "")
+    if patch:
+        for line in patch.split("\n"):
+            if line.startswith("--- a/") or line.startswith("+++ b/"):
+                path = line[6:].strip()
+                if path and path != "/dev/null":
+                    gold_files.add(path)
+    return gold_files
+
+
+def _aggregate_metrics(details: List[Dict]) -> Dict[str, float]:
+    """Aggregate recall/precision/f1 from per-task details."""
+    if not details:
+        return {"recall": 0, "precision": 0, "f1": 0, "n": 0}
+    recalls = [d["recall"] for d in details]
+    precisions = [d["precision"] for d in details]
+    avg_r = sum(recalls) / len(recalls)
+    avg_p = sum(precisions) / len(precisions)
+    f1 = (2 * avg_r * avg_p / (avg_r + avg_p)) if (avg_r + avg_p) > 0 else 0
+    return {
+        "recall": round(avg_r, 4),
+        "precision": round(avg_p, 4),
+        "f1": round(f1, 4),
+        "n": len(details),
+    }
+
+
+def _categorize_file(path: str) -> str:
+    """Categorize a file path into broad categories for bias analysis."""
+    path_lower = path.lower()
+    if any(t in path_lower for t in ["test", "spec", "mock", "fake", "fixture"]):
+        return "test/fixture"
+    if any(t in path_lower for t in ["config", "conf", "settings", "setup.py", "setup.cfg",
+                                      ".toml", ".yaml", ".yml", ".ini", ".json"]):
+        return "configuration"
+    if any(t in path_lower for t in ["doc", "readme", "changelog", "license", "contributing"]):
+        return "documentation"
+    if any(t in path_lower for t in ["migration", "alembic", "schema"]):
+        return "migration/schema"
+    if any(t in path_lower for t in ["__init__", "index.", "mod.rs", "package.json"]):
+        return "module_entry"
+    return "source_code"
 
 
 if __name__ == "__main__":
