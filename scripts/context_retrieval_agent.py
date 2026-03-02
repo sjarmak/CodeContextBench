@@ -899,274 +899,145 @@ def _extract_clone_urls(dockerfile_content: str) -> List[Dict[str, str]]:
 # ---------------------------------------------------------------------------
 
 
-SYSTEM_PROMPTS = {
-    "local": """\
-You are a code context retrieval specialist. Given a task description and \
-local repository paths, identify ALL source files, symbols, and dependency \
-chains relevant to answering the task.
+# ---------------------------------------------------------------------------
+# Unified Curator System Prompt
+# ---------------------------------------------------------------------------
+# Replaces the previous 6 backend-specific prompts (SDK x3 + CLI x3) and
+# SYSTEM_PROMPT_SUFFIX. All backends and modes share this single prompt,
+# parameterized by {tool_description}.
 
-You have access to LOCAL TOOLS ONLY:
-- run_shell: grep, ripgrep, find, and other read-only shell commands
-- read_file: read source file contents
-- list_directory: explore directory trees
-- search_imports: language-aware import/include search
-- find_symbols: find function/class/interface definitions
+CURATOR_SYSTEM_PROMPT = """\
+# Role
+You are a benchmark curator agent for CodeContextBench. Your task is to
+identify all source files a developer would need to READ or MODIFY to
+understand and solve a software engineering task, then annotate each file
+with the specific line ranges that are relevant.
 
-You do NOT have access to any search engine, web API, or code search service.
+You are NOT solving the task. You are producing the authoritative ground
+truth that allows us to measure whether other agents solved it correctly.
 
-## Strategy
-1. Read the task carefully. Identify key entities (packages, types, functions).
-2. Start broad: use list_directory and find to understand repo structure.
-3. Use search_imports to trace import/dependency chains.
-4. Use grep/rg for exact string matches of identifiers.
-5. Use find_symbols to locate definitions.
-6. Read candidate files to confirm they would need code changes (not just context).
-7. Be PRECISE — only include files that would appear in the fix patch (PR diff). \
-Do not include files you read for understanding but that don't need changes.
-8. For multi-repo tasks, search ALL repos, not just the most obvious one.
-""",
+# Calibration Standard
+Your behavior is calibrated against ContextBench's human-annotated dataset
+(1,136 SWE-bench tasks). Human annotators include BOTH modification files
+AND understanding/context files (tests, configs, dependencies). You must
+do the same.
 
-    "deepsearch": """\
-You are a code context retrieval specialist. Given a task description, \
-identify ALL source files, symbols, and dependency chains relevant to \
-answering the task using Sourcegraph search tools.
+# Inclusion Rule
+Include a file if a skilled developer MUST read it to correctly solve the task:
+- Files that need code changes (edits/patches)
+- Test files that reveal the bug or define expected behavior
+- Dependency implementations needed to understand the call chain
+- Configuration files that constrain the solution
+- Type definitions, headers, or interfaces needed for correctness
 
-You have access to SEARCH TOOLS:
-- deep_search: AI-powered semantic code search across repositories
-- sourcegraph_search: keyword/regex code search with filters
+Do NOT include files discovered incidentally (e.g., via transitive imports)
+that are not needed to understand the core issue.
 
-## Strategy
-1. Read the task carefully. Identify key entities and concepts.
-2. Use deep_search for broad semantic exploration first.
-3. Use sourcegraph_search for precise keyword/identifier matches.
-4. Vary your queries — try different terms, packages, file patterns.
-5. Be PRECISE — only include files that would appear in the fix patch (PR diff). \
-Do not include files you found during search that don't need code changes.
-""",
+# Size Calibration (from ContextBench empirical distribution)
+- Small tasks: 1-3 files (narrow, focused issues)
+- Medium tasks: 3-8 files (multi-component understanding)
+- Large tasks: 8-15+ files (complex dependencies or broad refactors)
+Most tasks need 3-5 files. Err toward recall over precision — missing a
+relevant file is worse than including an extra one.
 
-    "hybrid": """\
-You are a code context retrieval specialist. Given a task description and \
-local repository paths, identify ALL source files, symbols, and dependency \
-chains relevant to answering the task.
+# Tools Available
+{tool_description}
 
-You have access to BOTH local tools AND Sourcegraph search:
+# Strategy
+1. Parse the task carefully. Identify key entities (packages, types, functions).
+2. Explore broadly first — understand the repo structure and locate entry points.
+3. For each candidate file, READ it to identify the specific line ranges relevant
+   to the task. Record start_line and end_line for each relevant section.
+4. Classify each included file as either:
+   - "edit": file that would need modification to solve the task
+   - "context": file needed for understanding but not modified
+5. For multi-repo tasks, search ALL repos, not just the most obvious one.
+6. Cross-validate: verify every file you include by reading it directly.
+   Do not include files based solely on search result summaries.
 
-Local tools:
-- run_shell: grep, ripgrep, find, and other read-only shell commands
-- read_file: read source file contents
-- list_directory: explore directory trees
-- search_imports: language-aware import/include search
-- find_symbols: find function/class/interface definitions
-
-Sourcegraph tools:
-- deep_search: AI-powered semantic code search across repositories
-- sourcegraph_search: keyword/regex code search with filters
-
-## Strategy
-1. Read the task carefully. Identify key entities and concepts.
-2. ALWAYS start with sourcegraph_search or deep_search to discover relevant \
-   files and repos — even if local repos are available. The local repo set \
-   may be INCOMPLETE (not all repos mentioned in the task are cloned locally).
-3. Use local grep/rg to verify and refine findings against actual files.
-4. Use search_imports and find_symbols for precise dependency tracing.
-5. Cross-check: anything found by search should be verified locally, and \
-   local findings should be checked for completeness via search.
-6. If local search finds nothing, ALWAYS try Sourcegraph search before \
-   concluding a file doesn't exist. The file may be in a repo not cloned locally.
-7. Be PRECISE — only include files that would appear in the fix patch (PR diff). \
-Do not include files you read for context that don't need code changes.
-8. For multi-repo tasks, search ALL repos — including repos you might not \
-   have locally. Use sourcegraph_search to find files across ALL indexed repos.
-""",
-}
-
-SYSTEM_PROMPT_SUFFIX = """
-## Evaluation Rubric — What "Relevant Files" Means
-You are evaluated against the set of files that would appear in the **actual fix \
-patch** (the git diff). This means:
-
-- Include ONLY files that would need **code changes** (additions, modifications, or \
-deletions) to address the task. These are the files that would appear in a pull \
-request diff.
-- Do NOT include files you would merely **read** for context or understanding. Reading \
-a file to trace a call chain is part of your research process, but only report files \
-that need changes in your final answer.
-- Do NOT include callers, importers, or dependents of the changed code unless they \
-themselves require modification (e.g., updating an API call signature).
-
-## File Category Rules
-- **Source code**: Include if it needs code changes. Exclude if it only provides context.
-- **Test files**: Include ONLY if the tests themselves need modification (e.g., adding \
-new test cases, updating assertions). Do NOT include tests that merely validate the fix.
-- **Documentation**: Include ONLY if docs need updating (e.g., CHANGELOG, man pages, \
-API docs). Most bug fixes do not require doc changes.
-- **Configuration/build files**: Include ONLY if they need changes (e.g., CMakeLists.txt \
-for new source files, package.json for new deps). Most fixes do not touch these.
-- **Type definition files** (.d.ts, .h headers): Include if type signatures change.
-
-## Size Calibration
-Over 60% of bug fix tasks require changes to only **1 file**. Be conservative:
-- Simple bugs: 1 file (most common)
-- Moderate bugs: 1-3 files
-- Multi-component changes: 3-5 files
-- Large refactors or features: 5-10+ files
-
-When in doubt, ask: "Would this file appear in the PR diff?" If no, exclude it.
-Err on the side of fewer, more precise predictions rather than broad coverage.
-
-## Output
-When you have identified all relevant files, output a JSON object with:
+# Output Format
+When done, output a JSON object inside a ```json fenced block:
 ```json
-{
-  "files": [
-    {"repo": "repo-name", "path": "relative/path/to/file"}
-  ],
+{{
+  "files": ["repo-relative/path/to/file.ext", ...],
+  "expected_edit_files": ["repo-relative/path/to/file.ext", ...],
   "symbols": [
-    {"repo": "repo-name", "path": "relative/path", "symbol": "SymbolName"}
+    {{"file": "path", "symbol": "ClassName.method_name", "repo": null}}
   ],
-  "chain": [
-    {"repo": "repo-name", "path": "relative/path", "symbol": "FuncName"}
+  "chunks": [
+    {{"file": "path", "line_start": 10, "line_end": 40, "annotation": "why this range is relevant"}}
   ],
-  "text": "Brief explanation of your findings and methodology."
-}
+  "dependency_chain": ["path1", "path2", ...],
+  "text": "Brief explanation of methodology and findings."
+}}
 ```
-Include only fields relevant to the task. Omit empty arrays.
+
+Rules:
+- "files" MUST be repo-relative path strings (e.g. "src/main.py"), NOT dicts.
+- "expected_edit_files" is a SUBSET of "files": only files a fix would modify.
+- "chunks" MUST have at least one entry per file in "files".
+  Each chunk identifies the specific function, class, or block that is relevant.
+- "symbols" lists key function/class definitions you identified.
+- "dependency_chain" is the ordered sequence of files in the call/import chain.
+- For multi-repo tasks, prefix paths with "repo_name::" when needed.
 IMPORTANT: Output the JSON as a fenced code block with ```json markers.
 """
 
-# ---------------------------------------------------------------------------
-# CLI-mode system prompts (uses Claude CLI built-in tools)
-# ---------------------------------------------------------------------------
 
-CLI_SYSTEM_PROMPTS = {
-    "local": """\
-You are a code context retrieval specialist. Given a task description and \
-local repository paths, identify the source files that would need to be \
-**modified** to address the task — i.e., files that would appear in the \
-fix patch / pull request diff.
+def _tool_description_for_backend(backend: str, cli_mode: bool = False) -> str:
+    """Return tool description text for the curator system prompt."""
+    if cli_mode:
+        local = (
+            "Local tools:\n"
+            "- Bash (read-only): run grep, rg (ripgrep), find, ls, wc, and other read-only shell commands\n"
+            "- Read: read source file contents\n"
+            "- Glob: find files by glob patterns (e.g., '**/*.py')\n"
+            "- Grep: search file contents with regex patterns"
+        )
+        ds = (
+            "Sourcegraph Deep Search (via Bash — MUST USE):\n"
+            "Run: bash /home/stephanie_jarmak/CodeContextBench/scripts/ds_wrapper.sh \"your question here\"\n"
+            "CRITICAL: Always include the repository name in your query.\n"
+            "Examples:\n"
+            "- \"What files implement RBAC escalation checks in kubernetes/kubernetes?\"\n"
+            "- \"Where is the ProducerBatch class defined in apache/kafka?\"\n"
+            "Deep Search takes 30-60 seconds. Use it for broad exploration, architecture\n"
+            "questions, dependency tracing, and finding implementations across repos."
+        )
+        sg_kw = "- mcp__sourcegraph__sg_keyword_search: keyword/regex code search with filters"
 
-You have access to LOCAL TOOLS ONLY:
-- Bash (read-only): run grep, rg (ripgrep), find, ls, wc, and other read-only shell commands
-- Read: read source file contents
-- Glob: find files by glob patterns (e.g., "**/*.py")
-- Grep: search file contents with regex patterns (supports --type, -C context)
+        if backend == "local":
+            return f"{local}\n\nYou do NOT have access to any search engine, web API, or code search service."
+        elif backend == "deepsearch":
+            return f"{ds}\n{sg_kw}"
+        else:  # hybrid
+            return f"{local}\n\n{ds}\n{sg_kw}"
+    else:
+        # SDK mode tools
+        local = (
+            "Local tools:\n"
+            "- run_shell: grep, ripgrep, find, and other read-only shell commands\n"
+            "- read_file: read source file contents\n"
+            "- list_directory: explore directory trees\n"
+            "- search_imports: language-aware import/include search\n"
+            "- find_symbols: find function/class/interface definitions"
+        )
+        sg = (
+            "Sourcegraph tools:\n"
+            "- deep_search: AI-powered semantic code search across repositories\n"
+            "- sourcegraph_search: keyword/regex code search with filters"
+        )
 
-You do NOT have access to any search engine, web API, or code search service.
+        if backend == "local":
+            return f"{local}\n\nYou do NOT have access to any search engine, web API, or code search service."
+        elif backend == "deepsearch":
+            return sg
+        else:  # hybrid
+            return f"{local}\n\n{sg}"
 
-## Strategy
-1. Read the task carefully. Identify key entities (packages, types, functions).
-2. Start broad: use Glob and Bash (find/ls) to understand repo structure.
-3. Use Grep to trace import/dependency chains and find symbol definitions.
-4. Read candidate files with Read to confirm they contain code that needs changing.
-5. Be PRECISE — report only files that need code changes, not files you read \
-for context. Most bugs require changing only 1 file.
-6. For multi-repo tasks, search ALL repos, not just the most obvious one.
-""",
-
-    "deepsearch": """\
-You are a code context retrieval specialist. Given a task description, \
-identify the source files that would need to be **modified** to address \
-the task — i.e., files that would appear in the fix patch / pull request diff.
-
-You have access to SEARCH TOOLS:
-- Bash: run Deep Search via the ds_wrapper.sh script (see below)
-- mcp__sourcegraph__sg_keyword_search: keyword/regex code search with filters
-
-## Deep Search (MUST USE)
-Deep Search is an AI-powered semantic code search that understands code \
-structure, relationships, and natural language queries. It returns detailed \
-answers with file paths and code explanations.
-
-To run Deep Search, use Bash:
-```
-bash /home/stephanie_jarmak/CodeContextBench/scripts/ds_wrapper.sh "your question here"
-```
-
-CRITICAL: Always include the repository name in your Deep Search query so it \
-searches the correct codebase. Use the repo names from the "Repositories" \
-section below. Examples:
-- "What files implement RBAC escalation checks in kubernetes/kubernetes?"
-- "Where is the ProducerBatch class defined in apache/kafka?"
-- "How does the xDS protocol work in envoyproxy/envoy?"
-
-Deep Search takes 30-60 seconds to complete. Use it for:
-- Broad exploration: "What files implement X in repo Y?"
-- Architecture questions: "How does the RBAC system work in repo Y?"
-- Dependency tracing: "What files depend on package X in repo Y?"
-- Finding implementations: "Where is interface Y implemented in repo Z?"
-
-## Strategy
-1. Read the task carefully. Identify key entities and concepts.
-2. ALWAYS start with Deep Search for broad semantic exploration. Include the \
-repo name in every query.
-3. Use mcp__sourcegraph__sg_keyword_search for precise identifier matches.
-4. Vary your queries — try different terms, packages, file patterns.
-5. Be PRECISE — report only files that need code changes, not files you found \
-during search that are merely related. Most bugs require changing only 1 file.
-""",
-
-    "hybrid": """\
-You are a code context retrieval specialist. Given a task description and \
-local repository paths, identify the source files that would need to be \
-**modified** to address the task — i.e., files that would appear in the \
-fix patch / pull request diff.
-
-You have access to BOTH local tools AND Sourcegraph Deep Search:
-
-Local tools:
-- Bash: run grep, rg (ripgrep), find, ls, and other read-only shell commands. \
-Also used to invoke Deep Search (see below).
-- Read: read source file contents
-- Glob: find files by glob patterns
-- Grep: search file contents with regex patterns
-
-Sourcegraph tools:
-- **Deep Search** (MUST USE FIRST): AI-powered semantic code search via Bash
-- mcp__sourcegraph__sg_keyword_search: keyword/regex code search with filters
-
-## Deep Search (MUST USE FIRST)
-Deep Search is an AI-powered semantic code search that understands code \
-structure, relationships, and natural language queries. It returns detailed \
-answers with file paths and code explanations. You MUST run at least one \
-Deep Search query before using other tools.
-
-To run Deep Search, use Bash:
-```
-bash /home/stephanie_jarmak/CodeContextBench/scripts/ds_wrapper.sh "your question here"
-```
-
-CRITICAL: Always include the repository name in your Deep Search query so it \
-searches the correct codebase. Use the repo names from the "Repositories" \
-section below. Examples:
-- "What files implement RBAC escalation checks in kubernetes/kubernetes?"
-- "Where is the ProducerBatch class defined in apache/kafka?"
-- "How does the xDS protocol work in envoyproxy/envoy?"
-
-Deep Search takes 30-60 seconds to complete. Use it for:
-- Broad exploration: "What files implement X in repo Y?"
-- Architecture questions: "How does the RBAC system work in repo Y?"
-- Dependency tracing: "What files depend on package X in repo Y?"
-- Finding implementations: "Where is interface Y implemented in repo Z?"
-
-## Strategy
-1. Read the task carefully. Identify key entities and concepts.
-2. ALWAYS start with Deep Search to discover relevant files and repos — \
-even if local repos are available. The local repo set may be INCOMPLETE. \
-Include the repo name in every Deep Search query. \
-Run: bash /home/stephanie_jarmak/CodeContextBench/scripts/ds_wrapper.sh "your question about repo/name"
-3. Use local Grep/Bash (rg) to verify and refine findings against actual files.
-4. Use mcp__sourcegraph__sg_keyword_search for precise identifier matches.
-5. Cross-check: anything found by search should be verified locally, and \
-local findings should be checked for completeness via search.
-6. If local search finds nothing, ALWAYS try Deep Search or keyword search \
-before concluding a file doesn't exist.
-7. Be PRECISE — report only files that need code changes, not files you read \
-for context. Most bugs require changing only 1 file. Do not include callers, \
-importers, or related modules unless they themselves need modification.
-8. For multi-repo tasks, search ALL repos — including repos you might not \
-have locally.
-""",
-}
+# CLI_SYSTEM_PROMPTS and SYSTEM_PROMPTS removed — replaced by unified
+# CURATOR_SYSTEM_PROMPT above. Both SDK and CLI modes use the same prompt
+# template, parameterized via _tool_description_for_backend().
 
 
 def run_agent_cli(
@@ -1185,7 +1056,9 @@ def run_agent_cli(
     Returns:
         (oracle_result, metadata) — same interface as run_agent().
     """
-    system = CLI_SYSTEM_PROMPTS.get(backend, CLI_SYSTEM_PROMPTS["hybrid"]) + SYSTEM_PROMPT_SUFFIX
+    system = CURATOR_SYSTEM_PROMPT.format(
+        tool_description=_tool_description_for_backend(backend, cli_mode=True),
+    )
     user_msg = build_user_message(ctx, repo_paths)
 
     # -- Determine allowed tools based on backend --
@@ -1359,117 +1232,222 @@ def _cli_error_metadata(model: str, backend: str, start_time: float) -> Dict[str
     }
 
 
-PRUNE_PROMPT = """\
-You are a precision filter for code context retrieval. Given a task description \
-and a list of predicted files, remove files that are NOT directly relevant.
-
-## Rules
-- Keep ONLY files that a developer would need to **read or modify** to address the task.
-- Remove test files unless the task is specifically about testing.
-- Remove documentation files unless the task is about docs.
-- Remove files that merely import or reference the relevant code.
-- When unsure, keep the file (recall > precision).
-
-## Task
-{task_description}
-
-## Predicted Files
-{file_list}
-
-## Output
-Return a JSON object with the filtered file list:
-```json
-{{
-  "files": [
-    {{"repo": "repo-name", "path": "relative/path/to/file"}}
-  ],
-  "pruned_count": <number of files removed>,
-  "text": "Brief explanation of what was removed and why."
-}}
-```
-"""
+# PRUNE_PROMPT and prune_oracle_cli() removed — pruning guidance is now
+# integrated into the unified CURATOR_SYSTEM_PROMPT. The curator prompt
+# instructs the agent to classify files as "edit" vs "context" and
+# exclude files discovered incidentally.
 
 
-def prune_oracle_cli(
-    oracle: Dict[str, Any],
-    ctx: Dict[str, Any],
-    prune_model: str = "claude-haiku-4-5-20251001",
-    verbose: bool = False,
-) -> Dict[str, Any]:
-    """Run a pruning pass on the oracle output using a cheap model via CLI.
+# ---------------------------------------------------------------------------
+# Phase 0: Task parsing for curator
+# ---------------------------------------------------------------------------
 
-    Asks a fast model to remove irrelevant files from the agent's output.
-    Returns the pruned oracle (or original if pruning fails).
+
+def parse_task_for_curator(task_dir: Path) -> Dict[str, Any]:
+    """Phase 0: Parse task artifacts to build structured context for the curator.
+
+    Enriches load_task_context() output with:
+      - task_type: 'sdlc' or 'mcp_unique'
+      - is_multi_repo: bool
+      - test_sh_diff_targets: files referenced in git diff commands in test.sh
+      - test_sh_file_patterns: general file references in test.sh
     """
-    files = oracle.get("files", [])
-    if len(files) <= 3:
-        # Too few to prune — skip
-        if verbose:
-            log.info("  Prune: skipping (%d files, <= 3)", len(files))
-        return oracle
+    ctx = load_task_context(task_dir)
+    suite = ctx.get("suite_name", "")
+    ctx["task_type"] = "mcp_unique" if suite.startswith("ccb_mcp_") else "sdlc"
 
-    task_desc = ctx.get("seed_prompt", "") or ctx.get("instruction", "")
-    file_list = "\n".join(
-        f"- {f.get('repo', '?')}: {f.get('path', '?')}" for f in files
-    )
+    # Detect multi-repo from Dockerfile env vars or fixture
+    ctx["is_multi_repo"] = bool(ctx.get("repo_fixture", {}).get("repos", []))
+    if not ctx["is_multi_repo"]:
+        docker_sg = task_dir / "environment" / "Dockerfile.sg_only"
+        if docker_sg.exists():
+            text = docker_sg.read_text()
+            ctx["is_multi_repo"] = "SOURCEGRAPH_REPOS" in text
 
-    prompt = PRUNE_PROMPT.format(
-        task_description=task_desc[:3000],
-        file_list=file_list,
-    )
+    # Parse test.sh for expected edit targets
+    test_sh = task_dir / "tests" / "test.sh"
+    ctx["test_sh_file_patterns"] = []
+    ctx["test_sh_diff_targets"] = []
+    if test_sh.exists():
+        test_text = test_sh.read_text()
+        # Extract git diff file targets (e.g. git diff -- path/to/file)
+        for m in re.finditer(r'git\s+diff.*?--\s+([\w/._-]+)', test_text):
+            target = m.group(1).strip()
+            if target and not target.startswith("-"):
+                ctx["test_sh_diff_targets"].append(target)
+        # Extract general file references (cat, grep, test -f)
+        for m in re.finditer(r'(?:cat|grep|test\s+-[ef])\s+["\']?(/?\w[\w/._-]+)', test_text):
+            ctx["test_sh_file_patterns"].append(m.group(1))
 
-    cmd = [
-        "claude", "-p", prompt,
-        "--output-format", "json",
-        "--model", prune_model,
-        "--dangerously-skip-permissions",
-    ]
-    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+    return ctx
 
-    if verbose:
-        log.info("  Prune: %d files -> calling %s", len(files), prune_model)
 
-    try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, env=env, timeout=60,
-        )
-    except subprocess.TimeoutExpired:
-        log.warning("  Prune: timeout, keeping original")
-        return oracle
+# ---------------------------------------------------------------------------
+# Schema Converters: agent output → ground_truth.json / oracle_answer.json
+# ---------------------------------------------------------------------------
 
-    if result.returncode != 0:
-        log.warning("  Prune: CLI failed (rc=%d), keeping original", result.returncode)
-        return oracle
 
-    try:
-        cli_output = json.loads(result.stdout)
-    except (json.JSONDecodeError, ValueError):
-        log.warning("  Prune: failed to parse CLI output, keeping original")
-        return oracle
+def _infer_primary_repo(ctx: Dict[str, Any]) -> str:
+    """Infer the primary repository name from task context."""
+    # From Dockerfile env vars
+    docker_envs = ctx.get("docker_env_vars", {})
+    repo_name = docker_envs.get("SOURCEGRAPH_REPO_NAME", "")
+    if repo_name:
+        return repo_name
+    # From clone URLs
+    urls = ctx.get("repo_urls", [])
+    if urls and isinstance(urls[0], dict):
+        return urls[0].get("slug", urls[0].get("name", ""))
+    if urls and isinstance(urls[0], str):
+        return urls[0]
+    return ""
 
-    result_text = cli_output.get("result", "")
-    pruned = _extract_json_from_text(result_text)
-    if pruned is None or "files" not in pruned:
-        log.warning("  Prune: no valid JSON in output, keeping original")
-        return oracle
 
-    pruned_files = pruned.get("files", [])
-    prune_cost = cli_output.get("total_cost_usd", 0.0)
+def _convert_to_ir_schema(
+    raw_oracle: Dict[str, Any],
+    ctx: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Convert agent output to the IR pipeline's ground_truth.json schema.
 
-    if verbose:
-        log.info("  Prune: %d -> %d files ($%.4f)",
-                 len(files), len(pruned_files), prune_cost)
+    Target format matches schemas/retrieval_events_schema.json ground_truth block:
+      {files: [string], symbols: [{file, symbol, repo?}], expected_edit_files: [string],
+       chunks: [{file, line_start, line_end, annotation?}]}
 
-    # Merge: keep pruned files but preserve original symbols/chain/text
-    result_oracle = dict(oracle)
-    result_oracle["files"] = pruned_files
-    result_oracle["_prune_metadata"] = {
-        "original_count": len(files),
-        "pruned_count": len(files) - len(pruned_files),
-        "prune_model": prune_model,
-        "prune_cost_usd": prune_cost,
-    }
-    return result_oracle
+    Handles both new format (files as strings) and legacy (files as {repo, path} dicts).
+    """
+    # Normalize files to plain string paths
+    files = []
+    for f in raw_oracle.get("files", []):
+        if isinstance(f, str):
+            files.append(f)
+        elif isinstance(f, dict):
+            repo = f.get("repo", "")
+            path = f.get("path", "")
+            if ctx.get("is_multi_repo") and repo:
+                clean = repo.replace("sg-evals/", "")
+                if "--" in clean:
+                    clean = clean.split("--")[0]
+                files.append(f"{clean}::{path}")
+            else:
+                files.append(path)
+    # Deduplicate preserving order
+    seen = set()
+    deduped = []
+    for f in files:
+        if f and f not in seen:
+            seen.add(f)
+            deduped.append(f)
+    files = deduped
+
+    # Normalize expected_edit_files
+    edit_files = []
+    for f in raw_oracle.get("expected_edit_files", []):
+        if isinstance(f, str):
+            edit_files.append(f)
+        elif isinstance(f, dict):
+            edit_files.append(f.get("path", ""))
+    edit_files = [f for f in edit_files if f]
+
+    # If agent didn't produce expected_edit_files, infer from test.sh
+    if not edit_files and ctx.get("test_sh_diff_targets"):
+        edit_files = ctx["test_sh_diff_targets"]
+
+    # Normalize symbols to {file, symbol, repo}
+    symbols = []
+    for s in raw_oracle.get("symbols", []):
+        if isinstance(s, dict):
+            symbols.append({
+                "file": s.get("path", s.get("file", "")),
+                "symbol": s.get("symbol", ""),
+                "repo": s.get("repo") if ctx.get("is_multi_repo") else None,
+            })
+
+    # Normalize chunks
+    chunks = []
+    for c in raw_oracle.get("chunks", []):
+        if isinstance(c, dict) and "file" in c and "line_start" in c and "line_end" in c:
+            chunks.append({
+                "file": c["file"],
+                "line_start": c["line_start"],
+                "line_end": c["line_end"],
+                "annotation": c.get("annotation"),
+            })
+
+    # Build result
+    result: Dict[str, Any] = {"files": files}
+    if symbols:
+        result["symbols"] = symbols
+    if edit_files:
+        # Determine confidence
+        if ctx.get("test_sh_diff_targets") and edit_files:
+            result["expected_edit_files"] = edit_files
+            result["expected_edit_files_source"] = "curator_agent_verifier_analysis"
+            result["expected_edit_files_confidence"] = "high"
+        else:
+            result["expected_edit_files"] = edit_files
+            result["expected_edit_files_source"] = "curator_agent_inference"
+            result["expected_edit_files_confidence"] = "medium"
+    if chunks:
+        result["chunks"] = chunks
+
+    # Preserve dependency_chain if present
+    chain = raw_oracle.get("dependency_chain", [])
+    if chain:
+        result["dependency_chain"] = chain
+
+    return result
+
+
+def _convert_to_oracle_schema(
+    raw_oracle: Dict[str, Any],
+    ctx: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Convert agent output to oracle_answer.json format for MCP artifact verifier.
+
+    Target format: {files: [{repo, path}], symbols: [{repo, path, symbol}],
+                    chain: [...], text: str}
+    """
+    primary_repo = _infer_primary_repo(ctx)
+
+    # Normalize files to {repo, path} dicts
+    files = []
+    for f in raw_oracle.get("files", []):
+        if isinstance(f, dict) and "repo" in f and "path" in f:
+            files.append(f)
+        elif isinstance(f, str):
+            if "::" in f:
+                repo, path = f.split("::", 1)
+                files.append({"repo": repo, "path": path})
+            else:
+                files.append({"repo": primary_repo, "path": f})
+
+    # Normalize symbols
+    symbols = []
+    for s in raw_oracle.get("symbols", []):
+        if isinstance(s, dict):
+            symbols.append({
+                "repo": s.get("repo", primary_repo),
+                "path": s.get("path", s.get("file", "")),
+                "symbol": s.get("symbol", ""),
+            })
+
+    # Normalize chain
+    chain_raw = raw_oracle.get("chain", raw_oracle.get("dependency_chain", []))
+    chain = []
+    for c in chain_raw:
+        if isinstance(c, dict):
+            chain.append(c)
+        elif isinstance(c, str):
+            chain.append({"repo": primary_repo, "path": c, "symbol": ""})
+
+    result: Dict[str, Any] = {"files": files}
+    if symbols:
+        result["symbols"] = symbols
+    if chain:
+        result["chain"] = chain
+    result["text"] = raw_oracle.get("text", "")
+
+    return result
 
 
 def build_user_message(
@@ -1528,10 +1506,25 @@ def build_user_message(
         "in repositories beyond the local set. Do not assume local repos are exhaustive."
     )
 
-    # Suite context
+    # Task type and verifier hints (from Phase 0 parsing)
+    task_type = ctx.get("task_type", "")
     suite = ctx.get("suite_name", "")
     if suite:
         parts.append(f"\n## Suite: {suite}")
+    if task_type:
+        parts.append(f"Task type: {task_type}")
+
+    # Verifier file targets — helps agent determine expected_edit_files
+    diff_targets = ctx.get("test_sh_diff_targets", [])
+    if diff_targets:
+        parts.append(
+            "\n## Verifier Targets (files checked by test.sh)\n"
+            + "\n".join(f"- `{t}`" for t in diff_targets)
+        )
+        parts.append(
+            "These files are checked by the verifier's `git diff` — they are likely "
+            "the files that need modification (expected_edit_files)."
+        )
 
     return "\n".join(parts)
 
@@ -1560,7 +1553,9 @@ def run_agent(
         (oracle_result, metadata) where oracle_result is the JSON output
         and metadata has cost/timing info.
     """
-    system = SYSTEM_PROMPTS.get(backend, SYSTEM_PROMPTS["hybrid"]) + SYSTEM_PROMPT_SUFFIX
+    system = CURATOR_SYSTEM_PROMPT.format(
+        tool_description=_tool_description_for_backend(backend, cli_mode=False),
+    )
     tools = get_tools_for_backend(backend)
     user_msg = build_user_message(ctx, repo_paths)
     messages = [{"role": "user", "content": user_msg}]
@@ -1747,13 +1742,16 @@ def cross_validate_task(
 def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
     """Try to extract oracle JSON from a text string.
 
-    Tries in order: fenced ```json block, regex for {"files": ...}, raw parse.
+    Tries in order:
+      1. Fenced ```json block
+      2. Balanced-brace search for outermost object containing "files"
+      3. Raw parse of entire text
     Returns None if no valid JSON found.
     """
     if not text:
         return None
 
-    # Try to extract JSON from fenced block
+    # 1. Try to extract JSON from fenced block
     m = re.search(r"```json\s*\n(.*?)\n```", text, re.DOTALL)
     if m:
         try:
@@ -1761,15 +1759,28 @@ def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
         except json.JSONDecodeError:
             pass
 
-    # Try to find any JSON object with "files" key
-    m = re.search(r"\{[^{}]*\"files\"[^{}]*\}", text, re.DOTALL)
-    if m:
-        try:
-            return json.loads(m.group(0))
-        except json.JSONDecodeError:
-            pass
+    # 2. Balanced-brace search — finds nested arrays/objects correctly
+    depth = 0
+    start = None
+    for i, ch in enumerate(text):
+        if ch == '{':
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0 and start is not None:
+                candidate = text[start:i + 1]
+                if '"files"' in candidate:
+                    try:
+                        parsed = json.loads(candidate)
+                        if isinstance(parsed, dict):
+                            return parsed
+                    except json.JSONDecodeError:
+                        pass
+                start = None
 
-    # Try the whole text
+    # 3. Try the whole text
     try:
         return json.loads(text)
     except (json.JSONDecodeError, ValueError):
@@ -1882,31 +1893,116 @@ def verify_dual_retrieval(
 # ---------------------------------------------------------------------------
 
 
+def write_curator_outputs(
+    task_dir: Path,
+    raw_oracle: Dict[str, Any],
+    metadata: Dict[str, Any],
+    ctx: Dict[str, Any],
+    output_path: str = "",
+    overwrite: bool = False,
+) -> Dict[str, Path]:
+    """Write all curator output files (ground_truth + oracle_answer + meta).
+
+    Produces up to 3 files:
+      1. ground_truth.json (or ground_truth_agent.json) — IR pipeline format
+      2. oracle_answer.json (MCP-unique only) — artifact verifier format
+      3. ground_truth_meta.json — sidecar with confidence and provenance
+
+    If overwrite=False (default), existing files are not touched and the
+    agent output is written to *_agent.json variants instead.
+
+    Returns dict of output type -> file path.
+    """
+    tests_dir = task_dir / "tests"
+    tests_dir.mkdir(exist_ok=True)
+    outputs: Dict[str, Path] = {}
+
+    # 1. ground_truth.json (ALL tasks, IR pipeline format)
+    ir_gt = _convert_to_ir_schema(raw_oracle, ctx)
+    if output_path:
+        gt_path = Path(output_path)
+    else:
+        existing_gt = tests_dir / "ground_truth.json"
+        if existing_gt.exists() and not overwrite:
+            gt_path = tests_dir / "ground_truth_agent.json"
+        else:
+            gt_path = tests_dir / "ground_truth.json"
+    gt_path.write_text(json.dumps(ir_gt, indent=2) + "\n")
+    outputs["ground_truth"] = gt_path
+    log.info("Wrote ground_truth: %s", gt_path)
+
+    # 2. oracle_answer.json (MCP-unique only, artifact verifier format)
+    suite = ctx.get("suite_name", "")
+    if suite.startswith("ccb_mcp_"):
+        oracle_fmt = _convert_to_oracle_schema(raw_oracle, ctx)
+        oracle_fmt["_metadata"] = metadata
+        existing_oracle = tests_dir / "oracle_answer.json"
+        if existing_oracle.exists() and not overwrite:
+            oracle_path = tests_dir / "oracle_answer_agent.json"
+        else:
+            oracle_path = tests_dir / "oracle_answer.json"
+        oracle_path.write_text(json.dumps(oracle_fmt, indent=2) + "\n")
+        outputs["oracle_answer"] = oracle_path
+        log.info("Wrote oracle_answer: %s", oracle_path)
+
+    # 3. ground_truth_meta.json (sidecar, ALL tasks)
+    has_chunks = bool(ir_gt.get("chunks"))
+    n_files = len(ir_gt.get("files", []))
+    n_edit = len(ir_gt.get("expected_edit_files", []))
+    has_test_sh = bool(ctx.get("test_sh_diff_targets"))
+
+    if has_chunks and n_files >= 2:
+        confidence = "high"
+    elif n_files >= 1:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    meta_sidecar = {
+        "has_ground_truth": n_files > 0,
+        "has_chunk_ground_truth": has_chunks,
+        "ground_truth_source": "curator_agent",
+        "ground_truth_confidence": confidence,
+        "task_name": ctx.get("task_name", ""),
+        "curator_agent_version": "2.0",
+        "model": metadata.get("model", ""),
+        "backend": metadata.get("backend", ""),
+        "timestamp": metadata.get("timestamp", ""),
+        "files_count": n_files,
+        "edit_files_count": n_edit,
+        "chunks_count": len(ir_gt.get("chunks", [])),
+        "symbols_count": len(ir_gt.get("symbols", [])),
+        "cost_usd": metadata.get("cost_usd", 0),
+        "elapsed_sec": metadata.get("elapsed_sec", 0),
+        "exploration_notes": raw_oracle.get("text", "")[:500],
+    }
+    meta_path = tests_dir / "ground_truth_meta.json"
+    meta_path.write_text(json.dumps(meta_sidecar, indent=2) + "\n")
+    outputs["meta"] = meta_path
+    log.info("Wrote metadata: %s", meta_path)
+
+    return outputs
+
+
+# Keep backward-compatible alias for any callers
 def write_oracle(
     task_dir: Path,
     oracle: Dict[str, Any],
     metadata: Dict[str, Any],
     output_path: str = "",
 ) -> Path:
-    """Write the agent-generated oracle to disk.
-
-    Writes to tests/oracle_answer_agent.json (or ground_truth_agent.json
-    for SDLC tasks). NEVER overwrites existing oracle files.
-    """
+    """Backward-compatible wrapper. Prefer write_curator_outputs()."""
     oracle["_metadata"] = metadata
-
     if output_path:
         out = Path(output_path)
     else:
         tests_dir = task_dir / "tests"
         tests_dir.mkdir(exist_ok=True)
-        # Use separate filename to never overwrite existing oracles
         suite = task_dir.parent.name
         if suite.startswith("ccb_mcp_"):
             out = tests_dir / "oracle_answer_agent.json"
         else:
             out = tests_dir / "ground_truth_agent.json"
-
     out.write_text(json.dumps(oracle, indent=2) + "\n")
     log.info("Wrote: %s", out)
     return out
@@ -1980,6 +2076,10 @@ def main() -> int:
     parser.add_argument(
         "--no-verify", action="store_true",
         help="Skip dual-retrieval verification pass",
+    )
+    parser.add_argument(
+        "--overwrite-existing", action="store_true",
+        help="Overwrite existing ground_truth.json / oracle_answer.json (default: write to _agent variants)",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -2112,7 +2212,7 @@ def main() -> int:
             i + 1, len(tasks), task_dir.parent.name, task_dir.name,
         )
 
-        ctx = load_task_context(task_dir)
+        ctx = parse_task_for_curator(task_dir)
 
         # Get repo paths (needed for local/hybrid backends)
         repo_paths = {}
@@ -2160,7 +2260,7 @@ def main() -> int:
 
         total_cost += metadata.get("cost_usd", 0)
 
-        # Write output
+        # Write output — use curator outputs (ground_truth + oracle + meta)
         output_path = ""
         if args.output and len(tasks) == 1:
             output_path = args.output
@@ -2177,31 +2277,30 @@ def main() -> int:
         if not args.no_verify:
             vr = verify_dual_retrieval(oracle, repo_paths, sg_client=sg)
             metadata["dual_verification"] = vr["summary"]
-            # Annotate oracle file entries with verification flags
-            for v_entry in vr["files"]:
-                for f_entry in oracle.get("files", []):
-                    if f_entry.get("path") == v_entry["path"]:
-                        f_entry["local_verified"] = v_entry["local_verified"]
-                        f_entry["sg_verified"] = v_entry["sg_verified"]
-                        break
 
-        out_file = write_oracle(task_dir, oracle, metadata, output_path)
+        outputs = write_curator_outputs(
+            task_dir, oracle, metadata, ctx,
+            output_path=output_path,
+            overwrite=args.overwrite_existing,
+        )
 
         n_files = len(oracle.get("files", []))
         n_symbols = len(oracle.get("symbols", []))
+        n_chunks = len(oracle.get("chunks", []))
         results_summary.append({
             "task": f"{task_dir.parent.name}/{task_dir.name}",
             "files_found": n_files,
             "symbols_found": n_symbols,
+            "chunks_found": n_chunks,
             "cost_usd": metadata["cost_usd"],
             "tool_calls": metadata["tool_calls"],
             "elapsed_sec": metadata["elapsed_sec"],
-            "output": str(out_file),
+            "outputs": {k: str(v) for k, v in outputs.items()},
         })
 
         log.info(
-            "  -> %d files, %d symbols, $%.4f, %d tool calls, %.1fs",
-            n_files, n_symbols, metadata["cost_usd"],
+            "  -> %d files, %d symbols, %d chunks, $%.4f, %d tool calls, %.1fs",
+            n_files, n_symbols, n_chunks, metadata["cost_usd"],
             metadata["tool_calls"], metadata["elapsed_sec"],
         )
 

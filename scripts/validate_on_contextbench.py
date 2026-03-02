@@ -117,26 +117,25 @@ def _infer_language(instance_id: str, task: Dict) -> str:
 
 
 def _gold_context_size(task: Dict) -> str:
-    """Categorize gold context complexity: small/medium/large."""
-    files = task.get("files", [])
-    if isinstance(files, str):
-        try:
-            files = json.loads(files)
-        except json.JSONDecodeError:
-            files = []
-    n = len(files) if isinstance(files, list) else 0
-
-    # Also count from patch
-    patch = task.get("patch", "")
-    patch_files = set()
-    if patch:
-        for line in patch.split("\n"):
-            if line.startswith("--- a/") or line.startswith("+++ b/"):
-                p = line[6:].strip()
-                if p and p != "/dev/null":
-                    patch_files.add(p)
-    n = max(n, len(patch_files))
-
+    """Categorize gold context complexity: small/medium/large.
+    
+    Counts unique files in ContextBench's gold_context (human-annotated spans).
+    """
+    # Extract from gold_context (ContextBench's human annotations)
+    gc_str = task.get("gold_context", "[]")
+    gold_files = set()
+    try:
+        if isinstance(gc_str, str):
+            gc = json.loads(gc_str)
+        else:
+            gc = gc_str
+        for item in gc:
+            if isinstance(item, dict) and "file" in item:
+                gold_files.add(item["file"])
+    except (json.JSONDecodeError, TypeError):
+        pass
+    
+    n = len(gold_files)
     if n <= 2:
         return "small"
     elif n <= 5:
@@ -470,27 +469,37 @@ def convert_to_trajectory(
 ) -> Dict[str, Any]:
     """Convert our oracle output to ContextBench trajectory format.
 
+    Handles both new curator format (files as strings, chunks as line ranges)
+    and legacy format (files as {repo, path} dicts).
+
     ContextBench expects:
     {
         "instance_id": "owner__repo-1234",
         "traj_data": {
             "pred_steps": [{"files": [...], "spans": {}, "symbols": {}}],
             "pred_files": ["path/to/file1.py", ...],
-            "pred_spans": {}
+            "pred_spans": {"path": [{"start": N, "end": M}]}
         },
         "model_patch": "..."
     }
     """
-    files = [f.get("path", "") for f in oracle.get("files", []) if f.get("path")]
+    # Handle both string and dict file formats
+    files = []
+    for f in oracle.get("files", []):
+        if isinstance(f, str) and f:
+            files.append(f)
+        elif isinstance(f, dict) and f.get("path"):
+            files.append(f["path"])
 
-    # Build spans from symbols if we have line info
-    pred_spans = {}
-    for sym in oracle.get("symbols", []):
-        path = sym.get("path", "")
-        if path and path not in pred_spans:
-            pred_spans[path] = []
-        # We don't have exact line numbers from our oracle format,
-        # so we leave spans empty and rely on file-level metrics
+    # Build pred_spans from chunks (new curator format) or leave empty
+    pred_spans: Dict[str, List[Dict[str, int]]] = {}
+    for chunk in oracle.get("chunks", []):
+        if isinstance(chunk, dict) and "file" in chunk:
+            path = chunk["file"]
+            start = chunk.get("line_start", 0)
+            end = chunk.get("line_end", 0)
+            if path and start and end:
+                pred_spans.setdefault(path, []).append({"start": start, "end": end})
 
     return {
         "instance_id": instance_id,
@@ -559,30 +568,20 @@ def compute_simple_file_metrics(
     precisions = []
 
     for task, traj in zip(tasks, trajectories):
-        # Get gold files from task
-        gold_files_raw = task.get("files", [])
-        if isinstance(gold_files_raw, str):
-            try:
-                gold_files_raw = json.loads(gold_files_raw)
-            except json.JSONDecodeError:
-                gold_files_raw = []
-
+        # Get gold files from ContextBench's gold_context (human annotations)
+        # gold_context is a JSON list of span annotations: [{file, start_line, end_line, content}, ...]
+        gc_str = task.get("gold_context", "[]")
         gold_files = set()
-        if isinstance(gold_files_raw, list):
-            for f in gold_files_raw:
-                if isinstance(f, str):
-                    gold_files.add(f)
-                elif isinstance(f, dict):
-                    gold_files.add(f.get("path", ""))
-
-        # Also get gold files from patch if available
-        patch = task.get("patch", "")
-        if patch:
-            for line in patch.split("\n"):
-                if line.startswith("--- a/") or line.startswith("+++ b/"):
-                    path = line[6:].strip()
-                    if path and path != "/dev/null":
-                        gold_files.add(path)
+        try:
+            if isinstance(gc_str, str):
+                gc = json.loads(gc_str)
+            else:
+                gc = gc_str
+            for item in gc:
+                if isinstance(item, dict) and "file" in item:
+                    gold_files.add(item["file"])
+        except (json.JSONDecodeError, TypeError):
+            pass
 
         pred_files = set(traj.get("traj_data", {}).get("pred_files", []))
 
@@ -612,6 +611,84 @@ def compute_simple_file_metrics(
         "file_precision": round(avg_precision, 4),
         "file_f1": round(f1, 4),
         "n_evaluated": len(recalls),
+    }
+
+
+def compute_chunk_metrics(
+    tasks: List[Dict],
+    trajectories: List[Dict],
+) -> Dict[str, float]:
+    """Compute line-level overlap metrics against ContextBench gold spans.
+
+    Compares agent chunks (from pred_spans) against gold_context line ranges.
+    Returns chunk recall and precision.
+    """
+    chunk_recalls = []
+    chunk_precisions = []
+
+    for task, traj in zip(tasks, trajectories):
+        # Extract gold spans from ContextBench gold_context
+        gc_str = task.get("gold_context", "[]")
+        try:
+            if isinstance(gc_str, str):
+                gc = json.loads(gc_str)
+            else:
+                gc = gc_str
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        gold_spans: Dict[str, Set[int]] = {}
+        for item in gc:
+            if isinstance(item, dict) and "file" in item:
+                f = item["file"].lstrip("/")
+                start = item.get("start_line", 0)
+                end = item.get("end_line", 0)
+                if start and end:
+                    gold_spans.setdefault(f, set()).update(range(start, end + 1))
+
+        if not gold_spans:
+            continue
+
+        # Extract predicted spans from trajectory
+        pred_spans_raw = traj.get("traj_data", {}).get("pred_spans", {})
+        pred_spans: Dict[str, Set[int]] = {}
+        for f, ranges in pred_spans_raw.items():
+            f_norm = f.lstrip("/")
+            for r in ranges:
+                start = r.get("start", r.get("start_line", 0))
+                end = r.get("end", r.get("end_line", 0))
+                if start and end:
+                    pred_spans.setdefault(f_norm, set()).update(range(start, end + 1))
+
+        if not pred_spans:
+            continue
+
+        # Compute per-file line overlap
+        total_gold_lines = sum(len(lines) for lines in gold_spans.values())
+        total_pred_lines = sum(len(lines) for lines in pred_spans.values())
+        overlap_lines = 0
+        for f, gold_lines in gold_spans.items():
+            if f in pred_spans:
+                overlap_lines += len(gold_lines & pred_spans[f])
+
+        if total_gold_lines > 0:
+            chunk_recalls.append(overlap_lines / total_gold_lines)
+        if total_pred_lines > 0:
+            chunk_precisions.append(overlap_lines / total_pred_lines)
+
+    if not chunk_recalls:
+        return {"chunk_recall": 0, "chunk_precision": 0, "chunk_f1": 0, "n_chunk_evaluated": 0}
+
+    avg_recall = sum(chunk_recalls) / len(chunk_recalls)
+    avg_prec = sum(chunk_precisions) / len(chunk_precisions) if chunk_precisions else 0
+    f1 = (2 * avg_recall * avg_prec / (avg_recall + avg_prec)
+           if (avg_recall + avg_prec) > 0 else 0)
+
+    return {
+        "chunk_recall": round(avg_recall, 4),
+        "chunk_precision": round(avg_prec, 4),
+        "chunk_f1": round(f1, 4),
+        "n_chunk_evaluated": len(chunk_recalls),
     }
 
 
@@ -973,6 +1050,13 @@ def main() -> int:
     simple_metrics = compute_simple_file_metrics(evaluated_tasks, trajectories)
     log.info("Simple file metrics: %s", json.dumps(simple_metrics, indent=2))
 
+    # Compute chunk-level metrics (line-range overlap)
+    chunk_metrics = compute_chunk_metrics(evaluated_tasks, trajectories)
+    if chunk_metrics.get("n_chunk_evaluated", 0) > 0:
+        log.info("Chunk metrics: %s", json.dumps(chunk_metrics, indent=2))
+    else:
+        log.info("No chunk annotations to evaluate (agent did not produce chunks)")
+
     # Try running ContextBench evaluator
     gold_fname = "verified.parquet" if args.verified else "full.parquet"
     gold_path = DATA_DIR / gold_fname
@@ -992,6 +1076,8 @@ def main() -> int:
         n_attempted=len(tasks),
         composite_weights=composite_weights,
     )
+    # Add chunk metrics to report
+    report["chunk_metrics"] = chunk_metrics
 
     report_path = out_dir / "calibration_report.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n")
@@ -1008,6 +1094,17 @@ def main() -> int:
     print(f"  Recall:    {sm['recall']:.4f}")
     print(f"  Precision: {sm['precision']:.4f}")
     print(f"  F1:        {sm['f1']:.4f}")
+
+    # Chunk-level metrics
+    cm = report.get("chunk_metrics", {})
+    if cm.get("n_chunk_evaluated", 0) > 0:
+        print(f"\nChunk-Level Performance (line ranges):")
+        print(f"  Recall:    {cm['chunk_recall']:.4f}")
+        print(f"  Precision: {cm['chunk_precision']:.4f}")
+        print(f"  F1:        {cm['chunk_f1']:.4f}")
+        print(f"  Evaluated: {cm['n_chunk_evaluated']} tasks")
+    else:
+        print(f"\nChunk-Level: no chunk annotations (agent did not produce line ranges)")
 
     # Composite score
     print(f"\nComposite Score: {report.get('composite_score', 0):.4f}")
