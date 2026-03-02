@@ -1450,43 +1450,13 @@ before retrying."""
         logger.info(f"BaselineClaudeCodeAgent: Token refreshed, valid for {expires_in // 60} min")
         return new_access
 
-    async def _install_sourcegraph_skill(self, environment: BaseEnvironment) -> None:
-        """Install the Sourcegraph MCP skill to teach the agent how to use MCP tools effectively.
-        
-        This skill provides:
-        - Tool selection guidance (which Sourcegraph tool to use for each goal)
-        - Query scoping with repo: and file: filters
-        - Search type guidance (semantic vs keyword vs Deep Search)
-        - Step-by-step workflows for implementing features
-        - Common query patterns and mistake avoidance
-        
-        See: https://medium.com/@ajaynz/teaching-ai-to-navigate-your-codebase-agent-skills-sourcegraph-mcp-710b75ab2943
-        """
-        logger.info("BaselineClaudeCodeAgent: Installing Sourcegraph MCP skill...")
-        
-        # Install the skill using npx (Node.js should already be installed)
-        # The skill provides guidance on how to effectively use Sourcegraph MCP tools
-        result = await environment.exec('npx -y skills add ajaynz/sourcegraph-skill')
-        
-        # Check if installation succeeded by looking at output
-        if result.stdout and ("added" in result.stdout.lower() or "skill" in result.stdout.lower()):
-            logger.info(f"BaselineClaudeCodeAgent: Sourcegraph skill installed: {result.stdout[:200] if result.stdout else ''}")
-        elif result.stderr:
-            # Log warning but don't fail - skill is optional enhancement
-            logger.warning(f"BaselineClaudeCodeAgent: Sourcegraph skill install warning: {result.stderr[:200]}")
-        else:
-            logger.info(f"BaselineClaudeCodeAgent: Sourcegraph skill install output: {result.stdout[:200] if result.stdout else 'no output'}")
-
     async def _setup_sourcegraph_mcp(self, environment: BaseEnvironment) -> None:
         """Configure Sourcegraph MCP with all tools (keyword, NLS, Deep Search)."""
         # Set NODE_TLS_REJECT_UNAUTHORIZED globally in container for MCP subprocess
         # This works around Node.js fetch() SSL certificate validation issues in Docker
         await environment.exec('export NODE_TLS_REJECT_UNAUTHORIZED=0')
         logger.info("BaselineClaudeCodeAgent: Set NODE_TLS_REJECT_UNAUTHORIZED=0 globally for MCP")
-        
-        # Install the Sourcegraph skill to teach the agent how to use MCP tools effectively
-        await self._install_sourcegraph_skill(environment)
-        
+
         # Detect the correct working directory
         # - swebench-verified uses /testbed
         # - swebenchpro uses /app
@@ -1641,8 +1611,7 @@ Follow the test-first workflow from your system instructions.
         await environment.exec('export NODE_TLS_REJECT_UNAUTHORIZED=0')
         logger.info("BaselineClaudeCodeAgent: Set NODE_TLS_REJECT_UNAUTHORIZED=0 globally for MCP")
 
-        # Install the Sourcegraph skill to teach the agent how to use MCP tools effectively
-        await self._install_sourcegraph_skill(environment)
+
 
         # Detect the correct working directory
         workspace_check = await environment.exec('[ -d /workspace ] && echo EXISTS')
@@ -1698,8 +1667,7 @@ Follow the test-first workflow from your system instructions.
 
     async def _setup_deepsearch_mcp(self, environment: BaseEnvironment) -> None:
         """Configure Deep Search-only MCP endpoint."""
-        # Install the Sourcegraph skill to teach the agent how to use MCP tools effectively
-        await self._install_sourcegraph_skill(environment)
+
         
         # Detect the correct working directory
         # - swebench-verified uses /testbed
@@ -1841,8 +1809,7 @@ When making Deep Search queries, you MUST explicitly reference this repository n
 
     async def _setup_deepsearch_hybrid_mcp(self, environment: BaseEnvironment) -> None:
         """Configure Deep Search MCP with strategic local search fallback (hybrid approach)."""
-        # Install the Sourcegraph skill to teach the agent how to use MCP tools effectively
-        await self._install_sourcegraph_skill(environment)
+
         
         # Detect the correct working directory
         # - swebench-verified uses /testbed
