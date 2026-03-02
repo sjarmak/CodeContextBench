@@ -2,10 +2,9 @@
 set -eo pipefail
 # RepoQA SR-QA Verification Script
 
-# Source the sg_only wrapper (no-op if not in sg_only mode)
-if [ -f /tests/sgonly_verifier_wrapper.sh ]; then
-    source /tests/sgonly_verifier_wrapper.sh
-fi
+# SR-QA tasks: verifier only does JSON string matching (function name + path).
+# sgonly_verifier_wrapper clone is NOT needed — skipped to avoid 39+ min
+# Firefox mirror clone that causes VerifierTimeoutError on MCP runs.
 
 echo "Starting RepoQA verifier..." 1>&2
 cd /app || { echo "ERROR: Cannot cd to /app"; exit 1; }
