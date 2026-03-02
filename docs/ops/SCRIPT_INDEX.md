@@ -167,9 +167,11 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/backfill_size_metadata.py` [one_off] - Historical one-off script: backfill size metadata.
 - `scripts/backfill_triage_from_manifest.py` [one_off] - Historical one-off script: backfill triage from manifest.
 - `scripts/check_harness_readiness.py` - Utility script for check harness readiness.
+- `scripts/compare_contextbench_results.py` - Utility script for compare contextbench results.
 - `scripts/compute_bootstrap_cis.py` - Utility script for compute bootstrap cis.
 - `scripts/context_retrieval_agent.py` - Utility script for context retrieval agent.
 - `scripts/control_plane.py` - Utility script for control plane.
+- `scripts/convert_harbor_to_contextbench.py` - Utility script for convert harbor to contextbench.
 - `scripts/cross_validate_oracles.py` - Utility script for cross validate oracles.
 - `scripts/daytona_poc_runner.py` - Utility script for daytona poc runner.
 - `scripts/daytona_runner.py` - Utility script for daytona runner.
@@ -208,10 +210,12 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/rerun_zero_mcp_tasks.sh` [one_off] - Historical one-off script: rerun zero mcp tasks.
 - `scripts/rescore_difficulty.py` - Utility script for rescore difficulty.
 - `scripts/run_judge.py` - Utility script for run judge.
+- `scripts/scaffold_contextbench_tasks.py` - Utility script for scaffold contextbench tasks.
 - `scripts/scaffold_feature_tasks.py` - Utility script for scaffold feature tasks.
 - `scripts/scaffold_refactor_tasks.py` - Utility script for scaffold refactor tasks.
 - `scripts/scan_swebench_errors.py` - Utility script for scan swebench errors.
 - `scripts/sdlc_anomaly_scan.py` - Utility script for sdlc anomaly scan.
+- `scripts/select_contextbench_pilot.py` - Utility script for select contextbench pilot.
 - `scripts/smoke_artifact_verifier.py` - Utility script for smoke artifact verifier.
 - `scripts/verify_retrieval_eval_smoke.py` - Utility script for verify retrieval eval smoke.
 
