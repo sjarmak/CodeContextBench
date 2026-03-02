@@ -47,7 +47,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 log = logging.getLogger("validate_on_contextbench")
 
@@ -206,6 +206,81 @@ def stratified_sample(
         log.info("  %s: %d tasks", key, count)
 
     return sampled
+
+
+# Repos that overlap with CCB benchmark tasks — get 2x sampling weight
+CCB_OVERLAP_REPOS = [
+    "django", "kubernetes", "flask", "pandas", "kafka",
+    "pytorch", "numpy", "scikit-learn", "sympy", "requests",
+]
+
+
+def ccb_weighted_sample(
+    tasks: List[Dict[str, Any]],
+    n: int,
+    seed: int = 42,
+    hard_floor: float = 0.20,
+) -> List[Dict[str, Any]]:
+    """Stratified sample with CCB repo boost and difficulty floor.
+
+    - Tasks from CCB-overlapping repos get 2x weight in stratified_sample()
+    - At least `hard_floor` fraction are hard cases (>5 gold files)
+
+    Wraps stratified_sample() with pre/post filtering.
+    """
+    rng = random.Random(seed)
+
+    # Tag each task with CCB overlap
+    for t in tasks:
+        repo = t.get("repo", t.get("repo_url", "")).lower()
+        t["_ccb_overlap"] = any(r in repo for r in CCB_OVERLAP_REPOS)
+
+    # Duplicate CCB-overlap tasks to give them 2x weight
+    weighted = []
+    for t in tasks:
+        weighted.append(t)
+        if t.get("_ccb_overlap"):
+            weighted.append(t)  # 2x weight
+
+    # Initial stratified sample from the weighted pool
+    initial = stratified_sample(weighted, n, seed)
+
+    # Deduplicate (2x weight may cause duplicates)
+    seen_ids = set()
+    deduped = []
+    for t in initial:
+        iid = t.get("instance_id", id(t))
+        if iid not in seen_ids:
+            seen_ids.add(iid)
+            deduped.append(t)
+
+    # Ensure hard-case floor (>5 gold files)
+    hard = [t for t in deduped if _gold_context_size(t) == "large"]
+    min_hard = max(1, int(n * hard_floor))
+
+    if len(hard) < min_hard:
+        # Find more hard cases from the full pool
+        hard_pool = [t for t in tasks
+                     if _gold_context_size(t) == "large"
+                     and t.get("instance_id", id(t)) not in seen_ids]
+        rng.shuffle(hard_pool)
+        needed = min_hard - len(hard)
+        extras = hard_pool[:needed]
+        deduped.extend(extras)
+        for t in extras:
+            seen_ids.add(t.get("instance_id", id(t)))
+
+    # Trim to target size
+    if len(deduped) > n:
+        deduped = deduped[:n]
+
+    # Clean up temp field
+    for t in tasks:
+        t.pop("_ccb_overlap", None)
+    for t in deduped:
+        t.pop("_ccb_overlap", None)
+
+    return deduped
 
 
 def load_tasks(
@@ -498,6 +573,39 @@ def compute_simple_file_metrics(
     }
 
 
+# Default composite weights
+DEFAULT_COMPOSITE_WEIGHTS = {
+    "file_recall": 0.40,
+    "file_precision": 0.30,
+    "chain_recall": 0.20,
+    "symbol_recall": 0.10,
+}
+
+COMPOSITE_THRESHOLD = 0.65  # Go/no-go threshold
+STRATUM_WARNING_THRESHOLD = 0.50  # Warn if any stratum is below this
+
+
+def compute_composite_score(
+    file_recall: float,
+    file_precision: float,
+    chain_recall: float,
+    symbol_recall: float,
+    weights: Optional[Dict[str, float]] = None,
+) -> float:
+    """Compute weighted composite score for go/no-go decision.
+
+    Default weights: file_recall=0.40, file_precision=0.30,
+                     chain_recall=0.20, symbol_recall=0.10
+    """
+    w = weights or DEFAULT_COMPOSITE_WEIGHTS
+    return (
+        w["file_recall"] * file_recall
+        + w["file_precision"] * file_precision
+        + w["chain_recall"] * chain_recall
+        + w["symbol_recall"] * symbol_recall
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Validate context retrieval agent against ContextBench"
@@ -536,9 +644,30 @@ def main() -> int:
         help="Random seed for sampling",
     )
     parser.add_argument(
+        "--phase", type=str, default="", choices=("", "test", "verify"),
+        help="Calibration phase: 'test' (~10 tasks) or 'verify' (~50 tasks). Uses CCB-weighted sampling.",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Print selected tasks and stratum breakdown without running the agent",
+    )
+    parser.add_argument(
+        "--composite-weights", type=str, default="",
+        help='JSON string to override composite weights, e.g. \'{"file_recall":0.5,"file_precision":0.2,"chain_recall":0.2,"symbol_recall":0.1}\'',
+    )
+    parser.add_argument(
         "--verbose", action="store_true",
     )
     args = parser.parse_args()
+
+    # Parse composite weights if provided
+    composite_weights = None
+    if args.composite_weights:
+        try:
+            composite_weights = json.loads(args.composite_weights)
+        except json.JSONDecodeError:
+            log.error("Invalid JSON for --composite-weights: %s", args.composite_weights)
+            return 1
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -553,14 +682,62 @@ def main() -> int:
     out_dir = Path(args.out) if args.out else RESULTS_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load tasks
-    tasks = load_tasks(
-        verified=args.verified,
-        sample=args.sample,
-        seed=args.seed,
-    )
-    if not tasks:
-        return 1
+    # Phase-based calibration subset selection
+    if args.phase:
+        phase_size = 10 if args.phase == "test" else 50
+        # --phase test uses verified subset by default
+        use_verified = args.verified or (args.phase == "test")
+        all_tasks = load_tasks(
+            verified=use_verified,
+            sample=0,  # Load all, then CCB-weighted sample
+            seed=args.seed,
+        )
+        if not all_tasks:
+            return 1
+        tasks = ccb_weighted_sample(all_tasks, phase_size, seed=args.seed)
+        log.info("Phase '%s': selected %d tasks (CCB-weighted)", args.phase, len(tasks))
+
+        # Save subset for reproducibility
+        subset_dir = DATA_DIR
+        subset_dir.mkdir(parents=True, exist_ok=True)
+        subset_path = subset_dir / f"{args.phase}_subset.json"
+        subset_ids = [t.get("instance_id", f"task_{i}") for i, t in enumerate(tasks)]
+        subset_path.write_text(json.dumps(subset_ids, indent=2) + "\n")
+        log.info("Saved subset IDs: %s", subset_path)
+
+        if args.dry_run:
+            # Print stratum breakdown
+            strata: Dict[str, int] = {}
+            for t in tasks:
+                iid = t.get("instance_id", "")
+                lang = _infer_language(iid, t)
+                complexity = _gold_context_size(t)
+                key = f"{lang}/{complexity}"
+                strata[key] = strata.get(key, 0) + 1
+            print(f"\n--phase {args.phase}: {len(tasks)} tasks selected")
+            print(f"Stratum breakdown:")
+            for key, count in sorted(strata.items()):
+                print(f"  {key}: {count}")
+            n_hard = sum(1 for t in tasks if _gold_context_size(t) == "large")
+            print(f"\nHard cases (>5 gold files): {n_hard}/{len(tasks)} ({n_hard/len(tasks):.0%})")
+            ccb_count = sum(1 for t in tasks
+                           if any(r in t.get("repo", t.get("repo_url", "")).lower()
+                                  for r in CCB_OVERLAP_REPOS))
+            print(f"CCB-overlap repos: {ccb_count}/{len(tasks)} ({ccb_count/len(tasks):.0%})")
+            return 0
+    else:
+        # Standard load
+        tasks = load_tasks(
+            verified=args.verified,
+            sample=args.sample,
+            seed=args.seed,
+        )
+        if not tasks:
+            return 1
+
+        if args.dry_run:
+            print(f"Would process {len(tasks)} tasks (model={args.model}, backend={args.backend})")
+            return 0
 
     # Check for anthropic
     try:
@@ -672,6 +849,7 @@ def main() -> int:
         backend=args.backend,
         total_cost=total_cost,
         n_attempted=len(tasks),
+        composite_weights=composite_weights,
     )
 
     report_path = out_dir / "calibration_report.json"
@@ -690,12 +868,17 @@ def main() -> int:
     print(f"  Precision: {sm['precision']:.4f}")
     print(f"  F1:        {sm['f1']:.4f}")
 
+    # Composite score
+    print(f"\nComposite Score: {report.get('composite_score', 0):.4f}")
+
     # Go/no-go
     threshold = report["go_no_go"]
     status = "PASS" if threshold["pass"] else "FAIL"
     print(f"\nGo/No-Go: {status}")
     print(f"  File recall >= {threshold['file_recall_threshold']}: "
           f"{threshold['file_recall_met']}")
+    print(f"  Composite >= {threshold['composite_threshold']}: "
+          f"{threshold['composite_met']}")
 
     # Bias analysis
     if report.get("bias_analysis", {}).get("by_language"):
@@ -742,6 +925,7 @@ def build_calibration_report(
     backend: str = "",
     total_cost: float = 0,
     n_attempted: int = 0,
+    composite_weights: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
     """Build the calibration report with error profile and bias analysis.
 
@@ -823,10 +1007,34 @@ def build_calibration_report(
                 })
     gaps.sort(key=lambda g: g["miss_rate"], reverse=True)
 
-    # Go/no-go threshold
+    # Go/no-go threshold (legacy file-recall check, kept for backward compat)
     file_recall = simple_metrics.get("file_recall", 0)
+    file_precision = simple_metrics.get("file_precision", 0)
     FILE_RECALL_THRESHOLD = 0.60  # Minimum to proceed
-    go = file_recall >= FILE_RECALL_THRESHOLD
+    go_file_recall = file_recall >= FILE_RECALL_THRESHOLD
+
+    # Composite go/no-go (richer signal)
+    # chain_recall and symbol_recall default to 0 when not available from ContextBench
+    chain_recall = simple_metrics.get("chain_recall", 0)
+    symbol_recall = simple_metrics.get("symbol_recall", 0)
+    cw = composite_weights or DEFAULT_COMPOSITE_WEIGHTS
+    composite = compute_composite_score(file_recall, file_precision, chain_recall, symbol_recall, cw)
+    go_composite = composite >= COMPOSITE_THRESHOLD
+    go = go_file_recall and go_composite
+
+    # Per-stratum composite scores
+    stratum_composites = {}
+    stratum_warnings = []
+    for stratum_type in ("by_language", "by_complexity"):
+        metrics_dict = lang_metrics if stratum_type == "by_language" else comp_metrics
+        for key, m in metrics_dict.items():
+            sc = compute_composite_score(
+                m.get("recall", 0), m.get("precision", 0), 0, 0, cw,
+            )
+            stratum_composites[f"{stratum_type}/{key}"] = round(sc, 4)
+            if sc < STRATUM_WARNING_THRESHOLD:
+                stratum_warnings.append(f"{stratum_type}/{key}: composite={sc:.4f}")
+                log.warning("Stratum %s/%s composite %.4f < %.2f", stratum_type, key, sc, STRATUM_WARNING_THRESHOLD)
 
     return {
         "calibration_metadata": {
@@ -845,12 +1053,16 @@ def build_calibration_report(
             "f1": simple_metrics.get("file_f1", 0),
             "n": simple_metrics.get("n_evaluated", 0),
         },
+        "composite_score": round(composite, 4),
         "go_no_go": {
             "pass": go,
             "file_recall_threshold": FILE_RECALL_THRESHOLD,
-            "file_recall_met": file_recall >= FILE_RECALL_THRESHOLD,
+            "file_recall_met": go_file_recall,
+            "composite_threshold": COMPOSITE_THRESHOLD,
+            "composite_met": go_composite,
+            "composite_weights": cw,
             "recommendation": (
-                "PROCEED: Oracle meets calibration threshold."
+                "PROCEED: Oracle meets calibration thresholds."
                 if go else
                 "ITERATE: Oracle below threshold. Improve agent before deploying."
             ),
@@ -858,6 +1070,8 @@ def build_calibration_report(
         "bias_analysis": {
             "by_language": lang_metrics,
             "by_complexity": comp_metrics,
+            "stratum_composites": stratum_composites,
+            "stratum_warnings": stratum_warnings,
         },
         "systematic_gaps": gaps,
         "domain_gap_warning": (

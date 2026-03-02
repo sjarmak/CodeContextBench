@@ -179,6 +179,7 @@ def find_project_root() -> Path:
 def discover_comparison_pairs(
     suite: str = "",
     agent_dir: str = "",
+    agent_suffix: str = "_agent",
 ) -> List[Dict[str, Any]]:
     """Find all tasks with both an existing oracle and an agent-generated oracle.
 
@@ -223,15 +224,15 @@ def discover_comparison_pairs(
             if agent_dir:
                 ext_dir = Path(agent_dir) / s
                 for pattern in [
-                    f"{task_dir.name}_oracle_agent.json",
-                    f"{task_dir.name}_gt_agent.json",
+                    f"{task_dir.name}_oracle{agent_suffix}.json",
+                    f"{task_dir.name}_gt{agent_suffix}.json",
                 ]:
                     p = ext_dir / pattern
                     if p.exists():
                         agent = p
                         break
             else:
-                for name in ["oracle_answer_agent.json", "ground_truth_agent.json"]:
+                for name in [f"oracle_answer{agent_suffix}.json", f"ground_truth{agent_suffix}.json"]:
                     p = tests / name
                     if p.exists():
                         agent = p
@@ -382,8 +383,13 @@ def main() -> int:
         help="External directory with agent oracles (alternative to in-place)",
     )
     parser.add_argument(
+        "--agent-suffix", type=str, default="_agent",
+        help="Suffix for agent oracle filenames (default: '_agent'). "
+             "E.g., '_agent' finds oracle_answer_agent.json and ground_truth_agent.json",
+    )
+    parser.add_argument(
         "--report", type=str, default="",
-        help="Output report JSON path",
+        help="Output report JSON path (default: results/cross_validation/summary.json)",
     )
     parser.add_argument(
         "--verbose", action="store_true",
@@ -397,6 +403,7 @@ def main() -> int:
 
     pairs = discover_comparison_pairs(
         suite=args.suite, agent_dir=args.agent_dir,
+        agent_suffix=args.agent_suffix,
     )
 
     if not pairs:
@@ -472,6 +479,10 @@ def main() -> int:
     total_agent_only = sum(len(r["agent_only"]) for r in per_task)
     total_matched = sum(r["n_matched"] for r in per_task)
 
+    # High-divergence tasks (F1 < 0.5)
+    high_divergence = [r for r in per_task if r["f1"] < 0.5]
+    high_divergence.sort(key=lambda r: r["f1"])
+
     report = {
         "summary": {
             "total_tasks": len(per_task),
@@ -480,12 +491,14 @@ def main() -> int:
             "mean_file_precision": round(mean_precision, 4),
             "cohens_kappa": round(kappa, 4),
             "kappa_interpretation": _interpret_kappa(kappa),
+            "agent_suffix": args.agent_suffix,
         },
         "divergence": {
             "total_matched_files": total_matched,
             "total_oracle_only_files": total_oracle_only,
             "total_agent_only_files": total_agent_only,
         },
+        "high_divergence": high_divergence,
         "per_suite": suite_summary,
         "per_task": per_task,
     }
@@ -506,14 +519,24 @@ def main() -> int:
     print(f"\nPer-suite:")
     for s, m in sorted(suite_summary.items()):
         print(f"  {s}: n={m['n']}, F1={m['mean_f1']:.4f} [{m['min_f1']:.4f}-{m['max_f1']:.4f}]")
+
+    if high_divergence:
+        print(f"\nHigh-divergence tasks (F1 < 0.5): {len(high_divergence)}")
+        for r in high_divergence[:10]:
+            print(f"  {r['task']}: F1={r['f1']:.4f} (oracle={r['n_oracle']}, agent={r['n_agent']})")
+        if len(high_divergence) > 10:
+            print(f"  ... and {len(high_divergence) - 10} more")
     print(f"{'=' * 60}")
 
-    # Write report
-    if args.report:
-        out = Path(args.report)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(report, indent=2) + "\n")
-        log.info("Report written: %s", out)
+    # Write report (default: results/cross_validation/summary.json)
+    report_path = args.report
+    if not report_path:
+        root = find_project_root()
+        report_path = str(root / "results" / "cross_validation" / "summary.json")
+    out = Path(report_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2) + "\n")
+    log.info("Report written: %s", out)
 
     return 0
 

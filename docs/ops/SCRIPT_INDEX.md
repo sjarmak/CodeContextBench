@@ -193,6 +193,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/list_gemini_models.py` - Utility script for list gemini models.
 - `scripts/mirror_largerepo_expansion.sh` - Utility script for mirror largerepo expansion.
 - `scripts/plan_variance_runs.py` - Utility script for plan variance runs.
+- `scripts/promote_agent_oracles.py` - Utility script for promote agent oracles.
 - `scripts/push_base_images_ghcr.sh` - Utility script for push base images ghcr.
 - `scripts/regenerate_artifact_dockerfiles.py` - Utility script for regenerate artifact dockerfiles.
 - `scripts/rehost_sweap_images.py` - Utility script for rehost sweap images.

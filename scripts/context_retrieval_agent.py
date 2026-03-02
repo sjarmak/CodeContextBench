@@ -13,7 +13,8 @@ agreement between local-only and deepsearch-only is high (>80% file F1),
 the circularity concern is empirically defused.
 
 Environment variables:
-    ANTHROPIC_API_KEY           Required. Claude API key.
+    CLAUDE_CODE_OAUTH_TOKEN     Preferred. OAuth token for subscription billing.
+    ANTHROPIC_API_KEY           Fallback. Claude API key.
     SOURCEGRAPH_ACCESS_TOKEN    Required for deepsearch/hybrid backends.
     SOURCEGRAPH_URL             SG instance (default: https://sourcegraph.sourcegraph.com)
     CCB_REPO_CACHE              Repo clone cache dir (default: ~/.cache/ccb_repos)
@@ -66,7 +67,7 @@ log = logging.getLogger("context_retrieval_agent")
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL = "claude-sonnet-4-6"  # Good balance of cost and capability
+DEFAULT_MODEL = "claude-opus-4-6"  # Strongest model for oracle generation
 MAX_TOKENS = 16384
 MAX_TOOL_CALLS = 40
 TOOL_TIMEOUT_SEC = 30
@@ -1295,6 +1296,81 @@ def _extract_json_from_messages(messages: List[Dict]) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Dual-Retrieval Verification
+# ---------------------------------------------------------------------------
+
+
+def verify_dual_retrieval(
+    oracle: Dict[str, Any],
+    repo_paths: Dict[str, Path],
+    sg_client: Optional["SourcegraphClient"] = None,
+) -> Dict[str, Any]:
+    """Verify each oracle file is discoverable via local FS and Sourcegraph.
+
+    Returns dict with per-file verification results and summary stats.
+    Files that fail either check are flagged but NOT removed from the oracle.
+    """
+    files = oracle.get("files", [])
+    verification = []
+
+    for entry in files:
+        repo = entry.get("repo", "")
+        path = entry.get("path", "")
+
+        # --- Local verification: file exists on disk in any repo_paths ---
+        local_ok = False
+        if repo_paths:
+            # Try exact repo match first, then fall back to any repo dir
+            for rname, rdir in repo_paths.items():
+                candidate = rdir / path
+                if candidate.is_file():
+                    local_ok = True
+                    break
+
+        # --- Sourcegraph verification: keyword search returns results ---
+        sg_ok = False
+        if sg_client and sg_client.token:
+            try:
+                # Construct a precise file search query
+                sg_query = f"file:^{re.escape(path)}$ count:1"
+                if repo:
+                    sg_query = f"repo:{repo} {sg_query}"
+                result = sg_client.keyword_search(sg_query, max_results=1)
+                sg_ok = result and "No results found" not in result and "error" not in result.lower()
+            except Exception as e:
+                log.debug("SG verify failed for %s:%s: %s", repo, path, e)
+
+        verification.append({
+            "repo": repo,
+            "path": path,
+            "local_verified": local_ok,
+            "sg_verified": sg_ok,
+        })
+
+    # Summary stats
+    n_total = len(verification)
+    n_dual = sum(1 for v in verification if v["local_verified"] and v["sg_verified"])
+    n_local_only = sum(1 for v in verification if v["local_verified"] and not v["sg_verified"])
+    n_sg_only = sum(1 for v in verification if not v["local_verified"] and v["sg_verified"])
+    n_unverified = sum(1 for v in verification if not v["local_verified"] and not v["sg_verified"])
+
+    summary = {
+        "n_total": n_total,
+        "n_dual_verified": n_dual,
+        "n_local_only": n_local_only,
+        "n_sg_only": n_sg_only,
+        "n_unverified": n_unverified,
+    }
+
+    log.info(
+        "  Verification: %d/%d dual, %d local-only, %d sg-only, %d unverified",
+        n_dual, n_total, n_local_only, n_sg_only, n_unverified,
+    )
+
+    return {"files": verification, "summary": summary}
+
+
+# ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
 
@@ -1395,6 +1471,10 @@ def main() -> int:
         help="Only process tasks that have NO ground truth at all (no oracle_answer.json, no ground_truth.json)",
     )
     parser.add_argument(
+        "--no-verify", action="store_true",
+        help="Skip dual-retrieval verification pass",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Show tasks without running agent",
     )
@@ -1413,9 +1493,16 @@ def main() -> int:
         log.error("anthropic package not installed. pip install anthropic")
         return 1
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    # OAuth token preferred (subscription billing), API key fallback
+    api_key = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
+    if api_key:
+        log.info("Using OAuth token (CLAUDE_CODE_OAUTH_TOKEN)")
+    else:
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if api_key:
+            log.info("Using API key (ANTHROPIC_API_KEY)")
     if not api_key and not args.dry_run:
-        log.error("ANTHROPIC_API_KEY not set")
+        log.error("Set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY")
         return 1
 
     # Discover tasks
@@ -1556,6 +1643,18 @@ def main() -> int:
                 output_path = str(out_dir / f"{task_dir.name}_oracle_agent.json")
             else:
                 output_path = str(out_dir / f"{task_dir.name}_gt_agent.json")
+
+        # Dual-retrieval verification (unless --no-verify)
+        if not args.no_verify:
+            vr = verify_dual_retrieval(oracle, repo_paths, sg_client=sg)
+            metadata["dual_verification"] = vr["summary"]
+            # Annotate oracle file entries with verification flags
+            for v_entry in vr["files"]:
+                for f_entry in oracle.get("files", []):
+                    if f_entry.get("path") == v_entry["path"]:
+                        f_entry["local_verified"] = v_entry["local_verified"]
+                        f_entry["sg_verified"] = v_entry["sg_verified"]
+                        break
 
         out_file = write_oracle(task_dir, oracle, metadata, output_path)
 
