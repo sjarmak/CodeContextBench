@@ -1387,6 +1387,14 @@ def main() -> int:
         help="Process at most N tasks (0 = all). Useful for pilot runs.",
     )
     parser.add_argument(
+        "--skip-existing", action="store_true",
+        help="Skip tasks that already have an agent-generated oracle",
+    )
+    parser.add_argument(
+        "--missing-only", action="store_true",
+        help="Only process tasks that have NO ground truth at all (no oracle_answer.json, no ground_truth.json)",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Show tasks without running agent",
     )
@@ -1420,6 +1428,34 @@ def main() -> int:
     if not tasks:
         log.error("No tasks found")
         return 1
+
+    # Filter tasks based on flags
+    original_count = len(tasks)
+    if args.skip_existing or args.missing_only:
+        filtered = []
+        for t in tasks:
+            tests_dir = t / "tests"
+            suite = t.parent.name
+            # Check for agent-generated oracle
+            if args.skip_existing:
+                if suite.startswith("ccb_mcp_"):
+                    if (tests_dir / "oracle_answer_agent.json").exists():
+                        continue
+                else:
+                    if (tests_dir / "ground_truth_agent.json").exists():
+                        continue
+            # Check for ANY ground truth
+            if args.missing_only:
+                has_any = (
+                    (tests_dir / "oracle_answer.json").exists()
+                    or (tests_dir / "ground_truth.json").exists()
+                )
+                if has_any:
+                    continue
+            filtered.append(t)
+        tasks = filtered
+        log.info("Filtered %d -> %d tasks (skip_existing=%s, missing_only=%s)",
+                 original_count, len(tasks), args.skip_existing, args.missing_only)
 
     if args.max_tasks > 0:
         tasks = tasks[:args.max_tasks]
