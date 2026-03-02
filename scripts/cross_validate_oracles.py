@@ -251,27 +251,31 @@ def discover_comparison_pairs(
 
 
 def _extract_files(data: Dict[str, Any]) -> List[Dict]:
-    """Extract file list from various oracle/ground_truth formats."""
-    # oracle_answer.json format
-    if "files" in data and isinstance(data["files"], list):
-        return data["files"]
+    """Extract file list from various oracle/ground_truth formats.
 
-    # ground_truth.json format (ccb_fix/feature/refactor)
+    Handles:
+    - oracle_answer.json: {"files": [{"repo": ..., "path": ...}]}
+    - ground_truth.json (fix/feature/refactor): {"files": ["path", ...], "repo": "..."}
+    - ground_truth.json (debug/design/understand): {"file_references": [...]}
+    - ground_truth.json (dependency_chain): {"dependency_chain": ["path", ...]}
+    - ground_truth_agent.json: same as oracle_answer.json format
+    """
+    result = []
+
+    # "files" key — could be dicts or plain strings
     if "files" in data and isinstance(data["files"], list):
-        # Files might be plain strings
-        result = []
         repo = data.get("repo", "")
         for f in data["files"]:
-            if isinstance(f, str):
-                result.append({"repo": repo, "path": f})
-            elif isinstance(f, dict):
+            if isinstance(f, dict):
                 result.append(f)
-        return result
+            elif isinstance(f, str):
+                result.append({"repo": repo, "path": f})
+        if result:
+            return result
 
-    # ground_truth.json format (ccb_debug/design/understand)
+    # "file_references" key (ccb_debug/design/understand)
     if "file_references" in data:
         refs = data["file_references"]
-        result = []
         for ref in refs:
             if isinstance(ref, dict):
                 path = ref.get("file", ref.get("path", ""))
@@ -279,9 +283,24 @@ def _extract_files(data: Dict[str, Any]) -> List[Dict]:
                     result.append({"repo": "", "path": path})
             elif isinstance(ref, str):
                 result.append({"repo": "", "path": ref})
-        return result
+        if result:
+            return result
 
-    return []
+    # "root_cause_files" as additional files (ccb_fix)
+    for key in ("root_cause_files", "dependency_chain"):
+        items = data.get(key, [])
+        if isinstance(items, list):
+            repo = data.get("repo", "")
+            for f in items:
+                if isinstance(f, str):
+                    entry = {"repo": repo, "path": f}
+                    if entry not in result:
+                        result.append(entry)
+                elif isinstance(f, dict):
+                    if f not in result:
+                        result.append(f)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
