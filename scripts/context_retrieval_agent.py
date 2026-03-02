@@ -72,7 +72,7 @@ DEFAULT_MODEL = "claude-opus-4-6"  # Strongest model for oracle generation
 MAX_TOKENS = 16384
 MAX_TOOL_CALLS = 40
 TOOL_TIMEOUT_SEC = 30
-TASK_TIMEOUT_SEC = 300  # 5 minutes per task
+TASK_TIMEOUT_SEC = 600  # 10 minutes per task (Deep Search calls take 30-60s each)
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "ccb_repos"
 
 BACKENDS = ("local", "deepsearch", "hybrid")
@@ -920,8 +920,9 @@ You do NOT have access to any search engine, web API, or code search service.
 3. Use search_imports to trace import/dependency chains.
 4. Use grep/rg for exact string matches of identifiers.
 5. Use find_symbols to locate definitions.
-6. Read candidate files to verify relevance.
-7. Be THOROUGH — recall matters more than precision for oracle generation.
+6. Read candidate files to confirm they would need code changes (not just context).
+7. Be PRECISE — only include files that would appear in the fix patch (PR diff). \
+Do not include files you read for understanding but that don't need changes.
 8. For multi-repo tasks, search ALL repos, not just the most obvious one.
 """,
 
@@ -939,7 +940,8 @@ You have access to SEARCH TOOLS:
 2. Use deep_search for broad semantic exploration first.
 3. Use sourcegraph_search for precise keyword/identifier matches.
 4. Vary your queries — try different terms, packages, file patterns.
-5. Be THOROUGH — recall matters more than precision for oracle generation.
+5. Be PRECISE — only include files that would appear in the fix patch (PR diff). \
+Do not include files you found during search that don't need code changes.
 """,
 
     "hybrid": """\
@@ -971,24 +973,46 @@ Sourcegraph tools:
    local findings should be checked for completeness via search.
 6. If local search finds nothing, ALWAYS try Sourcegraph search before \
    concluding a file doesn't exist. The file may be in a repo not cloned locally.
-7. Be THOROUGH — recall matters more than precision for oracle generation.
+7. Be PRECISE — only include files that would appear in the fix patch (PR diff). \
+Do not include files you read for context that don't need code changes.
 8. For multi-repo tasks, search ALL repos — including repos you might not \
    have locally. Use sourcegraph_search to find files across ALL indexed repos.
-9. Stay FOCUSED on the specific task question. Include only files directly \
-   relevant to answering the task. Do not include every tangentially related file.
 """,
 }
 
 SYSTEM_PROMPT_SUFFIX = """
-## Precision Guidelines
-- Include ONLY source files that would need to be **read or modified** to address the task.
-- Do NOT include test files, documentation, or configuration files unless the task \
-explicitly asks about testing, docs, or configuration.
-- Do NOT include files that merely import or reference the relevant code — only files \
-that contain the logic central to the task.
-- When in doubt, ask: "Would a developer need to open this file to fix/understand the issue?" \
-If no, exclude it.
-- Aim for 1-5 files for simple bugs, 3-10 for moderate tasks, 10+ only for large refactors.
+## Evaluation Rubric — What "Relevant Files" Means
+You are evaluated against the set of files that would appear in the **actual fix \
+patch** (the git diff). This means:
+
+- Include ONLY files that would need **code changes** (additions, modifications, or \
+deletions) to address the task. These are the files that would appear in a pull \
+request diff.
+- Do NOT include files you would merely **read** for context or understanding. Reading \
+a file to trace a call chain is part of your research process, but only report files \
+that need changes in your final answer.
+- Do NOT include callers, importers, or dependents of the changed code unless they \
+themselves require modification (e.g., updating an API call signature).
+
+## File Category Rules
+- **Source code**: Include if it needs code changes. Exclude if it only provides context.
+- **Test files**: Include ONLY if the tests themselves need modification (e.g., adding \
+new test cases, updating assertions). Do NOT include tests that merely validate the fix.
+- **Documentation**: Include ONLY if docs need updating (e.g., CHANGELOG, man pages, \
+API docs). Most bug fixes do not require doc changes.
+- **Configuration/build files**: Include ONLY if they need changes (e.g., CMakeLists.txt \
+for new source files, package.json for new deps). Most fixes do not touch these.
+- **Type definition files** (.d.ts, .h headers): Include if type signatures change.
+
+## Size Calibration
+Over 60% of bug fix tasks require changes to only **1 file**. Be conservative:
+- Simple bugs: 1 file (most common)
+- Moderate bugs: 1-3 files
+- Multi-component changes: 3-5 files
+- Large refactors or features: 5-10+ files
+
+When in doubt, ask: "Would this file appear in the PR diff?" If no, exclude it.
+Err on the side of fewer, more precise predictions rather than broad coverage.
 
 ## Output
 When you have identified all relevant files, output a JSON object with:
@@ -1017,8 +1041,9 @@ IMPORTANT: Output the JSON as a fenced code block with ```json markers.
 CLI_SYSTEM_PROMPTS = {
     "local": """\
 You are a code context retrieval specialist. Given a task description and \
-local repository paths, identify ALL source files, symbols, and dependency \
-chains relevant to answering the task.
+local repository paths, identify the source files that would need to be \
+**modified** to address the task — i.e., files that would appear in the \
+fix patch / pull request diff.
 
 You have access to LOCAL TOOLS ONLY:
 - Bash (read-only): run grep, rg (ripgrep), find, ls, wc, and other read-only shell commands
@@ -1032,60 +1057,114 @@ You do NOT have access to any search engine, web API, or code search service.
 1. Read the task carefully. Identify key entities (packages, types, functions).
 2. Start broad: use Glob and Bash (find/ls) to understand repo structure.
 3. Use Grep to trace import/dependency chains and find symbol definitions.
-4. Read candidate files with Read to verify relevance.
-5. Be THOROUGH — recall matters more than precision for oracle generation.
+4. Read candidate files with Read to confirm they contain code that needs changing.
+5. Be PRECISE — report only files that need code changes, not files you read \
+for context. Most bugs require changing only 1 file.
 6. For multi-repo tasks, search ALL repos, not just the most obvious one.
 """,
 
     "deepsearch": """\
 You are a code context retrieval specialist. Given a task description, \
-identify ALL source files, symbols, and dependency chains relevant to \
-answering the task using Sourcegraph search tools.
+identify the source files that would need to be **modified** to address \
+the task — i.e., files that would appear in the fix patch / pull request diff.
 
 You have access to SEARCH TOOLS:
-- mcp__sourcegraph__sg_nls_search: AI-powered semantic code search
+- Bash: run Deep Search via the ds_wrapper.sh script (see below)
 - mcp__sourcegraph__sg_keyword_search: keyword/regex code search with filters
+
+## Deep Search (MUST USE)
+Deep Search is an AI-powered semantic code search that understands code \
+structure, relationships, and natural language queries. It returns detailed \
+answers with file paths and code explanations.
+
+To run Deep Search, use Bash:
+```
+bash /home/stephanie_jarmak/CodeContextBench/scripts/ds_wrapper.sh "your question here"
+```
+
+CRITICAL: Always include the repository name in your Deep Search query so it \
+searches the correct codebase. Use the repo names from the "Repositories" \
+section below. Examples:
+- "What files implement RBAC escalation checks in kubernetes/kubernetes?"
+- "Where is the ProducerBatch class defined in apache/kafka?"
+- "How does the xDS protocol work in envoyproxy/envoy?"
+
+Deep Search takes 30-60 seconds to complete. Use it for:
+- Broad exploration: "What files implement X in repo Y?"
+- Architecture questions: "How does the RBAC system work in repo Y?"
+- Dependency tracing: "What files depend on package X in repo Y?"
+- Finding implementations: "Where is interface Y implemented in repo Z?"
 
 ## Strategy
 1. Read the task carefully. Identify key entities and concepts.
-2. Use mcp__sourcegraph__sg_nls_search for broad semantic exploration first.
-3. Use mcp__sourcegraph__sg_keyword_search for precise keyword/identifier matches.
+2. ALWAYS start with Deep Search for broad semantic exploration. Include the \
+repo name in every query.
+3. Use mcp__sourcegraph__sg_keyword_search for precise identifier matches.
 4. Vary your queries — try different terms, packages, file patterns.
-5. Be THOROUGH — recall matters more than precision for oracle generation.
+5. Be PRECISE — report only files that need code changes, not files you found \
+during search that are merely related. Most bugs require changing only 1 file.
 """,
 
     "hybrid": """\
 You are a code context retrieval specialist. Given a task description and \
-local repository paths, identify ALL source files, symbols, and dependency \
-chains relevant to answering the task.
+local repository paths, identify the source files that would need to be \
+**modified** to address the task — i.e., files that would appear in the \
+fix patch / pull request diff.
 
-You have access to BOTH local tools AND Sourcegraph search:
+You have access to BOTH local tools AND Sourcegraph Deep Search:
 
 Local tools:
-- Bash (read-only): run grep, rg (ripgrep), find, ls, and other read-only shell commands
+- Bash: run grep, rg (ripgrep), find, ls, and other read-only shell commands. \
+Also used to invoke Deep Search (see below).
 - Read: read source file contents
 - Glob: find files by glob patterns
 - Grep: search file contents with regex patterns
 
 Sourcegraph tools:
-- mcp__sourcegraph__sg_nls_search: AI-powered semantic code search
+- **Deep Search** (MUST USE FIRST): AI-powered semantic code search via Bash
 - mcp__sourcegraph__sg_keyword_search: keyword/regex code search with filters
+
+## Deep Search (MUST USE FIRST)
+Deep Search is an AI-powered semantic code search that understands code \
+structure, relationships, and natural language queries. It returns detailed \
+answers with file paths and code explanations. You MUST run at least one \
+Deep Search query before using other tools.
+
+To run Deep Search, use Bash:
+```
+bash /home/stephanie_jarmak/CodeContextBench/scripts/ds_wrapper.sh "your question here"
+```
+
+CRITICAL: Always include the repository name in your Deep Search query so it \
+searches the correct codebase. Use the repo names from the "Repositories" \
+section below. Examples:
+- "What files implement RBAC escalation checks in kubernetes/kubernetes?"
+- "Where is the ProducerBatch class defined in apache/kafka?"
+- "How does the xDS protocol work in envoyproxy/envoy?"
+
+Deep Search takes 30-60 seconds to complete. Use it for:
+- Broad exploration: "What files implement X in repo Y?"
+- Architecture questions: "How does the RBAC system work in repo Y?"
+- Dependency tracing: "What files depend on package X in repo Y?"
+- Finding implementations: "Where is interface Y implemented in repo Z?"
 
 ## Strategy
 1. Read the task carefully. Identify key entities and concepts.
-2. ALWAYS start with Sourcegraph search to discover relevant files and repos — \
-even if local repos are available. The local repo set may be INCOMPLETE.
+2. ALWAYS start with Deep Search to discover relevant files and repos — \
+even if local repos are available. The local repo set may be INCOMPLETE. \
+Include the repo name in every Deep Search query. \
+Run: bash /home/stephanie_jarmak/CodeContextBench/scripts/ds_wrapper.sh "your question about repo/name"
 3. Use local Grep/Bash (rg) to verify and refine findings against actual files.
-4. Use Grep for import tracing and symbol definitions.
+4. Use mcp__sourcegraph__sg_keyword_search for precise identifier matches.
 5. Cross-check: anything found by search should be verified locally, and \
 local findings should be checked for completeness via search.
-6. If local search finds nothing, ALWAYS try Sourcegraph search before \
-concluding a file doesn't exist.
-7. Be THOROUGH — recall matters more than precision for oracle generation.
+6. If local search finds nothing, ALWAYS try Deep Search or keyword search \
+before concluding a file doesn't exist.
+7. Be PRECISE — report only files that need code changes, not files you read \
+for context. Most bugs require changing only 1 file. Do not include callers, \
+importers, or related modules unless they themselves need modification.
 8. For multi-repo tasks, search ALL repos — including repos you might not \
 have locally.
-9. Stay FOCUSED on the specific task question. Include only files directly \
-relevant to answering the task.
 """,
 }
 
@@ -1111,17 +1190,18 @@ def run_agent_cli(
 
     # -- Determine allowed tools based on backend --
     local_tools = ["Bash(read-only:true)", "Read", "Glob", "Grep"]
+    # Deep Search needs Bash (not read-only) to call ds_wrapper.sh
+    ds_tools = ["Bash", "Read", "Glob", "Grep"]
     sg_tools = [
         "mcp__sourcegraph__sg_keyword_search",
-        "mcp__sourcegraph__sg_nls_search",
     ]
 
     if backend == "local":
         allowed_tools = local_tools
     elif backend == "deepsearch":
-        allowed_tools = sg_tools
+        allowed_tools = ["Bash"] + sg_tools
     else:  # hybrid
-        allowed_tools = local_tools + sg_tools
+        allowed_tools = ds_tools + sg_tools
 
     # -- Write system prompt to temp file (avoids ARG_MAX) --
     sys_prompt_file = tempfile.NamedTemporaryFile(
@@ -1153,8 +1233,8 @@ def run_agent_cli(
             mcp_file.close()
             mcp_config_path = mcp_file.name
         else:
-            log.warning("SOURCEGRAPH_ACCESS_TOKEN not set; SG tools unavailable")
-            # Fall back to local-only tools
+            log.warning("SOURCEGRAPH_ACCESS_TOKEN not set; SG/Deep Search tools unavailable")
+            # Fall back to local-only tools (no Deep Search without token)
             allowed_tools = local_tools
 
     # -- Build CLI command --
@@ -1172,6 +1252,11 @@ def run_agent_cli(
 
     # -- Environment: unset CLAUDECODE to avoid nesting detection --
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+    # Ensure SRC_ACCESS_TOKEN is set for ds_wrapper.sh (Deep Search)
+    if "SRC_ACCESS_TOKEN" not in env:
+        sg_token = env.get("SOURCEGRAPH_ACCESS_TOKEN", "")
+        if sg_token:
+            env["SRC_ACCESS_TOKEN"] = sg_token
 
     if verbose:
         log.info("CLI cmd: claude -p <user_msg> --model %s --allowedTools %s",
@@ -1408,17 +1493,38 @@ def build_user_message(
     if check_types:
         parts.append(f"\n## Expected Output Types\n{', '.join(check_types)}")
 
-    # Available repos
-    parts.append("\n## Available Local Repositories")
+    # Available repos — extract clean repo names for Deep Search queries
+    repo_names = set()
+    parts.append("\n## Repositories")
     if repo_paths:
         for name, path in sorted(repo_paths.items()):
             parts.append(f"- **{name}**: `{path}`")
+            # Extract clean GitHub org/repo name for Deep Search
+            # e.g. "sg-evals/kubernetes--v1.32.0" -> "kubernetes/kubernetes"
+            # e.g. "django/django" -> "django/django"
+            clean = name.replace("sg-evals/", "")
+            # Strip version suffix: "kubernetes--v1.32.0" -> "kubernetes"
+            if "--" in clean:
+                clean = clean.split("--")[0]
+            repo_names.add(clean)
     else:
         parts.append("- *(none cloned locally)*")
+
+    # Infer repo names from task context if not available from paths
+    instruction = ctx.get("instruction", "") + " " + ctx.get("seed_prompt", "")
+    for pattern in re.findall(r'github\.com/([a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)', instruction):
+        repo_names.add(pattern.rstrip("."))
+
+    if repo_names:
+        parts.append(
+            f"\n**Use these repo names in Deep Search queries**: "
+            f"{', '.join(sorted(repo_names))}"
+        )
+
     parts.append(
         "\n**IMPORTANT**: The repos listed above may NOT be complete. "
         "The task may involve additional repositories not cloned locally. "
-        "You MUST use sourcegraph_search or deep_search to discover files "
+        "Use Deep Search and keyword search to discover files "
         "in repositories beyond the local set. Do not assume local repos are exhaustive."
     )
 
