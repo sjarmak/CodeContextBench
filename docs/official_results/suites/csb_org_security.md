@@ -21,13 +21,19 @@
 | [csb_org_security_haiku_20260301_231457](../runs/csb_org_security_haiku_20260301_231457.md) | `mcp-remote-direct` | 4 | 0.753 | 1.000 |
 | [csb_org_security_haiku_20260302_014939](../runs/csb_org_security_haiku_20260302_014939.md) | `mcp-remote-direct` | 6 | 0.731 | 1.000 |
 | [csb_org_security_haiku_20260302_022538](../runs/csb_org_security_haiku_20260302_022538.md) | `mcp-remote-direct` | 4 | 0.737 | 1.000 |
-| [csb_org_security_haiku_20260302_175821](../runs/csb_org_security_haiku_20260302_175821.md) | `baseline-local-direct` | 5 | 0.250 | 1.000 |
+| [csb_org_security_haiku_20260302_175821](../runs/csb_org_security_haiku_20260302_175821.md) | `baseline-local-direct` | 3 | 0.317 | 1.000 |
 | [csb_org_security_haiku_20260302_175821](../runs/csb_org_security_haiku_20260302_175821.md) | `mcp-remote-direct` | 13 | 0.478 | 1.000 |
-| [csb_org_security_haiku_20260302_175827](../runs/csb_org_security_haiku_20260302_175827.md) | `baseline-local-direct` | 4 | 0.419 | 1.000 |
+| [csb_org_security_haiku_20260302_175827](../runs/csb_org_security_haiku_20260302_175827.md) | `baseline-local-direct` | 3 | 0.418 | 1.000 |
 | [csb_org_security_haiku_20260302_175827](../runs/csb_org_security_haiku_20260302_175827.md) | `mcp-remote-direct` | 14 | 0.448 | 1.000 |
 | [csb_org_security_haiku_20260302_183602](../runs/csb_org_security_haiku_20260302_183602.md) | `mcp-remote-direct` | 6 | 0.697 | 0.833 |
 | [csb_org_security_haiku_20260302_183608](../runs/csb_org_security_haiku_20260302_183608.md) | `baseline-local-direct` | 6 | 0.588 | 0.833 |
 | [csb_org_security_haiku_20260302_183608](../runs/csb_org_security_haiku_20260302_183608.md) | `mcp-remote-direct` | 6 | 0.771 | 1.000 |
+| [csb_org_security_haiku_20260302_210829](../runs/csb_org_security_haiku_20260302_210829.md) | `mcp-remote-direct` | 4 | 0.119 | 0.500 |
+| [csb_org_security_haiku_20260302_210835](../runs/csb_org_security_haiku_20260302_210835.md) | `mcp-remote-direct` | 4 | 0.193 | 0.500 |
+| [csb_org_security_haiku_20260302_210842](../runs/csb_org_security_haiku_20260302_210842.md) | `baseline-local-direct` | 1 | 0.000 | 0.000 |
+| [csb_org_security_haiku_20260302_210842](../runs/csb_org_security_haiku_20260302_210842.md) | `mcp-remote-direct` | 4 | 0.200 | 0.500 |
+| [csb_org_security_haiku_20260302_212645](../runs/csb_org_security_haiku_20260302_212645.md) | `baseline-local-direct` | 3 | 0.231 | 0.667 |
+| [csb_org_security_haiku_20260302_212645](../runs/csb_org_security_haiku_20260302_212645.md) | `mcp-remote-direct` | 3 | 0.127 | 0.667 |
 
 ## Tasks
 
@@ -109,10 +115,14 @@
 | [mcp_ccx-vuln-remed-141_qp9jgt](../tasks/csb_org_security_haiku_20260301_201904--mcp-remote-artifact--mcp_ccx-vuln-remed-141_qp9jgt.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-141) | `mcp-remote-artifact` | `passed` | 0.341 | 2 | 0.968 |
 | [mcp_CCX-vuln-remed-141_I5Vdae](../tasks/csb_org_security_haiku_20260228_025547--mcp-remote-direct--mcp_CCX-vuln-remed-141_I5Vdae.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-141) | `mcp-remote-direct` | `passed` | 0.750 | 1 | 0.958 |
 | [bl_ccx-vuln-remed-161_nwcdij](../tasks/csb_org_security_haiku_20260301_201904--baseline-local-artifact--bl_ccx-vuln-remed-161_nwcdij.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `baseline-local-artifact` | `passed` | 0.222 | 1 | 0.000 |
-| [ccx-vuln-remed-161](../tasks/csb_org_security_haiku_20260302_175827--baseline-local-direct--ccx-vuln-remed-161.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `baseline-local-direct` | `passed` | 0.421 | 1 | 0.000 |
+| [ccx-vuln-remed-161](../tasks/csb_org_security_haiku_20260302_212645--baseline-local-direct--ccx-vuln-remed-161.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `baseline-local-direct` | `passed` | 0.471 | 2 | 0.000 |
 | [mcp_ccx-vuln-remed-161_niubqh](../tasks/csb_org_security_haiku_20260301_201904--mcp-remote-artifact--mcp_ccx-vuln-remed-161_niubqh.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `mcp-remote-artifact` | `passed` | 0.500 | 1 | 0.952 |
-| [mcp_ccx-vuln-remed-161_jx2ryv](../tasks/csb_org_security_haiku_20260302_175821--mcp-remote-direct--mcp_ccx-vuln-remed-161_jx2ryv.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `mcp-remote-direct` | `passed` | 0.533 | 2 | 0.913 |
-| [mcp_ccx-vuln-remed-161_ab1sbj](../tasks/csb_org_security_haiku_20260302_175827--mcp-remote-direct--mcp_ccx-vuln-remed-161_ab1sbj.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `mcp-remote-direct` | `passed` | 0.400 | 2 | 0.963 |
+| [mcp_ccx-vuln-remed-161_jx2ryv](../tasks/csb_org_security_haiku_20260302_175821--mcp-remote-direct--mcp_ccx-vuln-remed-161_jx2ryv.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `mcp-remote-direct` | `passed` | 0.533 | 6 | 0.913 |
+| [mcp_ccx-vuln-remed-161_ab1sbj](../tasks/csb_org_security_haiku_20260302_175827--mcp-remote-direct--mcp_ccx-vuln-remed-161_ab1sbj.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `mcp-remote-direct` | `passed` | 0.400 | 6 | 0.963 |
+| [mcp_ccx-vuln-remed-161_dd2zzh](../tasks/csb_org_security_haiku_20260302_210842--mcp-remote-direct--mcp_ccx-vuln-remed-161_dd2zzh.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `mcp-remote-direct` | `failed` | 0.000 | 6 | 0.000 |
+| [mcp_ccx-vuln-remed-161_hzbpja](../tasks/csb_org_security_haiku_20260302_210835--mcp-remote-direct--mcp_ccx-vuln-remed-161_hzbpja.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `mcp-remote-direct` | `failed` | 0.000 | 6 | - |
+| [mcp_ccx-vuln-remed-161_ki0hwa](../tasks/csb_org_security_haiku_20260302_210829--mcp-remote-direct--mcp_ccx-vuln-remed-161_ki0hwa.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `mcp-remote-direct` | `failed` | 0.000 | 6 | 1.000 |
+| [mcp_ccx-vuln-remed-161_ovc2ot](../tasks/csb_org_security_haiku_20260302_212645--mcp-remote-direct--mcp_ccx-vuln-remed-161_ovc2ot.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `mcp-remote-direct` | `failed` | 0.000 | 6 | - |
 | [bl_ccx-vuln-remed-162_zvuzze](../tasks/csb_org_security_haiku_20260301_201904--baseline-local-artifact--bl_ccx-vuln-remed-162_zvuzze.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-162) | `baseline-local-artifact` | `passed` | 0.421 | 1 | 0.000 |
 | [ccx-vuln-remed-162](../tasks/csb_org_security_haiku_20260302_175827--baseline-local-direct--ccx-vuln-remed-162.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-162) | `baseline-local-direct` | `passed` | 0.500 | 2 | 0.000 |
 | [mcp_ccx-vuln-remed-162_kugjvf](../tasks/csb_org_security_haiku_20260301_201904--mcp-remote-artifact--mcp_ccx-vuln-remed-162_kugjvf.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-162) | `mcp-remote-artifact` | `passed` | 0.476 | 1 | 0.955 |
@@ -124,10 +134,14 @@
 | [mcp_ccx-vuln-remed-163_ijiapm](../tasks/csb_org_security_haiku_20260302_175821--mcp-remote-direct--mcp_ccx-vuln-remed-163_ijiapm.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-163) | `mcp-remote-direct` | `passed` | 0.133 | 2 | 0.968 |
 | [mcp_ccx-vuln-remed-163_eh4j30](../tasks/csb_org_security_haiku_20260302_175827--mcp-remote-direct--mcp_ccx-vuln-remed-163_eh4j30.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-163) | `mcp-remote-direct` | `passed` | 0.095 | 2 | 0.962 |
 | [bl_ccx-vuln-remed-164_p2zsy7](../tasks/csb_org_security_haiku_20260301_201904--baseline-local-artifact--bl_ccx-vuln-remed-164_p2zsy7.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `baseline-local-artifact` | `passed` | 0.273 | 1 | 0.000 |
-| [ccx-vuln-remed-164](../tasks/csb_org_security_haiku_20260302_175821--baseline-local-direct--ccx-vuln-remed-164.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `baseline-local-direct` | `passed` | 0.222 | 1 | 0.000 |
+| [ccx-vuln-remed-164](../tasks/csb_org_security_haiku_20260302_212645--baseline-local-direct--ccx-vuln-remed-164.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `baseline-local-direct` | `passed` | 0.222 | 2 | 0.000 |
 | [mcp_ccx-vuln-remed-164_mwmu17](../tasks/csb_org_security_haiku_20260301_201904--mcp-remote-artifact--mcp_ccx-vuln-remed-164_mwmu17.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `mcp-remote-artifact` | `passed` | 0.250 | 1 | 0.974 |
-| [mcp_ccx-vuln-remed-164_jboqa5](../tasks/csb_org_security_haiku_20260302_175821--mcp-remote-direct--mcp_ccx-vuln-remed-164_jboqa5.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `mcp-remote-direct` | `passed` | 0.210 | 2 | 0.950 |
-| [mcp_ccx-vuln-remed-164_drzwqh](../tasks/csb_org_security_haiku_20260302_175827--mcp-remote-direct--mcp_ccx-vuln-remed-164_drzwqh.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `mcp-remote-direct` | `passed` | 0.210 | 2 | 0.962 |
+| [mcp_ccx-vuln-remed-164_jboqa5](../tasks/csb_org_security_haiku_20260302_175821--mcp-remote-direct--mcp_ccx-vuln-remed-164_jboqa5.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `mcp-remote-direct` | `passed` | 0.210 | 6 | 0.950 |
+| [mcp_ccx-vuln-remed-164_drzwqh](../tasks/csb_org_security_haiku_20260302_175827--mcp-remote-direct--mcp_ccx-vuln-remed-164_drzwqh.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `mcp-remote-direct` | `passed` | 0.210 | 6 | 0.962 |
+| [mcp_ccx-vuln-remed-164_zwlfpz](../tasks/csb_org_security_haiku_20260302_210842--mcp-remote-direct--mcp_ccx-vuln-remed-164_zwlfpz.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `mcp-remote-direct` | `passed` | 0.300 | 6 | 0.960 |
+| [mcp_ccx-vuln-remed-164_qhn0ar](../tasks/csb_org_security_haiku_20260302_210835--mcp-remote-direct--mcp_ccx-vuln-remed-164_qhn0ar.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `mcp-remote-direct` | `passed` | 0.273 | 6 | 0.966 |
+| [mcp_ccx-vuln-remed-164_ortnn6](../tasks/csb_org_security_haiku_20260302_210829--mcp-remote-direct--mcp_ccx-vuln-remed-164_ortnn6.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `mcp-remote-direct` | `passed` | 0.111 | 6 | 0.929 |
+| [mcp_ccx-vuln-remed-164_jdf4zn](../tasks/csb_org_security_haiku_20260302_212645--mcp-remote-direct--mcp_ccx-vuln-remed-164_jdf4zn.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `mcp-remote-direct` | `passed` | 0.273 | 6 | 0.857 |
 | [bl_ccx-vuln-remed-165_p0ttqa](../tasks/csb_org_security_haiku_20260301_201904--baseline-local-artifact--bl_ccx-vuln-remed-165_p0ttqa.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-165) | `baseline-local-artifact` | `passed` | 0.286 | 1 | 0.000 |
 | [ccx-vuln-remed-165](../tasks/csb_org_security_haiku_20260302_175821--baseline-local-direct--ccx-vuln-remed-165.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-165) | `baseline-local-direct` | `passed` | 0.462 | 3 | 0.000 |
 | [mcp_ccx-vuln-remed-165_hctvsf](../tasks/csb_org_security_haiku_20260301_201904--mcp-remote-artifact--mcp_ccx-vuln-remed-165_hctvsf.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-165) | `mcp-remote-artifact` | `passed` | 0.400 | 1 | 0.971 |
@@ -135,9 +149,13 @@
 | [mcp_ccx-vuln-remed-165_x4ywvb](../tasks/csb_org_security_haiku_20260302_175827--mcp-remote-direct--mcp_ccx-vuln-remed-165_x4ywvb.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-165) | `mcp-remote-direct` | `passed` | 0.400 | 3 | 0.818 |
 | [mcp_ccx-vuln-remed-165_gci0sl](../tasks/csb_org_security_haiku_20260302_014939--mcp-remote-direct--mcp_ccx-vuln-remed-165_gci0sl.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-165) | `mcp-remote-direct` | `passed` | 0.353 | 3 | 0.900 |
 | [bl_ccx-vuln-remed-166_vjelxg](../tasks/csb_org_security_haiku_20260301_201904--baseline-local-artifact--bl_ccx-vuln-remed-166_vjelxg.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-166) | `baseline-local-artifact` | `passed` | 0.364 | 1 | 0.000 |
+| [ccx-vuln-remed-166](../tasks/csb_org_security_haiku_20260302_210842--baseline-local-direct--ccx-vuln-remed-166.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-166) | `baseline-local-direct` | `failed` | 0.000 | 3 | - |
 | [mcp_ccx-vuln-remed-166_rsfibw](../tasks/csb_org_security_haiku_20260301_201904--mcp-remote-artifact--mcp_ccx-vuln-remed-166_rsfibw.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-166) | `mcp-remote-artifact` | `passed` | 0.333 | 1 | 0.962 |
-| [mcp_ccx-vuln-remed-166_6esmdm](../tasks/csb_org_security_haiku_20260302_175821--mcp-remote-direct--mcp_ccx-vuln-remed-166_6esmdm.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-166) | `mcp-remote-direct` | `passed` | 0.364 | 2 | 0.944 |
-| [mcp_ccx-vuln-remed-166_yccoie](../tasks/csb_org_security_haiku_20260302_175827--mcp-remote-direct--mcp_ccx-vuln-remed-166_yccoie.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-166) | `mcp-remote-direct` | `passed` | 0.400 | 2 | 0.867 |
+| [mcp_ccx-vuln-remed-166_6esmdm](../tasks/csb_org_security_haiku_20260302_175821--mcp-remote-direct--mcp_ccx-vuln-remed-166_6esmdm.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-166) | `mcp-remote-direct` | `passed` | 0.364 | 5 | 0.944 |
+| [mcp_ccx-vuln-remed-166_yccoie](../tasks/csb_org_security_haiku_20260302_175827--mcp-remote-direct--mcp_ccx-vuln-remed-166_yccoie.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-166) | `mcp-remote-direct` | `passed` | 0.400 | 5 | 0.867 |
+| [mcp_ccx-vuln-remed-166_sotrhc](../tasks/csb_org_security_haiku_20260302_210842--mcp-remote-direct--mcp_ccx-vuln-remed-166_sotrhc.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-166) | `mcp-remote-direct` | `passed` | 0.500 | 5 | 0.941 |
+| [mcp_ccx-vuln-remed-166_mzhfa6](../tasks/csb_org_security_haiku_20260302_210835--mcp-remote-direct--mcp_ccx-vuln-remed-166_mzhfa6.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-166) | `mcp-remote-direct` | `passed` | 0.500 | 5 | 0.929 |
+| [mcp_ccx-vuln-remed-166_vjh9u3](../tasks/csb_org_security_haiku_20260302_210829--mcp-remote-direct--mcp_ccx-vuln-remed-166_vjh9u3.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-166) | `mcp-remote-direct` | `passed` | 0.364 | 5 | 0.917 |
 | [bl_ccx-vuln-remed-167_6vt6iw](../tasks/csb_org_security_haiku_20260301_201904--baseline-local-artifact--bl_ccx-vuln-remed-167_6vt6iw.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-167) | `baseline-local-artifact` | `passed` | 0.174 | 1 | 0.000 |
 | [ccx-vuln-remed-167](../tasks/csb_org_security_haiku_20260302_175821--baseline-local-direct--ccx-vuln-remed-167.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-167) | `baseline-local-direct` | `passed` | 0.061 | 2 | 0.000 |
 | [mcp_ccx-vuln-remed-167_oloto0](../tasks/csb_org_security_haiku_20260301_201904--mcp-remote-artifact--mcp_ccx-vuln-remed-167_oloto0.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-167) | `mcp-remote-artifact` | `passed` | 0.100 | 1 | 0.969 |
@@ -149,9 +167,13 @@
 | [mcp_ccx-vuln-remed-168_wvsl3t](../tasks/csb_org_security_haiku_20260302_175821--mcp-remote-direct--mcp_ccx-vuln-remed-168_wvsl3t.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-168) | `mcp-remote-direct` | `passed` | 0.273 | 2 | 0.903 |
 | [mcp_ccx-vuln-remed-168_xznrfi](../tasks/csb_org_security_haiku_20260302_175827--mcp-remote-direct--mcp_ccx-vuln-remed-168_xznrfi.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-168) | `mcp-remote-direct` | `passed` | 0.235 | 2 | 0.962 |
 | [bl_ccx-vuln-remed-169_ausscm](../tasks/csb_org_security_haiku_20260301_201904--baseline-local-artifact--bl_ccx-vuln-remed-169_ausscm.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-169) | `baseline-local-artifact` | `passed` | 0.071 | 1 | 0.000 |
-| [ccx-vuln-remed-169](../tasks/csb_org_security_haiku_20260302_175821--baseline-local-direct--ccx-vuln-remed-169.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-169) | `baseline-local-direct` | `passed` | 0.075 | 1 | 0.000 |
+| [ccx-vuln-remed-169](../tasks/csb_org_security_haiku_20260302_212645--baseline-local-direct--ccx-vuln-remed-169.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-169) | `baseline-local-direct` | `failed` | 0.000 | 2 | - |
 | [mcp_ccx-vuln-remed-169_xpu3ah](../tasks/csb_org_security_haiku_20260301_201904--mcp-remote-artifact--mcp_ccx-vuln-remed-169_xpu3ah.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-169) | `mcp-remote-artifact` | `passed` | 0.048 | 1 | 0.968 |
-| [mcp_ccx-vuln-remed-169_hts7hd](../tasks/csb_org_security_haiku_20260302_175827--mcp-remote-direct--mcp_ccx-vuln-remed-169_hts7hd.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-169) | `mcp-remote-direct` | `passed` | 0.071 | 1 | 0.941 |
+| [mcp_ccx-vuln-remed-169_hts7hd](../tasks/csb_org_security_haiku_20260302_175827--mcp-remote-direct--mcp_ccx-vuln-remed-169_hts7hd.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-169) | `mcp-remote-direct` | `passed` | 0.071 | 5 | 0.941 |
+| [mcp_ccx-vuln-remed-169_vjyuhv](../tasks/csb_org_security_haiku_20260302_210842--mcp-remote-direct--mcp_ccx-vuln-remed-169_vjyuhv.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-169) | `mcp-remote-direct` | `failed` | 0.000 | 5 | - |
+| [mcp_ccx-vuln-remed-169_xiwpxv](../tasks/csb_org_security_haiku_20260302_210835--mcp-remote-direct--mcp_ccx-vuln-remed-169_xiwpxv.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-169) | `mcp-remote-direct` | `failed` | 0.000 | 5 | - |
+| [mcp_ccx-vuln-remed-169_7ttlrf](../tasks/csb_org_security_haiku_20260302_210829--mcp-remote-direct--mcp_ccx-vuln-remed-169_7ttlrf.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-169) | `mcp-remote-direct` | `failed` | 0.000 | 5 | - |
+| [mcp_ccx-vuln-remed-169_nlw0yv](../tasks/csb_org_security_haiku_20260302_212645--mcp-remote-direct--mcp_ccx-vuln-remed-169_nlw0yv.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-169) | `mcp-remote-direct` | `passed` | 0.109 | 5 | 0.893 |
 | [ccx-vuln-remed-170](../tasks/csb_org_security_haiku_20260302_175827--baseline-local-direct--ccx-vuln-remed-170.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-170) | `baseline-local-direct` | `passed` | 0.600 | 2 | 0.000 |
 | [mcp_ccx-vuln-remed-170_2bxbd6](../tasks/csb_org_security_haiku_20260301_201904--mcp-remote-artifact--mcp_ccx-vuln-remed-170_2bxbd6.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-170) | `mcp-remote-artifact` | `passed` | 0.667 | 1 | 0.926 |
 | [mcp_ccx-vuln-remed-170_7ij03u](../tasks/csb_org_security_haiku_20260302_175827--mcp-remote-direct--mcp_ccx-vuln-remed-170_7ij03u.html) | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-170) | `mcp-remote-direct` | `passed` | 0.667 | 2 | 0.962 |
@@ -188,7 +210,7 @@
 
 ## Multi-Run Variance
 
-Tasks with multiple valid runs (47 task/config pairs).
+Tasks with multiple valid runs (50 task/config pairs).
 
 | Task | Benchmark | Config | Runs | Mean | Std | Individual Rewards |
 |---|---|---|---:|---:|---:|---|
@@ -216,19 +238,22 @@ Tasks with multiple valid runs (47 task/config pairs).
 | CCX-vuln-remed-141 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-141) | `baseline-local-artifact` | 2 | 0.177 | 0.251 | 0.000, 0.354 |
 | CCX-vuln-remed-141 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-141) | `baseline-local-direct` | 3 | 0.714 | 0.062 | 0.786, 0.672, 0.685 |
 | CCX-vuln-remed-141 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-141) | `mcp-remote-artifact` | 2 | 0.545 | 0.289 | 0.750, 0.341 |
-| CCX-vuln-remed-161 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `mcp-remote-direct` | 2 | 0.467 | 0.094 | 0.533, 0.400 |
+| CCX-vuln-remed-161 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `baseline-local-direct` | 2 | 0.446 | 0.035 | 0.421, 0.471 |
+| CCX-vuln-remed-161 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-161) | `mcp-remote-direct` | 4 | 0.233 | 0.275 | 0.533, 0.400, 0.000, 0.000 |
 | CCX-vuln-remed-162 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-162) | `baseline-local-direct` | 2 | 0.383 | 0.165 | 0.267, 0.500 |
 | CCX-vuln-remed-162 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-162) | `mcp-remote-direct` | 2 | 0.383 | 0.165 | 0.500, 0.267 |
 | CCX-vuln-remed-163 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-163) | `baseline-local-direct` | 2 | 0.139 | 0.020 | 0.125, 0.154 |
 | CCX-vuln-remed-163 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-163) | `mcp-remote-direct` | 2 | 0.114 | 0.027 | 0.095, 0.133 |
-| CCX-vuln-remed-164 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `mcp-remote-direct` | 2 | 0.210 | 0.000 | 0.210, 0.210 |
+| CCX-vuln-remed-164 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `baseline-local-direct` | 2 | 0.222 | 0.000 | 0.222, 0.222 |
+| CCX-vuln-remed-164 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-164) | `mcp-remote-direct` | 6 | 0.230 | 0.069 | 0.210, 0.210, 0.111, 0.273, 0.300, 0.273 |
 | CCX-vuln-remed-165 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-165) | `baseline-local-direct` | 3 | 0.384 | 0.073 | 0.375, 0.316, 0.462 |
 | CCX-vuln-remed-165 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-165) | `mcp-remote-direct` | 3 | 0.376 | 0.024 | 0.353, 0.400, 0.375 |
-| CCX-vuln-remed-166 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-166) | `mcp-remote-direct` | 2 | 0.382 | 0.026 | 0.364, 0.400 |
+| CCX-vuln-remed-166 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-166) | `mcp-remote-direct` | 5 | 0.425 | 0.070 | 0.364, 0.400, 0.364, 0.500, 0.500 |
 | CCX-vuln-remed-167 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-167) | `baseline-local-direct` | 2 | 0.093 | 0.045 | 0.125, 0.061 |
 | CCX-vuln-remed-167 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-167) | `mcp-remote-direct` | 2 | 0.167 | 0.047 | 0.200, 0.133 |
 | CCX-vuln-remed-168 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-168) | `baseline-local-direct` | 2 | 0.336 | 0.131 | 0.244, 0.429 |
 | CCX-vuln-remed-168 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-168) | `mcp-remote-direct` | 2 | 0.254 | 0.026 | 0.235, 0.273 |
+| CCX-vuln-remed-169 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-169) | `mcp-remote-direct` | 2 | 0.090 | 0.027 | 0.071, 0.109 |
 | CCX-vuln-remed-170 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-170) | `baseline-local-direct` | 2 | 0.729 | 0.182 | 0.857, 0.600 |
 | CCX-vuln-remed-170 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-170) | `mcp-remote-direct` | 2 | 0.762 | 0.135 | 0.857, 0.667 |
 | CCX-vuln-remed-281 | [source](../../../benchmarks/csb_org_security/ccx-vuln-remed-281) | `baseline-local-direct` | 6 | 0.684 | 0.040 | 0.673, 0.650, 0.673, 0.673, 0.673, 0.764 |

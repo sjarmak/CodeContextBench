@@ -185,6 +185,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/export_official_results.py` - Utility script for export official results.
 - `scripts/extract_analysis_metrics.py` - Utility script for extract analysis metrics.
 - `scripts/extract_build_diary.py` - Utility script for extract build diary.
+- `scripts/extract_build_narrative.py` - Utility script for extract build narrative.
 - `scripts/find_mcp_distracted.py` - Utility script for find mcp distracted.
 - `scripts/fix_h3_tokens.py` [one_off] - Historical one-off script: fix h3 tokens.
 - `scripts/fix_workspace_perms.py` [one_off] - Historical one-off script: fix workspace perms.
@@ -200,6 +201,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/plan_variance_runs.py` - Utility script for plan variance runs.
 - `scripts/plot_build_diary.py` - Utility script for plot build diary.
 - `scripts/plot_build_diary_supplementary.py` - Utility script for plot build diary supplementary.
+- `scripts/plot_build_narrative.py` - Utility script for plot build narrative.
 - `scripts/promote_agent_oracles.py` - Utility script for promote agent oracles.
 - `scripts/push_base_images_ghcr.sh` - Utility script for push base images ghcr.
 - `scripts/regenerate_artifact_dockerfiles.py` - Utility script for regenerate artifact dockerfiles.
