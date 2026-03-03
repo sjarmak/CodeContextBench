@@ -467,6 +467,17 @@ REAL_HOME="$HOME"
 # are detected and skipped automatically in setup_multi_accounts.
 SKIP_ACCOUNTS="${SKIP_ACCOUNTS:-}"
 
+# Rate-limit preflight probe before launching runs.
+# - RATE_LIMIT_PREFLIGHT=1 (default): probe each account with a tiny Claude request
+# - RATE_LIMIT_PREFLIGHT=0: disable probing
+# - RATE_LIMIT_PREFLIGHT_MODE=skip (default): drop rate-limited accounts from CLAUDE_HOMES
+# - RATE_LIMIT_PREFLIGHT_MODE=fail: abort launch if any account is rate-limited
+RATE_LIMIT_PREFLIGHT="${RATE_LIMIT_PREFLIGHT:-1}"
+RATE_LIMIT_PREFLIGHT_MODE="${RATE_LIMIT_PREFLIGHT_MODE:-skip}"
+RATE_LIMIT_PROBE_TIMEOUT_SEC="${RATE_LIMIT_PROBE_TIMEOUT_SEC:-20}"
+RATE_LIMIT_PROBE_MODEL="${RATE_LIMIT_PROBE_MODEL:-anthropic/claude-haiku-4-5-20251001}"
+RATE_LIMIT_PROBE_PROMPT="${RATE_LIMIT_PROBE_PROMPT:-Reply with exactly OK.}"
+
 # Check whether an account's OAuth token is valid (or can be refreshed).
 # Args: $1 = account home directory (e.g., ~/.claude-homes/account1)
 # Returns 0 if the token is valid (or was successfully refreshed), 1 otherwise.
@@ -636,6 +647,123 @@ ensure_fresh_token_all() {
     done
     # Restore real HOME
     export HOME="$REAL_HOME"
+}
+
+# Probe a single account for immediate Anthropic rate-limit status.
+# Returns:
+#   0 => probe succeeded and account appears usable
+#   2 => account appears rate-limited
+#   1 => probe failed for non-rate-limit reasons (treated as usable with warning)
+_check_account_rate_limit() {
+    local account_home=$1
+    local output
+    local rc
+
+    # timeout returns 124 on timeout
+    output=$(
+        HOME="$account_home" timeout "$RATE_LIMIT_PROBE_TIMEOUT_SEC" \
+            claude --print \
+            --output-format text \
+            --permission-mode bypassPermissions \
+            --model "$RATE_LIMIT_PROBE_MODEL" \
+            "$RATE_LIMIT_PROBE_PROMPT" 2>&1
+    )
+    rc=$?
+
+    if echo "$output" | grep -qiE "rate[ _-]?limit|429|hit your limit|exceed your account'?s rate limit|too many requests"; then
+        return 2
+    fi
+
+    if [ "$rc" -eq 124 ]; then
+        echo "    Probe timed out (${RATE_LIMIT_PROBE_TIMEOUT_SEC}s); keeping account"
+        return 1
+    fi
+
+    if [ "$rc" -ne 0 ]; then
+        # Non-rate-limit failure should not hard-block launches by default.
+        # Keep account active and let run-time retry logic handle transient errors.
+        echo "    Probe command failed (exit $rc); keeping account"
+        return 1
+    fi
+
+    return 0
+}
+
+# Check all active accounts for immediate rate-limit state and apply policy.
+# Must be called after setup_multi_accounts/ensure_fresh_token_all.
+preflight_rate_limits() {
+    if [ "$RATE_LIMIT_PREFLIGHT" != "1" ]; then
+        echo "Rate-limit preflight: disabled (RATE_LIMIT_PREFLIGHT=$RATE_LIMIT_PREFLIGHT)"
+        return 0
+    fi
+
+    if [ ${#CLAUDE_HOMES[@]} -eq 0 ]; then
+        setup_multi_accounts
+    fi
+
+    local kept_homes=()
+    local limited_homes=()
+    local warned=()
+
+    echo "Rate-limit preflight: probing ${#CLAUDE_HOMES[@]} account(s)..."
+
+    for home_dir in "${CLAUDE_HOMES[@]}"; do
+        local label
+        label=$(basename "$home_dir")
+        echo "  Checking $label ..."
+        if _check_account_rate_limit "$home_dir"; then
+            echo "    OK"
+            kept_homes+=("$home_dir")
+        else
+            local rl_rc=$?
+            if [ "$rl_rc" -eq 2 ]; then
+                echo "    RATE-LIMITED"
+                limited_homes+=("$home_dir")
+            else
+                warned+=("$home_dir")
+                kept_homes+=("$home_dir")
+            fi
+        fi
+    done
+
+    if [ ${#limited_homes[@]} -eq 0 ]; then
+        echo "Rate-limit preflight: no limited accounts detected"
+        return 0
+    fi
+
+    echo "Rate-limit preflight: detected ${#limited_homes[@]} limited account(s):"
+    for h in "${limited_homes[@]}"; do
+        echo "  - $(basename "$h")"
+    done
+
+    case "$RATE_LIMIT_PREFLIGHT_MODE" in
+        skip)
+            CLAUDE_HOMES=("${kept_homes[@]}")
+            if [ ${#CLAUDE_HOMES[@]} -eq 0 ]; then
+                echo "ERROR: all accounts are currently rate-limited; aborting launch"
+                return 1
+            fi
+            echo "Rate-limit preflight: continuing with ${#CLAUDE_HOMES[@]} account(s)"
+            if [ "$PARALLEL_JOBS" -gt 0 ]; then
+                local max_jobs=$(( SESSIONS_PER_ACCOUNT * ${#CLAUDE_HOMES[@]} ))
+                if [ "$PARALLEL_JOBS" -gt "$max_jobs" ]; then
+                    echo "Rate-limit preflight: capping PARALLEL_JOBS from $PARALLEL_JOBS to $max_jobs"
+                    PARALLEL_JOBS=$max_jobs
+                fi
+            fi
+            ;;
+        fail)
+            echo "ERROR: aborting due to rate-limited accounts (RATE_LIMIT_PREFLIGHT_MODE=fail)"
+            return 1
+            ;;
+        *)
+            echo "WARNING: unknown RATE_LIMIT_PREFLIGHT_MODE=$RATE_LIMIT_PREFLIGHT_MODE; defaulting to skip"
+            CLAUDE_HOMES=("${kept_homes[@]}")
+            [ ${#CLAUDE_HOMES[@]} -gt 0 ] || return 1
+            ;;
+    esac
+
+    return 0
 }
 
 # ============================================

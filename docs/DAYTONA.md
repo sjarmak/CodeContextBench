@@ -273,6 +273,9 @@ python3 scripts/build_daytona_registry.py
 | `DAYTONA_API_URL` | No | Override API endpoint (default: `https://app.daytona.io/api`) |
 | `DAYTONA_TARGET` | No | Override target region (default: `us`) |
 | `DAYTONA_OVERRIDE_STORAGE` | No | Override per-sandbox storage (MB). Set to `10240` to cap at Daytona's 10GB limit when tasks specify larger values in task.toml |
+| `RATE_LIMIT_PREFLIGHT` | No | Account preflight before launch (`1`=enabled, `0`=disabled; default `1`) |
+| `RATE_LIMIT_PREFLIGHT_MODE` | No | Behavior when account is limited: `skip` (default) or `fail` |
+| `RATE_LIMIT_PROBE_TIMEOUT_SEC` | No | Timeout in seconds for per-account probe (default `20`) |
 
 ## Troubleshooting
 
@@ -283,6 +286,8 @@ python3 scripts/build_daytona_registry.py
 **"Missing Dockerfile" or "Missing instruction"**: The task may lack the Dockerfile variant for your chosen config. Check with `--dry-run` first.
 
 **OAuth token expired**: Re-run `claude` in the account home directory to refresh, or switch to `--auth api-key`.
+
+**Anthropic account is rate-limited**: launch scripts now run a preflight probe per account. Default behavior is `RATE_LIMIT_PREFLIGHT_MODE=skip`, which removes limited accounts from the run before `harbor run` starts. To hard-block launches instead, set `RATE_LIMIT_PREFLIGHT_MODE=fail`.
 
 **MCP config errors**: Verify `SRC_ACCESS_TOKEN` is valid: `curl -H "Authorization: token $SRC_ACCESS_TOKEN" https://sourcegraph.com/.api/graphql`.
 

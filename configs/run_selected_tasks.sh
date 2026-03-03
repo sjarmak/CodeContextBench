@@ -184,6 +184,7 @@ if [ "$RUN_FULL" = true ] && [ -z "$SOURCEGRAPH_ACCESS_TOKEN" ]; then
 fi
 
 ensure_fresh_token_all  # also populates CLAUDE_HOMES[] via setup_multi_accounts
+preflight_rate_limits
 
 # Auto-detect PARALLEL_TASKS: Daytona supports 125 concurrent sandboxes,
 # local Docker is limited by account sessions.
@@ -229,8 +230,13 @@ for task in selection['tasks']:
         continue
     if use_case_category_filter and task.get('use_case_category', '') != use_case_category_filter:
         continue
-    # task_dir is relative to benchmarks/ in both formats
-    task_dir = 'benchmarks/' + task['task_dir']
+    # task_dir is relative to benchmarks/ in both formats.
+    # Some historical selection entries only have task_id; fallback to
+    # benchmarks/{suite}/{task_id} when task_dir is absent.
+    task_rel = task.get('task_dir') or f\"{bm}/{task.get('task_id', '')}\"
+    if not task_rel or task_rel.endswith('/'):
+        continue
+    task_dir = 'benchmarks/' + task_rel
     print(f'{bm}\t{task[\"task_id\"]}\t{task_dir}')
 "
 }
