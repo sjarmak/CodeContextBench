@@ -3148,20 +3148,67 @@ def _resolve_repos(
     if repo_paths:
         return repo_paths
 
-    # Strategy 3: Extract repo from Dockerfile "# Repo:" comment (SWEAP images)
+    # Strategy 3-5: Parse Dockerfile comments and TAC image mapping
     task_dir = Path(ctx.get("task_dir", ""))
     dockerfile = task_dir / "environment" / "Dockerfile"
     if dockerfile.exists():
         text = dockerfile.read_text()
+
+        # Strategy 3: # Repo: comment (SWEAP images)
         m = re.search(r"#\s*Repo:\s*(\S+)", text)
         if m:
             slug = m.group(1).strip()
-            log.info("  Resolved repo from Dockerfile comment: %s", slug)
+            log.info("  Resolved repo from Dockerfile # Repo: %s", slug)
             try:
                 path = clone_repo(slug, cache_dir)
                 repo_paths[slug] = path
             except Exception as e:
                 log.warning("Failed to clone %s: %s", slug, e)
+
+        # Strategy 4: # Source: org/repo (commit) (SWEAP debug tasks)
+        if not repo_paths:
+            m = re.search(r"#\s*Source:\s*(\S+)\s+\(([a-f0-9]+)\)", text)
+            if m:
+                slug = m.group(1).strip()
+                log.info("  Resolved repo from Dockerfile # Source: %s", slug)
+                try:
+                    path = clone_repo(slug, cache_dir)
+                    repo_paths[slug] = path
+                except Exception as e:
+                    log.warning("Failed to clone %s: %s", slug, e)
+
+        # Strategy 4b: Parse SWEAP FROM tag when # Source: uses instance ID format
+        # Tag: jefzda/sweap-images:org.repo-org__repo-commitHash-version
+        if not repo_paths:
+            m = re.search(
+                r"jefzda/sweap-images:([\w-]+)\.([\w-]+)-[\w_]+-([a-f0-9]{10,})",
+                text,
+            )
+            if m:
+                slug = f"{m.group(1)}/{m.group(2)}"
+                log.info("  Resolved repo from SWEAP FROM tag: %s", slug)
+                try:
+                    path = clone_repo(slug, cache_dir)
+                    repo_paths[slug] = path
+                except Exception as e:
+                    log.warning("Failed to clone %s: %s", slug, e)
+
+    # Strategy 5: TAC image task name → known repo mapping
+    if not repo_paths:
+        _TAC_REPO_MAP = {
+            "bustub": "cmu-db/bustub",
+            "openhands": "All-Hands-AI/OpenHands",
+        }
+        task_name = ctx.get("task_name", "")
+        for key, slug in _TAC_REPO_MAP.items():
+            if key in task_name.lower():
+                log.info("  Resolved repo from TAC map: %s -> %s", task_name, slug)
+                try:
+                    path = clone_repo(slug, cache_dir)
+                    repo_paths[slug] = path
+                except Exception as e:
+                    log.warning("Failed to clone %s: %s", slug, e)
+                break
 
     return repo_paths
 

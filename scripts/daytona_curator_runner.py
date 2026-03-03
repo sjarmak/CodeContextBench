@@ -1,29 +1,27 @@
 #!/usr/bin/env python3
-"""Run ContextBench calibration at high throughput via Daytona sandboxes.
+"""Run curator ground truth generation at high throughput via Daytona sandboxes.
+
+Supports two modes:
+  1. SDLC mode (--sdlc-all / --suite / --task-dir): Generate ground_truth.json
+     for CodeScaleBench SDLC tasks from benchmarks/csb_sdlc_*/ directories.
+  2. ContextBench mode (--sample / --phase): Calibrate against ContextBench
+     (HuggingFace parquet) tasks with trajectory + metrics output.
 
 Each sandbox gets its own Claude CLI + MCP server, eliminating the local
 MCP connection bottleneck that caps --parallel at 5 in local mode.
 
-Architecture:
-  - Loads ContextBench tasks (from validate_on_contextbench.py sampling)
-  - Clones repos locally (shared cache)
-  - For each task: creates a Daytona sandbox → installs Claude CLI →
-    uploads context_retrieval_agent.py + repo → runs curator → collects results
-  - Runs up to 30 sandboxes concurrently (conservative — Daytona Tier 3
-    allows 125 but curator tasks are long-running and memory-hungry)
-
 Usage:
-    # Quick pilot (5 tasks)
-    python3 scripts/daytona_curator_runner.py --sample 5 --verbose
+    # SDLC: generate ground truth for all missing tasks
+    python3 scripts/daytona_curator_runner.py --sdlc-all --missing-only --parallel 20
 
-    # Full calibration (50 tasks)
+    # SDLC: dry run to see what would be processed
+    python3 scripts/daytona_curator_runner.py --sdlc-all --missing-only --dry-run
+
+    # SDLC: single suite
+    python3 scripts/daytona_curator_runner.py --suite csb_sdlc_debug --missing-only
+
+    # ContextBench: calibration (existing behavior)
     python3 scripts/daytona_curator_runner.py --sample 50 --parallel 20
-
-    # Verified subset with CCB-weighted sampling
-    python3 scripts/daytona_curator_runner.py --phase verify --parallel 20
-
-    # Dry run
-    python3 scripts/daytona_curator_runner.py --sample 10 --dry-run
 
 Environment:
     source .env.local  (sets DAYTONA_API_KEY, SRC_ACCESS_TOKEN, OAuth creds)
@@ -34,8 +32,10 @@ import base64
 import json
 import logging
 import os
+import re
 import sys
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -60,6 +60,12 @@ SANDBOX_TIMEOUT_SEC = 900  # 15 min per task
 
 # Max concurrent sandboxes (Tier 3 = 125, but be conservative for long tasks)
 DEFAULT_PARALLEL = 20
+
+# TAC image tasks → known GitHub repos (no clone URL in Dockerfile)
+TAC_REPO_MAP = {
+    "bustub": {"slug": "cmu-db/bustub", "commit": "HEAD"},
+    "openhands": {"slug": "All-Hands-AI/OpenHands", "commit": "HEAD"},
+}
 
 
 def load_credentials() -> Dict[str, Any]:
@@ -123,15 +129,122 @@ def exec_cmd(sandbox, cmd: str, description: str = "", timeout: int = 120) -> st
         return ""
 
 
+# ---------------------------------------------------------------------------
+# Repo info extraction for SDLC tasks
+# ---------------------------------------------------------------------------
+
+
+def _extract_repo_info_for_sandbox(ctx: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Extract repo cloning info from task context for Daytona sandbox.
+
+    Tries strategies in order:
+      1. Dockerfile git clone URLs (sg-evals mirrors, already at right commit)
+      2. Dockerfile # Repo: comment (SWEAP images)
+      3. Dockerfile # Source: org/repo (commit) (SWEAP debug tasks)
+      4. TAC_REPO_MAP for known TAC image tasks
+
+    Returns list of {url, commit, name, slug} dicts.
+    """
+    repos = []
+
+    # Strategy 1: Dockerfile git clone URLs (sg-evals mirrors)
+    clone_urls = ctx.get("repo_urls", [])
+    for entry in clone_urls:
+        url = entry.get("url", "")
+        slug = entry.get("slug", "")
+        target = entry.get("target", "repo")
+        if url:
+            # Ensure URL ends with .git for clone
+            clone_url = url if url.endswith(".git") else url + ".git"
+            # Extract dir name from target path
+            name = target.rstrip("/").split("/")[-1] if target else "repo"
+            repos.append({
+                "url": clone_url,
+                "commit": "HEAD",  # mirrors are at the right commit
+                "name": name,
+                "slug": slug,
+            })
+    if repos:
+        return repos
+
+    # Parse Dockerfile for comment-based strategies
+    task_dir = Path(ctx.get("task_dir", ""))
+    dockerfile = task_dir / "environment" / "Dockerfile"
+    if dockerfile.exists():
+        text = dockerfile.read_text()
+
+        # Strategy 2: # Repo: comment (SWEAP images)
+        m = re.search(r"#\s*Repo:\s*(\S+)", text)
+        if m:
+            slug = m.group(1).strip()
+            return [{
+                "url": f"https://github.com/{slug}.git",
+                "commit": "HEAD",
+                "name": slug.split("/")[-1],
+                "slug": slug,
+            }]
+
+        # Strategy 3: # Source: org/repo (commit) (SWEAP debug tasks)
+        m = re.search(r"#\s*Source:\s*(\S+)\s+\(([a-f0-9]+)\)", text)
+        if m:
+            slug = m.group(1).strip()
+            commit = m.group(2).strip()
+            return [{
+                "url": f"https://github.com/{slug}.git",
+                "commit": commit,
+                "name": slug.split("/")[-1],
+                "slug": slug,
+            }]
+
+        # Strategy 3b: Parse SWEAP FROM tag when # Source: uses instance ID format
+        # Tag format: jefzda/sweap-images:org.repo-org__repo-commitHash-version
+        m = re.search(
+            r"jefzda/sweap-images:([\w-]+)\.([\w-]+)-[\w_]+-([a-f0-9]{10,})",
+            text,
+        )
+        if m:
+            org = m.group(1)
+            repo = m.group(2)
+            commit = m.group(3)
+            slug = f"{org}/{repo}"
+            return [{
+                "url": f"https://github.com/{slug}.git",
+                "commit": commit,
+                "name": repo,
+                "slug": slug,
+            }]
+
+    # Strategy 4: TAC image mapping
+    task_name = ctx.get("task_name", "")
+    for key, info in TAC_REPO_MAP.items():
+        if key in task_name.lower():
+            slug = info["slug"]
+            return [{
+                "url": f"https://github.com/{slug}.git",
+                "commit": info["commit"],
+                "name": slug.split("/")[-1],
+                "slug": slug,
+            }]
+
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Sandbox setup and execution
+# ---------------------------------------------------------------------------
+
+
 def setup_curator_sandbox(
     daytona_client,
     creds: Dict[str, Any],
-    repo_url: str,
-    commit: str,
+    repos: List[Dict[str, str]],
     model: str = "claude-opus-4-6",
     backend: str = "hybrid",
 ) -> Any:
     """Create and set up a Daytona sandbox for curator work.
+
+    Args:
+        repos: List of {url, commit, name, slug} dicts for repos to clone.
 
     Returns the sandbox object, ready to run the curator agent.
     """
@@ -158,11 +271,12 @@ def setup_curator_sandbox(
         .add_local_file(str(SCRIPTS_DIR / "ds_wrapper.sh"), "/tmp/ds_wrapper.sh")
     )
 
+    label_task = repos[0].get("slug", "unknown")[:50] if repos else "unknown"
     params = CreateSandboxFromImageParams(
         image=image,
         language="python",
         env_vars={"DEBIAN_FRONTEND": "noninteractive"},
-        labels={"purpose": "curator", "repo": repo_url[:50]},
+        labels={"purpose": "curator", "task": label_task},
         resources=Resources(
             cpu=SANDBOX_CPUS,
             memory=SANDBOX_MEMORY_GB,
@@ -206,14 +320,26 @@ def setup_curator_sandbox(
 
     exec_cmd(sandbox, "chmod +x /tmp/ds_wrapper.sh 2>/dev/null || true")
 
-    # Clone the target repo
-    log.info("[%s] Cloning %s @ %s", sandbox.id[:8], repo_url, commit[:8])
-    exec_cmd(sandbox,
-        f"git clone --no-checkout {repo_url} /workspace/repo 2>&1 | tail -3",
-        "Cloning repo", timeout=300)
-    exec_cmd(sandbox,
-        f"cd /workspace/repo && git checkout {commit} 2>&1 | tail -3",
-        "Checking out commit", timeout=60)
+    # Clone repos
+    for repo in repos:
+        url = repo["url"]
+        commit = repo.get("commit", "HEAD")
+        name = repo.get("name", "repo")
+        target_dir = f"/workspace/{name}"
+        log.info("[%s] Cloning %s -> %s (commit: %s)",
+                 sandbox.id[:8], url, target_dir, commit[:8] if commit != "HEAD" else "HEAD")
+        exec_cmd(sandbox,
+            f"git clone --no-checkout {url} {target_dir} 2>&1 | tail -3",
+            f"Cloning {name}", timeout=300)
+        if commit != "HEAD":
+            exec_cmd(sandbox,
+                f"cd {target_dir} && git checkout {commit} 2>&1 | tail -3",
+                f"Checking out {commit[:8]}", timeout=60)
+        else:
+            # For mirrors/HEAD, just checkout the default branch
+            exec_cmd(sandbox,
+                f"cd {target_dir} && git checkout 2>&1 | tail -3",
+                f"Checking out HEAD", timeout=60)
 
     # Set ownership
     exec_cmd(sandbox,
@@ -276,20 +402,25 @@ sys.exit(result.returncode)
 
 def run_curator_in_sandbox(
     sandbox,
-    problem_statement: str,
-    repo_name: str,
     creds: Dict[str, Any],
     model: str = "claude-opus-4-6",
     backend: str = "hybrid",
     verbose: bool = False,
     suite_name: str = "",
     prompt_version: str = "phase1",
+    user_msg: str = "",
+    workdir: str = "/workspace/repo",
+    problem_statement: str = "",
+    repo_name: str = "",
 ) -> Dict[str, Any]:
     """Run the curator agent inside a Daytona sandbox.
 
     Uses claude CLI mode (subscription billing) with a Python wrapper script
     that calls subprocess.run() to avoid shell quoting issues with the
     system prompt (which contains $, backticks, braces, etc.).
+
+    For SDLC mode, pass user_msg and workdir directly.
+    For ContextBench mode, pass problem_statement and repo_name (legacy).
 
     Returns the oracle result dict.
     """
@@ -313,13 +444,15 @@ def run_curator_in_sandbox(
             task_type_guidance=get_task_type_guidance(suite_name),
         )
 
-    user_msg = (
-        f"## Task\n{problem_statement[:4000]}\n\n"
-        f"## Repositories\n"
-        f"- **{repo_name}**: `/workspace/repo`\n\n"
-        f"**Use these repo names in Deep Search queries**: {repo_name}\n\n"
-        f"**IMPORTANT**: Search the local repository thoroughly using Bash, Read, Glob, Grep tools."
-    )
+    # Build user message (SDLC mode provides it; ContextBench builds it here)
+    if not user_msg:
+        user_msg = (
+            f"## Task\n{problem_statement[:4000]}\n\n"
+            f"## Repositories\n"
+            f"- **{repo_name}**: `/workspace/repo`\n\n"
+            f"**Use these repo names in Deep Search queries**: {repo_name}\n\n"
+            f"**IMPORTANT**: Search the local repository thoroughly using Bash, Read, Glob, Grep tools."
+        )
 
     # Write system prompt and user message via base64 to avoid heredoc issues
     sys_b64 = base64.b64encode(system_prompt.encode()).decode()
@@ -348,7 +481,7 @@ def run_curator_in_sandbox(
     config = {
         "model": model,
         "allowed_tools": allowed,
-        "workdir": "/workspace/repo",
+        "workdir": workdir,
     }
     if access_token:
         config["CLAUDE_CODE_OAUTH_TOKEN"] = access_token
@@ -359,7 +492,7 @@ def run_curator_in_sandbox(
         config["mcp_config"] = "/tmp/.mcp.json"
 
     config_json = json.dumps(config)
-    cfg_delim = f"CFG_{hash(repo_name) & 0xFFFFFF:06x}"
+    cfg_delim = f"CFG_{hash(workdir) & 0xFFFFFF:06x}"
     exec_cmd(sandbox,
         f"cat > /tmp/curator_config.json << '{cfg_delim}'\n{config_json}\n{cfg_delim}",
         "Writing curator config")
@@ -418,6 +551,115 @@ def run_curator_in_sandbox(
     return {"oracle": result, "metadata": metadata}
 
 
+# ---------------------------------------------------------------------------
+# SDLC task processing
+# ---------------------------------------------------------------------------
+
+
+def process_sdlc_task(
+    task_dir: Path,
+    idx: int,
+    total: int,
+    daytona_client,
+    creds: Dict[str, Any],
+    model: str,
+    backend: str,
+    verbose: bool,
+    prompt_version: str = "phase1",
+) -> Optional[Dict[str, Any]]:
+    """Process a single SDLC task for ground truth generation in a Daytona sandbox."""
+    from context_retrieval_agent import (
+        parse_task_for_curator,
+        build_user_message,
+        write_curator_outputs,
+    )
+
+    task_name = f"{task_dir.parent.name}/{task_dir.name}"
+    log.info("[%d/%d] %s", idx + 1, total, task_name)
+
+    # 1. Parse task locally
+    ctx = parse_task_for_curator(task_dir)
+
+    # 2. Extract repo info for sandbox cloning
+    repos = _extract_repo_info_for_sandbox(ctx)
+    if not repos:
+        log.warning("[%d/%d] No repo info for %s, skipping", idx + 1, total, task_name)
+        return None
+
+    # 3. Build user message with sandbox repo paths
+    repo_paths = {}
+    for r in repos:
+        repo_paths[r["slug"]] = Path(f"/workspace/{r['name']}")
+    user_msg = build_user_message(ctx, repo_paths)
+
+    # 4. Determine workdir (first repo)
+    workdir = f"/workspace/{repos[0]['name']}"
+
+    sandbox = None
+    try:
+        # 5. Create sandbox and clone repos
+        sandbox = setup_curator_sandbox(
+            daytona_client, creds, repos=repos,
+            model=model, backend=backend,
+        )
+
+        # 6. Run curator in sandbox
+        result = run_curator_in_sandbox(
+            sandbox,
+            creds=creds,
+            model=model,
+            backend=backend,
+            verbose=verbose,
+            suite_name=ctx.get("suite_name", ""),
+            prompt_version=prompt_version,
+            user_msg=user_msg,
+            workdir=workdir,
+        )
+
+        n_files = len(result["oracle"].get("files", []))
+        cost = result["metadata"].get("cost_usd", 0)
+        elapsed = result["metadata"].get("elapsed_sec", 0)
+        log.info("[%d/%d] %s -> %d files, $%.4f, %.1fs",
+                 idx + 1, total, task_name, n_files, cost, elapsed)
+
+        # 7. Write ground truth locally
+        if result["oracle"].get("files"):
+            metadata = {
+                "model": model,
+                "backend": backend,
+                "prompt_version": prompt_version,
+                "cost_usd": cost,
+                "elapsed_sec": elapsed,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "tool_calls": result["metadata"].get("num_turns", 0),
+                "generator": "daytona_curator_runner",
+            }
+            write_curator_outputs(
+                task_dir, result["oracle"], metadata, ctx, overwrite=True,
+            )
+        else:
+            log.warning("[%d/%d] %s: no files found by curator", idx + 1, total, task_name)
+
+        return {"task_name": task_name, "result": result}
+
+    except Exception as e:
+        log.error("[%d/%d] %s failed: %s", idx + 1, total, task_name, e)
+        traceback.print_exc()
+        return None
+    finally:
+        if sandbox:
+            try:
+                daytona_client.delete(sandbox)
+                log.debug("[%s] Sandbox deleted", sandbox.id[:8])
+            except Exception as e:
+                log.warning("Failed to delete sandbox: %s", e)
+
+
+# ---------------------------------------------------------------------------
+# ContextBench task processing (existing behavior)
+# ---------------------------------------------------------------------------
+
+
 def process_task(
     task: Dict[str, Any],
     idx: int,
@@ -455,8 +697,10 @@ def process_task(
 
     sandbox = None
     try:
+        # Wrap single repo in list format for setup_curator_sandbox
+        repos = [{"url": repo_url, "commit": commit, "name": "repo", "slug": repo_name}]
         sandbox = setup_curator_sandbox(
-            daytona_client, creds, repo_url, commit,
+            daytona_client, creds, repos=repos,
             model=model, backend=backend,
         )
 
@@ -509,60 +753,139 @@ def process_task(
                 log.warning("Failed to delete sandbox: %s", e)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Run ContextBench calibration at high throughput via Daytona"
+# ---------------------------------------------------------------------------
+# Main: dual-mode entry point
+# ---------------------------------------------------------------------------
+
+
+def _run_sdlc_mode(args, creds: Dict[str, Any]) -> int:
+    """SDLC mode: generate ground truth for CodeScaleBench tasks."""
+    from context_retrieval_agent import discover_tasks, load_task_context
+
+    # Discover tasks
+    tasks = discover_tasks(
+        suite=args.suite,
+        task_dir=args.task_dir,
+        sdlc_all=args.sdlc_all,
+        mcp_all=args.mcp_all,
     )
-    parser.add_argument("--sample", type=int, default=0, help="Number of tasks to sample")
-    parser.add_argument("--verified", action="store_true", help="Use verified subset (500)")
-    parser.add_argument("--phase", type=str, default="", choices=("", "test", "verify"),
-                        help="Calibration phase: 'test' (10) or 'verify' (50)")
-    parser.add_argument("--model", type=str, default="claude-opus-4-6")
-    parser.add_argument("--prompt-version", type=str, default="phase1",
-                        choices=("phase1", "v7"),
-                        help="Prompt version: phase1 (recall-focused) or v7 (edit-centric). Default: phase1")
-    parser.add_argument("--backend", type=str, default="hybrid",
-                        choices=("local", "deepsearch", "hybrid"))
-    parser.add_argument("--parallel", type=int, default=DEFAULT_PARALLEL,
-                        help=f"Concurrent sandboxes (default: {DEFAULT_PARALLEL})")
-    parser.add_argument("--max-cost", type=float, default=0, help="Cost limit in USD")
-    parser.add_argument("--max-tasks", type=int, default=0, help="Max tasks to process")
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--out", type=str, default="", help="Output directory")
-    parser.add_argument("--prune", action="store_true",
-                        help="Run haiku pruning pass to improve precision")
-    parser.add_argument("--instance-ids", type=str, default="",
-                        help="Comma-separated instance ID suffixes to filter tasks")
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--verbose", action="store_true")
-    args = parser.parse_args()
+    if not tasks:
+        log.error("No tasks found")
+        return 1
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
+    # Filter to missing-only if requested
+    original_count = len(tasks)
+    if args.missing_only:
+        filtered = []
+        for t in tasks:
+            tests_dir = t / "tests"
+            has_gt = (
+                (tests_dir / "ground_truth.json").exists()
+                or (tests_dir / "oracle_answer.json").exists()
+            )
+            if not has_gt:
+                filtered.append(t)
+        tasks = filtered
+        log.info("Filtered %d -> %d tasks (missing_only=True)", original_count, len(tasks))
 
-    # Add scripts dir to path for imports
-    sys.path.insert(0, str(SCRIPTS_DIR))
+    if args.max_tasks > 0:
+        tasks = tasks[:args.max_tasks]
 
+    if not tasks:
+        log.info("All tasks already have ground truth. Nothing to do.")
+        return 0
+
+    log.info("SDLC mode: %d tasks (model=%s, backend=%s, parallel=%d, prompt=%s)",
+             len(tasks), args.model, args.backend, args.parallel, args.prompt_version)
+
+    if args.dry_run:
+        for i, t in enumerate(tasks):
+            ctx = load_task_context(t)
+            repos = _extract_repo_info_for_sandbox(ctx)
+            repo_info = repos[0]["slug"] if repos else "NO_REPO"
+            print(f"  [{i+1}] {t.parent.name}/{t.name} ({repo_info})")
+        print(f"\nTotal: {len(tasks)} tasks, {args.parallel} concurrent sandboxes")
+        return 0
+
+    # Initialize Daytona client
+    try:
+        from daytona_sdk import Daytona, DaytonaConfig
+        daytona = Daytona(DaytonaConfig(
+            api_key=creds["daytona_api_key"],
+            target=os.environ.get("DAYTONA_TARGET", "us"),
+        ))
+    except ImportError:
+        log.error("daytona_sdk not installed: pip install daytona-sdk")
+        return 1
+
+    # Run tasks in parallel
+    total_cost = 0.0
+    completed = []
+    failed = []
+
+    task_args = [
+        (task_dir, i, len(tasks), daytona, creds, args.model, args.backend,
+         args.verbose, args.prompt_version)
+        for i, task_dir in enumerate(tasks)
+    ]
+
+    future_timeout = SANDBOX_TIMEOUT_SEC + 120
+
+    with ThreadPoolExecutor(max_workers=args.parallel) as executor:
+        futures = {
+            executor.submit(process_sdlc_task, *ta): ta[0]  # task_dir
+            for ta in task_args
+        }
+        for future in as_completed(futures, timeout=future_timeout + 60):
+            task_dir = futures.get(future, Path("?"))
+            try:
+                outcome = future.result(timeout=future_timeout)
+            except TimeoutError:
+                log.warning("Task %s timed out (>%ds), skipping", task_dir, future_timeout)
+                failed.append(str(task_dir))
+                continue
+            except Exception as e:
+                log.warning("Task %s raised %s: %s", task_dir, type(e).__name__, e)
+                failed.append(str(task_dir))
+                continue
+            if outcome is None:
+                failed.append(str(task_dir))
+                continue
+            cost = outcome["result"]["metadata"].get("cost_usd", 0)
+            total_cost += cost
+            completed.append(outcome["task_name"])
+
+            if args.max_cost > 0 and total_cost >= args.max_cost:
+                log.warning("Cost limit $%.2f reached, cancelling remaining", total_cost)
+                for f in futures:
+                    f.cancel()
+                break
+
+    # Summary
+    print(f"\n{'=' * 60}")
+    print("SDLC Ground Truth Generation (Daytona)")
+    print(f"{'=' * 60}")
+    print(f"Model: {args.model} | Backend: {args.backend} | Prompt: {args.prompt_version}")
+    print(f"Completed: {len(completed)}/{len(tasks)} | Failed: {len(failed)} | Cost: ${total_cost:.2f}")
+    if failed:
+        print(f"\nFailed tasks:")
+        for f in failed[:20]:
+            print(f"  - {f}")
+    print(f"{'=' * 60}")
+
+    return 0 if completed else 1
+
+
+def _run_contextbench_mode(args, creds: Dict[str, Any]) -> int:
+    """ContextBench mode: calibration with trajectory + metrics output."""
     from validate_on_contextbench import (
         load_tasks, ccb_weighted_sample, stratified_sample,
         compute_simple_file_metrics, compute_chunk_metrics,
         build_calibration_report,
     )
 
-    # Load credentials
-    creds = load_credentials()
-    if not creds["daytona_api_key"]:
-        log.error("DAYTONA_API_KEY required. Set in env or ~/.config/daytona/env.sh")
-        return 1
-    if not creds.get("oauth_creds"):
-        log.error("OAuth credentials required. Check ~/.claude-homes/account1/.claude/.credentials.json")
-        return 1
-
     # Load tasks
     if args.instance_ids:
-        # Filter to specific instance IDs (match by suffix)
         suffixes = [s.strip() for s in args.instance_ids.split(",") if s.strip()]
         all_tasks = load_tasks(sample=0, seed=args.seed)
         tasks = [t for t in all_tasks
@@ -620,7 +943,6 @@ def main() -> int:
         for i, task in enumerate(tasks)
     ]
 
-    # Per-future timeout: SANDBOX_TIMEOUT_SEC + 120s buffer for setup/cleanup
     future_timeout = SANDBOX_TIMEOUT_SEC + 120
 
     with ThreadPoolExecutor(max_workers=args.parallel) as executor:
@@ -716,6 +1038,78 @@ def main() -> int:
     print(f"{'=' * 70}")
 
     return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Run curator ground truth generation via Daytona (SDLC or ContextBench)"
+    )
+
+    # SDLC mode flags
+    sdlc_group = parser.add_argument_group("SDLC mode (ground truth generation)")
+    sdlc_group.add_argument("--sdlc-all", action="store_true",
+                            help="Process all SDLC tasks")
+    sdlc_group.add_argument("--mcp-all", action="store_true",
+                            help="Process all MCP-unique tasks")
+    sdlc_group.add_argument("--suite", type=str, default="",
+                            help="Process tasks in a specific suite (e.g., csb_sdlc_debug)")
+    sdlc_group.add_argument("--task-dir", type=str, default="",
+                            help="Single task directory to process")
+    sdlc_group.add_argument("--missing-only", action="store_true",
+                            help="Only process tasks missing ground_truth.json")
+
+    # ContextBench mode flags
+    cb_group = parser.add_argument_group("ContextBench mode (calibration)")
+    cb_group.add_argument("--sample", type=int, default=0, help="Number of tasks to sample")
+    cb_group.add_argument("--verified", action="store_true", help="Use verified subset (500)")
+    cb_group.add_argument("--phase", type=str, default="", choices=("", "test", "verify"),
+                          help="Calibration phase: 'test' (10) or 'verify' (50)")
+    cb_group.add_argument("--seed", type=int, default=42)
+    cb_group.add_argument("--out", type=str, default="", help="Output directory")
+    cb_group.add_argument("--prune", action="store_true",
+                          help="Run haiku pruning pass to improve precision")
+    cb_group.add_argument("--instance-ids", type=str, default="",
+                          help="Comma-separated instance ID suffixes to filter tasks")
+
+    # Shared flags
+    parser.add_argument("--model", type=str, default="claude-opus-4-6")
+    parser.add_argument("--prompt-version", type=str, default="phase1",
+                        choices=("phase1", "v7"),
+                        help="Prompt version: phase1 (recall-focused) or v7 (edit-centric). Default: phase1")
+    parser.add_argument("--backend", type=str, default="hybrid",
+                        choices=("local", "deepsearch", "hybrid"))
+    parser.add_argument("--parallel", type=int, default=DEFAULT_PARALLEL,
+                        help=f"Concurrent sandboxes (default: {DEFAULT_PARALLEL})")
+    parser.add_argument("--max-cost", type=float, default=0, help="Cost limit in USD")
+    parser.add_argument("--max-tasks", type=int, default=0, help="Max tasks to process")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+
+    # Add scripts dir to path for imports
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+    # Load credentials (skip validation for dry-run)
+    creds = load_credentials()
+    if not args.dry_run:
+        if not creds["daytona_api_key"]:
+            log.error("DAYTONA_API_KEY required. Set in env or ~/.config/daytona/env.sh")
+            return 1
+        if not creds.get("oauth_creds"):
+            log.error("OAuth credentials required. Check ~/.claude-homes/account1/.claude/.credentials.json")
+            return 1
+
+    # Dispatch to appropriate mode
+    sdlc_mode = args.sdlc_all or args.mcp_all or args.suite or args.task_dir
+    if sdlc_mode:
+        return _run_sdlc_mode(args, creds)
+    else:
+        return _run_contextbench_mode(args, creds)
 
 
 if __name__ == "__main__":
