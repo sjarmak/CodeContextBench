@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Export GitHub-friendly official run summaries with parsed trace views.
+"""Export GitHub-friendly run summaries with parsed trace views.
 
-Builds a static bundle from runs/official with:
+Builds a static bundle from runs/analysis with:
 - README.md summary tables
 - Per-run markdown pages
 - Per-task markdown pages with parsed trace/tool details
 - data/official_results.json (machine-readable)
 - index.html (local browser UI)
 
-Intended for publishing valid scored official runs and allowing local browsing.
+Intended for publishing valid scored runs and allowing local browsing.
 If raw runs are unavailable locally, `--serve` can still host an existing bundle.
 """
 
@@ -1466,7 +1466,7 @@ def _build_root_readme(suite_summaries: list[dict[str, Any]], run_summaries: lis
     generated = datetime.now(timezone.utc).isoformat()
     lines.append("# Official Results Browser")
     lines.append("")
-    lines.append("This bundle is generated from `runs/official/` and includes only valid scored tasks (`passed`/`failed` with numeric reward).")
+    lines.append("This bundle is generated from `runs/analysis/` and includes only valid scored tasks (`passed`/`failed` with numeric reward).")
     lines.append("")
     lines.append(f"Generated: `{generated}`")
     lines.append("")
@@ -1912,8 +1912,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--runs-dir",
-        default="./runs/official",
-        help="Path to official runs directory (default: ./runs/official)",
+        default="./runs/analysis",
+        help="Path to runs directory (default: ./runs/analysis)",
     )
     parser.add_argument(
         "--output-dir",
@@ -1969,7 +1969,7 @@ def main() -> int:
             _serve_directory(output_dir, args.port)
             return 0
         print(f"[FAIL] runs dir not found: {runs_dir}")
-        print("[HINT] Pass --runs-dir to a local official runs checkout, or run with --serve to host an existing docs bundle.")
+        print("[HINT] Pass --runs-dir to a local analysis runs checkout, or run with --serve to host an existing docs bundle.")
         return 2
 
     run_filter = set(args.run) if args.run else None
