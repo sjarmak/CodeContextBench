@@ -128,7 +128,7 @@ runs/staging/{run_name}/
 ```
 
 These artifacts are fully compatible with:
-- **Runs explorer**: `python3 scripts/export_official_results.py`
+- **Runs explorer**: `python3 scripts/export_official_results.py` (defaults to `runs/analysis/`; pass `--runs-dir ./runs/official/` for curated official runs)
 - **IR analysis pipeline**: `python3 scripts/normalize_retrieval_events.py`
 - **QA validation**: `python3 scripts/validate_task_run.py`
 - **Metrics extraction**: `python3 scripts/extract_task_metrics.py`
