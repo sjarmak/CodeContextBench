@@ -153,11 +153,13 @@ Where cost is mixed, speed is not. MCP is substantially faster across the board,
 | Wall clock | 369 | 403.1 | 356.2 | -46.8 |
 | Agent execution | 369 | 237.1 | 146.7 | -90.4 |
 
+Agent execution time (excluding infrastructure overhead) tells the cleaner story: the agent's problem-solving phase is 38% shorter with MCP. Org tasks see the biggest speedup (-63 seconds wall clock, -19.8%), because remote search eliminates the need to read many local files when source is truncated. SDLC tasks are also faster (-23 seconds, -4.4%), though the improvement is smaller since local code is already available.
+
 On suites where MCP improves reward (Org security and incident especially), you get better results faster and cheaper. Where MCP hurts (debug), you get worse results faster and at slightly higher cost. This is useful signal for figuring out where these tools are worth using.
 
 ## MCP Tool Usage Patterns
 
-Agents overwhelmingly default to keyword search. Deep Search was almost never invoked organically (6 tasks, 8 calls across 602 MCP runs). The agent relies on keyword search (4,813 calls) and file reading (6,324 calls) as its primary tools. Natural language search is used in ~42% of tasks but contributes only 587 calls. Agents seem to have a strong preference for exact keyword matching over semantic search, even when they are told outright about these tools.
+Agents overwhelmingly default to keyword search. Deep Search was almost never invoked organically (6 tasks, 8 calls across 602 MCP runs). The agent relies on keyword search (4,813 calls) and file reading (6,324 calls) as its primary MCP tools. Natural language search is used in ~42% of tasks but contributes only 587 calls vs 4,813 for keyword search. The search strategy breakdown: the vast majority of tasks use keyword-only or keyword-dominant approaches, with natural language search as a secondary fallback, and Deep Search effectively ignored. Agents seem to have a strong preference for exact keyword matching over semantic search, even when they are told outright about these tools.
 
 ## Auditable Results (Transcripts!)
 
@@ -175,15 +177,19 @@ In addition to being able to navigate the results via markdowns, if you clone th
 python3 scripts/export_official_results.py --serve
 ```
 
-You get a local results explorer where you can browse every task run. It shows the full set of task runs across all suites, configs, and runs.
+You get a local results explorer where you can browse every task run. It shows 4,132 total task evaluations across all suites, configs, and runs.
 
 The Official Results Browser lets you filter by suite, task run, config, and status. Every row links to the task's repo, benchmark definition, trajectory, and audit trail.
+
+Drilling into a specific task, here's a baseline run of bustub-hyperloglog-impl-001 in the feature suite. You can see it took 2269 seconds (nearly 38 minutes), made 175 tool calls, consumed 28.5M input tokens, and scored a reward of 0.167. The full conversation history (388 messages) is right there for inspection.
+
+And an example MCP-augmented run: mcp_CCX-compliance-124 in the compliance suite. 115 seconds total, 20 tool calls, MCP ratio of 0.950, reward of 0.7419. The agent trace starts with "I'll help you audit the CSP enforcement infrastructure in Firefox" and immediately goes to the relevant dom/security/ directory via Sourcegraph MCP tools.
 
 Each task detail view has expandable sections for the tool breakdown, context metrics / IR analysis, and the complete conversation history. You can verify not just whether the agent succeeded, but how it approached the task, what tools it used, and where it went wrong or right.
 
 ## How I Built This (And What Broke)
 
-I built CodeScaleBench almost entirely with Claude Code, the same AI coding agent I used for the benchmark runs. ~1000 conversation sessions over about a month, producing the task selection pipeline, 190+ Docker environment variants, a 3,500-line IR evaluation pipeline, a 7-function oracle scoring system, and helper skills for everything from benchmark design to pre-flight validation to results QA.
+I built CodeScaleBench almost entirely with Claude Code, the same AI coding agent I used for the initial benchmark runs. ~600 conversation sessions over about a month, producing the task selection pipeline, 190+ Docker environment variants, a 3,500-line IR evaluation pipeline, a 7-function oracle scoring system, and helper skills for everything from benchmark design to pre-flight validation to results QA.
 
 The process taught me a lot about where AI-assisted development works well and where issues pop up.
 
