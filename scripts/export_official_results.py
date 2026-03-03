@@ -40,7 +40,7 @@ DEFAULT_REPO_BLOB_BASE = "https://github.com/sourcegraph/CodeScaleBench/blob/mai
 if str(PROJECT_ROOT / "scripts") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
-from config_utils import discover_configs, is_mcp_config
+from config_utils import discover_configs, is_config_dir, is_mcp_config
 from official_runs import (
     top_level_run_dirs,
     load_manifest,
@@ -244,6 +244,56 @@ def _iter_task_dirs(config_dir: Path) -> list[Path]:
             continue
         task_dirs.append(trial_dir)
     return task_dirs
+
+
+def _suite_from_path_parts(parts: tuple[str, ...], prefix_map: dict[str, str]) -> str:
+    """Best-effort suite inference for non-official directory layouts."""
+    for part in parts:
+        if part.startswith(("csb_sdlc_", "csb_org_", "ccb_mcp_")):
+            return part
+    for part in parts:
+        if part.startswith(("ccb_", "csb_")):
+            suite = _suite_from_run_dir(part, prefix_map)
+            if suite != "unknown":
+                return suite
+    return "unknown"
+
+
+def _iter_analysis_layout_tasks(
+    runs_dir: Path,
+    prefix_map: dict[str, str],
+    run_filter: set[str] | None,
+) -> list[tuple[str, str, str, Path]]:
+    """Discover tasks in analysis-style layout:
+    runs/analysis/.../<suite>/<config>/<task>/<trial>/result.json
+    """
+    discovered: list[tuple[str, str, str, Path]] = []
+    for result_path in sorted(runs_dir.rglob("result.json")):
+        if any(part in SKIP_DIR_PARTS for part in result_path.parts):
+            continue
+        task_dir = result_path.parent
+        if (task_dir / "__broken_verifier").exists():
+            continue
+        try:
+            payload = json.loads(result_path.read_text())
+        except Exception:
+            continue
+        if not _is_task_result_payload(payload):
+            continue
+
+        rel_parts = result_path.relative_to(runs_dir).parts
+        config_idx = next((i for i, part in enumerate(rel_parts) if is_config_dir(part)), None)
+        if config_idx is None:
+            continue
+
+        config = rel_parts[config_idx]
+        run_dir_name = "/".join(rel_parts[:config_idx]) if config_idx > 0 else "analysis"
+        if run_filter and run_dir_name not in run_filter:
+            continue
+
+        suite = _suite_from_path_parts(rel_parts, prefix_map)
+        discovered.append((suite, run_dir_name, config, task_dir))
+    return discovered
 
 
 def _extract_reward_and_status(result_payload: dict[str, Any]) -> tuple[float | None, str]:
@@ -1745,53 +1795,61 @@ def build_export(
     audits_dir = output_dir / "audits"
     traces_dir = output_dir / "traces"
 
+    def _append_task_record(suite: str, run_dir_name: str, config: str, task_dir: Path) -> None:
+        normalized_config = _normalize_config_for_suite(suite, config)
+        extracted = _extract_task_record(suite, run_dir_name, normalized_config, task_dir, max_examples)
+        if extracted is None:
+            return
+        record, audit_payload = extracted
+
+        task_slug = _slug(f"{run_dir_name}--{config}--{record.task_name}")
+        bundled_trace_paths: dict[str, str | None] = {"trajectory": None, "transcript": None}
+        if record.trace_paths.get("trajectory"):
+            src = PROJECT_ROOT / record.trace_paths["trajectory"]
+            if src.is_file():
+                rel = f"traces/{task_slug}/trajectory.json"
+                dst = traces_dir / task_slug / "trajectory.json"
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                bundled_trace_paths["trajectory"] = rel
+        if record.trace_paths.get("transcript"):
+            src_tx = PROJECT_ROOT / record.trace_paths["transcript"]
+            if src_tx.is_file():
+                tx_name = src_tx.name
+                rel_tx = f"traces/{task_slug}/{tx_name}"
+                dst_tx = traces_dir / task_slug / tx_name
+                dst_tx.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_tx, dst_tx)
+                bundled_trace_paths["transcript"] = rel_tx
+        record.bundled_trace_paths = bundled_trace_paths
+
+        audit_page_rel = f"audits/{task_slug}.json"
+        record.audit_page = audit_page_rel
+        _write_text(audits_dir / f"{task_slug}.json", json.dumps(audit_payload, indent=2, sort_keys=True))
+        task_page_rel = f"tasks/{task_slug}.html"
+        task_page_path = tasks_dir / f"{task_slug}.html"
+        _write_text(task_page_path, _build_task_page(record))
+
+        task_dict = _to_task_dict(
+            record,
+            task_page_rel,
+            output_dir,
+            repo_blob_base,
+        )
+        tasks_out.append(task_dict)
+
     for run_dir in run_dirs:
         suite = _suite_from_run_dir(run_dir.name, prefix_map)
         configs = discover_configs(run_dir)
         for config in configs:
-            normalized_config = _normalize_config_for_suite(suite, config)
             config_dir = run_dir / config
             for task_dir in _iter_task_dirs(config_dir):
-                extracted = _extract_task_record(suite, run_dir.name, normalized_config, task_dir, max_examples)
-                if extracted is None:
-                    continue
-                record, audit_payload = extracted
+                _append_task_record(suite, run_dir.name, config, task_dir)
 
-                task_slug = _slug(f"{run_dir.name}--{config}--{record.task_name}")
-                bundled_trace_paths: dict[str, str | None] = {"trajectory": None, "transcript": None}
-                if record.trace_paths.get("trajectory"):
-                    src = PROJECT_ROOT / record.trace_paths["trajectory"]
-                    if src.is_file():
-                        rel = f"traces/{task_slug}/trajectory.json"
-                        dst = traces_dir / task_slug / "trajectory.json"
-                        dst.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(src, dst)
-                bundled_trace_paths["trajectory"] = rel
-                if record.trace_paths.get("transcript"):
-                    src_tx = PROJECT_ROOT / record.trace_paths["transcript"]
-                    if src_tx.is_file():
-                        tx_name = src_tx.name
-                        rel_tx = f"traces/{task_slug}/{tx_name}"
-                        dst_tx = traces_dir / task_slug / tx_name
-                        dst_tx.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(src_tx, dst_tx)
-                        bundled_trace_paths["transcript"] = rel_tx
-                record.bundled_trace_paths = bundled_trace_paths
-
-                audit_page_rel = f"audits/{task_slug}.json"
-                record.audit_page = audit_page_rel
-                _write_text(audits_dir / f"{task_slug}.json", json.dumps(audit_payload, indent=2, sort_keys=True))
-                task_page_rel = f"tasks/{task_slug}.html"
-                task_page_path = tasks_dir / f"{task_slug}.html"
-                _write_text(task_page_path, _build_task_page(record))
-
-                task_dict = _to_task_dict(
-                    record,
-                    task_page_rel,
-                    output_dir,
-                    repo_blob_base,
-                )
-                tasks_out.append(task_dict)
+    # Fallback: analysis layout does not have official run-dir/config structure.
+    if not tasks_out:
+        for suite, run_dir_name, config, task_dir in _iter_analysis_layout_tasks(runs_dir, prefix_map, run_filter):
+            _append_task_record(suite, run_dir_name, config, task_dir)
 
     run_summaries: list[dict[str, Any]] = []
     suite_summaries: list[dict[str, Any]] = []
