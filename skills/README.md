@@ -124,16 +124,3 @@ Skills are plain markdown — any agent that can read files can use them. Point 
 ```
 Read skills/mcp-audit/SKILL.md and then run an MCP audit for the latest benchmark run.
 ```
-
-## Adapting for Your Own Project
-
-These skills demonstrate how to encode project-specific operational knowledge.
-To create skills for your own project:
-
-1. **Identify repetitive workflows** — What do you explain to the AI agent every session?
-2. **Write the steps** — Include exact commands, expected outputs, and decision points
-3. **Add context** — What files are involved? What does each step check?
-4. **Include variants** — Show common flag combinations and alternative invocations
-5. **Document failure modes** — What can go wrong and how to recover?
-
-The key insight: if you've explained a workflow to an AI agent more than twice, it should be a skill file.
