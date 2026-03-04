@@ -16,13 +16,13 @@ import pytest
 # Make scripts/ importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from ccb_metrics.judge import (
+from csb_metrics.judge import (
     JudgeInput,
     JudgeResult,
     LLMJudge,
     normalize_score,
 )
-from ccb_metrics.judge.backends import AnthropicBackend, JudgeBackendError
+from csb_metrics.judge.backends import AnthropicBackend, JudgeBackendError, _parse_json
 
 # ---------------------------------------------------------------------------
 # Shared fixtures / helpers
@@ -70,7 +70,7 @@ def _make_judge() -> LLMJudge:
 
 
 class TestNormalizeScore:
-    """Tests for ccb_metrics.judge.models.normalize_score."""
+    """Tests for csb_metrics.judge.models.normalize_score."""
 
     def test_string_pass(self):
         assert normalize_score("pass") == 1.0
@@ -292,7 +292,7 @@ class TestAnthropicBackendRetry:
             return valid_json_str
 
         with patch.object(AnthropicBackend, "_raw_call", side_effect=flaky_raw_call):
-            with patch("ccb_metrics.judge.backends.time.sleep"):  # skip actual sleep
+            with patch("csb_metrics.judge.backends.time.sleep"):  # skip actual sleep
                 result = backend.call("system", "user")
 
         assert call_count == 2
@@ -314,5 +314,5 @@ class TestAnthropicBackendRetry:
     def test_parse_json_from_markdown_code_block(self):
         """_parse_json handles responses wrapped in ```json``` code blocks."""
         wrapped = f"```json\n{json.dumps(_MOCK_BACKEND_RESPONSE)}\n```"
-        result = AnthropicBackend._parse_json(wrapped)
+        result = _parse_json(wrapped)
         assert result["reasoning"] == _MOCK_BACKEND_RESPONSE["reasoning"]

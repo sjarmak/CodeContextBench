@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.extract_task_metrics import process_task_dir
-from scripts.ccb_metrics.models import TaskMetrics
+from scripts.csb_metrics.models import TaskMetrics
 
 
 class ExtractTaskMetricsEmitterTests(unittest.TestCase):

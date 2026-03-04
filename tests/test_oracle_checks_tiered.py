@@ -1,4 +1,4 @@
-"""Unit tests for tiered scoring in scripts/ccb_metrics/oracle_checks.py.
+"""Unit tests for tiered scoring in scripts/csb_metrics/oracle_checks.py.
 
 Covers the two-tier weighted scoring added to check_file_set_match and the
 _get_primary_score preference for weighted_f1 over plain f1.
@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.ccb_metrics.oracle_checks import check_file_set_match, _get_primary_score
+from scripts.csb_metrics.oracle_checks import check_file_set_match, _get_primary_score
 
 
 def _file(repo, path, tier=None):
