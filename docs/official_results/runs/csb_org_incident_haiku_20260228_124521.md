@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [mcp_ccx-incident-031_w5iQl2](../tasks/csb_org_incident_haiku_20260228_124521--mcp-remote-direct--mcp_ccx-incident-031_w5iQl2.html) | `passed` | 1.000 | 0.833 | 6 | traj, tx |
+| [mcp_ccx-incident-031_w5iQl2](../tasks/csb_org_incident_haiku_20260228_124521--mcp-remote-direct--mcp_ccx-incident-031_w5iQl2--5a33cd867e.html) | `passed` | 1.000 | 0.833 | 6 | traj, tx |

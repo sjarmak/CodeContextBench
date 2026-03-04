@@ -8,7 +8,7 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [ccx-dep-trace-106](../tasks/csb_org_crossrepo_haiku_20260228_005303--baseline-local-direct--ccx-dep-trace-106.html) | `passed` | 0.850 | 0.000 | 26 | traj, tx |
+| [ccx-dep-trace-106](../tasks/csb_org_crossrepo_haiku_20260228_005303--baseline-local-direct--ccx-dep-trace-106--38fc605ebc.html) | `passed` | 0.850 | 0.000 | 26 | traj, tx |
 
 ## mcp-remote-direct
 
@@ -18,4 +18,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [mcp_CCX-dep-trace-106_5gZPL7](../tasks/csb_org_crossrepo_haiku_20260228_005303--mcp-remote-direct--mcp_CCX-dep-trace-106_5gZPL7.html) | `passed` | 0.633 | 0.944 | 18 | traj, tx |
+| [mcp_CCX-dep-trace-106_5gZPL7](../tasks/csb_org_crossrepo_haiku_20260228_005303--mcp-remote-direct--mcp_CCX-dep-trace-106_5gZPL7--8db9fb4872.html) | `passed` | 0.633 | 0.944 | 18 | traj, tx |

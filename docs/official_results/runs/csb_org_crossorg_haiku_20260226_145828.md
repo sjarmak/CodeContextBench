@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [ccx-crossorg-062](../tasks/csb_org_crossorg_haiku_20260226_145828--baseline-local-direct--ccx-crossorg-062.html) | `passed` | 0.335 | 0.000 | 35 | traj, tx |
+| [ccx-crossorg-062](../tasks/csb_org_crossorg_haiku_20260226_145828--baseline-local-direct--ccx-crossorg-062--a6c2ec8d37.html) | `passed` | 0.335 | 0.000 | 35 | traj, tx |

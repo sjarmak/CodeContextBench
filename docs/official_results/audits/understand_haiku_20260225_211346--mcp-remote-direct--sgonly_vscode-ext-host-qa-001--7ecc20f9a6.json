@@ -1,0 +1,1142 @@
+{
+  "metrics": {
+    "agent_execution_seconds": 89.425668,
+    "cache_tokens": 2413784,
+    "context_metrics": {
+      "context_window_peak_pct": 0.4485,
+      "environment_setup_seconds": 7.315663,
+      "files_modified": 1,
+      "lines_added": 294,
+      "lines_removed": 0,
+      "task_context_length": null,
+      "verifier_seconds": 0.585801
+    },
+    "input_tokens": 2414327,
+    "ir_metrics": {},
+    "mcp_ratio": 0.9629629629629629,
+    "output_tokens": 65,
+    "search_calls_deepsearch": 0,
+    "search_calls_keyword": 7,
+    "search_calls_nls": 2,
+    "tool_calls_by_name": {
+      "Write": 1,
+      "mcp__sourcegraph__sg_keyword_search": 7,
+      "mcp__sourcegraph__sg_list_files": 5,
+      "mcp__sourcegraph__sg_nls_search": 2,
+      "mcp__sourcegraph__sg_read_file": 12
+    },
+    "tool_calls_local": 1,
+    "tool_calls_mcp": 26,
+    "tool_calls_total": 27,
+    "wall_clock_seconds": 175.571784
+  },
+  "parsed_trace": {
+    "trajectory": {
+      "bash_commands": [],
+      "code_changes": [
+        {
+          "content": "# VS Code Extension Host Isolation\n\n## Q1: Process Isolation Architecture\n\nVS Code uses **Electron's `utilityProcess` API** to spawn the extension host as a completely separate operating system process. This is the fundamental mechanism that provides isolation.\n\n**Key Implementation Details:**\n\n1. **Process Creation** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:1-100`):\n   - The `WindowUtilityProcess` class wraps Electron's native `utilityProcess.fork()` API\n   - Each extension host is spawned as an independent process with its own Node.js runtime\n   - The extension host entry point is specified in the configuration and loaded in the spawned process\n\n2. **Process Lifecycle Management** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts:70-100`):\n   - `ExtensionHostStarter.createExtensionHost()` creates a new `WindowUtilityProcess`\n   - Each extension host is assigned a unique ID and tracked in a map\n   - Exit handlers are registered immediately upon process creation (line 77)\n\n3. **OS-Level Isolation**:\n   - At the OS level, the extension host and main window are **parent and child processes**\n   - The main window (renderer process) runs in the primary Electron BrowserWindow\n   - The extension host runs in a completely separate process with independent memory, file descriptors, and system resources\n   - If the extension host process crashes, the OS notifies the main process via exit events\n   - There is **no shared memory** between the processes\u2014they cannot directly access each other's memory\n\n4. **Process Relationship**:\n   - The extension host process is a **child of the main Electron process**\n   - If the extension host crashes, only that child process terminates\n   - The parent (main window) continues running because it has its own process lifecycle\n   - The crash does not propagate to the parent\u2014it's caught by the parent's event handlers\n\n**Evidence:**\n- `src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:6-7`: Uses Electron's `utilityProcess` and `UtilityProcess` classes\n- `src/vs/platform/extensions/electron-main/extensionHostStarter.ts:75`: Creates `WindowUtilityProcess` with log, windows, telemetry, and lifecycle services\n- `src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:50-88`: `ExtensionHostProcess` wrapper provides the interface to the spawned process\n\n---\n\n## Q2: Communication Between Processes\n\nVS Code uses **RPC (Remote Procedure Call) Protocol over IPC sockets** for communication between the main window and extension host. This communication mechanism is completely independent of process lifecycle.\n\n**Key Implementation Details:**\n\n1. **Message Passing Protocol** (`src/vs/workbench/services/extensions/common/rpcProtocol.ts:1-150`):\n   - The `RPCProtocol` class implements a request-response protocol over `IMessagePassingProtocol`\n   - Messages are serialized to JSON with buffer references, sent across the IPC channel\n   - Each RPC call includes a message ID and expects an acknowledgment\n   - Protocol handles both incoming and outgoing messages\n\n2. **IPC Channel Creation** (`src/vs/base/parts/ipc/common/ipc.js` and `src/vs/base/parts/ipc/node/ipc.net.ts`):\n   - Communication happens over **named pipes (Windows) or Unix domain sockets (macOS/Linux)**\n   - The `IMessagePassingProtocol` interface abstracts the underlying transport\n   - Messages are read/written via `ProtocolReader` and `ProtocolWriter` classes\n   - Socket connection is established as part of extension host startup\n\n3. **Connection Lifecycle** (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:42-48`):\n   - The extension host receives a message port during initialization\n   - The port is used to establish the WebSocket-based communication channel\n   - Both processes maintain this connection for RPC messages\n\n4. **Crash Detection via IPC Disconnection** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:316-325`):\n   - Exit Event Handler (line 317): `process.on('exit', code => { ... })`\n     - Fires when the extension host process exits\n     - Calls `this._onExit.fire()` to notify listeners\n   - V8 Error Handler (line 328): `process.on('error', (type, location, report) => { ... })`\n     - Fires when a V8 crash is detected in the extension host\n   - Child Process Gone Handler (line 368): `app.on('child-process-gone', (event, details) => { ... })`\n     - Electron notifies when a utility process terminates unexpectedly\n\n5. **What Happens When Connection Breaks**:\n   - The RPC protocol tracks pending replies in `_pendingRPCReplies` (`src/vs/workbench/services/extensions/common/rpcProtocol.ts:135`)\n   - If the socket closes, the protocol receives an `onClose` event (`src/vs/base/parts/ipc/node/ipc.net.ts:963`)\n   - Pending RPC calls timeout after `UNRESPONSIVE_TIME = 3 seconds` (line 121)\n   - The extension host manager detects disconnection and fires `onDidExit` event\n   - The main window's extension service receives this event and handles recovery\n\n6. **ResponsiveState Tracking** (`src/vs/workbench/services/extensions/common/rpcProtocol.ts:102-105, 121-125`):\n   - `ResponsiveState` enum: `Responsive = 0`, `Unresponsive = 1`\n   - The protocol tracks unacknowledged message count (`_unacknowledgedCount`)\n   - If no acknowledgment within 3 seconds, protocol fires `onDidChangeResponsiveState` event\n   - Main window can show \"Extension Host Unresponsive\" warning to user\n\n**Evidence:**\n- `src/vs/workbench/services/extensions/common/rpcProtocol.ts:117-127`: RPCProtocol implements IRPCProtocol with message passing\n- `src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:301-325`: Socket and message event listeners\n- `src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:100-200`: Message port initialization\n\n---\n\n## Q3: Crash Detection and Recovery\n\nVS Code has a sophisticated crash detection and recovery system that prevents crashes from affecting the main window.\n\n**Key Implementation Details:**\n\n1. **Crash Detection Mechanisms** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:287-395`):\n\n   a. **Exit Event Handler** (lines 316-325):\n   ```\n   process.on('exit', code => {\n       this._onExit.fire({ pid: this.processPid!, code, signal: 'unknown' });\n       this.onDidExitOrCrashOrKill();\n   })\n   ```\n   - Fires when extension host process exits normally or unexpectedly\n   - Notifies all listeners of the exit\n\n   b. **V8 Crash Handler** (lines 327-365):\n   ```\n   process.on('error', (type, location, report) => { ... })\n   ```\n   - Detects V8 sandbox fatal errors\n   - Extracts addon information from crash reports\n   - Sends telemetry for diagnostics\n\n   c. **Child Process Gone Handler** (lines 367-390):\n   ```\n   app.on('child-process-gone', (event, details) => { ... })\n   ```\n   - Electron notifies when utility process terminates unexpectedly\n   - Provides exit code and reason string\n\n2. **Crash Tracking** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:1465-1492`):\n   - `ExtensionHostCrashTracker` class tracks recent crashes\n   - Time Window: `_TIME_LIMIT = 5 minutes` (line 1471)\n   - Crash Limit: `_CRASH_LIMIT = 3` crashes (line 1472)\n   - `registerCrash()` method records each crash timestamp\n   - `shouldAutomaticallyRestart()` returns true if fewer than 3 crashes in 5 minutes\n\n3. **Automatic vs. Manual Restart** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:880-898`):\n   ```\n   if (this._remoteCrashTracker.shouldAutomaticallyRestart()) {\n       // Automatic restart - up to 3 crashes allowed\n       this._logService.info(`Automatically restarting the remote extension host.`);\n       this._notificationService.status(nls.localize('extensionService.autoRestart',\n           \"The remote extension host terminated unexpectedly. Restarting...\"),\n           { hideAfter: 5000 });\n       this._startExtensionHostsIfNecessary(false, ...);\n   } else {\n       // Manual restart - 3+ crashes within 5 minutes\n       this._notificationService.prompt(Severity.Error,\n           nls.localize('extensionService.crash',\n           \"Remote Extension host terminated unexpectedly 3 times within the last 5 minutes.\"),\n           [{ label: nls.localize('restart', \"Restart Remote Extension Host\"),\n              run: () => { this._startExtensionHostsIfNecessary(...); } }]);\n   }\n   ```\n\n4. **Crash Logging** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:904-918`):\n   - Identifies which extensions were activated when crash occurred\n   - Logs the extension list for debugging\n   - Uses extension status tracking to correlate crashes with extensions\n\n5. **Preventing Infinite Restart Loops** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts:85-98`):\n   ```\n   // See https://github.com/microsoft/vscode/issues/194477\n   // If process sends exit event but doesn't really exit, kill it forcefully after 1s\n   setTimeout(() => {\n       try {\n           process.kill(pid, 0); // will throw if process doesn't exist\n           this._logService.error(`Extension host with pid ${pid} still exists, forcefully killing it...`);\n           process.kill(pid);\n       } catch (er) {\n           // ignore, process is already gone\n       }\n   }, 1000);\n   ```\n   - Detects zombie processes (sends exit signal but doesn't actually exit)\n   - Force kills after 1 second timeout\n   - Prevents hung processes from consuming resources\n\n6. **Lifecycle Management** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts:34-38`):\n   - On app shutdown, waits gracefully for extension host shutdown with 6-second timeout\n   - Prevents main app from closing before extension host cleanup is complete\n\n**Evidence:**\n- `src/vs/platform/extensions/electron-main/extensionHostStarter.ts:66-68`: `onDynamicExit()` returns exit event\n- `src/vs/workbench/services/extensions/common/abstractExtensionService.ts:1483-1491`: `ExtensionHostCrashTracker` implementation\n- `src/vs/platform/extensions/electron-main/extensionHostStarter.ts:77-83`: Exit handler registration and cleanup\n\n---\n\n## Q4: Isolation Mechanisms\n\nMultiple architectural features ensure the main window remains independent of the extension host lifecycle and can recover gracefully from extension failures.\n\n**Key Implementation Details:**\n\n1. **No Shared Memory or State**:\n   - Extension host and main window are **completely separate processes**\n   - Memory is not shared between them\n   - All state transfers occur through serialized RPC messages\n   - Even if extension host crashes with segmentation fault, it cannot corrupt main window's memory\n\n2. **Exception Isolation** (`src/vs/workbench/services/extensions/common/rpcProtocol.ts`):\n   - Exceptions in the extension host are caught within that process\n   - They do not propagate to the main window\n   - The extension host may crash, but the main window's event loop continues\n   - Each RPC call has explicit error handling on both sides\n\n3. **Responsive State Monitoring** (`src/vs/workbench/services/extensions/common/extensionHostManager.ts:254-256`):\n   ```\n   this._rpcProtocol = new RPCProtocol(protocol, logger);\n   this._register(this._rpcProtocol.onDidChangeResponsiveState(\n       (responsiveState: ResponsiveState) =>\n           this._onDidChangeResponsiveState.fire(responsiveState)));\n   ```\n   - Main window can detect if extension host is unresponsive\n   - Unresponsive state is tracked and reported to UI\n   - User is notified about extension host status\n   - Main window remains functional while extension host recovers\n\n4. **Graceful Disconnection** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:1243-1248`):\n   ```\n   public override dispose() {\n       for (let i = this._extensionHostManagers.length - 1; i >= 0; i--) {\n           const manager = this._extensionHostManagers[i];\n           manager.extensionHost.disconnect();\n           manager.dispose();\n       }\n   }\n   ```\n   - Main window can explicitly disconnect from extension host\n   - Allows clean shutdown without waiting for unresponsive extension host\n   - Prevents app from hanging on exit\n\n5. **OS-Specific Handling**:\n   - **Windows**: Uses named pipes for IPC, child process termination is handled by Windows process manager\n   - **macOS/Linux**: Uses Unix domain sockets for IPC, process signals are handled by kernel\n   - Both platforms ensure child process exit does not block parent process\n   - Electron's `child-process-gone` event provides reliable crash notifications on all platforms\n\n6. **Main Window Continues Operating**:\n   - If extension host crashes:\n     - Main window's event loop is unaffected\n     - User can still edit files, open tabs, navigate UI\n     - IPC socket is closed, triggering reconnection logic\n     - New extension host is spawned (if under crash limit)\n   - No locks or shared resources prevent main window from operating\n   - UI remains responsive because extension host runs in separate process\n\n7. **Buffer Between Processes** (`src/vs/base/parts/ipc/common/ipc.net.js:956-966`):\n   - `BufferedEmitter` queues incoming messages\n   - Even if one side is slow or temporarily unresponsive, messages are buffered\n   - Allows graceful degradation rather than immediate failure\n   - Prevents cascading failures from one process affecting the other\n\n8. **Feature Availability During Extension Host Absence**:\n   - Editor functionality (syntax highlighting from cached data, basic editing)\n   - File operations (basic file management)\n   - Workspace operations\n   - Core UI navigation\n   - Any features that don't require active extension host\n\n**Evidence:**\n- `src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:1-20`: Separate process isolation via Electron API\n- `src/vs/workbench/services/extensions/common/rpcProtocol.ts:117-160`: RPC isolation layer\n- `src/vs/workbench/services/extensions/common/extensionHostManager.ts:245-300`: Separate RPC protocol instance per extension host\n- `src/vs/base/parts/ipc/node/ipc.net.ts:956-1000`: Socket-based IPC isolation\n\n---\n\n## Evidence\n\n### Core Files and Key Classes\n\n**Process Management:**\n- `src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:100-110` - `WindowUtilityProcess` class definition\n- `src/vs/platform/extensions/electron-main/extensionHostStarter.ts:17-100` - `ExtensionHostStarter` creates and manages extension host processes\n- `src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:50-100` - `ExtensionHostProcess` wrapper\n\n**Communication and RPC:**\n- `src/vs/workbench/services/extensions/common/rpcProtocol.ts:117-160` - `RPCProtocol` class implementation\n- `src/vs/base/parts/ipc/node/ipc.net.ts` - Socket-based IPC implementation\n- `src/vs/workbench/services/extensions/common/extensionHostManager.ts:245-256` - RPC protocol instantiation and responsiveness tracking\n\n**Crash Detection and Recovery:**\n- `src/vs/workbench/services/extensions/common/abstractExtensionService.ts:1469-1492` - `ExtensionHostCrashTracker` class\n- `src/vs/workbench/services/extensions/common/abstractExtensionService.ts:880-918` - Crash handling and restart logic\n- `src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:316-390` - Exit, error, and crash event handlers\n- `src/vs/platform/extensions/electron-main/extensionHostStarter.ts:66-100` - Exit event registration and zombie process cleanup\n\n**Native Extension Service:**\n- `src/vs/workbench/services/extensions/electron-sandbox/nativeExtensionService.ts:62-150` - Main extension service for native environments\n\n### Interfaces and Contracts\n\n- `src/vs/workbench/services/extensions/common/extensionHostManagers.ts` - `IExtensionHostManager` interface\n- `src/vs/workbench/services/extensions/common/extensions.ts:114-130` - `IExtensionHost` interface with `onExit` event\n- `src/vs/base/parts/ipc/common/ipc.ts` - `IMessagePassingProtocol` interface\n- `src/vs/workbench/services/extensions/common/rpcProtocol.ts:102-125` - `ResponsiveState` and RPC protocol interfaces\n\n",
+          "file_path": "/logs/agent/investigation.md",
+          "sequence": 42,
+          "type": "write"
+        }
+      ],
+      "conversation_events": [
+        {
+          "payload": {},
+          "sequence": 1,
+          "subtype": "message",
+          "text": "# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repositories (version-pinned mirrors):**\n\n- `github.com/sg-evals/vscode--17baf841` \u2014 use `repo:^github.com/sg-evals/vscode--17baf841$` filter\n\nScope ALL keyword_search/nls_search queries to these repos.\nUse the repo name as the `repo` parameter for read_file/go_to_definition/find_references.\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repository:** `github.com/sg-evals/vscode--17baf841`\n- Use `repo:^github.com/sg-evals/vscode--17baf841$` filter in keyword_search\n- Use `github.com/sg-evals/vscode--17baf841` as the `repo` parameter for go_to_definition/find_references/read_file\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n# Debug Q&A: VS Code Extension Host Isolation\n\n**Repository:** github.com/sg-evals/vscode--17baf841 (mirror of microsoft/vscode)\n**Task Type:** Debug Q&A (investigation only \u2014 no code changes)\n\n## Background\n\nVS Code uses a multi-process architecture where extensions run in a separate process called the \"extension host.\" Users have observed that when an extension crashes or encounters a fatal error, the main VS Code window continues to function normally \u2014 they can still edit files, open new tabs, and use the UI.\n\n## Behavior Observation\n\n**What happens:** When a VS Code extension crashes (e.g., throws an uncaught exception, segfaults in a native module, or hits a fatal error), the main VS Code window remains responsive and functional. The user may see a notification about the extension host restarting, but the editor UI doesn't freeze or crash.\n\n**Why is this notable?** Many applications that load plugins or extensions crash entirely when a plugin fails. VS Code's architecture prevents extension failures from bringing down the whole application.\n\n## Questions\n\nAnswer ALL of the following questions to explain this behavior:\n\n### Q1: Process Isolation Architecture\n\nHow is the extension host process isolated from the main VS Code window process?\n- What mechanism is used to spawn the extension host as a separate process?\n- What is the relationship between the main process and the extension host process at the OS level (parent/child, detached, etc.)?\n- How does this isolation prevent a crash in one process from affecting the other?\n\n### Q2: Communication Between Processes\n\nSince the extension host and main window are separate processes, how do they communicate?\n- What IPC (inter-process communication) mechanism is used?\n- What happens to this communication channel when the extension host crashes?\n- How does the main window detect that the extension host has crashed vs. just being slow to respond?\n\n### Q3: Crash Detection and Recovery\n\nWhat happens when the extension host crashes?\n- What component in the main process detects the crash?\n- How does VS Code decide whether to automatically restart the extension host vs. showing a user prompt?\n- What prevents infinite restart loops if an extension crashes repeatedly?\n\n### Q4: Isolation Mechanisms\n\nWhat specific architectural features ensure the main window's lifecycle is independent of the extension host?\n- Are there any OS-specific isolation techniques (e.g., Windows vs. Linux/macOS)?\n- What prevents exceptions or errors in the extension host from propagating to the main process?\n- How does the architecture ensure the main window continues functioning even when extensions are unavailable?\n\n## Output Requirements\n\nWrite your answer to `/logs/agent/investigation.md` with the following structure:\n\n```\n# VS Code Extension Host Isolation\n\n## Q1: Process Isolation Architecture\n<answer with specific file paths, class names, and function references>\n\n## Q2: Communication Between Processes\n<answer with specific file paths, class names, and function references>\n\n## Q3: Crash Detection and Recovery\n<answer with specific file paths, class names, and function references>\n\n## Q4: Isolation Mechanisms\n<answer with specific file paths, class names, and function references>\n\n## Evidence\n<consolidated list of supporting file paths and line references>\n```\n\n## Constraints\n\n- Do NOT modify any source files\n- Cite specific files, classes, and functions \u2014 avoid vague or speculative answers\n- Focus on the `src/vs/workbench/services/extensions/`, `src/vs/platform/utilityProcess/`, and `src/vs/workbench/api/node/` directories",
+          "timestamp": "2026-02-25T22:59:23.247Z",
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "payload": {},
+          "sequence": 3,
+          "subtype": "message",
+          "text": "I'll investigate VS Code's extension host isolation architecture by exploring the codebase. Let me start with structured searches to understand the key components.",
+          "timestamp": "2026-02-25T22:59:26.313Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 4,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01LjjaMvP5gGcRk2zKZjWUb7",
+          "timestamp": "2026-02-25T22:59:26.617Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 5,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01MoSqCVBTJPpkRzAnRzqD7G",
+          "timestamp": "2026-02-25T22:59:26.885Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 6,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_0145ZS6JUhQQksZvoy7xitAB",
+          "timestamp": "2026-02-25T22:59:27.153Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 8,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_012JUo4vdnecW4HPqBNPJ8ey",
+          "timestamp": "2026-02-25T22:59:29.888Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 9,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01DW6d3kx49w1Y9G17bnWfTa",
+          "timestamp": "2026-02-25T22:59:30.149Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 10,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_nls_search toolu_01DNpNdPvwKSYQ86YAigfj9h",
+          "timestamp": "2026-02-25T22:59:30.390Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 12,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01MCiuBbys5x1eENyH8PVxVX",
+          "timestamp": "2026-02-25T22:59:34.341Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 13,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01BXRZ7TFxmsebsdkBBhoCNS",
+          "timestamp": "2026-02-25T22:59:34.867Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 14,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01R8NLFBa9VV16wapY7rQmn9",
+          "timestamp": "2026-02-25T22:59:35.228Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 16,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01EQjCRPuiKX7Kxk7CbGkaHx",
+          "timestamp": "2026-02-25T22:59:37.156Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 17,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01SmqZqHWZAcL7bLNcUNHL68",
+          "timestamp": "2026-02-25T22:59:37.605Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 18,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_nls_search toolu_01YZ8ZhEzFpDMTuXYASSEqYo",
+          "timestamp": "2026-02-25T22:59:37.851Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 20,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01Lp2MBXsWNunwcc12uwDRfn",
+          "timestamp": "2026-02-25T22:59:40.624Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 21,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01YTqquDEG9b9GQSLUAKwiSf",
+          "timestamp": "2026-02-25T22:59:41.202Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 23,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_017P8VdDJvRBqjC1ddqFeML4",
+          "timestamp": "2026-02-25T22:59:43.157Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 24,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01Jb2KQ8uDwfzQapszgDoc4r",
+          "timestamp": "2026-02-25T22:59:43.461Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 26,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01K8vXexFGvskAiMbYDasNKW",
+          "timestamp": "2026-02-25T22:59:45.707Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 27,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_016d3kczd2P1FhfLHsFCYfDb",
+          "timestamp": "2026-02-25T22:59:45.943Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 29,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01B86wVkrUCLqb7tmaZdB2gZ",
+          "timestamp": "2026-02-25T22:59:47.993Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 30,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01SCvCWAKvzHb12wgJM9bDe9",
+          "timestamp": "2026-02-25T22:59:48.580Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 32,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01VXYfrXHFtw2yTfwPKU7Pd5",
+          "timestamp": "2026-02-25T22:59:51.101Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 33,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01J6tJNFZZcZrPJmGz6F1r9i",
+          "timestamp": "2026-02-25T22:59:51.461Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 35,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01XhctUsBaHqFGaGd6sRpre4",
+          "timestamp": "2026-02-25T22:59:52.778Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 36,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01Md7eGvKXiRogzRE4CMXQJ9",
+          "timestamp": "2026-02-25T22:59:53.177Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 38,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01PczbhhXyuy5LCgNah6cBYh",
+          "timestamp": "2026-02-25T22:59:55.835Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 39,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_0118zn3EeSuaRDY41b15fu61",
+          "timestamp": "2026-02-25T22:59:56.307Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 41,
+          "subtype": "message",
+          "text": "Now I have enough information to provide a comprehensive investigation. Let me write the findings:",
+          "timestamp": "2026-02-25T23:00:04.920Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 42,
+          "subtype": "message",
+          "text": "Executed Write toolu_01VFiUX1CYNqkmnoKu7RcPga",
+          "timestamp": "2026-02-25T23:00:38.979Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 44,
+          "subtype": "message",
+          "text": "I've completed a comprehensive investigation of VS Code's extension host isolation architecture. Here's what I found:\n\n## Summary of Findings\n\n**The answer is: VS Code uses process isolation at the OS level combined with robust IPC communication and automatic recovery mechanisms.**\n\n### Q1: Process Isolation\n- **Extension hosts run as completely separate OS processes** spawned via Electron's `utilityProcess` API\n- Each process has its own memory, file descriptors, and system resources\n- At the OS level, they are parent/child processes with no shared memory\n- If the extension host crashes, only that process terminates\u2014the main window remains unaffected\n\n### Q2: Communication\n- **RPC Protocol over IPC sockets** (`rpcProtocol.ts`): Serialized JSON messages with buffer references\n- Communication uses **named pipes (Windows) or Unix domain sockets (macOS/Linux)**\n- When the extension host crashes, the socket closes and event handlers are triggered\n- The protocol tracks **responsive state** with 3-second timeout detection\n\n### Q3: Crash Detection & Recovery\n- **Three crash detection mechanisms**: exit events, V8 error handler, and `child-process-gone` notification\n- **Crash tracking**: Tracks 3 crashes within 5 minutes before requiring user intervention\n- **Automatic restart**: First 3 crashes trigger automatic restart with user notification\n- **Manual recovery**: After 3 crashes in 5 minutes, user gets prompt to restart extension host\n- **Zombie prevention**: Force kills processes that report exit but don't actually terminate\n\n### Q4: Isolation Mechanisms\n- **No shared memory**: Exceptions in extension host cannot corrupt main window\n- **Exception containment**: Crashes stay within the child process\n- **Responsive monitoring**: Main window tracks extension host health via RPC\n- **Graceful degradation**: Main window continues with core features while extension host recovers\n- **OS-level protection**: Process signals/termination handled by the kernel\n\nThe investigation has been saved to `/logs/agent/investigation.md` with specific file paths, class names, and code references for all findings.",
+          "timestamp": "2026-02-25T23:00:45.545Z",
+          "tool": null,
+          "type": "agent"
+        }
+      ],
+      "step_count": 44,
+      "tool_counts_by_name": {
+        "Write": 1,
+        "mcp__sourcegraph__sg_keyword_search": 7,
+        "mcp__sourcegraph__sg_list_files": 5,
+        "mcp__sourcegraph__sg_nls_search": 2,
+        "mcp__sourcegraph__sg_read_file": 12
+      },
+      "tool_event_count": 27,
+      "tool_events": [
+        {
+          "arguments": {
+            "path": "src/vs/workbench/services/extensions",
+            "repo": "github.com/sg-evals/vscode--17baf841"
+          },
+          "step_id": 4,
+          "timestamp": "2026-02-25T22:59:26.617Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "path": "src/vs/platform/utilityProcess",
+            "repo": "github.com/sg-evals/vscode--17baf841"
+          },
+          "step_id": 5,
+          "timestamp": "2026-02-25T22:59:26.885Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "path": "src/vs/workbench/api/node",
+            "repo": "github.com/sg-evals/vscode--17baf841"
+          },
+          "step_id": 6,
+          "timestamp": "2026-02-25T22:59:27.153Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/vscode--17baf841$ fork spawn extension host process"
+          },
+          "step_id": 8,
+          "timestamp": "2026-02-25T22:59:29.888Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/vscode--17baf841$ ExtensionHostProcessManager"
+          },
+          "step_id": 9,
+          "timestamp": "2026-02-25T22:59:30.149Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/vscode--17baf841$ crash detection extension host restart"
+          },
+          "step_id": 10,
+          "timestamp": "2026-02-25T22:59:30.390Z",
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "arguments": {
+            "endLine": 920,
+            "path": "src/vs/workbench/services/extensions/common/abstractExtensionService.ts",
+            "repo": "github.com/sg-evals/vscode--17baf841",
+            "startLine": 880
+          },
+          "step_id": 12,
+          "timestamp": "2026-02-25T22:59:34.341Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 1520,
+            "path": "src/vs/workbench/services/extensions/common/abstractExtensionService.ts",
+            "repo": "github.com/sg-evals/vscode--17baf841",
+            "startLine": 1460
+          },
+          "step_id": 13,
+          "timestamp": "2026-02-25T22:59:34.867Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/vscode--17baf841$ extension host manager IPC"
+          },
+          "step_id": 14,
+          "timestamp": "2026-02-25T22:59:35.228Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "src/vs/platform/extensions/electron-main/extensionHostStarter.ts",
+            "repo": "github.com/sg-evals/vscode--17baf841",
+            "startLine": 1
+          },
+          "step_id": 16,
+          "timestamp": "2026-02-25T22:59:37.156Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/vscode--17baf841$ RPC protocol extension host communication"
+          },
+          "step_id": 17,
+          "timestamp": "2026-02-25T22:59:37.605Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/vscode--17baf841$ extension host exit handler disconnect"
+          },
+          "step_id": 18,
+          "timestamp": "2026-02-25T22:59:37.851Z",
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "src/vs/workbench/services/extensions/node/rpcProtocol.ts",
+            "repo": "github.com/sg-evals/vscode--17baf841",
+            "startLine": 1
+          },
+          "step_id": 20,
+          "timestamp": "2026-02-25T22:59:40.624Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 320,
+            "path": "src/vs/platform/utilityProcess/electron-main/utilityProcess.ts",
+            "repo": "github.com/sg-evals/vscode--17baf841",
+            "startLine": 200
+          },
+          "step_id": 21,
+          "timestamp": "2026-02-25T22:59:41.202Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/vscode--17baf841$ file:rpcProtocol.ts"
+          },
+          "step_id": 23,
+          "timestamp": "2026-02-25T22:59:43.157Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "path": "src/vs/workbench/services/extensions/common",
+            "repo": "github.com/sg-evals/vscode--17baf841"
+          },
+          "step_id": 24,
+          "timestamp": "2026-02-25T22:59:43.461Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "endLine": 150,
+            "path": "src/vs/workbench/services/extensions/common/rpcProtocol.ts",
+            "repo": "github.com/sg-evals/vscode--17baf841",
+            "startLine": 1
+          },
+          "step_id": 26,
+          "timestamp": "2026-02-25T22:59:45.707Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "src/vs/platform/utilityProcess/electron-main/utilityProcess.ts",
+            "repo": "github.com/sg-evals/vscode--17baf841",
+            "startLine": 1
+          },
+          "step_id": 27,
+          "timestamp": "2026-02-25T22:59:45.943Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 380,
+            "path": "src/vs/platform/utilityProcess/electron-main/utilityProcess.ts",
+            "repo": "github.com/sg-evals/vscode--17baf841",
+            "startLine": 280
+          },
+          "step_id": 29,
+          "timestamp": "2026-02-25T22:59:47.993Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 300,
+            "path": "src/vs/workbench/services/extensions/common/extensionHostManager.ts",
+            "repo": "github.com/sg-evals/vscode--17baf841",
+            "startLine": 200
+          },
+          "step_id": 30,
+          "timestamp": "2026-02-25T22:59:48.580Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "src/vs/workbench/services/extensions/electron-sandbox/extensionService.ts",
+            "repo": "github.com/sg-evals/vscode--17baf841",
+            "startLine": 1
+          },
+          "step_id": 32,
+          "timestamp": "2026-02-25T22:59:51.101Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/vscode--17baf841$ MessageChannel message port extension host"
+          },
+          "step_id": 33,
+          "timestamp": "2026-02-25T22:59:51.461Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "path": "src/vs/workbench/services/extensions/electron-sandbox",
+            "repo": "github.com/sg-evals/vscode--17baf841"
+          },
+          "step_id": 35,
+          "timestamp": "2026-02-25T22:59:52.778Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/vscode--17baf841$ IMessagePassingProtocol message socket"
+          },
+          "step_id": 36,
+          "timestamp": "2026-02-25T22:59:53.177Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 150,
+            "path": "src/vs/workbench/services/extensions/electron-sandbox/nativeExtensionService.ts",
+            "repo": "github.com/sg-evals/vscode--17baf841",
+            "startLine": 1
+          },
+          "step_id": 38,
+          "timestamp": "2026-02-25T22:59:55.835Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts",
+            "repo": "github.com/sg-evals/vscode--17baf841",
+            "startLine": 1
+          },
+          "step_id": 39,
+          "timestamp": "2026-02-25T22:59:56.307Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "content": "# VS Code Extension Host Isolation\n\n## Q1: Process Isolation Architecture\n\nVS Code uses **Electron's `utilityProcess` API** to spawn the extension host as a completely separate operating system process. This is the fundamental mechanism that provides isolation.\n\n**Key Implementation Details:**\n\n1. **Process Creation** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:1-100`):\n   - The `WindowUtilityProcess` class wraps Electron's native `utilityProcess.fork()` API\n   - Each extension host is spawned as an independent process with its own Node.js runtime\n   - The extension host entry point is specified in the configuration and loaded in the spawned process\n\n2. **Process Lifecycle Management** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts:70-100`):\n   - `ExtensionHostStarter.createExtensionHost()` creates a new `WindowUtilityProcess`\n   - Each extension host is assigned a unique ID and tracked in a map\n   - Exit handlers are registered immediately upon process creation (line 77)\n\n3. **OS-Level Isolation**:\n   - At the OS level, the extension host and main window are **parent and child processes**\n   - The main window (renderer process) runs in the primary Electron BrowserWindow\n   - The extension host runs in a completely separate process with independent memory, file descriptors, and system resources\n   - If the extension host process crashes, the OS notifies the main process via exit events\n   - There is **no shared memory** between the processes\u2014they cannot directly access each other's memory\n\n4. **Process Relationship**:\n   - The extension host process is a **child of the main Electron process**\n   - If the extension host crashes, only that child process terminates\n   - The parent (main window) continues running because it has its own process lifecycle\n   - The crash does not propagate to the parent\u2014it's caught by the parent's event handlers\n\n**Evidence:**\n- `src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:6-7`: Uses Electron's `utilityProcess` and `UtilityProcess` classes\n- `src/vs/platform/extensions/electron-main/extensionHostStarter.ts:75`: Creates `WindowUtilityProcess` with log, windows, telemetry, and lifecycle services\n- `src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:50-88`: `ExtensionHostProcess` wrapper provides the interface to the spawned process\n\n---\n\n## Q2: Communication Between Processes\n\nVS Code uses **RPC (Remote Procedure Call) Protocol over IPC sockets** for communication between the main window and extension host. This communication mechanism is completely independent of process lifecycle.\n\n**Key Implementation Details:**\n\n1. **Message Passing Protocol** (`src/vs/workbench/services/extensions/common/rpcProtocol.ts:1-150`):\n   - The `RPCProtocol` class implements a request-response protocol over `IMessagePassingProtocol`\n   - Messages are serialized to JSON with buffer references, sent across the IPC channel\n   - Each RPC call includes a message ID and expects an acknowledgment\n   - Protocol handles both incoming and outgoing messages\n\n2. **IPC Channel Creation** (`src/vs/base/parts/ipc/common/ipc.js` and `src/vs/base/parts/ipc/node/ipc.net.ts`):\n   - Communication happens over **named pipes (Windows) or Unix domain sockets (macOS/Linux)**\n   - The `IMessagePassingProtocol` interface abstracts the underlying transport\n   - Messages are read/written via `ProtocolReader` and `ProtocolWriter` classes\n   - Socket connection is established as part of extension host startup\n\n3. **Connection Lifecycle** (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:42-48`):\n   - The extension host receives a message port during initialization\n   - The port is used to establish the WebSocket-based communication channel\n   - Both processes maintain this connection for RPC messages\n\n4. **Crash Detection via IPC Disconnection** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:316-325`):\n   - Exit Event Handler (line 317): `process.on('exit', code => { ... })`\n     - Fires when the extension host process exits\n     - Calls `this._onExit.fire()` to notify listeners\n   - V8 Error Handler (line 328): `process.on('error', (type, location, report) => { ... })`\n     - Fires when a V8 crash is detected in the extension host\n   - Child Process Gone Handler (line 368): `app.on('child-process-gone', (event, details) => { ... })`\n     - Electron notifies when a utility process terminates unexpectedly\n\n5. **What Happens When Connection Breaks**:\n   - The RPC protocol tracks pending replies in `_pendingRPCReplies` (`src/vs/workbench/services/extensions/common/rpcProtocol.ts:135`)\n   - If the socket closes, the protocol receives an `onClose` event (`src/vs/base/parts/ipc/node/ipc.net.ts:963`)\n   - Pending RPC calls timeout after `UNRESPONSIVE_TIME = 3 seconds` (line 121)\n   - The extension host manager detects disconnection and fires `onDidExit` event\n   - The main window's extension service receives this event and handles recovery\n\n6. **ResponsiveState Tracking** (`src/vs/workbench/services/extensions/common/rpcProtocol.ts:102-105, 121-125`):\n   - `ResponsiveState` enum: `Responsive = 0`, `Unresponsive = 1`\n   - The protocol tracks unacknowledged message count (`_unacknowledgedCount`)\n   - If no acknowledgment within 3 seconds, protocol fires `onDidChangeResponsiveState` event\n   - Main window can show \"Extension Host Unresponsive\" warning to user\n\n**Evidence:**\n- `src/vs/workbench/services/extensions/common/rpcProtocol.ts:117-127`: RPCProtocol implements IRPCProtocol with message passing\n- `src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:301-325`: Socket and message event listeners\n- `src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:100-200`: Message port initialization\n\n---\n\n## Q3: Crash Detection and Recovery\n\nVS Code has a sophisticated crash detection and recovery system that prevents crashes from affecting the main window.\n\n**Key Implementation Details:**\n\n1. **Crash Detection Mechanisms** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:287-395`):\n\n   a. **Exit Event Handler** (lines 316-325):\n   ```\n   process.on('exit', code => {\n       this._onExit.fire({ pid: this.processPid!, code, signal: 'unknown' });\n       this.onDidExitOrCrashOrKill();\n   })\n   ```\n   - Fires when extension host process exits normally or unexpectedly\n   - Notifies all listeners of the exit\n\n   b. **V8 Crash Handler** (lines 327-365):\n   ```\n   process.on('error', (type, location, report) => { ... })\n   ```\n   - Detects V8 sandbox fatal errors\n   - Extracts addon information from crash reports\n   - Sends telemetry for diagnostics\n\n   c. **Child Process Gone Handler** (lines 367-390):\n   ```\n   app.on('child-process-gone', (event, details) => { ... })\n   ```\n   - Electron notifies when utility process terminates unexpectedly\n   - Provides exit code and reason string\n\n2. **Crash Tracking** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:1465-1492`):\n   - `ExtensionHostCrashTracker` class tracks recent crashes\n   - Time Window: `_TIME_LIMIT = 5 minutes` (line 1471)\n   - Crash Limit: `_CRASH_LIMIT = 3` crashes (line 1472)\n   - `registerCrash()` method records each crash timestamp\n   - `shouldAutomaticallyRestart()` returns true if fewer than 3 crashes in 5 minutes\n\n3. **Automatic vs. Manual Restart** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:880-898`):\n   ```\n   if (this._remoteCrashTracker.shouldAutomaticallyRestart()) {\n       // Automatic restart - up to 3 crashes allowed\n       this._logService.info(`Automatically restarting the remote extension host.`);\n       this._notificationService.status(nls.localize('extensionService.autoRestart',\n           \"The remote extension host terminated unexpectedly. Restarting...\"),\n           { hideAfter: 5000 });\n       this._startExtensionHostsIfNecessary(false, ...);\n   } else {\n       // Manual restart - 3+ crashes within 5 minutes\n       this._notificationService.prompt(Severity.Error,\n           nls.localize('extensionService.crash',\n           \"Remote Extension host terminated unexpectedly 3 times within the last 5 minutes.\"),\n           [{ label: nls.localize('restart', \"Restart Remote Extension Host\"),\n              run: () => { this._startExtensionHostsIfNecessary(...); } }]);\n   }\n   ```\n\n4. **Crash Logging** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:904-918`):\n   - Identifies which extensions were activated when crash occurred\n   - Logs the extension list for debugging\n   - Uses extension status tracking to correlate crashes with extensions\n\n5. **Preventing Infinite Restart Loops** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts:85-98`):\n   ```\n   // See https://github.com/microsoft/vscode/issues/194477\n   // If process sends exit event but doesn't really exit, kill it forcefully after 1s\n   setTimeout(() => {\n       try {\n           process.kill(pid, 0); // will throw if process doesn't exist\n           this._logService.error(`Extension host with pid ${pid} still exists, forcefully killing it...`);\n           process.kill(pid);\n       } catch (er) {\n           // ignore, process is already gone\n       }\n   }, 1000);\n   ```\n   - Detects zombie processes (sends exit signal but doesn't actually exit)\n   - Force kills after 1 second timeout\n   - Prevents hung processes from consuming resources\n\n6. **Lifecycle Management** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts:34-38`):\n   - On app shutdown, waits gracefully for extension host shutdown with 6-second timeout\n   - Prevents main app from closing before extension host cleanup is complete\n\n**Evidence:**\n- `src/vs/platform/extensions/electron-main/extensionHostStarter.ts:66-68`: `onDynamicExit()` returns exit event\n- `src/vs/workbench/services/extensions/common/abstractExtensionService.ts:1483-1491`: `ExtensionHostCrashTracker` implementation\n- `src/vs/platform/extensions/electron-main/extensionHostStarter.ts:77-83`: Exit handler registration and cleanup\n\n---\n\n## Q4: Isolation Mechanisms\n\nMultiple architectural features ensure the main window remains independent of the extension host lifecycle and can recover gracefully from extension failures.\n\n**Key Implementation Details:**\n\n1. **No Shared Memory or State**:\n   - Extension host and main window are **completely separate processes**\n   - Memory is not shared between them\n   - All state transfers occur through serialized RPC messages\n   - Even if extension host crashes with segmentation fault, it cannot corrupt main window's memory\n\n2. **Exception Isolation** (`src/vs/workbench/services/extensions/common/rpcProtocol.ts`):\n   - Exceptions in the extension host are caught within that process\n   - They do not propagate to the main window\n   - The extension host may crash, but the main window's event loop continues\n   - Each RPC call has explicit error handling on both sides\n\n3. **Responsive State Monitoring** (`src/vs/workbench/services/extensions/common/extensionHostManager.ts:254-256`):\n   ```\n   this._rpcProtocol = new RPCProtocol(protocol, logger);\n   this._register(this._rpcProtocol.onDidChangeResponsiveState(\n       (responsiveState: ResponsiveState) =>\n           this._onDidChangeResponsiveState.fire(responsiveState)));\n   ```\n   - Main window can detect if extension host is unresponsive\n   - Unresponsive state is tracked and reported to UI\n   - User is notified about extension host status\n   - Main window remains functional while extension host recovers\n\n4. **Graceful Disconnection** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:1243-1248`):\n   ```\n   public override dispose() {\n       for (let i = this._extensionHostManagers.length - 1; i >= 0; i--) {\n           const manager = this._extensionHostManagers[i];\n           manager.extensionHost.disconnect();\n           manager.dispose();\n       }\n   }\n   ```\n   - Main window can explicitly disconnect from extension host\n   - Allows clean shutdown without waiting for unresponsive extension host\n   - Prevents app from hanging on exit\n\n5. **OS-Specific Handling**:\n   - **Windows**: Uses named pipes for IPC, child process termination is handled by Windows process manager\n   - **macOS/Linux**: Uses Unix domain sockets for IPC, process signals are handled by kernel\n   - Both platforms ensure child process exit does not block parent process\n   - Electron's `child-process-gone` event provides reliable crash notifications on all platforms\n\n6. **Main Window Continues Operating**:\n   - If extension host crashes:\n     - Main window's event loop is unaffected\n     - User can still edit files, open tabs, navigate UI\n     - IPC socket is closed, triggering reconnection logic\n     - New extension host is spawned (if under crash limit)\n   - No locks or shared resources prevent main window from operating\n   - UI remains responsive because extension host runs in separate process\n\n7. **Buffer Between Processes** (`src/vs/base/parts/ipc/common/ipc.net.js:956-966`):\n   - `BufferedEmitter` queues incoming messages\n   - Even if one side is slow or temporarily unresponsive, messages are buffered\n   - Allows graceful degradation rather than immediate failure\n   - Prevents cascading failures from one process affecting the other\n\n8. **Feature Availability During Extension Host Absence**:\n   - Editor functionality (syntax highlighting from cached data, basic editing)\n   - File operations (basic file management)\n   - Workspace operations\n   - Core UI navigation\n   - Any features that don't require active extension host\n\n**Evidence:**\n- `src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:1-20`: Separate process isolation via Electron API\n- `src/vs/workbench/services/extensions/common/rpcProtocol.ts:117-160`: RPC isolation layer\n- `src/vs/workbench/services/extensions/common/extensionHostManager.ts:245-300`: Separate RPC protocol instance per extension host\n- `src/vs/base/parts/ipc/node/ipc.net.ts:956-1000`: Socket-based IPC isolation\n\n---\n\n## Evidence\n\n### Core Files and Key Classes\n\n**Process Management:**\n- `src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:100-110` - `WindowUtilityProcess` class definition\n- `src/vs/platform/extensions/electron-main/extensionHostStarter.ts:17-100` - `ExtensionHostStarter` creates and manages extension host processes\n- `src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:50-100` - `ExtensionHostProcess` wrapper\n\n**Communication and RPC:**\n- `src/vs/workbench/services/extensions/common/rpcProtocol.ts:117-160` - `RPCProtocol` class implementation\n- `src/vs/base/parts/ipc/node/ipc.net.ts` - Socket-based IPC implementation\n- `src/vs/workbench/services/extensions/common/extensionHostManager.ts:245-256` - RPC protocol instantiation and responsiveness tracking\n\n**Crash Detection and Recovery:**\n- `src/vs/workbench/services/extensions/common/abstractExtensionService.ts:1469-1492` - `ExtensionHostCrashTracker` class\n- `src/vs/workbench/services/extensions/common/abstractExtensionService.ts:880-918` - Crash handling and restart logic\n- `src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:316-390` - Exit, error, and crash event handlers\n- `src/vs/platform/extensions/electron-main/extensionHostStarter.ts:66-100` - Exit event registration and zombie process cleanup\n\n**Native Extension Service:**\n- `src/vs/workbench/services/extensions/electron-sandbox/nativeExtensionService.ts:62-150` - Main extension service for native environments\n\n### Interfaces and Contracts\n\n- `src/vs/workbench/services/extensions/common/extensionHostManagers.ts` - `IExtensionHostManager` interface\n- `src/vs/workbench/services/extensions/common/extensions.ts:114-130` - `IExtensionHost` interface with `onExit` event\n- `src/vs/base/parts/ipc/common/ipc.ts` - `IMessagePassingProtocol` interface\n- `src/vs/workbench/services/extensions/common/rpcProtocol.ts:102-125` - `ResponsiveState` and RPC protocol interfaces\n\n",
+            "file_path": "/logs/agent/investigation.md"
+          },
+          "step_id": 42,
+          "timestamp": "2026-02-25T23:00:38.979Z",
+          "tool": "Write"
+        }
+      ]
+    },
+    "transcript": {
+      "json_line_count": 73,
+      "line_count": 73,
+      "message_event_count": 58,
+      "messages": [
+        {
+          "sequence": 0,
+          "subtype": "init",
+          "text": null,
+          "tool": null,
+          "type": "system"
+        },
+        {
+          "sequence": 1,
+          "subtype": "text",
+          "text": "I'll investigate VS Code's extension host isolation architecture by exploring the codebase. Let me start with structured searches to understand the key components.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 2,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 3,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 4,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 5,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 6,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 7,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 8,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 9,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 10,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 11,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 12,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_nls_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 13,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 14,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 15,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 16,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 17,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 18,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 19,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 20,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 21,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 22,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 23,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 24,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_nls_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 25,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 26,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 27,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 28,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 29,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 30,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 31,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 32,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 33,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 34,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 35,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 36,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 37,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 38,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 39,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 40,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 41,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 42,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 43,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 44,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 45,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 46,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 47,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 48,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 49,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 50,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 51,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 52,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 53,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 54,
+          "subtype": "text",
+          "text": "Now I have enough information to provide a comprehensive investigation. Let me write the findings:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 55,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Write",
+          "type": "assistant"
+        },
+        {
+          "sequence": 56,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 57,
+          "subtype": "text",
+          "text": "I've completed a comprehensive investigation of VS Code's extension host isolation architecture. Here's what I found:  ## Summary of Findings  **The answer is: VS Code uses process isolation at the OS level combined with...",
+          "tool": null,
+          "type": "assistant"
+        }
+      ],
+      "tool_event_count": 27,
+      "tool_events": [
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "Write"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "checksums": {
+      "result_json_sha256": "ea78f235a02df2714ead5a36b4cf2e6ceb093c4134bdd99244090473d0bf7d96",
+      "trajectory_sha256": "d46c73bcf6870bec208fbce349546b3f3df3ab459b5ec2d95a2894490a9ae47c",
+      "transcript_sha256": "a087d641d731e59bdbe5bfecc51afa31062030fdd5a38cb3006eb714ef6bec0c"
+    },
+    "config": "mcp-remote-direct",
+    "result_path": "runs/official/understand_haiku_20260225_211346/mcp-remote-direct/ccb_understand_vscode-ext-host-qa-001_mcp-remote-direct/sgonly_vscode-ext-host-qa-001__3W6zVCq/result.json",
+    "run_dir": "understand_haiku_20260225_211346",
+    "suite": "csb_sdlc_understand",
+    "task_dir": "runs/official/understand_haiku_20260225_211346/mcp-remote-direct/ccb_understand_vscode-ext-host-qa-001_mcp-remote-direct/sgonly_vscode-ext-host-qa-001__3W6zVCq",
+    "task_name": "sgonly_vscode-ext-host-qa-001",
+    "trace_paths": {
+      "trajectory": "runs/official/understand_haiku_20260225_211346/mcp-remote-direct/ccb_understand_vscode-ext-host-qa-001_mcp-remote-direct/sgonly_vscode-ext-host-qa-001__3W6zVCq/agent/trajectory.json",
+      "transcript": "runs/official/understand_haiku_20260225_211346/mcp-remote-direct/ccb_understand_vscode-ext-host-qa-001_mcp-remote-direct/sgonly_vscode-ext-host-qa-001__3W6zVCq/agent/claude-code.txt"
+    }
+  },
+  "score": {
+    "reward": 0.96,
+    "status": "passed",
+    "timed_out": false
+  }
+}

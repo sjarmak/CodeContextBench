@@ -8,5 +8,5 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [pytorch-release-210-fix-001](../tasks/csb_sdlc_fix_haiku_20260302_021447--baseline-local-direct--pytorch-release-210-fix-001.html) | `failed` | 0.000 | 0.000 | 38 | traj, tx |
-| [pytorch-relu-gelu-fusion-fix-001](../tasks/csb_sdlc_fix_haiku_20260302_021447--baseline-local-direct--pytorch-relu-gelu-fusion-fix-001.html) | `passed` | 0.858 | 0.000 | 62 | traj, tx |
+| [pytorch-release-210-fix-001](../tasks/csb_sdlc_fix_haiku_20260302_021447--baseline-local-direct--pytorch-release-210-fix-001--439b77f2fd.html) | `failed` | 0.000 | 0.000 | 38 | traj, tx |
+| [pytorch-relu-gelu-fusion-fix-001](../tasks/csb_sdlc_fix_haiku_20260302_021447--baseline-local-direct--pytorch-relu-gelu-fusion-fix-001--ac801cfdb2.html) | `passed` | 0.858 | 0.000 | 62 | traj, tx |

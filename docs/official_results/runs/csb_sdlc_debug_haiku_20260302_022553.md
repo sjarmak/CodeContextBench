@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [mcp_tutanota-search-regression-prove-001_qu1zvz](../tasks/csb_sdlc_debug_haiku_20260302_022553--mcp-remote-direct--mcp_tutanota-search-regression-prove-001_qu1zvz.html) | `passed` | 0.500 | 0.538 | 39 | traj, tx |
+| [mcp_tutanota-search-regression-prove-001_qu1zvz](../tasks/csb_sdlc_debug_haiku_20260302_022553--mcp-remote-direct--mcp_tutanota-search-regression-prove-001_qu1zvz--1fd9ec0f6e.html) | `passed` | 0.500 | 0.538 | 39 | traj, tx |

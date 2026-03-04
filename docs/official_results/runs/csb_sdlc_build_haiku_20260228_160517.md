@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [cgen-deps-install-001](../tasks/csb_sdlc_build_haiku_20260228_160517--baseline-local-direct--cgen-deps-install-001.html) | `passed` | 1.000 | 0.000 | 45 | traj, tx |
+| [cgen-deps-install-001](../tasks/csb_sdlc_build_haiku_20260228_160517--baseline-local-direct--cgen-deps-install-001--aa87009fac.html) | `passed` | 1.000 | 0.000 | 45 | traj, tx |

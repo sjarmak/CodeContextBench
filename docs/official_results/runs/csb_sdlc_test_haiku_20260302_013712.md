@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [sklearn-kmeans-perf-001](../tasks/csb_sdlc_test_haiku_20260302_013712--baseline-local-direct--sklearn-kmeans-perf-001.html) | `failed` | 0.000 | 0.000 | 29 | traj, tx |
+| [sklearn-kmeans-perf-001](../tasks/csb_sdlc_test_haiku_20260302_013712--baseline-local-direct--sklearn-kmeans-perf-001--adedd1b992.html) | `failed` | 0.000 | 0.000 | 29 | traj, tx |

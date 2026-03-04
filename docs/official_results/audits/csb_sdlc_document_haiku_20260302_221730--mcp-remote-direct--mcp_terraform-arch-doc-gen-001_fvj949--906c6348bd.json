@@ -1,0 +1,1193 @@
+{
+  "metrics": {
+    "agent_execution_seconds": 132.599924,
+    "cache_tokens": 2858049,
+    "context_metrics": {},
+    "input_tokens": 2858605,
+    "ir_metrics": {},
+    "mcp_ratio": 0.8888888888888888,
+    "output_tokens": 13597,
+    "search_calls_deepsearch": null,
+    "search_calls_keyword": null,
+    "search_calls_nls": null,
+    "tool_calls_by_name": {
+      "Bash": 2,
+      "Write": 1,
+      "mcp__sourcegraph__sg_keyword_search": 5,
+      "mcp__sourcegraph__sg_list_files": 3,
+      "mcp__sourcegraph__sg_list_repos": 1,
+      "mcp__sourcegraph__sg_read_file": 15
+    },
+    "tool_calls_local": 3,
+    "tool_calls_mcp": 24,
+    "tool_calls_total": 27,
+    "wall_clock_seconds": 183.960096
+  },
+  "parsed_trace": {
+    "trajectory": {
+      "bash_commands": [
+        {
+          "command": "wc -l /workspace/documentation.md && head -50 /workspace/documentation.md",
+          "sequence": 46
+        },
+        {
+          "command": "tail -50 /workspace/documentation.md",
+          "sequence": 48
+        }
+      ],
+      "code_changes": [
+        {
+          "content": "# Terraform Plan/Apply Pipeline Architecture Documentation\n\n## Overview\n\nTerraform's plan/apply pipeline is built on a graph-based execution model where infrastructure operations are represented as directed acyclic graphs (DAGs). The architecture enables concurrent execution of independent operations while maintaining correct ordering of dependent operations.\n\nThe pipeline consists of three major phases:\n1. **Graph Construction** - Building a DAG of operations from configuration\n2. **Graph Traversal** - Executing graph nodes in dependency order\n3. **State Management** - Tracking and persisting infrastructure state\n\n## 1. Graph Builder System\n\n### 1.1 GraphBuilder Interface\n\nThe `GraphBuilder` interface is the foundational abstraction for constructing execution graphs:\n\n```go\ntype GraphBuilder interface {\n    Build(addrs.ModuleInstance) (*Graph, tfdiags.Diagnostics)\n}\n```\n\nGraph builders take configuration, state, and options as input and produce a complete execution graph ready for traversal.\n\n### 1.2 BasicGraphBuilder\n\nThe `BasicGraphBuilder` is the core implementation that applies a sequence of transformations:\n\n```go\ntype BasicGraphBuilder struct {\n    Steps []GraphTransformer\n    Name  string\n}\n\nfunc (b *BasicGraphBuilder) Build(path addrs.ModuleInstance) (*Graph, tfdiags.Diagnostics)\n```\n\nThe Build method:\n1. Creates an empty graph at the given module path\n2. Sequentially applies each GraphTransformer\n3. Validates the final graph structure\n4. Returns diagnostics for any errors during transformation\n\nEach transformer can add nodes, modify edges, or reorganize the graph structure. Transformers are applied in a specific order to ensure correct graph construction.\n\n### 1.3 Operation-Specific Graph Builders\n\n#### PlanGraphBuilder\n\nBuilds graphs for plan and plan-like operations (plan, plan-destroy, validate, import):\n\n**Key inputs:**\n- `Config` - The desired infrastructure configuration\n- `State` - The current state (for comparison)\n- `RootVariableValues` - Input variables for the root module\n- `ExternalProviderConfigs` - Pre-configured provider instances\n- `Targets` - Resource targeting for partial operations\n- `ForceReplace` - Resources to force replacement\n- `skipRefresh` - Whether to skip state refresh\n- `skipPlanChanges` - For refresh-only operations\n\n**Graph composition:**\n1. Creates resource nodes from configuration\n2. Attaches provider configurations and schemas\n3. Establishes dependencies based on references\n4. Handles count/for_each expansion\n5. Attaches validation and check nodes\n6. Applies targeting filters if specified\n\n#### ApplyGraphBuilder\n\nBuilds graphs for applying previously-generated plans:\n\n**Key inputs:**\n- `Config` - The configuration file (must match the plan's configuration)\n- `Changes` - The planned changes from the plan file\n- `State` - Current state used as a baseline\n\n**Graph composition:**\n1. Creates nodes only for resources with planned changes\n2. Applies create-before-destroy ordering for replacements\n3. Establishes deposed object handling for replacements\n4. Sets up resource destruction sequences when needed\n\n#### EvalGraphBuilder\n\nUsed for validation and schema evaluation without configuring providers:\n\n- Retrieves provider schemas for type checking\n- Validates configuration structure\n- Does not initialize or configure actual provider instances\n\n### 1.4 Graph Transformers\n\nGraphTransformers modify graphs during construction. The interface is simple:\n\n```go\ntype GraphTransformer interface {\n    Transform(*Graph) error\n}\n```\n\nTransformers operate at different levels:\n\n**Key transformers in the pipeline:**\n\n1. **ConfigTransformer** - Adds resource nodes from configuration files\n2. **StateTransformer** - Adds state-only resources not in config\n3. **ProviderTransformer** - Adds provider nodes and connects them to resources\n4. **ReferenceTransformer** - Analyzes references and creates edges\n5. **ModuleExpansionTransformer** - Handles module.* expansion\n6. **CountTransformer** - Handles resource count expansion\n7. **ExpandTransformer** - Performs dynamic expansion with count/for_each\n8. **ProviderConfigTransformer** - Attaches configurations to providers\n9. **SchemaTransformer** - Attaches schema information to nodes\n10. **DeferredTransformer** - Marks operations for deferral when needed\n11. **OrphanResourceTransformer** - Handles removed resources\n12. **OutputTransformer** - Adds output value nodes\n13. **DestroyEdgeTransformer** - Creates edges for resource destruction\n14. **TransitiveReductionTransformer** - Removes redundant edges\n\n**Transformer execution order matters:** Transformers are applied sequentially, and later transformers depend on work done by earlier ones. For example, ReferenceTransformer must run after ConfigTransformer has added all resource nodes.\n\n### 1.5 Graph Representation\n\nThe Graph structure wraps a DAG (Directed Acyclic Graph):\n\n```go\ntype Graph struct {\n    dag.AcyclicGraph\n    Path addrs.ModuleInstance\n}\n```\n\nGraph nodes (vertices) represent different types of operations:\n- **Resource instances** - Individual resources being created/modified/deleted\n- **Providers** - Provider initialization and configuration\n- **Variables** - Root and module variable evaluation\n- **Outputs** - Output value evaluation\n- **Local values** - Local value computation\n- **Module instances** - Module expansion and nesting\n- **Data sources** - Data resource reads\n- **Checks** - Precondition and postcondition evaluation\n\nEdges represent dependencies:\n- **Reference edges** - A depends on B because B is referenced in A's configuration\n- **Implicit edges** - Dependencies within a module\n- **Provider edges** - Resources depend on their provider initialization\n- **Destroy edges** - Order constraints for destruction\n\n## 2. Provider Interface and Lifecycle\n\n### 2.1 Provider Architecture\n\nProviders are plugins implementing a well-defined interface. The architecture maintains a clean separation between Terraform core and provider implementations.\n\n**Provider lifecycle:**\n\n```\nInitialize \u2192 Configure \u2192 GetSchema \u2192 Read/Plan/Apply \u2192 Close\n```\n\n### 2.2 Provider Management\n\nThe `EvalContext` provides provider lifecycle management:\n\n```go\n// Initialization\nInitProvider(addr addrs.AbsProviderConfig, config *configs.Provider) (providers.Interface, error)\n\n// Access\nProvider(addr addrs.AbsProviderConfig) providers.Interface\nProviderSchema(addr addrs.AbsProviderConfig) (providers.ProviderSchema, error)\n\n// Configuration\nConfigureProvider(addr addrs.AbsProviderConfig, cfg cty.Value) tfdiags.Diagnostics\n\n// Cleanup\nCloseProvider(addr addrs.AbsProviderConfig) error\n```\n\n**Provider caching:**\n\nProviders are cached in the ContextGraphWalker to avoid repeated initialization:\n\n```go\ntype ContextGraphWalker struct {\n    providerCache map[string]providers.Interface      // Initialized providers\n    providerSchemas map[string]providers.ProviderSchema // Cached schemas\n    providerLock sync.Mutex                            // Thread-safe access\n}\n```\n\n### 2.3 Provider Node Execution\n\nProvider operations are represented as graph nodes:\n\n- **NodeApplyableProvider** - Initializes and configures a provider during apply\n- **NodeValidatableProvider** - Validates provider configuration during validation\n- **graphNodeCloseProvider** - Closes provider connections\n- **nodeExternalProvider** - Uses pre-configured providers passed from external callers\n\nWhen a provider node executes:\n1. It calls `EvalContext.InitProvider()` to create a provider instance\n2. It retrieves and validates the provider's schema\n3. It calls `ConfigureProvider()` with the provider configuration\n4. The provider instance is cached for use by resource operations\n\n### 2.4 Resource Operations\n\nResources delegate their operations to providers through standard interfaces:\n\n**Plan phase:**\n- Provider.PlanResourceChange() - Determines what changes are needed\n\n**Apply phase:**\n- Provider.ApplyResourceChange() - Applies the planned change\n- Provider.ImportResourceState() - Imports external resources\n\n**Refresh phase:**\n- Provider.ReadResource() - Gets current state from infrastructure\n\nEach resource operation node in the graph calls these provider methods within its Execute() method.\n\n### 2.5 Schema Management\n\nSchemas are retrieved once per provider and cached:\n\n```go\nschema, err := ctx.ProviderSchema(providerAddr)\n```\n\nSchemas define the resource types a provider supports and their configuration structure. They enable:\n- Type checking during expression evaluation\n- Validation of configuration values\n- Transformation of values during serialization\n\n## 3. State Management\n\n### 3.1 State Structure\n\nTerraform state represents the known infrastructure:\n\n```go\ntype State struct {\n    Version          uint64\n    Serial           uint64\n    Lineage          string\n    RootOutputValues map[string]*OutputValue\n    Modules          []*Module\n}\n```\n\nState tracks:\n- **Resources** - Resource instance values and metadata\n- **Outputs** - Root module output values\n- **Modules** - Nested module state\n- **Checks** - Check results and assertions\n\n### 3.2 Concurrent State Access: SyncState\n\nDuring graph traversal, multiple nodes execute concurrently. The `SyncState` wrapper provides thread-safe access:\n\n```go\ntype SyncState struct {\n    lock sync.Mutex\n    state *State\n}\n```\n\nSyncState consolidates multiple updates into atomic operations:\n\n```go\n// High-level atomic operations\nfunc (s *SyncState) SetResourceInstanceCurrent(addr addrs.AbsResourceInstance, obj *ResourceInstance, provider addrs.Provider)\nfunc (s *SyncState) SetResourceDeposed(addr addrs.AbsResourceInstance, key addrs.DeposedKey, obj *ResourceInstance, provider addrs.Provider)\nfunc (s *SyncState) RemoveResourceInstanceObject(addr addrs.AbsResourceInstance, key addrs.DeposedKey)\nfunc (s *SyncState) SetOutputValue(addr addrs.AbsOutputValue, value cty.Value)\n```\n\n**Key design:** Instead of locking individual fields, SyncState uses coarse-grained locking around meaningful state updates. This prevents partial updates and race conditions.\n\n### 3.3 State Snapshots\n\nThree state snapshots are maintained during pipeline execution:\n\n**InputState (PrevRunState):**\n- The state at the start of operations\n- Used to determine what already exists\n- Read-only during execution\n\n**CurrentState (State):**\n- Updated as resources are created/modified/deleted\n- Receives updates from Apply operations\n- Written to persistent storage at the end\n\n**RefreshState:**\n- Populated during refresh operations\n- Captures real infrastructure state\n- Used for comparison with configuration (plan operations)\n\n### 3.4 State Persistence\n\nState changes are persisted to backends through the Persister interface:\n\n```go\ntype Persister interface {\n    PersistState(*schemarepo.Schemas) error\n}\n```\n\n**Conflict detection:**\n- Serial numbers prevent overwriting concurrent changes\n- Lineage IDs track state history\n- Remote backends provide atomic writes\n\nAfter each apply phase, the updated state is persisted. The persistence layer handles:\n- Remote state locking\n- Concurrent write detection\n- State serialization\n- Backup creation\n\n### 3.5 Dynamic Expansion State\n\nThe `InstanceExpander` tracks gradual expansion of module and resource instances:\n\n```go\ntype Expander interface {\n    // Record that a module/resource at the given address expands to instances\n    SetModuleExpanded(addr addrs.ModuleInstance, for_each cty.Value)\n    SetResourceExpanded(addr addrs.AbsResourceInstance, for_each cty.Value)\n\n    // Get instances for a given address\n    GetModuleInstances(addr addrs.Module) []addrs.ModuleInstance\n    GetResourceInstances(addr addrs.Resource) []addrs.ResourceInstance\n}\n```\n\nThe expander allows count/for_each values to be unknown until they're evaluated during execution, enabling proper handling of dynamic resources.\n\n## 4. Execution Flow and Walker Pattern\n\n### 4.1 Graph Walking\n\nThe Graph.Walk() method traverses the graph and executes nodes:\n\n```go\nfunc (g *Graph) Walk(walker GraphWalker) tfdiags.Diagnostics {\n    // 1. Get evaluation context from walker\n    ctx := walker.EvalContext()\n\n    // 2. For each vertex in dependency order (respecting edges)\n    for vertex := range g.Vertices() {\n        // 3. Handle scope transitions (module entry/exit)\n        vertexCtx := walker.enterScope(vertex)\n\n        // 4. Execute the vertex if it's executable\n        if executable, ok := vertex.(GraphNodeExecutable); ok {\n            walker.Execute(vertexCtx, executable)\n        }\n\n        walker.exitScope(vertex)\n    }\n}\n```\n\n**Concurrency:** The graph walk uses the DAG's parallel traversal algorithm:\n- Only nodes with satisfied dependencies are executed\n- Multiple independent nodes execute concurrently\n- A semaphore limits parallelism (default 10)\n\n### 4.2 GraphWalker Interface\n\nThe GraphWalker coordinates execution:\n\n```go\ntype GraphWalker interface {\n    EvalContext() EvalContext\n    enterScope(evalContextScope) EvalContext\n    exitScope(evalContextScope)\n    Execute(EvalContext, GraphNodeExecutable) tfdiags.Diagnostics\n}\n```\n\n### 4.3 ContextGraphWalker Implementation\n\nThe main walker implementation provides the execution context:\n\n```go\ntype ContextGraphWalker struct {\n    // Configuration\n    Context *Context\n    Operation walkOperation\n\n    // State snapshots\n    State *states.SyncState           // Current state being updated\n    RefreshState *states.SyncState    // State from refresh\n    PrevRunState *states.SyncState    // Previous run's state\n\n    // Changes and tracking\n    Changes *plans.ChangesSync        // Planned changes\n    Checks *checks.State              // Check results\n    InstanceExpander *instances.Expander  // Dynamic expansion tracking\n    Deferrals *deferring.Deferred     // Deferred operations\n\n    // Caches\n    providerCache map[string]providers.Interface\n    provisionerCache map[string]provisioners.Interface\n    contexts collections.Map[evalContextScope, *BuiltinEvalContext]\n}\n```\n\n**Key operations:**\n\n1. **EvalContext()** - Creates the root evaluation context\n2. **enterScope()** - Creates module-specific contexts for nested modules\n3. **Execute()** - Calls the node's Execute method with a semaphore lock\n\n### 4.4 Node Execution\n\nEach executable node implements:\n\n```go\ntype GraphNodeExecutable interface {\n    Execute(ctx EvalContext, op walkOperation) tfdiags.Diagnostics\n}\n```\n\n**Example resource node execution:**\n\n```go\n// NodePlannableResourceInstance.Execute (plan phase)\nfunc (n *NodePlannableResourceInstance) Execute(ctx EvalContext, op walkOperation) tfdiags.Diagnostics {\n    // Get provider and schema\n    provider, schema := getProvider(ctx, n.ResolvedProvider)\n\n    // Read current state\n    prior := readState(ctx, n.Addr)\n\n    // Get proposed new state from config\n    proposed := evaluateConfig(ctx, n.Config)\n\n    // Call provider to plan changes\n    change := provider.PlanResourceChange(ctx, proposed, prior)\n\n    // Store the planned change\n    ctx.Changes().SetResourceInstancePlanned(n.Addr, change)\n}\n```\n\nDifferent node types execute different operations:\n- **Resource plan nodes** - Call provider.PlanResourceChange()\n- **Resource apply nodes** - Call provider.ApplyResourceChange()\n- **Provider nodes** - Call provider.Configure()\n- **Variable nodes** - Evaluate expressions\n- **Output nodes** - Evaluate output expressions\n- **Destroy nodes** - Handle resource deletion\n\n### 4.5 walkOperation Types\n\nThe walk operation indicates which phase is executing:\n\n```go\nconst (\n    walkPlan walkOperation = iota          // Plan phase\n    walkApply                              // Apply phase\n    walkValidate                           // Validation phase\n    walkImport                             // Import phase\n    walkRefresh                            // Refresh phase\n    walkPlanDestroy                        // Destroy plan phase\n    walkEval                               // Schema evaluation phase\n)\n```\n\nNodes can behave differently based on the operation. For example, resources skip refreshing during certain operations.\n\n### 4.6 Pipeline Coordination\n\nThe Context methods coordinate the overall pipeline:\n\n```go\n// Plan phase\nfunc (c *Context) Plan(config *configs.Config, prevRunState *states.State, opts *PlanOpts) (*plans.Plan, tfdiags.Diagnostics) {\n    // 1. Build the plan graph\n    graph, graphDiags := builder.Build(addrs.RootModule)\n\n    // 2. Create walker with input state\n    walker := c.graphWalker(graph, walkPlan, &graphWalkOpts{\n        InputState: prevRunState,\n        Changes: plans.NewChanges(),\n        Config: config,\n    })\n\n    // 3. Walk the graph\n    graph.Walk(walker)\n\n    // 4. Finalize the plan\n    plan := &plans.Plan{\n        Changes: walker.Changes.Finalize(),\n        State: walker.State.Close(),\n    }\n}\n\n// Apply phase\nfunc (c *Context) Apply(plan *plans.Plan, config *configs.Config, opts *ApplyOpts) (*states.State, tfdiags.Diagnostics) {\n    // 1. Build the apply graph (only for resources in plan)\n    graph, graphDiags := builder.Build(addrs.RootModule)\n\n    // 2. Create walker with changes from plan\n    walker := c.graphWalker(graph, walkApply, &graphWalkOpts{\n        InputState: plan.State,\n        Changes: plan.Changes,\n        Config: config,\n    })\n\n    // 3. Walk the graph\n    graph.Walk(walker)\n\n    // 4. Return final state\n    return walker.State.Close(), diags\n}\n```\n\n## 5. Hook System\n\n### 5.1 Hook Interface\n\nHooks provide extension points throughout the Terraform pipeline:\n\n```go\ntype Hook interface {\n    // Apply hooks\n    PreApply(id HookResourceIdentity, dk addrs.DeposedKey, action plans.Action, priorState, plannedNewState cty.Value) (HookAction, error)\n    PostApply(id HookResourceIdentity, dk addrs.DeposedKey, newState cty.Value, err error) (HookAction, error)\n\n    // Plan/diff hooks\n    PreDiff(id HookResourceIdentity, dk addrs.DeposedKey, priorState, proposedNewState cty.Value) (HookAction, error)\n    PostDiff(id HookResourceIdentity, dk addrs.DeposedKey, action plans.Action, priorState, plannedNewState cty.Value) (HookAction, error)\n\n    // Provisioning hooks\n    PreProvisionInstance(id HookResourceIdentity, state cty.Value) (HookAction, error)\n    PostProvisionInstance(id HookResourceIdentity, state cty.Value) (HookAction, error)\n    PreProvisionInstanceStep(id HookResourceIdentity, typeName string) (HookAction, error)\n    PostProvisionInstanceStep(id HookResourceIdentity, typeName string, err error) (HookAction, error)\n    ProvisionOutput(id HookResourceIdentity, typeName string, line string)\n\n    // Refresh hooks\n    PreRefresh(id HookResourceIdentity, dk addrs.DeposedKey, priorState cty.Value) (HookAction, error)\n    PostRefresh(id HookResourceIdentity, dk addrs.DeposedKey, priorState, newState cty.Value) (HookAction, error)\n\n    // Import hooks\n    PreImportState(id HookResourceIdentity, importID string) (HookAction, error)\n    PostImportState(id HookResourceIdentity, imported []providers.ImportedResource) (HookAction, error)\n    PrePlanImport(id HookResourceIdentity, importID string) (HookAction, error)\n    PostPlanImport(id HookResourceIdentity, imported []providers.ImportedResource) (HookAction, error)\n    PreApplyImport(id HookResourceIdentity, importing plans.ImportingSrc) (HookAction, error)\n    PostApplyImport(id HookResourceIdentity, importing plans.ImportingSrc) (HookAction, error)\n\n    // Lifecycle hooks\n    Stopping()                                              // Graceful shutdown signal\n    PostStateUpdate(new *states.State) (HookAction, error) // State changed\n}\n```\n\n### 5.2 Hook Invocation\n\nHooks are called through the EvalContext:\n\n```go\n// In BuiltinEvalContext\nfunc (ctx *BuiltinEvalContext) Hook(fn func(Hook) (HookAction, error)) error {\n    for _, h := range ctx.Hooks {\n        action, err := fn(h)\n        if err != nil {\n            return err\n        }\n        if action == HookActionHalt {\n            // Stop further hook processing\n            break\n        }\n    }\n    return nil\n}\n```\n\nHooks are registered when creating the Context:\n\n```go\nctx, diags := terraform.NewContext(&terraform.ContextOpts{\n    Hooks: []terraform.Hook{\n        uiHook,      // Updates UI with progress\n        countHook,   // Counts resources\n        stopHook,    // Handles graceful shutdown\n    },\n})\n```\n\n### 5.3 Hook Action Control\n\nHooks can influence execution through HookAction:\n\n```go\ntype HookAction byte\n\nconst (\n    HookActionContinue HookAction = iota  // Proceed normally\n    HookActionHalt                        // Stop this operation\n)\n```\n\nThis allows hooks to implement:\n- **Graceful shutdown** - Stop processing on external signals\n- **User approval** - Pause before critical operations\n- **Error injection** - Fail operations for testing\n- **Monitoring** - Pause and inspect operations\n\n## 6. Evaluation Context\n\n### 6.1 EvalContext Interface\n\nThe EvalContext provides the execution environment for graph nodes:\n\n```go\ntype EvalContext interface {\n    // Lifecycle\n    Stopped() <-chan struct{}\n\n    // Navigation\n    Path() addrs.ModuleInstance\n\n    // Hooks and UI\n    Hook(func(Hook) (HookAction, error)) error\n    Input() UIInput\n\n    // Providers\n    InitProvider(addr addrs.AbsProviderConfig, config *configs.Provider) (providers.Interface, error)\n    Provider(addr addrs.AbsProviderConfig) providers.Interface\n    ProviderSchema(addr addrs.AbsProviderConfig) (providers.ProviderSchema, error)\n    ConfigureProvider(addr addrs.AbsProviderConfig, cfg cty.Value) tfdiags.Diagnostics\n    CloseProvider(addr addrs.AbsProviderConfig) error\n\n    // Provisioners\n    Provisioner(name string) (provisioners.Interface, error)\n    ProvisionerSchema(name string) (*configschema.Block, error)\n    ClosePlugins() error\n\n    // State and changes\n    State() *states.SyncState\n    Changes() *plans.ChangesSync\n    RefreshState() *states.SyncState\n    PrevRunState() *states.SyncState\n\n    // Expression evaluation\n    EvaluateExpr(expr hcl.Expression, wantType cty.Type, self addrs.Referenceable) (cty.Value, tfdiags.Diagnostics)\n    EvaluateBlock(block *configs.Block, self addrs.Referenceable, allowSelfRef bool) (cty.Value, tfdiags.Diagnostics)\n\n    // Variable and value tracking\n    SetRootModuleArgument(addr addrs.InputVariable, value cty.Value)\n    GetLocalValue(addr addrs.LocalValue) cty.Value\n    SetLocalValue(addr addrs.LocalValue, value cty.Value)\n\n    // Dynamic expansion\n    InstanceExpander() *instances.Expander\n\n    // Deferred operations\n    Deferrals() *deferring.Deferred\n\n    // Check tracking\n    Checks() *checks.State\n\n    // Overrides\n    Overrides() *mocking.Overrides\n}\n```\n\n### 6.2 BuiltinEvalContext Implementation\n\nThe main evaluation context implementation:\n\n```go\ntype BuiltinEvalContext struct {\n    // Execution environment\n    StopContext context.Context\n    Hooks []Hook\n    InputValue UIInput\n\n    // Plugins and providers\n    Plugins *contextPlugins\n    ExternalProviderConfigs map[addrs.RootProviderConfig]providers.Interface\n    ProviderCache map[string]providers.Interface\n    ProviderSchemas map[string]providers.ProviderSchema\n    ProviderLock *sync.Mutex\n\n    // Provisioners\n    ProvisionerCache map[string]provisioners.Interface\n    ProvisionerSchemas map[string]*configschema.Block\n    ProvisionerLock *sync.Mutex\n\n    // State\n    StateValue *states.SyncState\n    RefreshStateValue *states.SyncState\n    PrevRunStateValue *states.SyncState\n\n    // Changes and tracking\n    ChangesValue *plans.ChangesSync\n    ChecksValue *checks.State\n    NamedValuesValue *namedvals.State\n    DeferralsValue *deferring.Deferred\n    InstanceExpanderValue *instances.Expander\n\n    // Evaluation\n    Evaluator *Evaluator\n}\n```\n\n### 6.3 Module-Scoped Contexts\n\nDifferent evaluation contexts are created for each module scope:\n\n```go\nfunc (w *ContextGraphWalker) enterScope(scope evalContextScope) EvalContext {\n    // Get or create a context for this module\n    if ctx, ok := w.contexts.GetOk(scope); ok {\n        return ctx\n    }\n\n    ctx := w.EvalContext().withScope(scope).(*BuiltinEvalContext)\n    w.contexts.Put(scope, ctx)\n    return ctx\n}\n```\n\nThis allows each module to have its own:\n- Variable values\n- Local values\n- Output values\n- Provider instances\n- Provisioner instances\n\n## 7. Dynamic Expansion for count/for_each\n\n### 7.1 Expansion Phases\n\nResources with count and for_each undergo multi-phase expansion:\n\n**Phase 1: Counting**\n```go\n// Evaluate count or for_each expression\nexpanded := evaluateCount(ctx, resource.Count)\n// Expand instances: aws_instance.web -> [aws_instance.web[0], aws_instance.web[1], ...]\nexpander.SetResourceExpanded(addr, expanded)\n```\n\n**Phase 2: Graph Update**\n```go\n// Dynamically add nodes for each expanded instance\nfor i, instance := range expanded {\n    g.Add(NewNodePlannableResourceInstance(...))\n}\n```\n\n**Phase 3: Execution**\n```go\n// Each instance node executes independently\nfor instance := range expanded {\n    walk the graph (may execute multiple instances concurrently)\n}\n```\n\n### 7.2 Deferred Expansion\n\nWhen count/for_each values are unknown during planning, resources are marked as deferred:\n\n```go\n// In node.Execute()\nif countValue.IsNull() || countValue.IsUnknown() {\n    // Record deferred action\n    deferrals.DeferResourceInstancePlanning(addr, deferralReason)\n    return // Skip this instance for now\n}\n```\n\nDeferred changes are applied in a subsequent run after dependencies provide the required values.\n\n## 8. Error Handling and Diagnostics\n\n### 8.1 Diagnostic Collection\n\nErrors and warnings are collected as diagnostics throughout execution:\n\n```go\ntype Diagnostics []Diagnostic\n\ntype Diagnostic interface {\n    Severity() DiagnosticSeverity  // Error, Warning\n    Description() DiagnosticDescription\n    Source() DiagnosticSource\n}\n```\n\nEach operation returns diagnostics:\n- **Plan returns** - Diagnostics if planning encountered issues\n- **Apply returns** - Diagnostics but still returns the updated state\n- **Nodes propagate** - Node.Execute() returns diagnostics\n\n### 8.2 Error Propagation\n\nGraph walking stops on errors:\n\n```go\n// In Graph.walk()\nfor vertex := range g.Vertices() {\n    diags = diags.Append(walker.Execute(vertexCtx, executable))\n    if diags.HasErrors() {\n        // Stop walking on errors\n        break\n    }\n}\n```\n\nNon-fatal errors can be collected and returned while continuing execution:\n\n```go\ntype NonFatalError struct {\n    Diagnostics Diagnostics\n}\n```\n\nThis allows partial results to be returned even when errors occur.\n\n### 8.3 Error Context\n\nErrors include source location information:\n\n```go\ntype DiagnosticSource struct {\n    Subject *SourceRange      // HCL source location\n    Context *SourceRange      // Surrounding context\n}\n```\n\nThis enables precise error reporting pointing to the exact configuration line that caused an issue.\n\n## 9. Extension Points in the Architecture\n\n### 9.1 Custom Graph Transformers\n\nExtend graph construction by implementing GraphTransformer:\n\n```go\ntype CustomTransformer struct {}\n\nfunc (t *CustomTransformer) Transform(g *Graph) error {\n    // Add custom nodes\n    g.Add(myCustomNode)\n\n    // Create edges\n    g.Connect(myCustomNode, someExistingNode)\n\n    return nil\n}\n```\n\nRegister in graph builders or apply to graphs after creation.\n\n### 9.2 Custom Hooks\n\nImplement Hook interface to observe and influence execution:\n\n```go\ntype CustomHook struct {}\n\nfunc (h *CustomHook) PreApply(id HookResourceIdentity, ...) (HookAction, error) {\n    // Log, monitor, or approve resource changes\n    log.Printf(\"About to apply %s\", id.Addr)\n    return HookActionContinue, nil\n}\n```\n\n### 9.3 Custom Evaluation Functions\n\nAdd custom evaluation capabilities:\n\n```go\n// In expression evaluation\nif customFunc := registry.GetFunction(name); customFunc != nil {\n    return customFunc.Call(args, ctx)\n}\n```\n\n### 9.4 Backend Integration\n\nExtend state management through backend interfaces:\n\n```go\ntype Backend interface {\n    // State management\n    State(workspace string) (statemgr.Full, error)\n\n    // Operation execution\n    Operation(context.Context, *operation.Operation) (*operation.Run, error)\n}\n```\n\nBackends can implement custom:\n- State locking mechanisms\n- Remote operations\n- State versioning\n- Access control\n\n## 10. Concurrent Execution Safety\n\n### 10.1 Concurrency Model\n\nThe architecture achieves thread-safe concurrent execution through:\n\n**1. Coarse-grained locking:**\n```go\n// SyncState locks entire operations\ntype SyncState struct {\n    lock sync.Mutex\n    state *State\n}\n\nfunc (s *SyncState) SetResourceInstanceCurrent(...) {\n    s.lock.Lock()\n    defer s.lock.Unlock()\n    s.state.SetResourceInstanceCurrent(...)\n}\n```\n\n**2. Semaphore-based parallelism:**\n```go\nfunc (w *ContextGraphWalker) Execute(ctx EvalContext, n GraphNodeExecutable) {\n    w.Context.parallelSem.Acquire()      // Limit concurrent execution\n    defer w.Context.parallelSem.Release()\n    n.Execute(ctx, w.Operation)\n}\n```\n\n**3. DAG-based ordering:**\n- Only nodes with satisfied dependencies execute\n- Dependencies prevent concurrent modification of same resources\n- Edge constraints ensure correct ordering\n\n### 10.2 State Synchronization\n\nMultiple independent state snapshots prevent conflicts:\n\n```go\n// During walk\nInputState (read-only) \u2190 unchanged\nCurrentState \u2190 updated by apply operations\nRefreshState \u2190 updated by refresh operations\n```\n\nState snapshots enable:\n- Refreshing state without affecting current state\n- Comparing old vs new states\n- Atomic state transitions\n\n### 10.3 Provider Caching and Thread Safety\n\nProviders are cached and accessed safely:\n\n```go\ntype ContextGraphWalker struct {\n    providerCache map[string]providers.Interface\n    providerLock sync.Mutex\n}\n\nfunc (w *ContextGraphWalker) getProvider(name string) providers.Interface {\n    w.providerLock.Lock()\n    defer w.providerLock.Unlock()\n    return w.providerCache[name]\n}\n```\n\nEach provider instance is used by multiple resource nodes, but:\n- Individual provider calls are thread-safe (by provider contract)\n- Schema access is cached and read-only\n- Configuration is fixed before execution starts\n\n## 11. Summary of Data Flow\n\n### 11.1 Plan Phase Flow\n\n```\nUser Configuration (HCL)\n    \u2193\nParse and validate configuration\n    \u2193\nPlanGraphBuilder constructs graph:\n  - ConfigTransformer adds resource nodes\n  - ProviderTransformer adds provider nodes\n  - ReferenceTransformer creates dependency edges\n  - Other transformers complete graph\n    \u2193\nContext.Plan() creates plan graph\n    \u2193\nGraph.Walk() with walkPlan operation:\n  - Variable nodes evaluate input variables\n  - Provider nodes initialize and configure\n  - Resource nodes call provider.PlanResourceChange()\n  - Output nodes evaluate output expressions\n    \u2193\nPlan captured with:\n  - Planned changes per resource\n  - Check results\n  - Evaluation state\n    \u2193\nPlan returned to user/CLI\n```\n\n### 11.2 Apply Phase Flow\n\n```\nPlan (from previous phase or file)\n    \u2193\nConfiguration (must match plan)\n    \u2193\nApplyGraphBuilder constructs graph:\n  - Creates nodes only for resources in plan changes\n  - Handles create-before-destroy ordering\n  - Creates destruction edges for replaced resources\n    \u2193\nContext.Apply() begins apply\n    \u2193\nGraph.Walk() with walkApply operation:\n  - Provider nodes initialize and configure\n  - Resource nodes call provider.ApplyResourceChange()\n  - Changes update CurrentState synchronously\n  - PostApply hooks notify of completion\n  - Dependent resources can now execute\n    \u2193\nState finalized:\n  - CurrentState becomes new persistent state\n  - Serial number incremented\n    \u2193\nState persisted to backend:\n  - Remote locking acquired\n  - Atomic write performed\n  - Lock released\n    \u2193\nUpdated state returned\n```\n\n### 11.3 Concurrent Execution Example\n\n```\nResource A\n  \u2502\n  \u2514\u2500\u2192 Provider A\n      \u2514\u2500\u2192 (initializes once)\n\nResource B\n  \u2502\n  \u2514\u2500\u2192 Provider B\n      \u2514\u2500\u2192 (initializes once)\n\nResource A depends on Resource B\n\nGraph execution:\n1. Provider A initializes (concurrent with Provider B)\n2. Provider B initializes (concurrent with Provider A)\n3. Resource B executes (uses Provider B)\n4. Resource A waits for Resource B dependency\n5. Resource A executes (uses Provider A)\n\nResult: A and B providers initialize concurrently,\n        B executes, then A executes sequentially.\n```\n\n## Conclusion\n\nTerraform's plan/apply pipeline architecture enables:\n- **Declarative infrastructure** through configuration-driven graphs\n- **Concurrent execution** of independent operations\n- **Safe state management** through synchronized updates\n- **Extensibility** through transformer and hook systems\n- **Reliable infrastructure changes** through planning and staged application\n\nThe graph-based model makes dependencies explicit, enables parallel execution where safe, and provides clear extension points for monitoring, control, and customization.\n",
+          "file_path": "/workspace/documentation.md",
+          "sequence": 43,
+          "type": "write"
+        }
+      ],
+      "conversation_events": [
+        {
+          "payload": {},
+          "sequence": 1,
+          "subtype": "message",
+          "text": "# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repositories (version-pinned mirrors):**\n\n- `github.com/sg-evals/terraform--7637a921` \u2014 use `repo:^github.com/sg-evals/terraform--7637a921$` filter\n- `github.com/sg-evals/terraform--24236f4f` \u2014 use `repo:^github.com/sg-evals/terraform--24236f4f$` filter\n\nScope ALL keyword_search/nls_search queries to these repos.\nUse the repo name as the `repo` parameter for read_file/go_to_definition/find_references.\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n**Sourcegraph Repositories:** `github.com/sg-evals/terraform--7637a921`, `github.com/sg-evals/terraform--24236f4f`\n\n# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repositories (version-pinned mirrors):**\n\n- `github.com/sg-evals/terraform--7637a921` \u2014 use `repo:^github.com/sg-evals/terraform--7637a921$` filter\n- `github.com/sg-evals/terraform--24236f4f` \u2014 use `repo:^github.com/sg-evals/terraform--24236f4f$` filter\n\nScope ALL keyword_search/nls_search queries to these repos.\nUse the repo name as the `repo` parameter for read_file/go_to_definition/find_references.\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n**Sourcegraph Repositories:** `github.com/sg-evals/terraform--7637a921`, `github.com/sg-evals/terraform--24236f4f`\n\n# Task: Terraform Plan/Apply Pipeline Architecture Documentation\n\n## Objective\n\nGenerate comprehensive architecture documentation for Terraform's plan/apply pipeline. Your documentation should explain how Terraform executes the plan and apply operations, covering the internal components and their interactions.\n\n## Scope\n\nYour documentation should cover the following architectural components:\n\n1. **Graph Builder System**\n   - How the dependency graph is constructed\n   - The role of graph transformers in building the execution graph\n   - How resources, providers, and modules are represented as graph nodes\n   - How dependencies between resources are discovered and encoded as edges\n\n2. **Provider Interface and Lifecycle**\n   - How providers are initialized and managed during execution\n   - The provider plugin architecture\n   - How resource operations are delegated to providers\n   - Provider configuration and instance management\n\n3. **State Management**\n   - How state is read, modified, and persisted during plan/apply\n   - The role of state managers and state synchronization\n   - How state snapshots enable concurrent graph evaluation\n   - State locking and remote state backends\n\n4. **Execution Flow and Hook System**\n   - The overall execution flow from command invocation to completion\n   - How graph nodes are evaluated (plan vs apply execution)\n   - The walker pattern for graph traversal\n   - Hook points for extending Terraform's behavior\n   - Dynamic expansion for count/for_each resources\n\n## Requirements\n\n- **Component Responsibilities**: Clearly explain what each major component does\n- **Data Flow**: Describe how data flows through the system during plan and apply operations\n- **Extension Points**: Identify where the architecture allows for customization or extension\n- **Error Handling**: Explain how errors are propagated and handled during execution\n\n## Deliverable\n\nWrite your documentation to `/workspace/documentation.md` in Markdown format.\n\nYour documentation should be technical and precise, aimed at developers who want to understand Terraform's internal architecture. Include specific details about component interactions, not just high-level descriptions.\n\n## Success Criteria\n\nYour documentation will be evaluated on:\n- Coverage of all required architectural topics\n- Accurate description of component responsibilities and interactions\n- Clear explanation of data flow through the pipeline\n- Identification of key extension points in the architecture\n- Technical depth appropriate for internal architecture documentation",
+          "timestamp": "2026-03-02T22:20:14.364Z",
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "payload": {},
+          "sequence": 3,
+          "subtype": "message",
+          "text": "I'll help you generate comprehensive architecture documentation for Terraform's plan/apply pipeline. Let me start by exploring the codebase to understand the key components and their interactions.",
+          "timestamp": "2026-03-02T22:20:17.491Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 4,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_repos toolu_011sFfXkvJM4bLxbUAvuDrDr",
+          "timestamp": "2026-03-02T22:20:17.584Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 6,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01YLH6F328AVtVqJ7Z2DxBV8",
+          "timestamp": "2026-03-02T22:20:19.228Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 8,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01BxMo2sJsi4jRdy978EVJtV",
+          "timestamp": "2026-03-02T22:20:20.709Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 10,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01DEJpZhRCzUdVPAauFtqg45",
+          "timestamp": "2026-03-02T22:20:22.634Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 12,
+          "subtype": "message",
+          "text": "Now let me search for key architectural components:",
+          "timestamp": "2026-03-02T22:20:25.208Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 13,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_016ipmEDUVkgzADB7BpPbwXp",
+          "timestamp": "2026-03-02T22:20:25.874Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 14,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01YafMUQe9RFPk7DDCXhZgxy",
+          "timestamp": "2026-03-02T22:20:26.083Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 15,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01CLnnA4QhyoynphKysZ2NuQ",
+          "timestamp": "2026-03-02T22:20:26.159Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 17,
+          "subtype": "message",
+          "text": "Now let me read the key architecture files:",
+          "timestamp": "2026-03-02T22:20:28.619Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 18,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01NA41n8nXbQ3j4CxgTGZ6rD",
+          "timestamp": "2026-03-02T22:20:29.091Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 19,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01GDb6qKT1xGxZTyUkAJgY9P",
+          "timestamp": "2026-03-02T22:20:29.311Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 20,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01NdDRkwqPLdmVpYLzs5UD1g",
+          "timestamp": "2026-03-02T22:20:29.620Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 22,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01BnxkE7pd5DcZLHezqoxPDo",
+          "timestamp": "2026-03-02T22:20:32.022Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 23,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01UtwoXB3ezFiqadwGBHs9MV",
+          "timestamp": "2026-03-02T22:20:32.445Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 24,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_017EJSPSnRrQkG4eFKutRbK2",
+          "timestamp": "2026-03-02T22:20:32.793Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 26,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01H1HRbDDMX5UfjhssuGKM1a",
+          "timestamp": "2026-03-02T22:20:35.234Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 27,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01FCTk4kWH3E7hUX4ELw8FpJ",
+          "timestamp": "2026-03-02T22:20:35.658Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 28,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_012puo31PoTqmeXh5W9bYwGv",
+          "timestamp": "2026-03-02T22:20:35.878Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 30,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_017pRCh7BA4AKhgL8m9i2gyo",
+          "timestamp": "2026-03-02T22:20:38.509Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 31,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01Wnxs3rkeYP2tszNfbSAfqW",
+          "timestamp": "2026-03-02T22:20:38.828Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 33,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01KtnH5rfFgPb9N22Wj2wcZ6",
+          "timestamp": "2026-03-02T22:20:40.761Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 34,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01T7E4sWAJBYHzUJEkFUnxHQ",
+          "timestamp": "2026-03-02T22:20:41.334Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 36,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_015Q1XLhzATo3vXYgH9m7bXf",
+          "timestamp": "2026-03-02T22:20:44.107Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 37,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01JPWhxXi3HGN7s5m2a2hiuk",
+          "timestamp": "2026-03-02T22:20:44.617Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 39,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01Jv3Hez8mmCdKzJvoFjN2CQ",
+          "timestamp": "2026-03-02T22:20:47.348Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 40,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01WKPx3DEWf8jR2rXj78BX34",
+          "timestamp": "2026-03-02T22:20:47.553Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 42,
+          "subtype": "message",
+          "text": "Now I have enough information to create comprehensive architecture documentation. Let me write it:",
+          "timestamp": "2026-03-02T22:20:55.341Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 43,
+          "subtype": "message",
+          "text": "Executed Write toolu_017zkkenT1M4TxFRzvDVYNVJ",
+          "timestamp": "2026-03-02T22:22:06.399Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 45,
+          "subtype": "message",
+          "text": "Perfect! I've created comprehensive architecture documentation for Terraform's plan/apply pipeline. Let me verify it was created successfully:",
+          "timestamp": "2026-03-02T22:22:10.255Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 46,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01YGcmowtFtGBd5DF85ZPrHy",
+          "timestamp": "2026-03-02T22:22:10.741Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 48,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01TaRbNCD5FvPAbL2EY8XNeb",
+          "timestamp": "2026-03-02T22:22:14.510Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 50,
+          "subtype": "message",
+          "text": "Excellent! I've successfully generated comprehensive architecture documentation for Terraform's plan/apply pipeline. The document is now available at `/workspace/documentation.md` with 1084 lines covering all required topics.\n\n## Documentation Summary\n\nThe documentation comprehensively covers:\n\n### **1. Graph Builder System**\n- GraphBuilder interface and how graphs are constructed\n- BasicGraphBuilder and its sequential transformation approach\n- Operation-specific builders (PlanGraphBuilder, ApplyGraphBuilder, EvalGraphBuilder)\n- 14+ graph transformers with their responsibilities\n- Graph structure and node types\n\n### **2. Provider Interface and Lifecycle**\n- Provider initialization and management\n- Provider caching and configuration\n- Schema retrieval and validation\n- Resource operations (plan, apply, import)\n- Provider node execution flow\n\n### **3. State Management**\n- State structure and components\n- SyncState for concurrent-safe access\n- Three state snapshots (InputState, CurrentState, RefreshState)\n- State persistence and conflict detection\n- Dynamic expansion tracking\n- Instance expander for count/for_each\n\n### **4. Execution Flow and Walker Pattern**\n- Graph.Walk() parallel traversal algorithm\n- GraphWalker interface and ContextGraphWalker implementation\n- Node execution model with walkOperation types\n- Pipeline coordination between plan and apply phases\n- Semaphore-based parallelism (default 10)\n\n### **5. Hook System**\n- Comprehensive Hook interface with 16+ callback points\n- PreApply, PostApply, PreDiff, PostDiff operations\n- Provisioning, refresh, and import hooks\n- Graceful shutdown and state update hooks\n- HookAction control mechanisms\n\n### **6. Evaluation Context**\n- EvalContext interface with 30+ methods\n- BuiltinEvalContext implementation\n- Module-scoped context management\n- Expression evaluation and provider/provisioner access\n\n### **7. Additional Topics**\n- Dynamic expansion for count/for_each\n- Deferred actions for unknown values\n- Error handling and diagnostic collection\n- Extension points (transformers, hooks, evaluation functions, backends)\n- Concurrent execution safety mechanisms\n- Data flow diagrams for plan and apply phases\n\nThe documentation is technically precise, includes code examples and data flow diagrams, and is specifically targeted at developers who want to understand Terraform's internal architecture for extending or customizing its behavior.",
+          "timestamp": "2026-03-02T22:22:22.979Z",
+          "tool": null,
+          "type": "agent"
+        }
+      ],
+      "step_count": 50,
+      "tool_counts_by_name": {
+        "Bash": 2,
+        "Write": 1,
+        "mcp__sourcegraph__sg_keyword_search": 5,
+        "mcp__sourcegraph__sg_list_files": 3,
+        "mcp__sourcegraph__sg_list_repos": 1,
+        "mcp__sourcegraph__sg_read_file": 15
+      },
+      "tool_event_count": 27,
+      "tool_events": [
+        {
+          "arguments": {
+            "query": "terraform--"
+          },
+          "step_id": 4,
+          "timestamp": "2026-03-02T22:20:17.584Z",
+          "tool": "mcp__sourcegraph__sg_list_repos"
+        },
+        {
+          "arguments": {
+            "repo": "github.com/sg-evals/terraform--7637a921"
+          },
+          "step_id": 6,
+          "timestamp": "2026-03-02T22:20:19.228Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "path": "internal",
+            "repo": "github.com/sg-evals/terraform--7637a921"
+          },
+          "step_id": 8,
+          "timestamp": "2026-03-02T22:20:20.709Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "path": "internal/terraform",
+            "repo": "github.com/sg-evals/terraform--7637a921"
+          },
+          "step_id": 10,
+          "timestamp": "2026-03-02T22:20:22.634Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/terraform--7637a921$ GraphBuilder type"
+          },
+          "step_id": 13,
+          "timestamp": "2026-03-02T22:20:25.874Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/terraform--7637a921$ Walker interface execute"
+          },
+          "step_id": 14,
+          "timestamp": "2026-03-02T22:20:26.083Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/terraform--7637a921$ type Hook interface"
+          },
+          "step_id": 15,
+          "timestamp": "2026-03-02T22:20:26.159Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 150,
+            "path": "internal/terraform/context.go",
+            "repo": "github.com/sg-evals/terraform--7637a921",
+            "startLine": 1
+          },
+          "step_id": 18,
+          "timestamp": "2026-03-02T22:20:29.091Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "path": "internal/terraform/graph_builder.go",
+            "repo": "github.com/sg-evals/terraform--7637a921"
+          },
+          "step_id": 19,
+          "timestamp": "2026-03-02T22:20:29.311Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "path": "internal/terraform/graph_walk.go",
+            "repo": "github.com/sg-evals/terraform--7637a921"
+          },
+          "step_id": 20,
+          "timestamp": "2026-03-02T22:20:29.620Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 150,
+            "path": "internal/terraform/context_plan.go",
+            "repo": "github.com/sg-evals/terraform--7637a921",
+            "startLine": 1
+          },
+          "step_id": 22,
+          "timestamp": "2026-03-02T22:20:32.022Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 120,
+            "path": "internal/terraform/context_apply.go",
+            "repo": "github.com/sg-evals/terraform--7637a921",
+            "startLine": 1
+          },
+          "step_id": 23,
+          "timestamp": "2026-03-02T22:20:32.445Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "internal/terraform/graph.go",
+            "repo": "github.com/sg-evals/terraform--7637a921",
+            "startLine": 1
+          },
+          "step_id": 24,
+          "timestamp": "2026-03-02T22:20:32.793Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "path": "internal/terraform/hook.go",
+            "repo": "github.com/sg-evals/terraform--7637a921"
+          },
+          "step_id": 26,
+          "timestamp": "2026-03-02T22:20:35.234Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "internal/terraform/eval_context.go",
+            "repo": "github.com/sg-evals/terraform--7637a921",
+            "startLine": 1
+          },
+          "step_id": 27,
+          "timestamp": "2026-03-02T22:20:35.658Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "path": "internal/terraform/transform.go",
+            "repo": "github.com/sg-evals/terraform--7637a921"
+          },
+          "step_id": 28,
+          "timestamp": "2026-03-02T22:20:35.878Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "internal/terraform/providers.go",
+            "repo": "github.com/sg-evals/terraform--7637a921",
+            "startLine": 1
+          },
+          "step_id": 30,
+          "timestamp": "2026-03-02T22:20:38.509Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "internal/terraform/context_walk.go",
+            "repo": "github.com/sg-evals/terraform--7637a921",
+            "startLine": 1
+          },
+          "step_id": 31,
+          "timestamp": "2026-03-02T22:20:38.828Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/terraform--7637a921$ GraphNodeExecutable interface Execute"
+          },
+          "step_id": 33,
+          "timestamp": "2026-03-02T22:20:40.761Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 200,
+            "path": "internal/terraform/graph_walk_context.go",
+            "repo": "github.com/sg-evals/terraform--7637a921",
+            "startLine": 1
+          },
+          "step_id": 34,
+          "timestamp": "2026-03-02T22:20:41.334Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "internal/terraform/node_resource_plan_instance.go",
+            "repo": "github.com/sg-evals/terraform--7637a921",
+            "startLine": 1
+          },
+          "step_id": 36,
+          "timestamp": "2026-03-02T22:20:44.107Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 150,
+            "path": "internal/terraform/graph_builder_plan.go",
+            "repo": "github.com/sg-evals/terraform--7637a921",
+            "startLine": 1
+          },
+          "step_id": 37,
+          "timestamp": "2026-03-02T22:20:44.617Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "internal/states/statemgr/persistent.go",
+            "repo": "github.com/sg-evals/terraform--7637a921",
+            "startLine": 1
+          },
+          "step_id": 39,
+          "timestamp": "2026-03-02T22:20:47.348Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/terraform--7637a921$ SyncState concurrent updates"
+          },
+          "step_id": 40,
+          "timestamp": "2026-03-02T22:20:47.553Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "content": "# Terraform Plan/Apply Pipeline Architecture Documentation\n\n## Overview\n\nTerraform's plan/apply pipeline is built on a graph-based execution model where infrastructure operations are represented as directed acyclic graphs (DAGs). The architecture enables concurrent execution of independent operations while maintaining correct ordering of dependent operations.\n\nThe pipeline consists of three major phases:\n1. **Graph Construction** - Building a DAG of operations from configuration\n2. **Graph Traversal** - Executing graph nodes in dependency order\n3. **State Management** - Tracking and persisting infrastructure state\n\n## 1. Graph Builder System\n\n### 1.1 GraphBuilder Interface\n\nThe `GraphBuilder` interface is the foundational abstraction for constructing execution graphs:\n\n```go\ntype GraphBuilder interface {\n    Build(addrs.ModuleInstance) (*Graph, tfdiags.Diagnostics)\n}\n```\n\nGraph builders take configuration, state, and options as input and produce a complete execution graph ready for traversal.\n\n### 1.2 BasicGraphBuilder\n\nThe `BasicGraphBuilder` is the core implementation that applies a sequence of transformations:\n\n```go\ntype BasicGraphBuilder struct {\n    Steps []GraphTransformer\n    Name  string\n}\n\nfunc (b *BasicGraphBuilder) Build(path addrs.ModuleInstance) (*Graph, tfdiags.Diagnostics)\n```\n\nThe Build method:\n1. Creates an empty graph at the given module path\n2. Sequentially applies each GraphTransformer\n3. Validates the final graph structure\n4. Returns diagnostics for any errors during transformation\n\nEach transformer can add nodes, modify edges, or reorganize the graph structure. Transformers are applied in a specific order to ensure correct graph construction.\n\n### 1.3 Operation-Specific Graph Builders\n\n#### PlanGraphBuilder\n\nBuilds graphs for plan and plan-like operations (plan, plan-destroy, validate, import):\n\n**Key inputs:**\n- `Config` - The desired infrastructure configuration\n- `State` - The current state (for comparison)\n- `RootVariableValues` - Input variables for the root module\n- `ExternalProviderConfigs` - Pre-configured provider instances\n- `Targets` - Resource targeting for partial operations\n- `ForceReplace` - Resources to force replacement\n- `skipRefresh` - Whether to skip state refresh\n- `skipPlanChanges` - For refresh-only operations\n\n**Graph composition:**\n1. Creates resource nodes from configuration\n2. Attaches provider configurations and schemas\n3. Establishes dependencies based on references\n4. Handles count/for_each expansion\n5. Attaches validation and check nodes\n6. Applies targeting filters if specified\n\n#### ApplyGraphBuilder\n\nBuilds graphs for applying previously-generated plans:\n\n**Key inputs:**\n- `Config` - The configuration file (must match the plan's configuration)\n- `Changes` - The planned changes from the plan file\n- `State` - Current state used as a baseline\n\n**Graph composition:**\n1. Creates nodes only for resources with planned changes\n2. Applies create-before-destroy ordering for replacements\n3. Establishes deposed object handling for replacements\n4. Sets up resource destruction sequences when needed\n\n#### EvalGraphBuilder\n\nUsed for validation and schema evaluation without configuring providers:\n\n- Retrieves provider schemas for type checking\n- Validates configuration structure\n- Does not initialize or configure actual provider instances\n\n### 1.4 Graph Transformers\n\nGraphTransformers modify graphs during construction. The interface is simple:\n\n```go\ntype GraphTransformer interface {\n    Transform(*Graph) error\n}\n```\n\nTransformers operate at different levels:\n\n**Key transformers in the pipeline:**\n\n1. **ConfigTransformer** - Adds resource nodes from configuration files\n2. **StateTransformer** - Adds state-only resources not in config\n3. **ProviderTransformer** - Adds provider nodes and connects them to resources\n4. **ReferenceTransformer** - Analyzes references and creates edges\n5. **ModuleExpansionTransformer** - Handles module.* expansion\n6. **CountTransformer** - Handles resource count expansion\n7. **ExpandTransformer** - Performs dynamic expansion with count/for_each\n8. **ProviderConfigTransformer** - Attaches configurations to providers\n9. **SchemaTransformer** - Attaches schema information to nodes\n10. **DeferredTransformer** - Marks operations for deferral when needed\n11. **OrphanResourceTransformer** - Handles removed resources\n12. **OutputTransformer** - Adds output value nodes\n13. **DestroyEdgeTransformer** - Creates edges for resource destruction\n14. **TransitiveReductionTransformer** - Removes redundant edges\n\n**Transformer execution order matters:** Transformers are applied sequentially, and later transformers depend on work done by earlier ones. For example, ReferenceTransformer must run after ConfigTransformer has added all resource nodes.\n\n### 1.5 Graph Representation\n\nThe Graph structure wraps a DAG (Directed Acyclic Graph):\n\n```go\ntype Graph struct {\n    dag.AcyclicGraph\n    Path addrs.ModuleInstance\n}\n```\n\nGraph nodes (vertices) represent different types of operations:\n- **Resource instances** - Individual resources being created/modified/deleted\n- **Providers** - Provider initialization and configuration\n- **Variables** - Root and module variable evaluation\n- **Outputs** - Output value evaluation\n- **Local values** - Local value computation\n- **Module instances** - Module expansion and nesting\n- **Data sources** - Data resource reads\n- **Checks** - Precondition and postcondition evaluation\n\nEdges represent dependencies:\n- **Reference edges** - A depends on B because B is referenced in A's configuration\n- **Implicit edges** - Dependencies within a module\n- **Provider edges** - Resources depend on their provider initialization\n- **Destroy edges** - Order constraints for destruction\n\n## 2. Provider Interface and Lifecycle\n\n### 2.1 Provider Architecture\n\nProviders are plugins implementing a well-defined interface. The architecture maintains a clean separation between Terraform core and provider implementations.\n\n**Provider lifecycle:**\n\n```\nInitialize \u2192 Configure \u2192 GetSchema \u2192 Read/Plan/Apply \u2192 Close\n```\n\n### 2.2 Provider Management\n\nThe `EvalContext` provides provider lifecycle management:\n\n```go\n// Initialization\nInitProvider(addr addrs.AbsProviderConfig, config *configs.Provider) (providers.Interface, error)\n\n// Access\nProvider(addr addrs.AbsProviderConfig) providers.Interface\nProviderSchema(addr addrs.AbsProviderConfig) (providers.ProviderSchema, error)\n\n// Configuration\nConfigureProvider(addr addrs.AbsProviderConfig, cfg cty.Value) tfdiags.Diagnostics\n\n// Cleanup\nCloseProvider(addr addrs.AbsProviderConfig) error\n```\n\n**Provider caching:**\n\nProviders are cached in the ContextGraphWalker to avoid repeated initialization:\n\n```go\ntype ContextGraphWalker struct {\n    providerCache map[string]providers.Interface      // Initialized providers\n    providerSchemas map[string]providers.ProviderSchema // Cached schemas\n    providerLock sync.Mutex                            // Thread-safe access\n}\n```\n\n### 2.3 Provider Node Execution\n\nProvider operations are represented as graph nodes:\n\n- **NodeApplyableProvider** - Initializes and configures a provider during apply\n- **NodeValidatableProvider** - Validates provider configuration during validation\n- **graphNodeCloseProvider** - Closes provider connections\n- **nodeExternalProvider** - Uses pre-configured providers passed from external callers\n\nWhen a provider node executes:\n1. It calls `EvalContext.InitProvider()` to create a provider instance\n2. It retrieves and validates the provider's schema\n3. It calls `ConfigureProvider()` with the provider configuration\n4. The provider instance is cached for use by resource operations\n\n### 2.4 Resource Operations\n\nResources delegate their operations to providers through standard interfaces:\n\n**Plan phase:**\n- Provider.PlanResourceChange() - Determines what changes are needed\n\n**Apply phase:**\n- Provider.ApplyResourceChange() - Applies the planned change\n- Provider.ImportResourceState() - Imports external resources\n\n**Refresh phase:**\n- Provider.ReadResource() - Gets current state from infrastructure\n\nEach resource operation node in the graph calls these provider methods within its Execute() method.\n\n### 2.5 Schema Management\n\nSchemas are retrieved once per provider and cached:\n\n```go\nschema, err := ctx.ProviderSchema(providerAddr)\n```\n\nSchemas define the resource types a provider supports and their configuration structure. They enable:\n- Type checking during expression evaluation\n- Validation of configuration values\n- Transformation of values during serialization\n\n## 3. State Management\n\n### 3.1 State Structure\n\nTerraform state represents the known infrastructure:\n\n```go\ntype State struct {\n    Version          uint64\n    Serial           uint64\n    Lineage          string\n    RootOutputValues map[string]*OutputValue\n    Modules          []*Module\n}\n```\n\nState tracks:\n- **Resources** - Resource instance values and metadata\n- **Outputs** - Root module output values\n- **Modules** - Nested module state\n- **Checks** - Check results and assertions\n\n### 3.2 Concurrent State Access: SyncState\n\nDuring graph traversal, multiple nodes execute concurrently. The `SyncState` wrapper provides thread-safe access:\n\n```go\ntype SyncState struct {\n    lock sync.Mutex\n    state *State\n}\n```\n\nSyncState consolidates multiple updates into atomic operations:\n\n```go\n// High-level atomic operations\nfunc (s *SyncState) SetResourceInstanceCurrent(addr addrs.AbsResourceInstance, obj *ResourceInstance, provider addrs.Provider)\nfunc (s *SyncState) SetResourceDeposed(addr addrs.AbsResourceInstance, key addrs.DeposedKey, obj *ResourceInstance, provider addrs.Provider)\nfunc (s *SyncState) RemoveResourceInstanceObject(addr addrs.AbsResourceInstance, key addrs.DeposedKey)\nfunc (s *SyncState) SetOutputValue(addr addrs.AbsOutputValue, value cty.Value)\n```\n\n**Key design:** Instead of locking individual fields, SyncState uses coarse-grained locking around meaningful state updates. This prevents partial updates and race conditions.\n\n### 3.3 State Snapshots\n\nThree state snapshots are maintained during pipeline execution:\n\n**InputState (PrevRunState):**\n- The state at the start of operations\n- Used to determine what already exists\n- Read-only during execution\n\n**CurrentState (State):**\n- Updated as resources are created/modified/deleted\n- Receives updates from Apply operations\n- Written to persistent storage at the end\n\n**RefreshState:**\n- Populated during refresh operations\n- Captures real infrastructure state\n- Used for comparison with configuration (plan operations)\n\n### 3.4 State Persistence\n\nState changes are persisted to backends through the Persister interface:\n\n```go\ntype Persister interface {\n    PersistState(*schemarepo.Schemas) error\n}\n```\n\n**Conflict detection:**\n- Serial numbers prevent overwriting concurrent changes\n- Lineage IDs track state history\n- Remote backends provide atomic writes\n\nAfter each apply phase, the updated state is persisted. The persistence layer handles:\n- Remote state locking\n- Concurrent write detection\n- State serialization\n- Backup creation\n\n### 3.5 Dynamic Expansion State\n\nThe `InstanceExpander` tracks gradual expansion of module and resource instances:\n\n```go\ntype Expander interface {\n    // Record that a module/resource at the given address expands to instances\n    SetModuleExpanded(addr addrs.ModuleInstance, for_each cty.Value)\n    SetResourceExpanded(addr addrs.AbsResourceInstance, for_each cty.Value)\n\n    // Get instances for a given address\n    GetModuleInstances(addr addrs.Module) []addrs.ModuleInstance\n    GetResourceInstances(addr addrs.Resource) []addrs.ResourceInstance\n}\n```\n\nThe expander allows count/for_each values to be unknown until they're evaluated during execution, enabling proper handling of dynamic resources.\n\n## 4. Execution Flow and Walker Pattern\n\n### 4.1 Graph Walking\n\nThe Graph.Walk() method traverses the graph and executes nodes:\n\n```go\nfunc (g *Graph) Walk(walker GraphWalker) tfdiags.Diagnostics {\n    // 1. Get evaluation context from walker\n    ctx := walker.EvalContext()\n\n    // 2. For each vertex in dependency order (respecting edges)\n    for vertex := range g.Vertices() {\n        // 3. Handle scope transitions (module entry/exit)\n        vertexCtx := walker.enterScope(vertex)\n\n        // 4. Execute the vertex if it's executable\n        if executable, ok := vertex.(GraphNodeExecutable); ok {\n            walker.Execute(vertexCtx, executable)\n        }\n\n        walker.exitScope(vertex)\n    }\n}\n```\n\n**Concurrency:** The graph walk uses the DAG's parallel traversal algorithm:\n- Only nodes with satisfied dependencies are executed\n- Multiple independent nodes execute concurrently\n- A semaphore limits parallelism (default 10)\n\n### 4.2 GraphWalker Interface\n\nThe GraphWalker coordinates execution:\n\n```go\ntype GraphWalker interface {\n    EvalContext() EvalContext\n    enterScope(evalContextScope) EvalContext\n    exitScope(evalContextScope)\n    Execute(EvalContext, GraphNodeExecutable) tfdiags.Diagnostics\n}\n```\n\n### 4.3 ContextGraphWalker Implementation\n\nThe main walker implementation provides the execution context:\n\n```go\ntype ContextGraphWalker struct {\n    // Configuration\n    Context *Context\n    Operation walkOperation\n\n    // State snapshots\n    State *states.SyncState           // Current state being updated\n    RefreshState *states.SyncState    // State from refresh\n    PrevRunState *states.SyncState    // Previous run's state\n\n    // Changes and tracking\n    Changes *plans.ChangesSync        // Planned changes\n    Checks *checks.State              // Check results\n    InstanceExpander *instances.Expander  // Dynamic expansion tracking\n    Deferrals *deferring.Deferred     // Deferred operations\n\n    // Caches\n    providerCache map[string]providers.Interface\n    provisionerCache map[string]provisioners.Interface\n    contexts collections.Map[evalContextScope, *BuiltinEvalContext]\n}\n```\n\n**Key operations:**\n\n1. **EvalContext()** - Creates the root evaluation context\n2. **enterScope()** - Creates module-specific contexts for nested modules\n3. **Execute()** - Calls the node's Execute method with a semaphore lock\n\n### 4.4 Node Execution\n\nEach executable node implements:\n\n```go\ntype GraphNodeExecutable interface {\n    Execute(ctx EvalContext, op walkOperation) tfdiags.Diagnostics\n}\n```\n\n**Example resource node execution:**\n\n```go\n// NodePlannableResourceInstance.Execute (plan phase)\nfunc (n *NodePlannableResourceInstance) Execute(ctx EvalContext, op walkOperation) tfdiags.Diagnostics {\n    // Get provider and schema\n    provider, schema := getProvider(ctx, n.ResolvedProvider)\n\n    // Read current state\n    prior := readState(ctx, n.Addr)\n\n    // Get proposed new state from config\n    proposed := evaluateConfig(ctx, n.Config)\n\n    // Call provider to plan changes\n    change := provider.PlanResourceChange(ctx, proposed, prior)\n\n    // Store the planned change\n    ctx.Changes().SetResourceInstancePlanned(n.Addr, change)\n}\n```\n\nDifferent node types execute different operations:\n- **Resource plan nodes** - Call provider.PlanResourceChange()\n- **Resource apply nodes** - Call provider.ApplyResourceChange()\n- **Provider nodes** - Call provider.Configure()\n- **Variable nodes** - Evaluate expressions\n- **Output nodes** - Evaluate output expressions\n- **Destroy nodes** - Handle resource deletion\n\n### 4.5 walkOperation Types\n\nThe walk operation indicates which phase is executing:\n\n```go\nconst (\n    walkPlan walkOperation = iota          // Plan phase\n    walkApply                              // Apply phase\n    walkValidate                           // Validation phase\n    walkImport                             // Import phase\n    walkRefresh                            // Refresh phase\n    walkPlanDestroy                        // Destroy plan phase\n    walkEval                               // Schema evaluation phase\n)\n```\n\nNodes can behave differently based on the operation. For example, resources skip refreshing during certain operations.\n\n### 4.6 Pipeline Coordination\n\nThe Context methods coordinate the overall pipeline:\n\n```go\n// Plan phase\nfunc (c *Context) Plan(config *configs.Config, prevRunState *states.State, opts *PlanOpts) (*plans.Plan, tfdiags.Diagnostics) {\n    // 1. Build the plan graph\n    graph, graphDiags := builder.Build(addrs.RootModule)\n\n    // 2. Create walker with input state\n    walker := c.graphWalker(graph, walkPlan, &graphWalkOpts{\n        InputState: prevRunState,\n        Changes: plans.NewChanges(),\n        Config: config,\n    })\n\n    // 3. Walk the graph\n    graph.Walk(walker)\n\n    // 4. Finalize the plan\n    plan := &plans.Plan{\n        Changes: walker.Changes.Finalize(),\n        State: walker.State.Close(),\n    }\n}\n\n// Apply phase\nfunc (c *Context) Apply(plan *plans.Plan, config *configs.Config, opts *ApplyOpts) (*states.State, tfdiags.Diagnostics) {\n    // 1. Build the apply graph (only for resources in plan)\n    graph, graphDiags := builder.Build(addrs.RootModule)\n\n    // 2. Create walker with changes from plan\n    walker := c.graphWalker(graph, walkApply, &graphWalkOpts{\n        InputState: plan.State,\n        Changes: plan.Changes,\n        Config: config,\n    })\n\n    // 3. Walk the graph\n    graph.Walk(walker)\n\n    // 4. Return final state\n    return walker.State.Close(), diags\n}\n```\n\n## 5. Hook System\n\n### 5.1 Hook Interface\n\nHooks provide extension points throughout the Terraform pipeline:\n\n```go\ntype Hook interface {\n    // Apply hooks\n    PreApply(id HookResourceIdentity, dk addrs.DeposedKey, action plans.Action, priorState, plannedNewState cty.Value) (HookAction, error)\n    PostApply(id HookResourceIdentity, dk addrs.DeposedKey, newState cty.Value, err error) (HookAction, error)\n\n    // Plan/diff hooks\n    PreDiff(id HookResourceIdentity, dk addrs.DeposedKey, priorState, proposedNewState cty.Value) (HookAction, error)\n    PostDiff(id HookResourceIdentity, dk addrs.DeposedKey, action plans.Action, priorState, plannedNewState cty.Value) (HookAction, error)\n\n    // Provisioning hooks\n    PreProvisionInstance(id HookResourceIdentity, state cty.Value) (HookAction, error)\n    PostProvisionInstance(id HookResourceIdentity, state cty.Value) (HookAction, error)\n    PreProvisionInstanceStep(id HookResourceIdentity, typeName string) (HookAction, error)\n    PostProvisionInstanceStep(id HookResourceIdentity, typeName string, err error) (HookAction, error)\n    ProvisionOutput(id HookResourceIdentity, typeName string, line string)\n\n    // Refresh hooks\n    PreRefresh(id HookResourceIdentity, dk addrs.DeposedKey, priorState cty.Value) (HookAction, error)\n    PostRefresh(id HookResourceIdentity, dk addrs.DeposedKey, priorState, newState cty.Value) (HookAction, error)\n\n    // Import hooks\n    PreImportState(id HookResourceIdentity, importID string) (HookAction, error)\n    PostImportState(id HookResourceIdentity, imported []providers.ImportedResource) (HookAction, error)\n    PrePlanImport(id HookResourceIdentity, importID string) (HookAction, error)\n    PostPlanImport(id HookResourceIdentity, imported []providers.ImportedResource) (HookAction, error)\n    PreApplyImport(id HookResourceIdentity, importing plans.ImportingSrc) (HookAction, error)\n    PostApplyImport(id HookResourceIdentity, importing plans.ImportingSrc) (HookAction, error)\n\n    // Lifecycle hooks\n    Stopping()                                              // Graceful shutdown signal\n    PostStateUpdate(new *states.State) (HookAction, error) // State changed\n}\n```\n\n### 5.2 Hook Invocation\n\nHooks are called through the EvalContext:\n\n```go\n// In BuiltinEvalContext\nfunc (ctx *BuiltinEvalContext) Hook(fn func(Hook) (HookAction, error)) error {\n    for _, h := range ctx.Hooks {\n        action, err := fn(h)\n        if err != nil {\n            return err\n        }\n        if action == HookActionHalt {\n            // Stop further hook processing\n            break\n        }\n    }\n    return nil\n}\n```\n\nHooks are registered when creating the Context:\n\n```go\nctx, diags := terraform.NewContext(&terraform.ContextOpts{\n    Hooks: []terraform.Hook{\n        uiHook,      // Updates UI with progress\n        countHook,   // Counts resources\n        stopHook,    // Handles graceful shutdown\n    },\n})\n```\n\n### 5.3 Hook Action Control\n\nHooks can influence execution through HookAction:\n\n```go\ntype HookAction byte\n\nconst (\n    HookActionContinue HookAction = iota  // Proceed normally\n    HookActionHalt                        // Stop this operation\n)\n```\n\nThis allows hooks to implement:\n- **Graceful shutdown** - Stop processing on external signals\n- **User approval** - Pause before critical operations\n- **Error injection** - Fail operations for testing\n- **Monitoring** - Pause and inspect operations\n\n## 6. Evaluation Context\n\n### 6.1 EvalContext Interface\n\nThe EvalContext provides the execution environment for graph nodes:\n\n```go\ntype EvalContext interface {\n    // Lifecycle\n    Stopped() <-chan struct{}\n\n    // Navigation\n    Path() addrs.ModuleInstance\n\n    // Hooks and UI\n    Hook(func(Hook) (HookAction, error)) error\n    Input() UIInput\n\n    // Providers\n    InitProvider(addr addrs.AbsProviderConfig, config *configs.Provider) (providers.Interface, error)\n    Provider(addr addrs.AbsProviderConfig) providers.Interface\n    ProviderSchema(addr addrs.AbsProviderConfig) (providers.ProviderSchema, error)\n    ConfigureProvider(addr addrs.AbsProviderConfig, cfg cty.Value) tfdiags.Diagnostics\n    CloseProvider(addr addrs.AbsProviderConfig) error\n\n    // Provisioners\n    Provisioner(name string) (provisioners.Interface, error)\n    ProvisionerSchema(name string) (*configschema.Block, error)\n    ClosePlugins() error\n\n    // State and changes\n    State() *states.SyncState\n    Changes() *plans.ChangesSync\n    RefreshState() *states.SyncState\n    PrevRunState() *states.SyncState\n\n    // Expression evaluation\n    EvaluateExpr(expr hcl.Expression, wantType cty.Type, self addrs.Referenceable) (cty.Value, tfdiags.Diagnostics)\n    EvaluateBlock(block *configs.Block, self addrs.Referenceable, allowSelfRef bool) (cty.Value, tfdiags.Diagnostics)\n\n    // Variable and value tracking\n    SetRootModuleArgument(addr addrs.InputVariable, value cty.Value)\n    GetLocalValue(addr addrs.LocalValue) cty.Value\n    SetLocalValue(addr addrs.LocalValue, value cty.Value)\n\n    // Dynamic expansion\n    InstanceExpander() *instances.Expander\n\n    // Deferred operations\n    Deferrals() *deferring.Deferred\n\n    // Check tracking\n    Checks() *checks.State\n\n    // Overrides\n    Overrides() *mocking.Overrides\n}\n```\n\n### 6.2 BuiltinEvalContext Implementation\n\nThe main evaluation context implementation:\n\n```go\ntype BuiltinEvalContext struct {\n    // Execution environment\n    StopContext context.Context\n    Hooks []Hook\n    InputValue UIInput\n\n    // Plugins and providers\n    Plugins *contextPlugins\n    ExternalProviderConfigs map[addrs.RootProviderConfig]providers.Interface\n    ProviderCache map[string]providers.Interface\n    ProviderSchemas map[string]providers.ProviderSchema\n    ProviderLock *sync.Mutex\n\n    // Provisioners\n    ProvisionerCache map[string]provisioners.Interface\n    ProvisionerSchemas map[string]*configschema.Block\n    ProvisionerLock *sync.Mutex\n\n    // State\n    StateValue *states.SyncState\n    RefreshStateValue *states.SyncState\n    PrevRunStateValue *states.SyncState\n\n    // Changes and tracking\n    ChangesValue *plans.ChangesSync\n    ChecksValue *checks.State\n    NamedValuesValue *namedvals.State\n    DeferralsValue *deferring.Deferred\n    InstanceExpanderValue *instances.Expander\n\n    // Evaluation\n    Evaluator *Evaluator\n}\n```\n\n### 6.3 Module-Scoped Contexts\n\nDifferent evaluation contexts are created for each module scope:\n\n```go\nfunc (w *ContextGraphWalker) enterScope(scope evalContextScope) EvalContext {\n    // Get or create a context for this module\n    if ctx, ok := w.contexts.GetOk(scope); ok {\n        return ctx\n    }\n\n    ctx := w.EvalContext().withScope(scope).(*BuiltinEvalContext)\n    w.contexts.Put(scope, ctx)\n    return ctx\n}\n```\n\nThis allows each module to have its own:\n- Variable values\n- Local values\n- Output values\n- Provider instances\n- Provisioner instances\n\n## 7. Dynamic Expansion for count/for_each\n\n### 7.1 Expansion Phases\n\nResources with count and for_each undergo multi-phase expansion:\n\n**Phase 1: Counting**\n```go\n// Evaluate count or for_each expression\nexpanded := evaluateCount(ctx, resource.Count)\n// Expand instances: aws_instance.web -> [aws_instance.web[0], aws_instance.web[1], ...]\nexpander.SetResourceExpanded(addr, expanded)\n```\n\n**Phase 2: Graph Update**\n```go\n// Dynamically add nodes for each expanded instance\nfor i, instance := range expanded {\n    g.Add(NewNodePlannableResourceInstance(...))\n}\n```\n\n**Phase 3: Execution**\n```go\n// Each instance node executes independently\nfor instance := range expanded {\n    walk the graph (may execute multiple instances concurrently)\n}\n```\n\n### 7.2 Deferred Expansion\n\nWhen count/for_each values are unknown during planning, resources are marked as deferred:\n\n```go\n// In node.Execute()\nif countValue.IsNull() || countValue.IsUnknown() {\n    // Record deferred action\n    deferrals.DeferResourceInstancePlanning(addr, deferralReason)\n    return // Skip this instance for now\n}\n```\n\nDeferred changes are applied in a subsequent run after dependencies provide the required values.\n\n## 8. Error Handling and Diagnostics\n\n### 8.1 Diagnostic Collection\n\nErrors and warnings are collected as diagnostics throughout execution:\n\n```go\ntype Diagnostics []Diagnostic\n\ntype Diagnostic interface {\n    Severity() DiagnosticSeverity  // Error, Warning\n    Description() DiagnosticDescription\n    Source() DiagnosticSource\n}\n```\n\nEach operation returns diagnostics:\n- **Plan returns** - Diagnostics if planning encountered issues\n- **Apply returns** - Diagnostics but still returns the updated state\n- **Nodes propagate** - Node.Execute() returns diagnostics\n\n### 8.2 Error Propagation\n\nGraph walking stops on errors:\n\n```go\n// In Graph.walk()\nfor vertex := range g.Vertices() {\n    diags = diags.Append(walker.Execute(vertexCtx, executable))\n    if diags.HasErrors() {\n        // Stop walking on errors\n        break\n    }\n}\n```\n\nNon-fatal errors can be collected and returned while continuing execution:\n\n```go\ntype NonFatalError struct {\n    Diagnostics Diagnostics\n}\n```\n\nThis allows partial results to be returned even when errors occur.\n\n### 8.3 Error Context\n\nErrors include source location information:\n\n```go\ntype DiagnosticSource struct {\n    Subject *SourceRange      // HCL source location\n    Context *SourceRange      // Surrounding context\n}\n```\n\nThis enables precise error reporting pointing to the exact configuration line that caused an issue.\n\n## 9. Extension Points in the Architecture\n\n### 9.1 Custom Graph Transformers\n\nExtend graph construction by implementing GraphTransformer:\n\n```go\ntype CustomTransformer struct {}\n\nfunc (t *CustomTransformer) Transform(g *Graph) error {\n    // Add custom nodes\n    g.Add(myCustomNode)\n\n    // Create edges\n    g.Connect(myCustomNode, someExistingNode)\n\n    return nil\n}\n```\n\nRegister in graph builders or apply to graphs after creation.\n\n### 9.2 Custom Hooks\n\nImplement Hook interface to observe and influence execution:\n\n```go\ntype CustomHook struct {}\n\nfunc (h *CustomHook) PreApply(id HookResourceIdentity, ...) (HookAction, error) {\n    // Log, monitor, or approve resource changes\n    log.Printf(\"About to apply %s\", id.Addr)\n    return HookActionContinue, nil\n}\n```\n\n### 9.3 Custom Evaluation Functions\n\nAdd custom evaluation capabilities:\n\n```go\n// In expression evaluation\nif customFunc := registry.GetFunction(name); customFunc != nil {\n    return customFunc.Call(args, ctx)\n}\n```\n\n### 9.4 Backend Integration\n\nExtend state management through backend interfaces:\n\n```go\ntype Backend interface {\n    // State management\n    State(workspace string) (statemgr.Full, error)\n\n    // Operation execution\n    Operation(context.Context, *operation.Operation) (*operation.Run, error)\n}\n```\n\nBackends can implement custom:\n- State locking mechanisms\n- Remote operations\n- State versioning\n- Access control\n\n## 10. Concurrent Execution Safety\n\n### 10.1 Concurrency Model\n\nThe architecture achieves thread-safe concurrent execution through:\n\n**1. Coarse-grained locking:**\n```go\n// SyncState locks entire operations\ntype SyncState struct {\n    lock sync.Mutex\n    state *State\n}\n\nfunc (s *SyncState) SetResourceInstanceCurrent(...) {\n    s.lock.Lock()\n    defer s.lock.Unlock()\n    s.state.SetResourceInstanceCurrent(...)\n}\n```\n\n**2. Semaphore-based parallelism:**\n```go\nfunc (w *ContextGraphWalker) Execute(ctx EvalContext, n GraphNodeExecutable) {\n    w.Context.parallelSem.Acquire()      // Limit concurrent execution\n    defer w.Context.parallelSem.Release()\n    n.Execute(ctx, w.Operation)\n}\n```\n\n**3. DAG-based ordering:**\n- Only nodes with satisfied dependencies execute\n- Dependencies prevent concurrent modification of same resources\n- Edge constraints ensure correct ordering\n\n### 10.2 State Synchronization\n\nMultiple independent state snapshots prevent conflicts:\n\n```go\n// During walk\nInputState (read-only) \u2190 unchanged\nCurrentState \u2190 updated by apply operations\nRefreshState \u2190 updated by refresh operations\n```\n\nState snapshots enable:\n- Refreshing state without affecting current state\n- Comparing old vs new states\n- Atomic state transitions\n\n### 10.3 Provider Caching and Thread Safety\n\nProviders are cached and accessed safely:\n\n```go\ntype ContextGraphWalker struct {\n    providerCache map[string]providers.Interface\n    providerLock sync.Mutex\n}\n\nfunc (w *ContextGraphWalker) getProvider(name string) providers.Interface {\n    w.providerLock.Lock()\n    defer w.providerLock.Unlock()\n    return w.providerCache[name]\n}\n```\n\nEach provider instance is used by multiple resource nodes, but:\n- Individual provider calls are thread-safe (by provider contract)\n- Schema access is cached and read-only\n- Configuration is fixed before execution starts\n\n## 11. Summary of Data Flow\n\n### 11.1 Plan Phase Flow\n\n```\nUser Configuration (HCL)\n    \u2193\nParse and validate configuration\n    \u2193\nPlanGraphBuilder constructs graph:\n  - ConfigTransformer adds resource nodes\n  - ProviderTransformer adds provider nodes\n  - ReferenceTransformer creates dependency edges\n  - Other transformers complete graph\n    \u2193\nContext.Plan() creates plan graph\n    \u2193\nGraph.Walk() with walkPlan operation:\n  - Variable nodes evaluate input variables\n  - Provider nodes initialize and configure\n  - Resource nodes call provider.PlanResourceChange()\n  - Output nodes evaluate output expressions\n    \u2193\nPlan captured with:\n  - Planned changes per resource\n  - Check results\n  - Evaluation state\n    \u2193\nPlan returned to user/CLI\n```\n\n### 11.2 Apply Phase Flow\n\n```\nPlan (from previous phase or file)\n    \u2193\nConfiguration (must match plan)\n    \u2193\nApplyGraphBuilder constructs graph:\n  - Creates nodes only for resources in plan changes\n  - Handles create-before-destroy ordering\n  - Creates destruction edges for replaced resources\n    \u2193\nContext.Apply() begins apply\n    \u2193\nGraph.Walk() with walkApply operation:\n  - Provider nodes initialize and configure\n  - Resource nodes call provider.ApplyResourceChange()\n  - Changes update CurrentState synchronously\n  - PostApply hooks notify of completion\n  - Dependent resources can now execute\n    \u2193\nState finalized:\n  - CurrentState becomes new persistent state\n  - Serial number incremented\n    \u2193\nState persisted to backend:\n  - Remote locking acquired\n  - Atomic write performed\n  - Lock released\n    \u2193\nUpdated state returned\n```\n\n### 11.3 Concurrent Execution Example\n\n```\nResource A\n  \u2502\n  \u2514\u2500\u2192 Provider A\n      \u2514\u2500\u2192 (initializes once)\n\nResource B\n  \u2502\n  \u2514\u2500\u2192 Provider B\n      \u2514\u2500\u2192 (initializes once)\n\nResource A depends on Resource B\n\nGraph execution:\n1. Provider A initializes (concurrent with Provider B)\n2. Provider B initializes (concurrent with Provider A)\n3. Resource B executes (uses Provider B)\n4. Resource A waits for Resource B dependency\n5. Resource A executes (uses Provider A)\n\nResult: A and B providers initialize concurrently,\n        B executes, then A executes sequentially.\n```\n\n## Conclusion\n\nTerraform's plan/apply pipeline architecture enables:\n- **Declarative infrastructure** through configuration-driven graphs\n- **Concurrent execution** of independent operations\n- **Safe state management** through synchronized updates\n- **Extensibility** through transformer and hook systems\n- **Reliable infrastructure changes** through planning and staged application\n\nThe graph-based model makes dependencies explicit, enables parallel execution where safe, and provides clear extension points for monitoring, control, and customization.\n",
+            "file_path": "/workspace/documentation.md"
+          },
+          "step_id": 43,
+          "timestamp": "2026-03-02T22:22:06.399Z",
+          "tool": "Write"
+        },
+        {
+          "arguments": {
+            "command": "wc -l /workspace/documentation.md && head -50 /workspace/documentation.md",
+            "description": "Verify documentation file creation and show beginning"
+          },
+          "step_id": 46,
+          "timestamp": "2026-03-02T22:22:10.741Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "tail -50 /workspace/documentation.md",
+            "description": "Verify documentation file ending"
+          },
+          "step_id": 48,
+          "timestamp": "2026-03-02T22:22:14.510Z",
+          "tool": "Bash"
+        }
+      ]
+    },
+    "transcript": {
+      "json_line_count": 79,
+      "line_count": 79,
+      "message_event_count": 61,
+      "messages": [
+        {
+          "sequence": 0,
+          "subtype": "init",
+          "text": null,
+          "tool": null,
+          "type": "system"
+        },
+        {
+          "sequence": 1,
+          "subtype": "text",
+          "text": "I'll help you generate comprehensive architecture documentation for Terraform's plan/apply pipeline. Let me start by exploring the codebase to understand the key components and their interactions.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 2,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_repos",
+          "type": "assistant"
+        },
+        {
+          "sequence": 3,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 4,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 5,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 6,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 7,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 8,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 9,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 10,
+          "subtype": "text",
+          "text": "Now let me search for key architectural components:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 11,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 12,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 13,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 14,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 15,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 16,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 17,
+          "subtype": "text",
+          "text": "Now let me read the key architecture files:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 18,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 19,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 20,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 21,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 22,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 23,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 24,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 25,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 26,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 27,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 28,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 29,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 30,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 31,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 32,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 33,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 34,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 35,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 36,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 37,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 38,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 39,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 40,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 41,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 42,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 43,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 44,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 45,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 46,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 47,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 48,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 49,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 50,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 51,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 52,
+          "subtype": "text",
+          "text": "Now I have enough information to create comprehensive architecture documentation. Let me write it:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 53,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Write",
+          "type": "assistant"
+        },
+        {
+          "sequence": 54,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 55,
+          "subtype": "text",
+          "text": "Perfect! I've created comprehensive architecture documentation for Terraform's plan/apply pipeline. Let me verify it was created successfully:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 56,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 57,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 58,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 59,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 60,
+          "subtype": "text",
+          "text": "Excellent! I've successfully generated comprehensive architecture documentation for Terraform's plan/apply pipeline. The document is now available at `/workspace/documentation.md` with 1084 lines covering all required to...",
+          "tool": null,
+          "type": "assistant"
+        }
+      ],
+      "tool_event_count": 27,
+      "tool_events": [
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_repos"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "Write"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "checksums": {
+      "result_json_sha256": "e4c733c77164acce873e3aacd52c8bb4ca5aa2a2100f8d9b3c44aeb9bdb8a7a0",
+      "trajectory_sha256": "9d4a01a6e9b42e334d2e83ea49a8bbd9d6f1642c4e033bca9704ca016250d444",
+      "transcript_sha256": "4c1d0b1ecb9d0a4aa799b7bf106e501b1700fdb6a95526172783b4cb0e5e9159"
+    },
+    "config": "mcp-remote-direct",
+    "result_path": "runs/official/csb_sdlc_document_haiku_20260302_221730/mcp-remote-direct/2026-03-02__22-19-26/mcp_terraform-arch-doc-gen-001_f__pxc59xs/result.json",
+    "run_dir": "csb_sdlc_document_haiku_20260302_221730",
+    "suite": "csb_sdlc_document",
+    "task_dir": "runs/official/csb_sdlc_document_haiku_20260302_221730/mcp-remote-direct/2026-03-02__22-19-26/mcp_terraform-arch-doc-gen-001_f__pxc59xs",
+    "task_name": "mcp_terraform-arch-doc-gen-001_fvj949",
+    "trace_paths": {
+      "trajectory": "runs/official/csb_sdlc_document_haiku_20260302_221730/mcp-remote-direct/2026-03-02__22-19-26/mcp_terraform-arch-doc-gen-001_f__pxc59xs/agent/trajectory.json",
+      "transcript": "runs/official/csb_sdlc_document_haiku_20260302_221730/mcp-remote-direct/2026-03-02__22-19-26/mcp_terraform-arch-doc-gen-001_f__pxc59xs/agent/claude-code.txt"
+    }
+  },
+  "score": {
+    "reward": 0.59,
+    "status": "passed",
+    "timed_out": false
+  }
+}

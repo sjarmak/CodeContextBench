@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [ccx-compliance-124](../tasks/csb_org_compliance_haiku_20260228_123206--baseline-local-direct--ccx-compliance-124.html) | `passed` | 0.593 | 0.000 | 25 | traj, tx |
+| [ccx-compliance-124](../tasks/csb_org_compliance_haiku_20260228_123206--baseline-local-direct--ccx-compliance-124--9b57f9c06b.html) | `passed` | 0.593 | 0.000 | 25 | traj, tx |

@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [mcp_numpy-array-sum-perf-001_1wlhdi](../tasks/csb_sdlc_test_haiku_20260302_013713--mcp-remote-direct--mcp_numpy-array-sum-perf-001_1wlhdi.html) | `failed` | 0.000 | 0.321 | 53 | traj, tx |
+| [mcp_numpy-array-sum-perf-001_1wlhdi](../tasks/csb_sdlc_test_haiku_20260302_013713--mcp-remote-direct--mcp_numpy-array-sum-perf-001_1wlhdi--b60dd4ea1c.html) | `failed` | 0.000 | 0.321 | 53 | traj, tx |

@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [ccx-platform-119](../tasks/csb_org_platform_haiku_20260226_214446--baseline-local-direct--ccx-platform-119.html) | `passed` | 0.632 | 0.000 | 17 | traj, tx |
+| [ccx-platform-119](../tasks/csb_org_platform_haiku_20260226_214446--baseline-local-direct--ccx-platform-119--24394f60d2.html) | `passed` | 0.632 | 0.000 | 17 | traj, tx |

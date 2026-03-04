@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [servo-scrollend-event-feat-001](../tasks/csb_sdlc_build_haiku_20260227_034711--baseline-local-direct--servo-scrollend-event-feat-001.html) | `passed` | 0.500 | 0.000 | 106 | traj, tx |
+| [servo-scrollend-event-feat-001](../tasks/csb_sdlc_build_haiku_20260227_034711--baseline-local-direct--servo-scrollend-event-feat-001--7210a05c3e.html) | `passed` | 0.500 | 0.000 | 106 | traj, tx |

@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [nodebb-plugin-validate-fix-001](../tasks/csb_sdlc_fix_haiku_20260302_022552--baseline-local-direct--nodebb-plugin-validate-fix-001.html) | `failed` | 0.000 | 0.000 | 194 | traj, tx |
+| [nodebb-plugin-validate-fix-001](../tasks/csb_sdlc_fix_haiku_20260302_022552--baseline-local-direct--nodebb-plugin-validate-fix-001--6934f55b2e.html) | `failed` | 0.000 | 0.000 | 194 | traj, tx |

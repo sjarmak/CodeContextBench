@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [ccx-dep-trace-106](../tasks/csb_org_crossrepo_haiku_20260226_145828--baseline-local-direct--ccx-dep-trace-106.html) | `passed` | 0.900 | 0.000 | 17 | traj, tx |
+| [ccx-dep-trace-106](../tasks/csb_org_crossrepo_haiku_20260226_145828--baseline-local-direct--ccx-dep-trace-106--512d69054a.html) | `passed` | 0.900 | 0.000 | 17 | traj, tx |

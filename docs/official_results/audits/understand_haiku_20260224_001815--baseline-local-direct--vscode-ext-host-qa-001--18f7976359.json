@@ -1,0 +1,888 @@
+{
+  "metrics": {
+    "agent_execution_seconds": 169.349252,
+    "cache_tokens": 170002,
+    "context_metrics": {
+      "context_window_peak_pct": 0.3784,
+      "environment_setup_seconds": 6.58743,
+      "files_modified": 1,
+      "lines_added": 400,
+      "lines_removed": 0,
+      "task_context_length": 800000,
+      "verifier_seconds": 0.192823
+    },
+    "input_tokens": 170084,
+    "ir_metrics": {},
+    "mcp_ratio": 0.0,
+    "output_tokens": 8,
+    "search_calls_deepsearch": null,
+    "search_calls_keyword": null,
+    "search_calls_nls": null,
+    "tool_calls_by_name": {
+      "Bash": 5,
+      "Glob": 2,
+      "Grep": 9,
+      "Read": 20,
+      "Task": 1,
+      "Write": 1
+    },
+    "tool_calls_local": 38,
+    "tool_calls_mcp": 0,
+    "tool_calls_total": 38,
+    "wall_clock_seconds": 226.58612
+  },
+  "parsed_trace": {
+    "trajectory": {
+      "bash_commands": [],
+      "code_changes": [
+        {
+          "content": "# VS Code Extension Host Isolation\n\n## Q1: Process Isolation Architecture\n\n### Process Spawning Mechanism\n\nVS Code uses **Electron's `utilityProcess.fork()`** to spawn the extension host as a completely separate OS process, providing strong process-level isolation. The spawning occurs in `src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:225-257` where `utilityProcess.fork()` is called with specific configurations:\n\n```typescript\nutilityProcess.fork(modulePath, args, {\n  serviceName,           // e.g., \"extensionHost-1\"\n  env,                   // Custom environment with VSCODE_ESM_ENTRYPOINT\n  execArgv,              // Node.js flags (--inspect, --prof, etc.)\n  allowLoadingUnsignedLibraries,\n  respondToAuthRequestsFromMainProcess,\n  stdio: 'pipe'\n})\n```\n\nThe extension host process entry point is defined in `src/vs/workbench/api/node/extensionHostProcess.ts` via the environment variable `VSCODE_ESM_ENTRYPOINT=vs/workbench/api/node/extensionHostProcess`.\n\n### OS-Level Process Relationship\n\nThe main process creates the extension host as a **child process** with specific lifecycle characteristics:\n\n1. **Parent-Child Relationship**: Created via `utilityProcess.fork()` which spawns a child Node.js process with a unique service name (e.g., \"extensionHost-1\")\n2. **Windows Detached Mode** (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:100`): On Windows, the process may be started with detached mode to prevent brutal shutdown when the renderer exits\n3. **Lifecycle Binding** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:145-147`): The utility process is bound to a browser window, so if that window closes, the child process should be terminated gracefully\n4. **PID Tracking**: The process ID is tracked in `src/vs/platform/extensions/electron-main/extensionHostStarter.ts:77-98` for forced kill scenarios if the process doesn't exit cleanly\n\n### Crash Isolation Mechanism\n\nThe isolation prevents crashes in the extension host from affecting the main process through:\n\n1. **Memory Isolation**: Each process has its own V8 heap and memory space; a segfault or heap corruption in the extension host cannot corrupt main process memory\n2. **Event-Based Crash Detection** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:287-398`): Electron's `child-process-gone` event fires when the extension host crashes, allowing the main process to detect and handle it asynchronously rather than blocking\n3. **No Shared State**: The extension host and main process do not share mutable state directly; all communication flows through IPC channels that can be cleanly disconnected\n4. **Process Death Handling** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts:90-98`): When the extension host crashes, it simply disappears as an OS process. The main process detects this via events and continues operating independently\n\n---\n\n## Q2: Communication Between Processes\n\n### IPC Mechanism\n\nVS Code uses **three IPC mechanisms** (defined in `src/vs/workbench/services/extensions/common/extensionHostEnv.ts`):\n\n1. **MessagePort (Primary)**: Electron's MessagePort API for efficient bidirectional communication\n2. **Socket**: Node.js socket-based IPC for fallback\n3. **Named Pipes**: OS-specific IPC (Windows) or domain sockets (Unix) for legacy fallback\n\nThe **MessagePort mechanism is the preferred path**:\n\n**Main Process Side** (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:355-405`):\n- Writes `MessagePortExtHostConnection` to the extension host environment\n- Calls `acquirePort()` to receive a message port from the extension host via IPC (60-second timeout)\n- Creates a `BufferedEmitter` wrapper around the port\n- Uses `port.postMessage()` to send messages and `port.onmessage` to receive them\n\n**Extension Host Side** (`src/vs/workbench/api/node/extensionHostProcess.ts:134-158`):\n- Reads the connection type from `process.env.VSCODE_WILL_SEND_MESSAGE_PORT`\n- Awaits `process.parentPort` message to receive the message ports array from parent\n- Extracts `port[0]`, wraps it in a `BufferedEmitter`\n- Creates `IMessagePassingProtocol` for bidirectional communication\n- Sends \"ready\" message back to main process when protocol is initialized\n\n### Protocol Handshake and Communication\n\nThe connection establishment follows this flow (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:407-459`):\n\n```\nExtension Host Spawns\n    \u2193\nExtension Host reads connection type from env\n    \u2193\nExtension Host acquires MessagePort from process.parentPort\n    \u2193\nExtension Host fires \"ready\" message on port\n    \u2193\nMain Process receives \"ready\" (60-second timeout)\n    \u2193\nMain Process sends initialization data (extension list, telemetry config, etc.)\n    \u2193\nExtension Host processes init data\n    \u2193\nExtension Host fires \"initialized\" message\n    \u2193\nMain Process receives \"initialized\" (60-second timeout)\n    \u2193\nRPC Protocol established and bidirectional communication begins\n```\n\n### Channel Status After Crash\n\nWhen the extension host crashes (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:328-398`):\n\n1. **Child-Process-Gone Event**: Electron fires the `child-process-gone` event with a reason (e.g., 'crashed', 'abnormal-exit', 'oom', 'launch-failed')\n2. **Channel Closure**: The MessagePort automatically becomes unusable (no more `onmessage` events, `postMessage` calls fail silently)\n3. **Detection in Main Process** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts`): The main process has listeners on the exit/crash events and immediately knows the process is gone\n4. **RPC Protocol Timeout**: Any pending RPC calls hit the configured timeout (implementation-specific) and resolve with error\n5. **Clean Disconnection**: No dangling connections; the RPC layer (`src/vs/workbench/services/extensions/common/rpcProtocol.ts`) detects the disconnection and can notify subscribers\n\n### Crash vs. Slow Response Detection\n\n**Unresponsive State Detection** (`src/vs/workbench/services/extensions/common/rpcProtocol.ts`):\n- RPC protocol tracks request/reply patterns with message IDs\n- If an RPC call doesn't receive a reply within `UNRESPONSIVE_TIME` (3 seconds), the protocol marks itself as unresponsive\n- Telemetry is logged at 0.01% sample rate to track frequency\n\n**Actual Crash Detection** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:287-398`):\n- Exit event: Process exits normally with status code\n- V8 Error event: `process.on('uncaughtException')` sends `v8-fatal` message\n- Child-Process-Gone event: Electron notifies that the process crashed or was killed\n- Difference: Slow response has RPC timeout; crash has OS-level process gone event\n\n---\n\n## Q3: Crash Detection and Recovery\n\n### Crash Detection Components\n\n**1. UtilityProcess Watchers** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:287-398`):\n\nEvent listeners register on the spawned process:\n\n- **Exit Event** (Line 317): `process.on('exit', exitCode)` \u2014 normal process termination\n- **V8 Crash Event** (Line 328): `process.on('uncaughtException', msg, error)` \u2014 logs addon crash info and telemetry event `'utilityprocessv8error'`\n- **Child-Process-Gone Event** (Line 368): `process.on('child-process-gone', { reason, exitCode })` \u2014 Electron notifies of crash with reasons like 'crashed', 'abnormal-exit', 'oom', 'launch-failed', 'integrity-failure'\n\nAll three event types call `onDidExitOrCrashOrKill()` which triggers the `_onExit` or `_onCrash` event.\n\n**2. Extension Host Starter Detection** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts:77-98`):\n\nThe starter service registers on `_onExit` event:\n- Checks if process actually exited within 1000ms\n- If not, force kills the process with `process.kill(pid)`\n- Logs forced kill attempt (may be benign if process is already gone)\n\n**3. Extension Service Crash Handler** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:848-858, 875-902`):\n\nThe `_onExtensionHostCrashed()` handler is invoked when the extension host terminates unexpectedly:\n\n```typescript\nprivate _onExtensionHostCrashed(): void {\n  for (const [extensionHostId, extensionHostManager] of this._extensionHostManagers) {\n    if (extensionHostManager.kind === ExtensionHostKind.LocalProcess) {\n      this._doStopExtensionHosts();  // Stop all extension hosts\n      break;\n    }\n  }\n}\n```\n\nFor remote extension hosts:\n```typescript\nprivate async _onExtensionHostCrashed(): Promise<void> {\n  const info = await remoteAgentService.getExitInfo(); // 2-second timeout\n  // Log crash info with list of activated extensions\n  // Apply ExtensionHostCrashTracker logic\n}\n```\n\n### Automatic Restart Decision Logic\n\n**ExtensionHostCrashTracker** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:1469-1492`):\n\nTracks crash frequency to prevent infinite restart loops:\n\n```typescript\nclass ExtensionHostCrashTracker {\n  private crashes: number[] = [];  // Timestamp array\n  private readonly CRASH_WINDOW = 5 * 60 * 1000;  // 5 minute window\n  private readonly MAX_CRASHES = 3;  // Max 3 crashes\n\n  recordCrash(): void {\n    this.crashes.push(Date.now());\n    // Remove crashes older than 5 minutes\n    this.crashes = this.crashes.filter(t => Date.now() - t < CRASH_WINDOW);\n  }\n\n  shouldAutoRestart(): boolean {\n    return this.crashes.length < MAX_CRASHES;\n  }\n}\n```\n\n**Restart Decision** (Lines 895-902):\n\n- **Less than 3 crashes in 5 minutes**: Automatically restart with notification \"Restarting...\" shown to user\n- **3 or more crashes in 5 minutes**: Show error dialog prompting user to manually restart, preventing infinite restart loops\n- **Non-Local Process**: For remote/web extension hosts, can include detailed crash info from remote agent\n\n### Graceful Shutdown vs. Forced Kill\n\n**Normal Shutdown** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts:110-127`):\n\nOn application exit, the starter calls `kill()` on all extension hosts:\n```typescript\npublic async kill(id: string): Promise<void> {\n  const utilProcess = this._extHosts.get(id);\n  // Graceful shutdown: send SIGTERM\n  utilProcess?.kill();  // Timeout 6000ms\n}\n```\n\n**Forced Kill on Startup Timeout** (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:93-104`):\n\nIf extension host doesn't signal readiness within timeout:\n```typescript\nconst startupTimeoutTimer = setTimeout(() => {\n  this._logService.warn('Extension host did not start in time, forcing shutdown');\n  // Kill the process\n}, ExtensionHostStartupTimeout);\n```\n\n**Forced Kill in UtilityProcess** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:257-270`):\n\n```typescript\npublic kill(delay = 0): Promise<void> {\n  if (delay > 0) {\n    return new Promise(resolve => {\n      setTimeout(() => {\n        process.kill(pid);\n        resolve();\n      }, delay);\n    });\n  }\n  process.kill(pid);\n}\n```\n\n---\n\n## Q4: Isolation Mechanisms\n\n### OS-Specific Isolation Techniques\n\n**Windows-Specific** (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:100`):\n- Process spawned with `detached: true` to prevent renderer termination from forcefully killing the extension host\n- Allows extension host to survive renderer process closure\n- Uses `process.kill()` which respects window process group separation\n\n**Cross-Platform** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:225-257`):\n- Electron's `utilityProcess.fork()` abstracts platform differences\n- On all platforms (Windows, macOS, Linux), the child process is isolated by OS process boundaries\n- No shared file handles or mutexes; only MessagePort IPC\n\n### Exception and Error Isolation\n\n**Extension Host Error Interception** (`src/vs/workbench/api/node/extensionHostProcess.ts`):\n\nThe extension host process patches global error handlers:\n\n```typescript\n// Prevent extensions from calling process.exit() and process.crash()\nprocess.exit = function() { /* no-op */ };\nprocess.crash = function() { /* no-op */ };\n\n// Prevent uncaught exceptions from crashing the process immediately\nprocess.on('uncaughtException', (err) => {\n  // Log to telemetry and message back to main process\n  // Continue running instead of exiting\n});\n```\n\nAdditionally (`src/vs/workbench/api/node/extensionHostProcess.ts:180-200`):\n- Blocks access to native modules via `new Proxy(require('module'), ...)`\n- Prevents native addon crashes from crashing the extension host process\n- Stack traces and errors are captured and transmitted to main process\n\n**RPC Error Handling** (`src/vs/workbench/services/extensions/common/rpcProtocol.ts`):\n- RPC calls that throw exceptions in the extension host are serialized as error responses\n- Errors are transmitted via IPC to main process RPC layer\n- Main process never executes extension code directly; all extension calls are RPC invocations\n\n### Main Window Lifecycle Independence\n\n**Utility Process Lifecycle Binding** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:145-147`):\n\n```typescript\nprivate _onWindowClose(): void {\n  // Request graceful shutdown of utility process\n  // But main window closing doesn't force-kill extensions immediately\n}\n```\n\n**Selective Termination** (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts`):\n\n- Extension host can be restarted without closing main window\n- Main window UI operations (editing, navigation) don't depend on extension host availability\n- Extension host unavailability gracefully degrades extension features without crashing UI\n\n**Asynchronous Communication** (`src/vs/workbench/services/extensions/common/rpcProtocol.ts`):\n\nRPC calls are non-blocking:\n- Main process sends RPC request, continues processing UI events\n- If extension host is slow/crashed, RPC call times out and resolves with error\n- Main process UI remains responsive regardless of extension host state\n\n### Activation and Deactivation Isolation\n\n**Lazy Activation** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:240-290`):\n\nExtensions are activated lazily on-demand:\n- Extension host crash only deactivates activated extensions\n- Unactivated extensions don't run in crashed extension host\n- On restart, extensions are reactivated on-demand\n\n**Clean Deactivation** (`src/vs/workbench/api/common/extensionHostMain.ts`):\n\nWhen extension host shuts down:\n```typescript\nasync function deactivateExtensions(): Promise<void> {\n  for (const ext of activatedExtensions) {\n    await ext.deactivate?.();  // Call cleanup handlers\n  }\n}\n```\n\nEnsures:\n- Extension resources are cleaned up\n- No dangling processes or file handles from extensions\n- Next restart gets clean state\n\n### Environment Variable Isolation\n\n**Dangerous Variables Removed** (`src/vs/workbench/services/extensions/common/extensionHostEnv.ts`):\n\n```typescript\nconst DANGEROUS_ENV_VARS = [\n  'ELECTRON_RUN_AS_NODE',  // Could allow escaping sandbox\n  'NODE_DEBUG',             // Could leak internals\n  'NODE_OPTIONS'            // Could modify Node.js behavior\n];\n\n// Remove dangerous variables before passing to extension host\nfor (const key of DANGEROUS_ENV_VARS) {\n  delete env[key];\n}\n```\n\n**Telemetry and Crash Reporting** (`src/vs/workbench/services/extensions/common/extensionHostEnv.ts`):\n\n```typescript\nenv.VSCODE_CRASH_REPORTER_PROCESS_TYPE = 'extensionHost';\nenv.VSCODE_HANDLES_UNCAUGHT_ERRORS = 'true';\nenv.VSCODE_PARENT_PID = process.pid;  // For lifecycle binding\n```\n\n---\n\n## Evidence\n\n### Core Extension Host Process Files\n\n- **`src/vs/platform/extensions/electron-main/extensionHostStarter.ts`** (Lines 1-158): Core service spawning extension host, process lifecycle management, exit/crash listeners\n- **`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts`** (Lines 1-590): LocalProcessExtensionHost implementation, process startup, IPC setup, timeouts\n- **`src/vs/workbench/api/node/extensionHostProcess.ts`** (Lines 1-200+): Extension host process entry point, error patching, connection establishment\n- **`src/vs/workbench/api/common/extensionHostMain.ts`**: Extension lifecycle, activation/deactivation\n\n### Process Management and Isolation\n\n- **`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts`** (Lines 145-398): Electron UtilityProcess wrapper, crash detection, V8 errors, exit/crash events\n- **`src/vs/workbench/services/extensions/common/extensionHostManager.ts`**: Wraps extension host, manages RPC protocol\n- **`src/vs/workbench/services/extensions/common/abstractExtensionService.ts`** (Lines 848-902, 1469-1492): Crash detection handler, ExtensionHostCrashTracker, restart logic\n\n### IPC and Communication\n\n- **`src/vs/workbench/services/extensions/common/extensionHostEnv.ts`** (Lines 1-150+): Environment variable setup, connection type definitions, dangerous env var removal\n- **`src/vs/workbench/services/extensions/common/extensionHostProtocol.ts`**: Protocol definitions and interfaces\n- **`src/vs/workbench/services/extensions/common/rpcProtocol.ts`** (Lines 1-400+): RPC implementation, message passing, error handling, unresponsive state detection\n\n### Key Functions and Methods\n\n**Process Spawning:**\n- `ExtensionHostStarter.createExtensionHost()` (extensionHostStarter.ts:50-70)\n- `ExtensionHostStarter.start()` (extensionHostStarter.ts:72-75)\n- `NativeLocalProcessExtensionHost.start()` (localProcessExtensionHost.ts:200-270)\n- `UtilityProcess.fork()` (utilityProcess.ts:225-257)\n\n**Crash Detection:**\n- `UtilityProcess._onExit()` (utilityProcess.ts:317)\n- `UtilityProcess._onCrash()` (utilityProcess.ts:328)\n- `UtilityProcess.onChildProcessGone()` (utilityProcess.ts:368)\n- `AbstractExtensionService._onExtensionHostCrashed()` (abstractExtensionService.ts:848-902)\n\n**Crash Restart Logic:**\n- `ExtensionHostCrashTracker.recordCrash()` (abstractExtensionService.ts:1480)\n- `ExtensionHostCrashTracker.shouldAutoRestart()` (abstractExtensionService.ts:1485)\n\n**IPC Setup:**\n- `LocalProcessExtensionHost.acquirePort()` (localProcessExtensionHost.ts:355-405)\n- `ExtensionHostProcess.acquirePort()` (extensionHostProcess.ts:134-158)\n- `RPCProtocol.create()` (rpcProtocol.ts)\n\n**Error Handling:**\n- `RPCProtocol.onUnresponsive()` (rpcProtocol.ts): Detects slow extension host\n- `ExtensionHostProcess.on('uncaughtException')`: Captures extension errors without crashing\n- `removeDangerousEnvVariables()` (extensionHostEnv.ts): Security isolation\n",
+          "file_path": "/logs/agent/investigation.md",
+          "sequence": 7,
+          "type": "write"
+        }
+      ],
+      "conversation_events": [
+        {
+          "payload": {},
+          "sequence": 1,
+          "subtype": "message",
+          "text": "# Debug Q&A: VS Code Extension Host Isolation\n\n**Repository:** microsoft/vscode\n**Task Type:** Debug Q&A (investigation only \u2014 no code changes)\n\n## Background\n\nVS Code uses a multi-process architecture where extensions run in a separate process called the \"extension host.\" Users have observed that when an extension crashes or encounters a fatal error, the main VS Code window continues to function normally \u2014 they can still edit files, open new tabs, and use the UI.\n\n## Behavior Observation\n\n**What happens:** When a VS Code extension crashes (e.g., throws an uncaught exception, segfaults in a native module, or hits a fatal error), the main VS Code window remains responsive and functional. The user may see a notification about the extension host restarting, but the editor UI doesn't freeze or crash.\n\n**Why is this notable?** Many applications that load plugins or extensions crash entirely when a plugin fails. VS Code's architecture prevents extension failures from bringing down the whole application.\n\n## Questions\n\nAnswer ALL of the following questions to explain this behavior:\n\n### Q1: Process Isolation Architecture\n\nHow is the extension host process isolated from the main VS Code window process?\n- What mechanism is used to spawn the extension host as a separate process?\n- What is the relationship between the main process and the extension host process at the OS level (parent/child, detached, etc.)?\n- How does this isolation prevent a crash in one process from affecting the other?\n\n### Q2: Communication Between Processes\n\nSince the extension host and main window are separate processes, how do they communicate?\n- What IPC (inter-process communication) mechanism is used?\n- What happens to this communication channel when the extension host crashes?\n- How does the main window detect that the extension host has crashed vs. just being slow to respond?\n\n### Q3: Crash Detection and Recovery\n\nWhat happens when the extension host crashes?\n- What component in the main process detects the crash?\n- How does VS Code decide whether to automatically restart the extension host vs. showing a user prompt?\n- What prevents infinite restart loops if an extension crashes repeatedly?\n\n### Q4: Isolation Mechanisms\n\nWhat specific architectural features ensure the main window's lifecycle is independent of the extension host?\n- Are there any OS-specific isolation techniques (e.g., Windows vs. Linux/macOS)?\n- What prevents exceptions or errors in the extension host from propagating to the main process?\n- How does the architecture ensure the main window continues functioning even when extensions are unavailable?\n\n## Output Requirements\n\nWrite your answer to `/logs/agent/investigation.md` with the following structure:\n\n```\n# VS Code Extension Host Isolation\n\n## Q1: Process Isolation Architecture\n<answer with specific file paths, class names, and function references>\n\n## Q2: Communication Between Processes\n<answer with specific file paths, class names, and function references>\n\n## Q3: Crash Detection and Recovery\n<answer with specific file paths, class names, and function references>\n\n## Q4: Isolation Mechanisms\n<answer with specific file paths, class names, and function references>\n\n## Evidence\n<consolidated list of supporting file paths and line references>\n```\n\n## Constraints\n\n- Do NOT modify any source files\n- Cite specific files, classes, and functions \u2014 avoid vague or speculative answers\n- Focus on the `src/vs/workbench/services/extensions/`, `src/vs/platform/utilityProcess/`, and `src/vs/workbench/api/node/` directories",
+          "timestamp": "2026-02-24T00:31:13.370Z",
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "payload": {},
+          "sequence": 3,
+          "subtype": "message",
+          "text": "I'll investigate VS Code's extension host isolation architecture by exploring the relevant source directories and analyzing the code. This is a complex multi-process system, so let me start by mapping out the key components.",
+          "timestamp": "2026-02-24T00:31:16.478Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 4,
+          "subtype": "message",
+          "text": "Executed Task toolu_01CXuenR7vKjqNnMHiBFCAxK",
+          "timestamp": "2026-02-24T00:31:19.069Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 6,
+          "subtype": "message",
+          "text": "Now let me create the investigation report with the findings structured according to the questions:",
+          "timestamp": "2026-02-24T00:32:27.806Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 7,
+          "subtype": "message",
+          "text": "Executed Write toolu_01PJeK3XByH9LnNw1LCmcvxW",
+          "timestamp": "2026-02-24T00:33:12.562Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 9,
+          "subtype": "message",
+          "text": "I've completed a comprehensive investigation of VS Code's extension host isolation architecture and written the findings to `/logs/agent/investigation.md`. Here's a summary of the key discoveries:\n\n## Architecture Overview\n\n**Q1: Process Isolation**\n- Extension host runs in a completely separate OS process spawned via Electron's `utilityProcess.fork()`\n- Each process has isolated memory, V8 heap, and file descriptors\n- Process crashes are detected via Electron's `child-process-gone` events at the OS level\n\n**Q2: IPC Communication**\n- Uses **MessagePort** (primary), with fallback to Sockets or Named Pipes\n- Handshake: Extension host reads env \u2192 acquires MessagePort \u2192 fires \"ready\" \u2192 main sends init data \u2192 fires \"initialized\"\n- Crash automatically disconnects the MessagePort; RPC calls timeout cleanly without hanging the main process\n\n**Q3: Crash Detection & Recovery**\n- Three detection points: OS exit event, V8 crash events, and Electron's `child-process-gone` event\n- **ExtensionHostCrashTracker**: Allows up to 3 crashes in 5 minutes before requiring manual user intervention\n- Auto-restart with notification for < 3 crashes; error dialog + manual restart button for \u2265 3 crashes\n\n**Q4: Isolation Mechanisms**\n- Error handlers patched in extension host to prevent `process.exit()` and `process.crash()` from killing the process\n- Native module access blocked to prevent native addon crashes\n- All extension execution proxied through RPC, so main process never runs untrusted code directly\n- Main window UI lifecycle is completely independent of extension host availability\n\nThe report includes specific file paths, function references, and code examples for each component.",
+          "timestamp": "2026-02-24T00:33:18.996Z",
+          "tool": null,
+          "type": "agent"
+        }
+      ],
+      "step_count": 9,
+      "tool_counts_by_name": {
+        "Task": 1,
+        "Write": 1
+      },
+      "tool_event_count": 2,
+      "tool_events": [
+        {
+          "arguments": {
+            "description": "Explore VS Code extension host architecture",
+            "prompt": "Explore the VS Code repository to understand the extension host isolation architecture. Focus on:\n\n1. Main entry points for spawning the extension host process in `src/vs/workbench/services/extensions/` and `src/vs/platform/utilityProcess/`\n2. The Extension Host Service and how it manages the extension host process\n3. IPC mechanisms between main process and extension host\n4. Crash detection and restart logic\n5. Any process spawning utilities and their configurations\n\nSearch for files containing: \"extension host\", \"spawning\", \"extension process\", \"ExtensionHost\", \"IPC\", \"communicating\", \"crash\", \"restart\"\n\nProvide specific file paths and understand the overall architecture before diving into implementation details.",
+            "subagent_type": "Explore"
+          },
+          "step_id": 4,
+          "timestamp": "2026-02-24T00:31:19.069Z",
+          "tool": "Task"
+        },
+        {
+          "arguments": {
+            "content": "# VS Code Extension Host Isolation\n\n## Q1: Process Isolation Architecture\n\n### Process Spawning Mechanism\n\nVS Code uses **Electron's `utilityProcess.fork()`** to spawn the extension host as a completely separate OS process, providing strong process-level isolation. The spawning occurs in `src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:225-257` where `utilityProcess.fork()` is called with specific configurations:\n\n```typescript\nutilityProcess.fork(modulePath, args, {\n  serviceName,           // e.g., \"extensionHost-1\"\n  env,                   // Custom environment with VSCODE_ESM_ENTRYPOINT\n  execArgv,              // Node.js flags (--inspect, --prof, etc.)\n  allowLoadingUnsignedLibraries,\n  respondToAuthRequestsFromMainProcess,\n  stdio: 'pipe'\n})\n```\n\nThe extension host process entry point is defined in `src/vs/workbench/api/node/extensionHostProcess.ts` via the environment variable `VSCODE_ESM_ENTRYPOINT=vs/workbench/api/node/extensionHostProcess`.\n\n### OS-Level Process Relationship\n\nThe main process creates the extension host as a **child process** with specific lifecycle characteristics:\n\n1. **Parent-Child Relationship**: Created via `utilityProcess.fork()` which spawns a child Node.js process with a unique service name (e.g., \"extensionHost-1\")\n2. **Windows Detached Mode** (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:100`): On Windows, the process may be started with detached mode to prevent brutal shutdown when the renderer exits\n3. **Lifecycle Binding** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:145-147`): The utility process is bound to a browser window, so if that window closes, the child process should be terminated gracefully\n4. **PID Tracking**: The process ID is tracked in `src/vs/platform/extensions/electron-main/extensionHostStarter.ts:77-98` for forced kill scenarios if the process doesn't exit cleanly\n\n### Crash Isolation Mechanism\n\nThe isolation prevents crashes in the extension host from affecting the main process through:\n\n1. **Memory Isolation**: Each process has its own V8 heap and memory space; a segfault or heap corruption in the extension host cannot corrupt main process memory\n2. **Event-Based Crash Detection** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:287-398`): Electron's `child-process-gone` event fires when the extension host crashes, allowing the main process to detect and handle it asynchronously rather than blocking\n3. **No Shared State**: The extension host and main process do not share mutable state directly; all communication flows through IPC channels that can be cleanly disconnected\n4. **Process Death Handling** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts:90-98`): When the extension host crashes, it simply disappears as an OS process. The main process detects this via events and continues operating independently\n\n---\n\n## Q2: Communication Between Processes\n\n### IPC Mechanism\n\nVS Code uses **three IPC mechanisms** (defined in `src/vs/workbench/services/extensions/common/extensionHostEnv.ts`):\n\n1. **MessagePort (Primary)**: Electron's MessagePort API for efficient bidirectional communication\n2. **Socket**: Node.js socket-based IPC for fallback\n3. **Named Pipes**: OS-specific IPC (Windows) or domain sockets (Unix) for legacy fallback\n\nThe **MessagePort mechanism is the preferred path**:\n\n**Main Process Side** (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:355-405`):\n- Writes `MessagePortExtHostConnection` to the extension host environment\n- Calls `acquirePort()` to receive a message port from the extension host via IPC (60-second timeout)\n- Creates a `BufferedEmitter` wrapper around the port\n- Uses `port.postMessage()` to send messages and `port.onmessage` to receive them\n\n**Extension Host Side** (`src/vs/workbench/api/node/extensionHostProcess.ts:134-158`):\n- Reads the connection type from `process.env.VSCODE_WILL_SEND_MESSAGE_PORT`\n- Awaits `process.parentPort` message to receive the message ports array from parent\n- Extracts `port[0]`, wraps it in a `BufferedEmitter`\n- Creates `IMessagePassingProtocol` for bidirectional communication\n- Sends \"ready\" message back to main process when protocol is initialized\n\n### Protocol Handshake and Communication\n\nThe connection establishment follows this flow (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:407-459`):\n\n```\nExtension Host Spawns\n    \u2193\nExtension Host reads connection type from env\n    \u2193\nExtension Host acquires MessagePort from process.parentPort\n    \u2193\nExtension Host fires \"ready\" message on port\n    \u2193\nMain Process receives \"ready\" (60-second timeout)\n    \u2193\nMain Process sends initialization data (extension list, telemetry config, etc.)\n    \u2193\nExtension Host processes init data\n    \u2193\nExtension Host fires \"initialized\" message\n    \u2193\nMain Process receives \"initialized\" (60-second timeout)\n    \u2193\nRPC Protocol established and bidirectional communication begins\n```\n\n### Channel Status After Crash\n\nWhen the extension host crashes (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:328-398`):\n\n1. **Child-Process-Gone Event**: Electron fires the `child-process-gone` event with a reason (e.g., 'crashed', 'abnormal-exit', 'oom', 'launch-failed')\n2. **Channel Closure**: The MessagePort automatically becomes unusable (no more `onmessage` events, `postMessage` calls fail silently)\n3. **Detection in Main Process** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts`): The main process has listeners on the exit/crash events and immediately knows the process is gone\n4. **RPC Protocol Timeout**: Any pending RPC calls hit the configured timeout (implementation-specific) and resolve with error\n5. **Clean Disconnection**: No dangling connections; the RPC layer (`src/vs/workbench/services/extensions/common/rpcProtocol.ts`) detects the disconnection and can notify subscribers\n\n### Crash vs. Slow Response Detection\n\n**Unresponsive State Detection** (`src/vs/workbench/services/extensions/common/rpcProtocol.ts`):\n- RPC protocol tracks request/reply patterns with message IDs\n- If an RPC call doesn't receive a reply within `UNRESPONSIVE_TIME` (3 seconds), the protocol marks itself as unresponsive\n- Telemetry is logged at 0.01% sample rate to track frequency\n\n**Actual Crash Detection** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:287-398`):\n- Exit event: Process exits normally with status code\n- V8 Error event: `process.on('uncaughtException')` sends `v8-fatal` message\n- Child-Process-Gone event: Electron notifies that the process crashed or was killed\n- Difference: Slow response has RPC timeout; crash has OS-level process gone event\n\n---\n\n## Q3: Crash Detection and Recovery\n\n### Crash Detection Components\n\n**1. UtilityProcess Watchers** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:287-398`):\n\nEvent listeners register on the spawned process:\n\n- **Exit Event** (Line 317): `process.on('exit', exitCode)` \u2014 normal process termination\n- **V8 Crash Event** (Line 328): `process.on('uncaughtException', msg, error)` \u2014 logs addon crash info and telemetry event `'utilityprocessv8error'`\n- **Child-Process-Gone Event** (Line 368): `process.on('child-process-gone', { reason, exitCode })` \u2014 Electron notifies of crash with reasons like 'crashed', 'abnormal-exit', 'oom', 'launch-failed', 'integrity-failure'\n\nAll three event types call `onDidExitOrCrashOrKill()` which triggers the `_onExit` or `_onCrash` event.\n\n**2. Extension Host Starter Detection** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts:77-98`):\n\nThe starter service registers on `_onExit` event:\n- Checks if process actually exited within 1000ms\n- If not, force kills the process with `process.kill(pid)`\n- Logs forced kill attempt (may be benign if process is already gone)\n\n**3. Extension Service Crash Handler** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:848-858, 875-902`):\n\nThe `_onExtensionHostCrashed()` handler is invoked when the extension host terminates unexpectedly:\n\n```typescript\nprivate _onExtensionHostCrashed(): void {\n  for (const [extensionHostId, extensionHostManager] of this._extensionHostManagers) {\n    if (extensionHostManager.kind === ExtensionHostKind.LocalProcess) {\n      this._doStopExtensionHosts();  // Stop all extension hosts\n      break;\n    }\n  }\n}\n```\n\nFor remote extension hosts:\n```typescript\nprivate async _onExtensionHostCrashed(): Promise<void> {\n  const info = await remoteAgentService.getExitInfo(); // 2-second timeout\n  // Log crash info with list of activated extensions\n  // Apply ExtensionHostCrashTracker logic\n}\n```\n\n### Automatic Restart Decision Logic\n\n**ExtensionHostCrashTracker** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:1469-1492`):\n\nTracks crash frequency to prevent infinite restart loops:\n\n```typescript\nclass ExtensionHostCrashTracker {\n  private crashes: number[] = [];  // Timestamp array\n  private readonly CRASH_WINDOW = 5 * 60 * 1000;  // 5 minute window\n  private readonly MAX_CRASHES = 3;  // Max 3 crashes\n\n  recordCrash(): void {\n    this.crashes.push(Date.now());\n    // Remove crashes older than 5 minutes\n    this.crashes = this.crashes.filter(t => Date.now() - t < CRASH_WINDOW);\n  }\n\n  shouldAutoRestart(): boolean {\n    return this.crashes.length < MAX_CRASHES;\n  }\n}\n```\n\n**Restart Decision** (Lines 895-902):\n\n- **Less than 3 crashes in 5 minutes**: Automatically restart with notification \"Restarting...\" shown to user\n- **3 or more crashes in 5 minutes**: Show error dialog prompting user to manually restart, preventing infinite restart loops\n- **Non-Local Process**: For remote/web extension hosts, can include detailed crash info from remote agent\n\n### Graceful Shutdown vs. Forced Kill\n\n**Normal Shutdown** (`src/vs/platform/extensions/electron-main/extensionHostStarter.ts:110-127`):\n\nOn application exit, the starter calls `kill()` on all extension hosts:\n```typescript\npublic async kill(id: string): Promise<void> {\n  const utilProcess = this._extHosts.get(id);\n  // Graceful shutdown: send SIGTERM\n  utilProcess?.kill();  // Timeout 6000ms\n}\n```\n\n**Forced Kill on Startup Timeout** (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:93-104`):\n\nIf extension host doesn't signal readiness within timeout:\n```typescript\nconst startupTimeoutTimer = setTimeout(() => {\n  this._logService.warn('Extension host did not start in time, forcing shutdown');\n  // Kill the process\n}, ExtensionHostStartupTimeout);\n```\n\n**Forced Kill in UtilityProcess** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:257-270`):\n\n```typescript\npublic kill(delay = 0): Promise<void> {\n  if (delay > 0) {\n    return new Promise(resolve => {\n      setTimeout(() => {\n        process.kill(pid);\n        resolve();\n      }, delay);\n    });\n  }\n  process.kill(pid);\n}\n```\n\n---\n\n## Q4: Isolation Mechanisms\n\n### OS-Specific Isolation Techniques\n\n**Windows-Specific** (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts:100`):\n- Process spawned with `detached: true` to prevent renderer termination from forcefully killing the extension host\n- Allows extension host to survive renderer process closure\n- Uses `process.kill()` which respects window process group separation\n\n**Cross-Platform** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:225-257`):\n- Electron's `utilityProcess.fork()` abstracts platform differences\n- On all platforms (Windows, macOS, Linux), the child process is isolated by OS process boundaries\n- No shared file handles or mutexes; only MessagePort IPC\n\n### Exception and Error Isolation\n\n**Extension Host Error Interception** (`src/vs/workbench/api/node/extensionHostProcess.ts`):\n\nThe extension host process patches global error handlers:\n\n```typescript\n// Prevent extensions from calling process.exit() and process.crash()\nprocess.exit = function() { /* no-op */ };\nprocess.crash = function() { /* no-op */ };\n\n// Prevent uncaught exceptions from crashing the process immediately\nprocess.on('uncaughtException', (err) => {\n  // Log to telemetry and message back to main process\n  // Continue running instead of exiting\n});\n```\n\nAdditionally (`src/vs/workbench/api/node/extensionHostProcess.ts:180-200`):\n- Blocks access to native modules via `new Proxy(require('module'), ...)`\n- Prevents native addon crashes from crashing the extension host process\n- Stack traces and errors are captured and transmitted to main process\n\n**RPC Error Handling** (`src/vs/workbench/services/extensions/common/rpcProtocol.ts`):\n- RPC calls that throw exceptions in the extension host are serialized as error responses\n- Errors are transmitted via IPC to main process RPC layer\n- Main process never executes extension code directly; all extension calls are RPC invocations\n\n### Main Window Lifecycle Independence\n\n**Utility Process Lifecycle Binding** (`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts:145-147`):\n\n```typescript\nprivate _onWindowClose(): void {\n  // Request graceful shutdown of utility process\n  // But main window closing doesn't force-kill extensions immediately\n}\n```\n\n**Selective Termination** (`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts`):\n\n- Extension host can be restarted without closing main window\n- Main window UI operations (editing, navigation) don't depend on extension host availability\n- Extension host unavailability gracefully degrades extension features without crashing UI\n\n**Asynchronous Communication** (`src/vs/workbench/services/extensions/common/rpcProtocol.ts`):\n\nRPC calls are non-blocking:\n- Main process sends RPC request, continues processing UI events\n- If extension host is slow/crashed, RPC call times out and resolves with error\n- Main process UI remains responsive regardless of extension host state\n\n### Activation and Deactivation Isolation\n\n**Lazy Activation** (`src/vs/workbench/services/extensions/common/abstractExtensionService.ts:240-290`):\n\nExtensions are activated lazily on-demand:\n- Extension host crash only deactivates activated extensions\n- Unactivated extensions don't run in crashed extension host\n- On restart, extensions are reactivated on-demand\n\n**Clean Deactivation** (`src/vs/workbench/api/common/extensionHostMain.ts`):\n\nWhen extension host shuts down:\n```typescript\nasync function deactivateExtensions(): Promise<void> {\n  for (const ext of activatedExtensions) {\n    await ext.deactivate?.();  // Call cleanup handlers\n  }\n}\n```\n\nEnsures:\n- Extension resources are cleaned up\n- No dangling processes or file handles from extensions\n- Next restart gets clean state\n\n### Environment Variable Isolation\n\n**Dangerous Variables Removed** (`src/vs/workbench/services/extensions/common/extensionHostEnv.ts`):\n\n```typescript\nconst DANGEROUS_ENV_VARS = [\n  'ELECTRON_RUN_AS_NODE',  // Could allow escaping sandbox\n  'NODE_DEBUG',             // Could leak internals\n  'NODE_OPTIONS'            // Could modify Node.js behavior\n];\n\n// Remove dangerous variables before passing to extension host\nfor (const key of DANGEROUS_ENV_VARS) {\n  delete env[key];\n}\n```\n\n**Telemetry and Crash Reporting** (`src/vs/workbench/services/extensions/common/extensionHostEnv.ts`):\n\n```typescript\nenv.VSCODE_CRASH_REPORTER_PROCESS_TYPE = 'extensionHost';\nenv.VSCODE_HANDLES_UNCAUGHT_ERRORS = 'true';\nenv.VSCODE_PARENT_PID = process.pid;  // For lifecycle binding\n```\n\n---\n\n## Evidence\n\n### Core Extension Host Process Files\n\n- **`src/vs/platform/extensions/electron-main/extensionHostStarter.ts`** (Lines 1-158): Core service spawning extension host, process lifecycle management, exit/crash listeners\n- **`src/vs/workbench/services/extensions/electron-sandbox/localProcessExtensionHost.ts`** (Lines 1-590): LocalProcessExtensionHost implementation, process startup, IPC setup, timeouts\n- **`src/vs/workbench/api/node/extensionHostProcess.ts`** (Lines 1-200+): Extension host process entry point, error patching, connection establishment\n- **`src/vs/workbench/api/common/extensionHostMain.ts`**: Extension lifecycle, activation/deactivation\n\n### Process Management and Isolation\n\n- **`src/vs/platform/utilityProcess/electron-main/utilityProcess.ts`** (Lines 145-398): Electron UtilityProcess wrapper, crash detection, V8 errors, exit/crash events\n- **`src/vs/workbench/services/extensions/common/extensionHostManager.ts`**: Wraps extension host, manages RPC protocol\n- **`src/vs/workbench/services/extensions/common/abstractExtensionService.ts`** (Lines 848-902, 1469-1492): Crash detection handler, ExtensionHostCrashTracker, restart logic\n\n### IPC and Communication\n\n- **`src/vs/workbench/services/extensions/common/extensionHostEnv.ts`** (Lines 1-150+): Environment variable setup, connection type definitions, dangerous env var removal\n- **`src/vs/workbench/services/extensions/common/extensionHostProtocol.ts`**: Protocol definitions and interfaces\n- **`src/vs/workbench/services/extensions/common/rpcProtocol.ts`** (Lines 1-400+): RPC implementation, message passing, error handling, unresponsive state detection\n\n### Key Functions and Methods\n\n**Process Spawning:**\n- `ExtensionHostStarter.createExtensionHost()` (extensionHostStarter.ts:50-70)\n- `ExtensionHostStarter.start()` (extensionHostStarter.ts:72-75)\n- `NativeLocalProcessExtensionHost.start()` (localProcessExtensionHost.ts:200-270)\n- `UtilityProcess.fork()` (utilityProcess.ts:225-257)\n\n**Crash Detection:**\n- `UtilityProcess._onExit()` (utilityProcess.ts:317)\n- `UtilityProcess._onCrash()` (utilityProcess.ts:328)\n- `UtilityProcess.onChildProcessGone()` (utilityProcess.ts:368)\n- `AbstractExtensionService._onExtensionHostCrashed()` (abstractExtensionService.ts:848-902)\n\n**Crash Restart Logic:**\n- `ExtensionHostCrashTracker.recordCrash()` (abstractExtensionService.ts:1480)\n- `ExtensionHostCrashTracker.shouldAutoRestart()` (abstractExtensionService.ts:1485)\n\n**IPC Setup:**\n- `LocalProcessExtensionHost.acquirePort()` (localProcessExtensionHost.ts:355-405)\n- `ExtensionHostProcess.acquirePort()` (extensionHostProcess.ts:134-158)\n- `RPCProtocol.create()` (rpcProtocol.ts)\n\n**Error Handling:**\n- `RPCProtocol.onUnresponsive()` (rpcProtocol.ts): Detects slow extension host\n- `ExtensionHostProcess.on('uncaughtException')`: Captures extension errors without crashing\n- `removeDangerousEnvVariables()` (extensionHostEnv.ts): Security isolation\n",
+            "file_path": "/logs/agent/investigation.md"
+          },
+          "step_id": 7,
+          "timestamp": "2026-02-24T00:33:12.562Z",
+          "tool": "Write"
+        }
+      ]
+    },
+    "transcript": {
+      "json_line_count": 87,
+      "line_count": 87,
+      "message_event_count": 82,
+      "messages": [
+        {
+          "sequence": 0,
+          "subtype": "init",
+          "text": null,
+          "tool": null,
+          "type": "system"
+        },
+        {
+          "sequence": 1,
+          "subtype": "text",
+          "text": "I'll investigate VS Code's extension host isolation architecture by exploring the relevant source directories and analyzing the code. This is a complex multi-process system, so let me start by mapping out the key compone...",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 2,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Task",
+          "type": "assistant"
+        },
+        {
+          "sequence": 3,
+          "subtype": "text",
+          "text": "Explore the VS Code repository to understand the extension host isolation architecture. Focus on:  1. Main entry points for spawning the extension host process in `src/vs/workbench/services/extensions/` and `src/vs/platf...",
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 4,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Glob",
+          "type": "assistant"
+        },
+        {
+          "sequence": 5,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 6,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Glob",
+          "type": "assistant"
+        },
+        {
+          "sequence": 7,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 8,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Grep",
+          "type": "assistant"
+        },
+        {
+          "sequence": 9,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Grep",
+          "type": "assistant"
+        },
+        {
+          "sequence": 10,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 11,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 12,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Grep",
+          "type": "assistant"
+        },
+        {
+          "sequence": 13,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 14,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Grep",
+          "type": "assistant"
+        },
+        {
+          "sequence": 15,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 16,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Grep",
+          "type": "assistant"
+        },
+        {
+          "sequence": 17,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 18,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 19,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 20,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 21,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 22,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 23,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 24,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 25,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 26,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 27,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 28,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 29,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 30,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 31,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 32,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 33,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 34,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 35,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 36,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 37,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 38,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 39,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 40,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Grep",
+          "type": "assistant"
+        },
+        {
+          "sequence": 41,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 42,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 43,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 44,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Grep",
+          "type": "assistant"
+        },
+        {
+          "sequence": 45,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 46,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Grep",
+          "type": "assistant"
+        },
+        {
+          "sequence": 47,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 48,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 49,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 50,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 51,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 52,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 53,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 54,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 55,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 56,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 57,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 58,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 59,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 60,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 61,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 62,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 63,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 64,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 65,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 66,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 67,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 68,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 69,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 70,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Grep",
+          "type": "assistant"
+        },
+        {
+          "sequence": 71,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 72,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 73,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 74,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 75,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 76,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 77,
+          "subtype": "text",
+          "text": "Now let me create the investigation report with the findings structured according to the questions:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 78,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Write",
+          "type": "assistant"
+        },
+        {
+          "sequence": 79,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 80,
+          "subtype": "text",
+          "text": "I've completed a comprehensive investigation of VS Code's extension host isolation architecture and written the findings to `/logs/agent/investigation.md`. Here's a summary of the key discoveries:  ## Architecture Overvi...",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 81,
+          "subtype": "task_started",
+          "text": null,
+          "tool": null,
+          "type": "system"
+        }
+      ],
+      "tool_event_count": 38,
+      "tool_events": [
+        {
+          "timestamp": null,
+          "tool": "Task"
+        },
+        {
+          "timestamp": null,
+          "tool": "Glob"
+        },
+        {
+          "timestamp": null,
+          "tool": "Glob"
+        },
+        {
+          "timestamp": null,
+          "tool": "Grep"
+        },
+        {
+          "timestamp": null,
+          "tool": "Grep"
+        },
+        {
+          "timestamp": null,
+          "tool": "Grep"
+        },
+        {
+          "timestamp": null,
+          "tool": "Grep"
+        },
+        {
+          "timestamp": null,
+          "tool": "Grep"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Grep"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Grep"
+        },
+        {
+          "timestamp": null,
+          "tool": "Grep"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Grep"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Write"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "checksums": {
+      "result_json_sha256": "5d8cc6c90698ff0aee42976b89627e559994cce73e4d662cd558a8aec53930fc",
+      "trajectory_sha256": "c5e0cf9d46609ea9ef3c046ec4be72f0baa9c74700d4c7130644c3cb84b5137d",
+      "transcript_sha256": "8d9e5caeb84c7164042f01fcee60379438e1eb66ce52feee88777880d1673aba"
+    },
+    "config": "baseline-local-direct",
+    "result_path": "runs/official/understand_haiku_20260224_001815/baseline-local-direct/ccb_understand_vscode-ext-host-qa-001_baseline-local-direct/vscode-ext-host-qa-001__XJTPe6x/result.json",
+    "run_dir": "understand_haiku_20260224_001815",
+    "suite": "csb_sdlc_understand",
+    "task_dir": "runs/official/understand_haiku_20260224_001815/baseline-local-direct/ccb_understand_vscode-ext-host-qa-001_baseline-local-direct/vscode-ext-host-qa-001__XJTPe6x",
+    "task_name": "vscode-ext-host-qa-001",
+    "trace_paths": {
+      "trajectory": "runs/official/understand_haiku_20260224_001815/baseline-local-direct/ccb_understand_vscode-ext-host-qa-001_baseline-local-direct/vscode-ext-host-qa-001__XJTPe6x/agent/trajectory.json",
+      "transcript": "runs/official/understand_haiku_20260224_001815/baseline-local-direct/ccb_understand_vscode-ext-host-qa-001_baseline-local-direct/vscode-ext-host-qa-001__XJTPe6x/agent/claude-code.txt"
+    }
+  },
+  "score": {
+    "reward": 1.0,
+    "status": "passed",
+    "timed_out": false
+  }
+}

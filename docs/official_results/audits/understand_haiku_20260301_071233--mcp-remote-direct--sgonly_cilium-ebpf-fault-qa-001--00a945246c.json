@@ -1,0 +1,1130 @@
+{
+  "metrics": {
+    "agent_execution_seconds": 91.021063,
+    "cache_tokens": 2685525,
+    "context_metrics": {
+      "context_window_peak_pct": 0.5875,
+      "environment_setup_seconds": 1.080102,
+      "files_modified": 1,
+      "lines_added": 284,
+      "lines_removed": 0,
+      "task_context_length": null,
+      "verifier_seconds": 1.665329
+    },
+    "input_tokens": 2686032,
+    "ir_metrics": {},
+    "mcp_ratio": 0.9629629629629629,
+    "output_tokens": 8820,
+    "search_calls_deepsearch": 0,
+    "search_calls_keyword": 6,
+    "search_calls_nls": 4,
+    "tool_calls_by_name": {
+      "Write": 1,
+      "mcp__sourcegraph__sg_keyword_search": 6,
+      "mcp__sourcegraph__sg_list_files": 4,
+      "mcp__sourcegraph__sg_nls_search": 4,
+      "mcp__sourcegraph__sg_read_file": 12
+    },
+    "tool_calls_local": 1,
+    "tool_calls_mcp": 26,
+    "tool_calls_total": 27,
+    "wall_clock_seconds": 114.846748
+  },
+  "parsed_trace": {
+    "trajectory": {
+      "bash_commands": [],
+      "code_changes": [
+        {
+          "content": "# Cilium eBPF Fault Isolation\n\n## Q1: Per-Node eBPF Lifecycle\n\n### How eBPF programs are compiled, loaded, and attached independently on each node\n\n**Component: Compilation**\n\nEach Cilium agent running on a node independently compiles eBPF programs locally using the `loader` component:\n\n1. **Local Kernel Probing** (`pkg/datapath/loader/compile.go:135-157`):\n   - `getBPFCPU()` function probes the kernel at runtime to detect available BPF ISA versions\n   - Detects support for BPF v3, v2, or v1 based on kernel helpers: `probes.HaveV3ISA()`, `probes.HaveV2ISA()`\n   - This allows per-node CPU-specific optimizations based on kernel capabilities\n   - Result is stored in `nameBPFCPU` variable, making compilation node-specific\n\n2. **Template-Based Compilation** (`pkg/datapath/loader/cache.go:26-94`):\n   - `objectCache` maintains a per-node cache of compiled eBPF templates\n   - `UpdateDatapathHash()` monitors node configuration changes (kernel version, enabled features)\n   - When configuration changes, the cache is invalidated and recompilation is triggered\n   - Hash is calculated per-node from `LocalNodeConfiguration`\n\n3. **Compilation Process** (`pkg/datapath/loader/compile.go:170-257`):\n   - `compile()` function uses clang to compile BPF C code into object files\n   - Node configuration (kernel MHz, number of CPUs) is injected via `-D` compiler flags\n   - Headers are generated from node-specific state in `pkg/datapath/loader/cache.go:141-142`\n   - Each compilation produces a node-local object file stored in the state directory\n\n**Component: Loading and Attachment**\n\n4. **Per-Endpoint Loading** (`pkg/datapath/loader/loader.go:700-732`):\n   - `ReloadDatapath()` loads compiled BPF programs for a specific endpoint\n   - `templateCache.fetchOrCompile()` retrieves or generates a template for the endpoint configuration\n   - Templates are cached locally at `<StateDir>/templates/` (see `pkg/defaults/defaults.go:56-57`)\n   - Each endpoint gets its own policy programs loaded independently\n\n5. **Program Attachment via TC/XDP** (`pkg/datapath/loader/loader.go:507-584`, `loader.go:319-334`):\n   - Programs attached at Linux Traffic Control (tc) ingress/egress hooks\n   - `attachSKBProgram()` attaches to endpoint's veth device interface\n   - `attachCiliumHost()` and `attachNetworkDevices()` attach host/device programs\n   - Each attachment is per-interface, per-direction, per-node\n\n**Key Insight**: Node-specific configuration affects compilation (kernel features, CPU variant) but failures are isolated because each node compiles independently before any cluster-wide policy is applied.\n\n---\n\n## Q2: Deployment Architecture\n\n### How Cilium's deployment model ensures per-node isolation\n\n**DaemonSet Deployment** (`install/kubernetes/cilium/templates/cilium-agent/daemonset.yaml`):\n\n1. **One Pod Per Node**:\n   - Cilium is deployed as a Kubernetes DaemonSet (not Deployment)\n   - Each node runs exactly one Cilium agent pod\n   - If the DaemonSet is updated, each pod is updated independently, not rolled out cluster-wide\n   - Failure of one node's pod does NOT prevent other nodes' pods from running\n\n2. **Per-Node BPF Filesystem Mount** (`daemonset.yaml:809-815`, `daemonset.yaml:602-606`):\n   - Each Cilium pod mounts the host's BPF filesystem at `/sys/fs/bpf`\n   - This is a per-node filesystem; each node has its own `/sys/fs/bpf` on the host\n   - BPF maps and programs are stored per-node in `/sys/fs/bpf/cilium/`\n   - If one node's BPF filesystem is corrupted, other nodes' filesystems are unaffected\n\n3. **Independent Agent Initialization** (`daemon/cmd/daemon_main.go`, `daemon/cmd/daemon.go`):\n   - Each agent initializes independently in `func newDaemon()`\n   - Calls `d.initMaps()` (`daemon/cmd/datapath.go:145-156`) to open/create BPF maps\n   - Maps are created in the node-local BPF filesystem\n   - If map initialization fails on node A, node B's maps are unaffected\n\n4. **Compilation Lock Per Agent** (`daemon/cmd/daemon.go:119-122`, `pkg/datapath/loader/loader.go:86`):\n   - Each agent maintains a `compilationLock` to serialize eBPF compilation\n   - Compilation happens locally; no cluster-wide coordination\n   - One node's compilation failure doesn't block other nodes' compilation\n\n**Control Plane / Data Plane Split**:\n\n5. **Control Plane**: Kubernetes API Server (central, cluster-wide)\n6. **Data Plane**: eBPF programs on each node (distributed, per-node)\n   - Policy definitions are distributed via Kubernetes API as CRDs\n   - But enforcement happens independently per-node through locally-compiled eBPF\n   - Each node enforces policies using its own compiled eBPF bytecode\n\n**Fallback Behavior** (`pkg/datapath/loader/loader.go:280-281`, `pkg/datapath/loader/compile.go:141-157`):\n- If a node cannot compile eBPF for its kernel version, it logs an error and continues\n- Other nodes continue to operate normally\n- The failing node may degrade to fallback mode or log policy enforcement failures\n- No cascade to other nodes\n\n---\n\n## Q3: Policy Distribution vs. Enforcement\n\n### How cluster-wide CRDs are translated to per-node eBPF enforcement\n\n**Policy Distribution** (Kubernetes API):\n\n1. **Cluster-Wide Policy Resources**:\n   - `CiliumNetworkPolicy` (namespaced) and `CiliumClusterwideNetworkPolicy` (cluster-wide)\n   - These are standard Kubernetes Custom Resource Definitions (CRDs)\n   - Stored in etcd, accessible to all agents via Kubernetes API watch\n   - Distribution is handled by Kubernetes API server, not Cilium\n\n2. **Per-Node Policy Watcher** (`daemon/cmd/daemon.go`, `pkg/k8s/watchers/watcher.go`):\n   - Each agent runs a watcher on the Kubernetes API\n   - All agents watch the same policy resources\n   - When a policy changes, all agents are notified simultaneously via API watch\n\n**Policy Translation (Per-Node Compilation)**:\n\n3. **Policy to eBPF Translation** (`pkg/policy/`, `pkg/endpoint/bpf.go:529-584`):\n   - Each agent independently translates policies into eBPF bytecode\n   - Translation happens in `Endpoint.SyncPolicy()` and `policyMapSync()`\n   - Policy state is stored in `desiredPolicy` and `realizedPolicy` per endpoint\n   - Translation is deterministic but node-local (no cross-node dependencies)\n\n4. **Per-Endpoint Policy Maps** (`pkg/maps/policymap/policymap.go:31-39`):\n   - Each endpoint gets a policy map: `cilium_policy_v2_<endpoint-id>`\n   - Maps are created locally on each node\n   - Policy keys: `(identity, traffic_direction, protocol, port, prefix_len)`\n   - Policy values: allow/deny decisions with proxy port info\n   - Maps are stored per-endpoint in node-local BPF filesystem\n\n5. **Endpoint Regeneration** (`pkg/endpoint/bpf.go`, `pkg/endpoint/regenerator.go`):\n   - When a policy changes, affected endpoints are regenerated\n   - Regeneration happens per-endpoint, per-node\n   - Each agent calculates affected endpoints independently\n   - Endpoint compilation via `ReloadDatapath()` with endpoint-specific configuration\n   - Template hashing in `pkg/datapath/loader/cache.go:170` ensures consistency within a node\n\n**Why One Node Failure Doesn't Propagate**:\n\n6. **Independent Translation**:\n   - Policy resource exists in Kubernetes API (shared)\n   - But translation to eBPF happens independently per-node\n   - If node A's compiler/verifier rejects a program, node B's compiler still succeeds\n   - Node A logs the error but doesn't affect node B's policy enforcement\n\n7. **Endpoint-Specific Configuration** (`pkg/datapath/types/config.go`):\n   - Each node has `LocalNodeConfiguration` with kernel-specific settings\n   - Endpoints use this node-local config during compilation\n   - Same policy + different kernel config = potentially different compiled eBPF\n   - This allows graceful degradation per-node\n\n---\n\n## Q4: eBPF Map Scoping and State Isolation\n\n### How eBPF map state is isolated across nodes\n\n**Map Creation and Scoping**:\n\n1. **Per-Node BPF Filesystem Hierarchy** (`pkg/datapath/loader/paths.go:15-75`):\n   - Maps are pinned to `/sys/fs/bpf/cilium/` on each node (host-level path)\n   - Endpoint maps: `/sys/fs/bpf/cilium/endpoints/<endpoint-id>/`\n   - Device maps: `/sys/fs/bpf/cilium/devices/<device-name>/`\n   - Links directory: `/sys/fs/bpf/cilium/endpoints/<endpoint-id>/links/`\n   - Each path is node-local (on host filesystem, not in container)\n\n2. **Per-Endpoint Maps** (`pkg/maps/policymap/policymap.go:31-39`):\n   - Policy map name: `cilium_policy_v2_<endpoint-id>`\n   - Endpoint ID is assigned per-container per-node (e.g., 1-65535)\n   - Same container on different nodes gets different endpoint IDs\n   - Maps with different IDs don't interact\n\n3. **Global vs. Per-Endpoint Maps**:\n   - **Global maps** (shared across endpoints on a node):\n     - `cilium_call_policy`: Program array for policy tail calls (per-node)\n     - `cilium_ct_<dir>_<version>`: Connection tracking (per-node, shared)\n     - `cilium_ipcache`: IP to identity mapping (per-node, shared via BPF filesystem)\n   - **Per-Endpoint maps**:\n     - `cilium_policy_v2_<epid>`: Policy decisions (per-endpoint, per-node)\n     - `cilium_calls_<epid>`: Custom calls (per-endpoint, per-node)\n\n4. **BPF Filesystem Pinning** (`pkg/datapath/loader/loader.go:345-376`, `loader.go:516-520`):\n   - Maps are pinned to the BPF filesystem during load in `bpf.LoadAndAssign()`\n   - Pin path includes node-local state directory: `bpf.TCGlobalsPath()`\n   - When a map is pinned, subsequent accesses refer to the pinned path\n   - **Isolation mechanism**: Different nodes have different host filesystems\n\n**Network Namespace Isolation**:\n\n5. **Container Network Namespace**:\n   - Each container runs in a separate network namespace (on host)\n   - Host-facing veth device is in host namespace\n   - eBPF programs attach to veth device, enforce policy in host namespace\n   - TC hooks on veth enforce ingress/egress policy for the container\n   - **Isolation**: eBPF programs access maps via file descriptor, which references the pinned path on the node\n\n6. **Map State Independence**:\n   - If node A fails to create a map, node B's maps are unaffected\n   - Maps are created independently during agent init (`daemon/cmd/datapath.go:145-156`)\n   - Creation happens in parallel (no cross-node synchronization)\n   - Map entries are not synchronized across nodes (except through policy updates)\n\n**Failure Scenarios**:\n\n7. **Map Full / Overflow**:\n   - If an endpoint's policy map overflows on node A, only that endpoint on node A is affected\n   - Other endpoints on node A can still write to their maps\n   - All endpoints on node B operate normally (their maps are separate)\n   - Agent can lockdown the endpoint if configured (`option.EnableEndpointLockdownOnPolicyOverflow`)\n\n8. **Map Corruption / Loss**:\n   - If node A's BPF filesystem is unmounted, maps are lost on node A\n   - Node B's BPF filesystem (on different host) is unaffected\n   - On node A restart, maps are recreated from scratch (endpoints reinitialized)\n   - No cluster-wide impact\n\n9. **Kernel Verifier Rejection**:\n   - If a program is rejected by kernel verifier on node A (e.g., due to kernel version mismatch)\n   - Node B's kernel may accept the same program (different kernel version, different verifier rules)\n   - eBPF source is compiled node-locally with node-specific parameters\n   - Compilation can succeed on node B even if it fails on node A\n\n---\n\n## Evidence\n\n### Key Files and References\n\n#### Q1: Per-Node eBPF Lifecycle\n- **Compilation Logic**: `pkg/datapath/loader/compile.go:135-257`\n  - `getBPFCPU()`: Kernel feature detection\n  - `compile()`: Local compilation\n  - `compileDatapath()`: Compilation orchestration\n\n- **Caching**: `pkg/datapath/loader/cache.go:26-223`\n  - `objectCache`: Per-node template cache\n  - `fetchOrCompile()`: Template caching and compilation\n  - `UpdateDatapathHash()`: Cache invalidation on config change\n\n- **Loader**: `pkg/datapath/loader/loader.go:74-732`\n  - `loader` struct: Per-node loader instance\n  - `ReloadDatapath()`: Endpoint program loading\n  - `reloadEndpoint()`: Per-endpoint attachment\n  - `reloadHostEndpoint()`: Host endpoint attachment\n\n#### Q2: Deployment Architecture\n- **DaemonSet Config**: `install/kubernetes/cilium/templates/cilium-agent/daemonset.yaml`\n  - BPF filesystem mount: lines 809-815, 602-606\n  - Pod-per-node scheduling\n\n- **Agent Initialization**: `daemon/cmd/daemon.go:119-207`, `daemon/cmd/daemon_main.go:1240-1250`\n  - `compilationLock`: Per-agent compilation synchronization\n  - `initMaps()`: Independent map initialization\n  - `CheckOrMountFS()`: Per-node BPF filesystem mounting\n\n#### Q3: Policy Distribution vs. Enforcement\n- **Policy Repository**: `pkg/policy/repository.go:34-151`\n  - `PolicyContext`: Per-node policy evaluation context\n  - Policy resolution per identity\n\n- **Endpoint Policy Sync**: `pkg/endpoint/bpf.go:529-584`\n  - `policyMapSync()`: Per-endpoint policy synchronization\n  - `applyPolicyMapChangesLocked()`: Per-endpoint policy application\n\n- **Policy Maps**: `pkg/maps/policymap/policymap.go:22-95`\n  - `MapName` prefix: `cilium_policy_v2_`\n  - `PolicyKey`, `PolicyEntry`: Per-endpoint policy entries\n\n#### Q4: eBPF Map Scoping and State Isolation\n- **BPFfs Paths**: `pkg/datapath/loader/paths.go:15-75`\n  - `bpffsEndpointDir()`: Per-endpoint BPF directory\n  - `bpffsDeviceDir()`: Per-device BPF directory\n  - `bpffsEndpointLinksDir()`: Per-endpoint link pins\n\n- **Map Attachment**: `pkg/datapath/loader/loader.go:338-378`, `loader.go:511-584`\n  - `attachCiliumHost()`: Host-facing program attachment\n  - `reloadEndpoint()`: Endpoint program loading with map pins\n  - Map pinning path: `bpf.TCGlobalsPath()` (node-local)\n\n- **Network Isolation**: `Documentation/reference-guides/bpf/progtypes.rst:703-718`\n  - Container network namespace isolation via veth\n  - Host-facing veth in host namespace where eBPF attaches\n\n### Kernel and Framework References\n- **ebpf-go library**: Used for eBPF program loading (`github.com/cilium/ebpf`)\n- **Kubernetes API**: Policy distribution via CRD watch\n- **Linux kernel**: Per-node eBPF verifier, per-node BPF filesystem\n- **TC (Traffic Control)**: Hook point for program attachment\n- **veth pairs**: Network namespace isolation mechanism\n\n",
+          "file_path": "/logs/agent/investigation.md",
+          "sequence": 40,
+          "type": "write"
+        }
+      ],
+      "conversation_events": [
+        {
+          "payload": {},
+          "sequence": 1,
+          "subtype": "message",
+          "text": "# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repositories (version-pinned mirrors):**\n\n- `github.com/sg-evals/cilium--a2f97aa8` \u2014 use `repo:^github.com/sg-evals/cilium--a2f97aa8$` filter\n\nScope ALL keyword_search/nls_search queries to these repos.\nUse the repo name as the `repo` parameter for read_file/go_to_definition/find_references.\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repository:** `github.com/sg-evals/cilium--a2f97aa8`\n- Use `repo:^github.com/sg-evals/cilium--a2f97aa8$` filter in keyword_search\n- Use `github.com/sg-evals/cilium--a2f97aa8` as the `repo` parameter for go_to_definition/find_references/read_file\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n# Debug Q&A: Cilium eBPF Fault Isolation\n\n**Repository:** github.com/sg-evals/cilium--a2f97aa8 (mirror of cilium/cilium)\n**Task Type:** Debug Q&A (investigation only \u2014 no code changes)\n\n## Background\n\nCilium is a Kubernetes CNI (Container Network Interface) plugin that uses eBPF (Extended Berkeley Packet Filter) programs to enforce network policies and route traffic. In a multi-node Kubernetes cluster, each node runs its own Cilium agent which compiles, loads, and attaches eBPF programs to enforce policies.\n\n## Behavior Observation\n\n**What happens:** When an eBPF program fails to compile or load on one Kubernetes node (e.g., due to a kernel verifier rejection, compilation error, or incompatible kernel features), the other nodes in the cluster continue to enforce their network policies normally. The failing node may log errors or degrade to a fallback mode, but the failure doesn't propagate cluster-wide.\n\n**Why is this notable?** Many distributed systems that rely on shared state or centralized configuration can fail cluster-wide when one node encounters a problem. Cilium's architecture ensures that eBPF datapath failures are isolated to the affected node.\n\n## Questions\n\nAnswer ALL of the following questions to explain this behavior:\n\n### Q1: Per-Node eBPF Lifecycle\n\nHow are eBPF programs compiled, loaded, and attached on each node independently?\n- What component is responsible for compiling eBPF programs on each node?\n- How does node-specific configuration (kernel version, enabled features, etc.) affect compilation?\n- At what point in the lifecycle does the eBPF program become node-local vs. cluster-wide?\n\n### Q2: Deployment Architecture\n\nHow does Cilium's deployment model ensure per-node isolation?\n- How is the Cilium agent deployed across the cluster (DaemonSet, static pods, etc.)?\n- What happens when one node's Cilium agent fails to initialize its eBPF programs?\n- How does the control plane vs. data plane split contribute to isolation?\n\n### Q3: Policy Distribution vs. Enforcement\n\nCilium network policies are cluster-wide resources (CRDs), but enforcement is per-node. How does this work?\n- How are CiliumNetworkPolicy resources distributed to each node?\n- What component on each node translates policies into eBPF bytecode?\n- Why doesn't a compilation failure on one node block policy distribution to other nodes?\n\n### Q4: eBPF Map Scoping and State Isolation\n\neBPF programs use maps (hash tables, arrays) to store state. How is map state isolated across nodes?\n- Are eBPF maps node-local or cluster-wide?\n- What mechanisms (BPF filesystem pinning, namespaces) ensure map isolation?\n- If a node fails to create or update a map, how does that affect other nodes' packet processing?\n\n## Output Requirements\n\nWrite your answer to `/logs/agent/investigation.md` with the following structure:\n\n```\n# Cilium eBPF Fault Isolation\n\n## Q1: Per-Node eBPF Lifecycle\n<answer with specific file paths, class names, and function references>\n\n## Q2: Deployment Architecture\n<answer with specific file paths, class names, and function references>\n\n## Q3: Policy Distribution vs. Enforcement\n<answer with specific file paths, class names, and function references>\n\n## Q4: eBPF Map Scoping and State Isolation\n<answer with specific file paths, class names, and function references>\n\n## Evidence\n<consolidated list of supporting file paths and line references>\n```\n\n## Constraints\n\n- Do NOT modify any source files\n- Cite specific files, classes, and functions \u2014 avoid vague or speculative answers\n- Focus on the `pkg/datapath/loader/`, `pkg/policy/`, `pkg/maps/`, and `pkg/endpoint/` directories",
+          "timestamp": "2026-03-01T07:14:39.441Z",
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "payload": {},
+          "sequence": 3,
+          "subtype": "message",
+          "text": "I'll investigate Cilium's eBPF fault isolation architecture by examining the relevant source code. Let me start by exploring the key components.",
+          "timestamp": "2026-03-01T07:14:43.660Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 4,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01R1GAWogLijGQyb9nNkcHfo",
+          "timestamp": "2026-03-01T07:14:43.984Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 5,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01UFNEbhpNjxu1sxoyiVcade",
+          "timestamp": "2026-03-01T07:14:44.241Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 6,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01GYALp37d8Ww6XSJj5djdnN",
+          "timestamp": "2026-03-01T07:14:44.504Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 7,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01WbQHKQBP8CaZY9U35XZktF",
+          "timestamp": "2026-03-01T07:14:44.725Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 9,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01Fffrz8xbp2qyEo7JWxi3Lu",
+          "timestamp": "2026-03-01T07:14:48.671Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 10,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_018n8PkhA1owtBfvPD12YwRy",
+          "timestamp": "2026-03-01T07:14:48.913Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 12,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01FunZG4Ke5hxX5Bbk8F7ATR",
+          "timestamp": "2026-03-01T07:14:52.727Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 13,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_0141Fc8kJiwupatdYm8LXnEM",
+          "timestamp": "2026-03-01T07:14:53.118Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 15,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01Hi4sAG9KhFhpoFfx82Sc3d",
+          "timestamp": "2026-03-01T07:14:55.142Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 16,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01EF1vxZSHFVbAceeK6ftmC7",
+          "timestamp": "2026-03-01T07:14:55.451Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 17,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01T5G35k9LrPzbSyDLMb2C77",
+          "timestamp": "2026-03-01T07:14:55.775Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 19,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_nls_search toolu_012NpgevPMf7nMK99fDLZkC7",
+          "timestamp": "2026-03-01T07:14:58.878Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 20,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01MVNkqtzF5KNgKGuGZ3KpKS",
+          "timestamp": "2026-03-01T07:14:59.300Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 21,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01HtDSEn9u3eySgjv3bEWZLU",
+          "timestamp": "2026-03-01T07:14:59.613Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 23,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01BH3Nh4MV2TNfPiuszDdWka",
+          "timestamp": "2026-03-01T07:15:02.415Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 24,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_nls_search toolu_01AUqMqr44TKkZMU9YxpGnLf",
+          "timestamp": "2026-03-01T07:15:02.895Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 25,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01HT9Y6CXBvfdkS12SoUxnhC",
+          "timestamp": "2026-03-01T07:15:03.340Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 27,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01DQP6iTq54dZiP9sfK3GT4h",
+          "timestamp": "2026-03-01T07:15:06.817Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 28,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_nls_search toolu_018HQRL1Vu7X3UwrvMTGRzrq",
+          "timestamp": "2026-03-01T07:15:07.239Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 29,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01M4gpgG8q9cEwDdbGKkVHfV",
+          "timestamp": "2026-03-01T07:15:07.711Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 31,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01GCHjtbKAMRMQjMg6eDCbu9",
+          "timestamp": "2026-03-01T07:15:13.802Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 32,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_015Bxr6pXU1qiQEyvdTfjR88",
+          "timestamp": "2026-03-01T07:15:14.252Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 33,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_013Jshu6LR3bNKxMXitp28kw",
+          "timestamp": "2026-03-01T07:15:14.526Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 35,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_nls_search toolu_01P43o9kgBcdBhhH8veaEQ9Y",
+          "timestamp": "2026-03-01T07:15:17.550Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 36,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_013gqJNbeJED6sBpx3caMPQx",
+          "timestamp": "2026-03-01T07:15:17.933Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 37,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01V6AeF6UyKM5pD146htCFiM",
+          "timestamp": "2026-03-01T07:15:18.422Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 39,
+          "subtype": "message",
+          "text": "Now I have enough information to write a comprehensive answer. Let me create the investigation document.",
+          "timestamp": "2026-03-01T07:15:21.012Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 40,
+          "subtype": "message",
+          "text": "Executed Write toolu_01CEe8hYkC8NwGTCSSRwU2Tt",
+          "timestamp": "2026-03-01T07:16:01.619Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 42,
+          "subtype": "message",
+          "text": "Perfect! I've completed a comprehensive investigation of Cilium's eBPF fault isolation architecture and saved the detailed analysis to `/logs/agent/investigation.md`.\n\n## Summary\n\nThe investigation explains how Cilium ensures that eBPF program failures on one Kubernetes node don't propagate cluster-wide:\n\n**Key Findings:**\n\n1. **Per-Node eBPF Lifecycle**: Each Cilium agent independently probes its kernel (ISA version detection), compiles eBPF programs locally with node-specific parameters, and loads them. Compilation failures are node-local.\n\n2. **Deployment Architecture**: Cilium runs as a Kubernetes DaemonSet with one pod per node. Each agent has an independent `compilationLock` and initializes maps locally in `/sys/fs/bpf/cilium/`. One node's BPF filesystem is isolated from others.\n\n3. **Policy Distribution vs. Enforcement**: While cluster-wide `CiliumNetworkPolicy` resources are distributed via Kubernetes API, **each node independently translates them to eBPF bytecode**. If node A's kernel verifier rejects a program, node B's compilation can still succeed.\n\n4. **eBPF Map Scoping**: Maps are pinned to per-node directories (`/sys/fs/bpf/cilium/endpoints/<endpoint-id>/`). Each endpoint on each node gets a unique endpoint ID and separate maps. Network namespace isolation via veth ensures packet processing remains node-local.\n\nThe analysis includes specific file references to the loader (`pkg/datapath/loader/`), policy (`pkg/policy/`), maps (`pkg/maps/`), and endpoint (`pkg/endpoint/`) components that implement this isolation.",
+          "timestamp": "2026-03-01T07:16:08.337Z",
+          "tool": null,
+          "type": "agent"
+        }
+      ],
+      "step_count": 42,
+      "tool_counts_by_name": {
+        "Write": 1,
+        "mcp__sourcegraph__sg_keyword_search": 6,
+        "mcp__sourcegraph__sg_list_files": 4,
+        "mcp__sourcegraph__sg_nls_search": 4,
+        "mcp__sourcegraph__sg_read_file": 12
+      },
+      "tool_event_count": 27,
+      "tool_events": [
+        {
+          "arguments": {
+            "path": "pkg/datapath/loader",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8"
+          },
+          "step_id": 4,
+          "timestamp": "2026-03-01T07:14:43.984Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "path": "pkg/policy",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8"
+          },
+          "step_id": 5,
+          "timestamp": "2026-03-01T07:14:44.241Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "path": "pkg/maps",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8"
+          },
+          "step_id": 6,
+          "timestamp": "2026-03-01T07:14:44.504Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "path": "pkg/endpoint",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8"
+          },
+          "step_id": 7,
+          "timestamp": "2026-03-01T07:14:44.725Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "path": "pkg/datapath/loader/loader.go",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8"
+          },
+          "step_id": 9,
+          "timestamp": "2026-03-01T07:14:48.671Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "path": "pkg/datapath/loader/compile.go",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8"
+          },
+          "step_id": 10,
+          "timestamp": "2026-03-01T07:14:48.913Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "path": "pkg/endpoint/bpf.go",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8"
+          },
+          "step_id": 12,
+          "timestamp": "2026-03-01T07:14:52.727Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "limit": 200,
+            "path": "pkg/policy/distillery.go",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8"
+          },
+          "step_id": 13,
+          "timestamp": "2026-03-01T07:14:53.118Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "pkg/policy/distillery.go",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8",
+            "startLine": 1
+          },
+          "step_id": 15,
+          "timestamp": "2026-03-01T07:14:55.142Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/cilium--a2f97aa8$ DaemonSet deployment"
+          },
+          "step_id": 16,
+          "timestamp": "2026-03-01T07:14:55.451Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/cilium--a2f97aa8$ eBPF map isolation kernel namespace"
+          },
+          "step_id": 17,
+          "timestamp": "2026-03-01T07:14:55.775Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/cilium--a2f97aa8$ per-node eBPF compilation local kernel"
+          },
+          "step_id": 19,
+          "timestamp": "2026-03-01T07:14:58.878Z",
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/cilium--a2f97aa8$ pkg/maps/policymap policy enforcement endpoint"
+          },
+          "step_id": 20,
+          "timestamp": "2026-03-01T07:14:59.300Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "path": "pkg/maps/policymap",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8"
+          },
+          "step_id": 21,
+          "timestamp": "2026-03-01T07:14:59.613Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 150,
+            "path": "pkg/maps/policymap/policymap.go",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8",
+            "startLine": 1
+          },
+          "step_id": 23,
+          "timestamp": "2026-03-01T07:15:02.415Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/cilium--a2f97aa8$ agent initialization startup per-node maps BPF filesystem"
+          },
+          "step_id": 24,
+          "timestamp": "2026-03-01T07:15:02.895Z",
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/cilium--a2f97aa8$ ReloadDatapath endpoint regeneration policy"
+          },
+          "step_id": 25,
+          "timestamp": "2026-03-01T07:15:03.340Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 150,
+            "path": "pkg/endpoint/regenerator.go",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8",
+            "startLine": 1
+          },
+          "step_id": 27,
+          "timestamp": "2026-03-01T07:15:06.817Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/cilium--a2f97aa8$ template cache endpoint compilation node-local"
+          },
+          "step_id": 28,
+          "timestamp": "2026-03-01T07:15:07.239Z",
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "arguments": {
+            "endLine": 150,
+            "path": "pkg/datapath/loader/cache.go",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8",
+            "startLine": 1
+          },
+          "step_id": 29,
+          "timestamp": "2026-03-01T07:15:07.711Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 250,
+            "path": "pkg/datapath/loader/cache.go",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8",
+            "startLine": 150
+          },
+          "step_id": 31,
+          "timestamp": "2026-03-01T07:15:13.802Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/cilium--a2f97aa8$ bpffsEndpointLinksDir bpffsDeviceLinksDir bpffs"
+          },
+          "step_id": 32,
+          "timestamp": "2026-03-01T07:15:14.252Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "path": "pkg/datapath/loader/paths.go",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8"
+          },
+          "step_id": 33,
+          "timestamp": "2026-03-01T07:15:14.526Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/cilium--a2f97aa8$ CiliumNetworkPolicy distributed policy reconciliation endpoint"
+          },
+          "step_id": 35,
+          "timestamp": "2026-03-01T07:15:17.550Z",
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/cilium--a2f97aa8$ network namespace container veth device isolation"
+          },
+          "step_id": 36,
+          "timestamp": "2026-03-01T07:15:17.933Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 150,
+            "path": "pkg/policy/repository.go",
+            "repo": "github.com/sg-evals/cilium--a2f97aa8",
+            "startLine": 1
+          },
+          "step_id": 37,
+          "timestamp": "2026-03-01T07:15:18.422Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "content": "# Cilium eBPF Fault Isolation\n\n## Q1: Per-Node eBPF Lifecycle\n\n### How eBPF programs are compiled, loaded, and attached independently on each node\n\n**Component: Compilation**\n\nEach Cilium agent running on a node independently compiles eBPF programs locally using the `loader` component:\n\n1. **Local Kernel Probing** (`pkg/datapath/loader/compile.go:135-157`):\n   - `getBPFCPU()` function probes the kernel at runtime to detect available BPF ISA versions\n   - Detects support for BPF v3, v2, or v1 based on kernel helpers: `probes.HaveV3ISA()`, `probes.HaveV2ISA()`\n   - This allows per-node CPU-specific optimizations based on kernel capabilities\n   - Result is stored in `nameBPFCPU` variable, making compilation node-specific\n\n2. **Template-Based Compilation** (`pkg/datapath/loader/cache.go:26-94`):\n   - `objectCache` maintains a per-node cache of compiled eBPF templates\n   - `UpdateDatapathHash()` monitors node configuration changes (kernel version, enabled features)\n   - When configuration changes, the cache is invalidated and recompilation is triggered\n   - Hash is calculated per-node from `LocalNodeConfiguration`\n\n3. **Compilation Process** (`pkg/datapath/loader/compile.go:170-257`):\n   - `compile()` function uses clang to compile BPF C code into object files\n   - Node configuration (kernel MHz, number of CPUs) is injected via `-D` compiler flags\n   - Headers are generated from node-specific state in `pkg/datapath/loader/cache.go:141-142`\n   - Each compilation produces a node-local object file stored in the state directory\n\n**Component: Loading and Attachment**\n\n4. **Per-Endpoint Loading** (`pkg/datapath/loader/loader.go:700-732`):\n   - `ReloadDatapath()` loads compiled BPF programs for a specific endpoint\n   - `templateCache.fetchOrCompile()` retrieves or generates a template for the endpoint configuration\n   - Templates are cached locally at `<StateDir>/templates/` (see `pkg/defaults/defaults.go:56-57`)\n   - Each endpoint gets its own policy programs loaded independently\n\n5. **Program Attachment via TC/XDP** (`pkg/datapath/loader/loader.go:507-584`, `loader.go:319-334`):\n   - Programs attached at Linux Traffic Control (tc) ingress/egress hooks\n   - `attachSKBProgram()` attaches to endpoint's veth device interface\n   - `attachCiliumHost()` and `attachNetworkDevices()` attach host/device programs\n   - Each attachment is per-interface, per-direction, per-node\n\n**Key Insight**: Node-specific configuration affects compilation (kernel features, CPU variant) but failures are isolated because each node compiles independently before any cluster-wide policy is applied.\n\n---\n\n## Q2: Deployment Architecture\n\n### How Cilium's deployment model ensures per-node isolation\n\n**DaemonSet Deployment** (`install/kubernetes/cilium/templates/cilium-agent/daemonset.yaml`):\n\n1. **One Pod Per Node**:\n   - Cilium is deployed as a Kubernetes DaemonSet (not Deployment)\n   - Each node runs exactly one Cilium agent pod\n   - If the DaemonSet is updated, each pod is updated independently, not rolled out cluster-wide\n   - Failure of one node's pod does NOT prevent other nodes' pods from running\n\n2. **Per-Node BPF Filesystem Mount** (`daemonset.yaml:809-815`, `daemonset.yaml:602-606`):\n   - Each Cilium pod mounts the host's BPF filesystem at `/sys/fs/bpf`\n   - This is a per-node filesystem; each node has its own `/sys/fs/bpf` on the host\n   - BPF maps and programs are stored per-node in `/sys/fs/bpf/cilium/`\n   - If one node's BPF filesystem is corrupted, other nodes' filesystems are unaffected\n\n3. **Independent Agent Initialization** (`daemon/cmd/daemon_main.go`, `daemon/cmd/daemon.go`):\n   - Each agent initializes independently in `func newDaemon()`\n   - Calls `d.initMaps()` (`daemon/cmd/datapath.go:145-156`) to open/create BPF maps\n   - Maps are created in the node-local BPF filesystem\n   - If map initialization fails on node A, node B's maps are unaffected\n\n4. **Compilation Lock Per Agent** (`daemon/cmd/daemon.go:119-122`, `pkg/datapath/loader/loader.go:86`):\n   - Each agent maintains a `compilationLock` to serialize eBPF compilation\n   - Compilation happens locally; no cluster-wide coordination\n   - One node's compilation failure doesn't block other nodes' compilation\n\n**Control Plane / Data Plane Split**:\n\n5. **Control Plane**: Kubernetes API Server (central, cluster-wide)\n6. **Data Plane**: eBPF programs on each node (distributed, per-node)\n   - Policy definitions are distributed via Kubernetes API as CRDs\n   - But enforcement happens independently per-node through locally-compiled eBPF\n   - Each node enforces policies using its own compiled eBPF bytecode\n\n**Fallback Behavior** (`pkg/datapath/loader/loader.go:280-281`, `pkg/datapath/loader/compile.go:141-157`):\n- If a node cannot compile eBPF for its kernel version, it logs an error and continues\n- Other nodes continue to operate normally\n- The failing node may degrade to fallback mode or log policy enforcement failures\n- No cascade to other nodes\n\n---\n\n## Q3: Policy Distribution vs. Enforcement\n\n### How cluster-wide CRDs are translated to per-node eBPF enforcement\n\n**Policy Distribution** (Kubernetes API):\n\n1. **Cluster-Wide Policy Resources**:\n   - `CiliumNetworkPolicy` (namespaced) and `CiliumClusterwideNetworkPolicy` (cluster-wide)\n   - These are standard Kubernetes Custom Resource Definitions (CRDs)\n   - Stored in etcd, accessible to all agents via Kubernetes API watch\n   - Distribution is handled by Kubernetes API server, not Cilium\n\n2. **Per-Node Policy Watcher** (`daemon/cmd/daemon.go`, `pkg/k8s/watchers/watcher.go`):\n   - Each agent runs a watcher on the Kubernetes API\n   - All agents watch the same policy resources\n   - When a policy changes, all agents are notified simultaneously via API watch\n\n**Policy Translation (Per-Node Compilation)**:\n\n3. **Policy to eBPF Translation** (`pkg/policy/`, `pkg/endpoint/bpf.go:529-584`):\n   - Each agent independently translates policies into eBPF bytecode\n   - Translation happens in `Endpoint.SyncPolicy()` and `policyMapSync()`\n   - Policy state is stored in `desiredPolicy` and `realizedPolicy` per endpoint\n   - Translation is deterministic but node-local (no cross-node dependencies)\n\n4. **Per-Endpoint Policy Maps** (`pkg/maps/policymap/policymap.go:31-39`):\n   - Each endpoint gets a policy map: `cilium_policy_v2_<endpoint-id>`\n   - Maps are created locally on each node\n   - Policy keys: `(identity, traffic_direction, protocol, port, prefix_len)`\n   - Policy values: allow/deny decisions with proxy port info\n   - Maps are stored per-endpoint in node-local BPF filesystem\n\n5. **Endpoint Regeneration** (`pkg/endpoint/bpf.go`, `pkg/endpoint/regenerator.go`):\n   - When a policy changes, affected endpoints are regenerated\n   - Regeneration happens per-endpoint, per-node\n   - Each agent calculates affected endpoints independently\n   - Endpoint compilation via `ReloadDatapath()` with endpoint-specific configuration\n   - Template hashing in `pkg/datapath/loader/cache.go:170` ensures consistency within a node\n\n**Why One Node Failure Doesn't Propagate**:\n\n6. **Independent Translation**:\n   - Policy resource exists in Kubernetes API (shared)\n   - But translation to eBPF happens independently per-node\n   - If node A's compiler/verifier rejects a program, node B's compiler still succeeds\n   - Node A logs the error but doesn't affect node B's policy enforcement\n\n7. **Endpoint-Specific Configuration** (`pkg/datapath/types/config.go`):\n   - Each node has `LocalNodeConfiguration` with kernel-specific settings\n   - Endpoints use this node-local config during compilation\n   - Same policy + different kernel config = potentially different compiled eBPF\n   - This allows graceful degradation per-node\n\n---\n\n## Q4: eBPF Map Scoping and State Isolation\n\n### How eBPF map state is isolated across nodes\n\n**Map Creation and Scoping**:\n\n1. **Per-Node BPF Filesystem Hierarchy** (`pkg/datapath/loader/paths.go:15-75`):\n   - Maps are pinned to `/sys/fs/bpf/cilium/` on each node (host-level path)\n   - Endpoint maps: `/sys/fs/bpf/cilium/endpoints/<endpoint-id>/`\n   - Device maps: `/sys/fs/bpf/cilium/devices/<device-name>/`\n   - Links directory: `/sys/fs/bpf/cilium/endpoints/<endpoint-id>/links/`\n   - Each path is node-local (on host filesystem, not in container)\n\n2. **Per-Endpoint Maps** (`pkg/maps/policymap/policymap.go:31-39`):\n   - Policy map name: `cilium_policy_v2_<endpoint-id>`\n   - Endpoint ID is assigned per-container per-node (e.g., 1-65535)\n   - Same container on different nodes gets different endpoint IDs\n   - Maps with different IDs don't interact\n\n3. **Global vs. Per-Endpoint Maps**:\n   - **Global maps** (shared across endpoints on a node):\n     - `cilium_call_policy`: Program array for policy tail calls (per-node)\n     - `cilium_ct_<dir>_<version>`: Connection tracking (per-node, shared)\n     - `cilium_ipcache`: IP to identity mapping (per-node, shared via BPF filesystem)\n   - **Per-Endpoint maps**:\n     - `cilium_policy_v2_<epid>`: Policy decisions (per-endpoint, per-node)\n     - `cilium_calls_<epid>`: Custom calls (per-endpoint, per-node)\n\n4. **BPF Filesystem Pinning** (`pkg/datapath/loader/loader.go:345-376`, `loader.go:516-520`):\n   - Maps are pinned to the BPF filesystem during load in `bpf.LoadAndAssign()`\n   - Pin path includes node-local state directory: `bpf.TCGlobalsPath()`\n   - When a map is pinned, subsequent accesses refer to the pinned path\n   - **Isolation mechanism**: Different nodes have different host filesystems\n\n**Network Namespace Isolation**:\n\n5. **Container Network Namespace**:\n   - Each container runs in a separate network namespace (on host)\n   - Host-facing veth device is in host namespace\n   - eBPF programs attach to veth device, enforce policy in host namespace\n   - TC hooks on veth enforce ingress/egress policy for the container\n   - **Isolation**: eBPF programs access maps via file descriptor, which references the pinned path on the node\n\n6. **Map State Independence**:\n   - If node A fails to create a map, node B's maps are unaffected\n   - Maps are created independently during agent init (`daemon/cmd/datapath.go:145-156`)\n   - Creation happens in parallel (no cross-node synchronization)\n   - Map entries are not synchronized across nodes (except through policy updates)\n\n**Failure Scenarios**:\n\n7. **Map Full / Overflow**:\n   - If an endpoint's policy map overflows on node A, only that endpoint on node A is affected\n   - Other endpoints on node A can still write to their maps\n   - All endpoints on node B operate normally (their maps are separate)\n   - Agent can lockdown the endpoint if configured (`option.EnableEndpointLockdownOnPolicyOverflow`)\n\n8. **Map Corruption / Loss**:\n   - If node A's BPF filesystem is unmounted, maps are lost on node A\n   - Node B's BPF filesystem (on different host) is unaffected\n   - On node A restart, maps are recreated from scratch (endpoints reinitialized)\n   - No cluster-wide impact\n\n9. **Kernel Verifier Rejection**:\n   - If a program is rejected by kernel verifier on node A (e.g., due to kernel version mismatch)\n   - Node B's kernel may accept the same program (different kernel version, different verifier rules)\n   - eBPF source is compiled node-locally with node-specific parameters\n   - Compilation can succeed on node B even if it fails on node A\n\n---\n\n## Evidence\n\n### Key Files and References\n\n#### Q1: Per-Node eBPF Lifecycle\n- **Compilation Logic**: `pkg/datapath/loader/compile.go:135-257`\n  - `getBPFCPU()`: Kernel feature detection\n  - `compile()`: Local compilation\n  - `compileDatapath()`: Compilation orchestration\n\n- **Caching**: `pkg/datapath/loader/cache.go:26-223`\n  - `objectCache`: Per-node template cache\n  - `fetchOrCompile()`: Template caching and compilation\n  - `UpdateDatapathHash()`: Cache invalidation on config change\n\n- **Loader**: `pkg/datapath/loader/loader.go:74-732`\n  - `loader` struct: Per-node loader instance\n  - `ReloadDatapath()`: Endpoint program loading\n  - `reloadEndpoint()`: Per-endpoint attachment\n  - `reloadHostEndpoint()`: Host endpoint attachment\n\n#### Q2: Deployment Architecture\n- **DaemonSet Config**: `install/kubernetes/cilium/templates/cilium-agent/daemonset.yaml`\n  - BPF filesystem mount: lines 809-815, 602-606\n  - Pod-per-node scheduling\n\n- **Agent Initialization**: `daemon/cmd/daemon.go:119-207`, `daemon/cmd/daemon_main.go:1240-1250`\n  - `compilationLock`: Per-agent compilation synchronization\n  - `initMaps()`: Independent map initialization\n  - `CheckOrMountFS()`: Per-node BPF filesystem mounting\n\n#### Q3: Policy Distribution vs. Enforcement\n- **Policy Repository**: `pkg/policy/repository.go:34-151`\n  - `PolicyContext`: Per-node policy evaluation context\n  - Policy resolution per identity\n\n- **Endpoint Policy Sync**: `pkg/endpoint/bpf.go:529-584`\n  - `policyMapSync()`: Per-endpoint policy synchronization\n  - `applyPolicyMapChangesLocked()`: Per-endpoint policy application\n\n- **Policy Maps**: `pkg/maps/policymap/policymap.go:22-95`\n  - `MapName` prefix: `cilium_policy_v2_`\n  - `PolicyKey`, `PolicyEntry`: Per-endpoint policy entries\n\n#### Q4: eBPF Map Scoping and State Isolation\n- **BPFfs Paths**: `pkg/datapath/loader/paths.go:15-75`\n  - `bpffsEndpointDir()`: Per-endpoint BPF directory\n  - `bpffsDeviceDir()`: Per-device BPF directory\n  - `bpffsEndpointLinksDir()`: Per-endpoint link pins\n\n- **Map Attachment**: `pkg/datapath/loader/loader.go:338-378`, `loader.go:511-584`\n  - `attachCiliumHost()`: Host-facing program attachment\n  - `reloadEndpoint()`: Endpoint program loading with map pins\n  - Map pinning path: `bpf.TCGlobalsPath()` (node-local)\n\n- **Network Isolation**: `Documentation/reference-guides/bpf/progtypes.rst:703-718`\n  - Container network namespace isolation via veth\n  - Host-facing veth in host namespace where eBPF attaches\n\n### Kernel and Framework References\n- **ebpf-go library**: Used for eBPF program loading (`github.com/cilium/ebpf`)\n- **Kubernetes API**: Policy distribution via CRD watch\n- **Linux kernel**: Per-node eBPF verifier, per-node BPF filesystem\n- **TC (Traffic Control)**: Hook point for program attachment\n- **veth pairs**: Network namespace isolation mechanism\n\n",
+            "file_path": "/logs/agent/investigation.md"
+          },
+          "step_id": 40,
+          "timestamp": "2026-03-01T07:16:01.619Z",
+          "tool": "Write"
+        }
+      ]
+    },
+    "transcript": {
+      "json_line_count": 71,
+      "line_count": 71,
+      "message_event_count": 58,
+      "messages": [
+        {
+          "sequence": 0,
+          "subtype": "init",
+          "text": null,
+          "tool": null,
+          "type": "system"
+        },
+        {
+          "sequence": 1,
+          "subtype": "text",
+          "text": "I'll investigate Cilium's eBPF fault isolation architecture by examining the relevant source code. Let me start by exploring the key components.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 2,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 3,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 4,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 5,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 6,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 7,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 8,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 9,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 10,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 11,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 12,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 13,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 14,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 15,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 16,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 17,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 18,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 19,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 20,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 21,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 22,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 23,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 24,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_nls_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 25,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 26,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 27,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 28,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 29,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 30,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 31,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_nls_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 32,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 33,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 34,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 35,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 36,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 37,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_nls_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 38,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 39,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 40,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 41,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 42,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 43,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 44,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 45,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 46,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 47,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 48,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_nls_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 49,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 50,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 51,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 52,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 53,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 54,
+          "subtype": "text",
+          "text": "Now I have enough information to write a comprehensive answer. Let me create the investigation document.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 55,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Write",
+          "type": "assistant"
+        },
+        {
+          "sequence": 56,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 57,
+          "subtype": "text",
+          "text": "Perfect! I've completed a comprehensive investigation of Cilium's eBPF fault isolation architecture and saved the detailed analysis to `/logs/agent/investigation.md`.  ## Summary  The investigation explains how Cilium en...",
+          "tool": null,
+          "type": "assistant"
+        }
+      ],
+      "tool_event_count": 27,
+      "tool_events": [
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "Write"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "checksums": {
+      "result_json_sha256": "1d822ccacc2cdc906ff8cb117914c3d47247a09591fbfed01968a3b8875da945",
+      "trajectory_sha256": "c56a3dd7f5139a88fa615c2356a410876ccb0c2818d1e622c7c8e1afac1d5257",
+      "transcript_sha256": "781f0806d3dc0c59af1bb0ae3aaa1fe8c7902ba268ed8bc4a937ddb2bcd2d9ad"
+    },
+    "config": "mcp-remote-direct",
+    "result_path": "runs/official/understand_haiku_20260301_071233/mcp-remote-direct/ccb_understand_cilium-ebpf-fault-qa-001_mcp-remote-direct/sgonly_cilium-ebpf-fault-qa-001__5QbKZYh/result.json",
+    "run_dir": "understand_haiku_20260301_071233",
+    "suite": "csb_sdlc_understand",
+    "task_dir": "runs/official/understand_haiku_20260301_071233/mcp-remote-direct/ccb_understand_cilium-ebpf-fault-qa-001_mcp-remote-direct/sgonly_cilium-ebpf-fault-qa-001__5QbKZYh",
+    "task_name": "sgonly_cilium-ebpf-fault-qa-001",
+    "trace_paths": {
+      "trajectory": "runs/official/understand_haiku_20260301_071233/mcp-remote-direct/ccb_understand_cilium-ebpf-fault-qa-001_mcp-remote-direct/sgonly_cilium-ebpf-fault-qa-001__5QbKZYh/agent/trajectory.json",
+      "transcript": "runs/official/understand_haiku_20260301_071233/mcp-remote-direct/ccb_understand_cilium-ebpf-fault-qa-001_mcp-remote-direct/sgonly_cilium-ebpf-fault-qa-001__5QbKZYh/agent/claude-code.txt"
+    }
+  },
+  "score": {
+    "reward": 0.85,
+    "status": "passed",
+    "timed_out": false
+  }
+}

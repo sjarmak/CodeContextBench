@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [vscode-stale-diagnostics-feat-001](../tasks/feature_haiku_vscode_rerun_20260301_023018--baseline-local-direct--vscode-stale-diagnostics-feat-001.html) | `passed` | 0.500 | 0.000 | 157 | traj, tx |
+| [vscode-stale-diagnostics-feat-001](../tasks/feature_haiku_vscode_rerun_20260301_023018--baseline-local-direct--vscode-stale-diagnostics-feat-001--67360b9476.html) | `passed` | 0.500 | 0.000 | 157 | traj, tx |

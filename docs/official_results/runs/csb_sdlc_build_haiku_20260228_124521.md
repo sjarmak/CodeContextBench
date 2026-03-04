@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [mcp_strata-fx-european-refac-001_nd0ML5](../tasks/csb_sdlc_build_haiku_20260228_124521--mcp-remote-direct--mcp_strata-fx-european-refac-001_nd0ML5.html) | `passed` | 0.880 | 0.447 | 38 | traj, tx |
+| [mcp_strata-fx-european-refac-001_nd0ML5](../tasks/csb_sdlc_build_haiku_20260228_124521--mcp-remote-direct--mcp_strata-fx-european-refac-001_nd0ML5--3fdae6ba90.html) | `passed` | 0.880 | 0.447 | 38 | traj, tx |

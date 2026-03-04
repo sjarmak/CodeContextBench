@@ -149,40 +149,14 @@ When you add `--environment-type daytona`, Harbor:
 
 ## Capacity Planning
 
-### Daytona Limits (Tier 3)
+When planning large runs on Daytona, you should:
 
-| Resource | Total | Per Sandbox | Max Concurrent |
-|----------|-------|-------------|----------------|
-| vCPU | 250 | 2 (default) | **125** |
-| Memory | 500 GiB | 4 GiB (default) | **125** |
-| Storage | 2,000 GiB | ~10 GiB | 200 |
-| Sandbox creation | 600/min | - | Not a bottleneck |
+- **Check your own Daytona account limits.** Consult the Daytona dashboard or documentation for your plan’s vCPU, memory, storage, and concurrency quotas.
+- **Check your model provider’s rate limits.** Parallelism that is safe for one organization or model may not be safe for another.
+- **Start small and scale up.** Begin with a single suite or a subset of tasks and gradually increase `--parallel` as you confirm stability.
+- **Leave headroom.** Stay comfortably below documented limits to avoid throttling or transient failures.
 
-### Anthropic API Limits (Sourcegraph org)
-
-| Model | RPM | Safe `--parallel` |
-|-------|-----|-------------------|
-| Haiku | 4,000 | **125** (Daytona-limited) |
-| Sonnet | 20,000 | **125** (Daytona-limited) |
-| Opus | 20,000 | **125** (Daytona-limited) |
-
-With the Sourcegraph org's API limits, Daytona is always the bottleneck, not Anthropic.
-
-### Cost Estimates (283 tasks)
-
-| Model | Cost per full run | Paired run (2 configs) |
-|-------|-------------------|----------------------|
-| Haiku | ~$6-15 | ~$12-30 |
-| Sonnet | ~$30-80 | ~$60-160 |
-| Opus | ~$150-400 | ~$300-800 |
-
-### Wall Clock Estimates
-
-| Parallelism | 283 tasks | Paired (566 tasks) |
-|-------------|-----------|-------------------|
-| `-n 60` | ~15 min | ~15 min (concurrent) |
-| `-n 100` | ~10 min | ~15 min (concurrent) |
-| `-n 125` | ~8 min | ~12 min (sequential) |
+> The exact numeric limits, RPMs, and cost per run are deployment‑specific. The tables in blog posts or internal docs are examples only; always derive concrete numbers from your own infrastructure and pricing.
 
 ## Alternative: Standalone Runner
 

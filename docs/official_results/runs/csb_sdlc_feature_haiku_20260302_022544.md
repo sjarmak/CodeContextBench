@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [servo-css-container-query-feat-001](../tasks/csb_sdlc_feature_haiku_20260302_022544--baseline-local-direct--servo-css-container-query-feat-001.html) | `failed` | 0.000 | 0.000 | 208 | traj, tx |
+| [servo-css-container-query-feat-001](../tasks/csb_sdlc_feature_haiku_20260302_022544--baseline-local-direct--servo-css-container-query-feat-001--de7cd7c2bd.html) | `failed` | 0.000 | 0.000 | 208 | traj, tx |

@@ -1,0 +1,930 @@
+{
+  "metrics": {
+    "agent_execution_seconds": 112.495866,
+    "cache_tokens": 2442908,
+    "context_metrics": {
+      "context_window_peak_pct": 0.3953,
+      "environment_setup_seconds": 1.042296,
+      "files_modified": 1,
+      "lines_added": 631,
+      "lines_removed": 0,
+      "task_context_length": null,
+      "verifier_seconds": 0.702026
+    },
+    "input_tokens": 2443385,
+    "ir_metrics": {},
+    "mcp_ratio": 0.8888888888888888,
+    "output_tokens": 10505,
+    "search_calls_deepsearch": 0,
+    "search_calls_keyword": 9,
+    "search_calls_nls": 0,
+    "tool_calls_by_name": {
+      "Read": 1,
+      "Write": 1,
+      "mcp__sourcegraph__sg_keyword_search": 9,
+      "mcp__sourcegraph__sg_read_file": 7
+    },
+    "tool_calls_local": 2,
+    "tool_calls_mcp": 16,
+    "tool_calls_total": 18,
+    "wall_clock_seconds": 132.055033
+  },
+  "parsed_trace": {
+    "trajectory": {
+      "bash_commands": [],
+      "code_changes": [
+        {
+          "content": "# Security Reachability Analysis: Envoy AdminImpl::handlerDrainListeners()\n\n**Repository**: github.com/sg-evals/envoy--v1.31.2 (Envoy v1.31.1)\n**Target Function**: `AdminImpl::handlerDrainListeners()` in `source/server/admin/listeners_handler.cc:15-47`\n**Endpoint**: `/drain_listeners` (POST)\n\n## Executive Summary\n\n**CONCLUSION: NOT EXPLOITABLE FROM EXTERNAL HTTP INPUT**\n\nThe `handlerDrainListeners()` function is **NOT reachable from external internet-facing traffic**. This function is protected by architectural isolation: it exists solely within the admin HTTP listener, which listens on a completely separate network address and port from the data plane. External attackers cannot reach this endpoint unless they have direct network access to the admin listening address (which defaults to 127.0.0.1:9901).\n\n---\n\n## 1. Call Path: HTTP Request Reception to Handler\n\n### 1.1 Admin Listener Creation (Server Initialization)\n\n**File**: `source/server/server.cc:714-735`\n\n```cpp\nif (initial_config.admin().address()) {\n#ifdef ENVOY_ADMIN_FUNCTIONALITY\n    admin_->startHttpListener(initial_config.admin().accessLogs(),\n                             initial_config.admin().address(),\n                             initial_config.admin().socketOptions());\n#else\n    return absl::InvalidArgumentError(\"Admin address configured but admin support compiled out\");\n#endif\n} else {\n    ENVOY_LOG(info, \"No admin address given, so no admin HTTP server started.\");\n}\n```\n\n**Key Finding**: The admin HTTP listener is ONLY started if `bootstrap.admin.address` is configured. This is a completely separate address from any data plane listeners.\n\n### 1.2 Admin Socket Factory & Listener Setup\n\n**File**: `source/server/admin/admin.cc:53-76`\n\n```cpp\nvoid AdminImpl::startHttpListener(std::list<AccessLog::InstanceSharedPtr> access_logs,\n                                Network::Address::InstanceConstSharedPtr address,\n                                Network::Socket::OptionsSharedPtr socket_options) {\n  access_logs_ = std::move(access_logs);\n\n  socket_ = std::make_shared<Network::TcpListenSocket>(address, socket_options, true);\n  RELEASE_ASSERT(0 == socket_->ioHandle().listen(ENVOY_TCP_BACKLOG_SIZE).return_value_,\n                \"listen() failed on admin listener\");\n  socket_factories_.emplace_back(std::make_unique<AdminListenSocketFactory>(socket_));\n  listener_ = std::make_unique<AdminListener>(*this, factory_context_.listenerScope());\n\n  ENVOY_LOG(info, \"admin address: {}\",\n            socket().connectionInfoProvider().localAddress()->asString());\n}\n```\n\n**Key Finding**:\n- A separate TCP socket is created and bound to the admin address (line 58)\n- The socket listens on the configured admin address only\n- An `AdminListener` is instantiated as a separate `Network::ListenerConfig` (line 62)\n\n### 1.3 Network Filter Chain Creation\n\n**File**: `source/server/admin/admin.cc:289-298`\n\n```cpp\nbool AdminImpl::createNetworkFilterChain(Network::Connection& connection,\n                                       const Filter::NetworkFilterFactoriesList&) {\n  // Pass in the null overload manager so that the admin interface is accessible even when Envoy\n  // is overloaded.\n  connection.addReadFilter(Network::ReadFilterSharedPtr{new Http::ConnectionManagerImpl(\n      shared_from_this(), server_.drainManager(), server_.api().randomGenerator(),\n      server_.httpContext(), server_.runtime(), server_.localInfo(), server_.clusterManager(),\n      server_.nullOverloadManager(), server_.timeSource())});\n  return true;\n}\n```\n\n**Key Finding**:\n- Only TCP connections to the admin socket trigger this path\n- An `Http::ConnectionManagerImpl` is created specifically for the admin interface\n- This is different from data plane listeners which have their own HTTP connection managers\n\n### 1.4 HTTP Filter Chain Setup\n\n**File**: `source/server/admin/admin.cc:300-307`\n\n```cpp\nbool AdminImpl::createFilterChain(Http::FilterChainManager& manager, bool,\n                                const Http::FilterChainOptions&) const {\n  Http::FilterFactoryCb factory = [this](Http::FilterChainFactoryCallbacks& callbacks) {\n    callbacks.addStreamFilter(std::make_shared<AdminFilter>(*this));\n  };\n  manager.applyFilterFactoryCb({}, factory);\n  return true;\n}\n```\n\n**Key Finding**: The `AdminFilter` is added as the only HTTP filter in the admin listener's filter chain.\n\n### 1.5 HTTP Request Reception & Initial Processing\n\n**File**: `source/server/admin/admin_filter.cc:10-18`\n\n```cpp\nHttp::FilterHeadersStatus AdminFilter::decodeHeaders(Http::RequestHeaderMap& headers,\n                                                     bool end_stream) {\n  request_headers_ = &headers;\n  if (end_stream) {\n    onComplete();\n  }\n  return Http::FilterHeadersStatus::StopIteration;\n}\n```\n\n**Key Finding**: When HTTP headers arrive on an admin connection, they are captured and the filter stops iteration (terminal filter).\n\n### 1.6 Request Data Buffering\n\n**File**: `source/server/admin/admin_filter.cc:20-32`\n\n```cpp\nHttp::FilterDataStatus AdminFilter::decodeData(Buffer::Instance& data, bool end_stream) {\n  // Currently we generically buffer all admin request data in case a handler wants to use it.\n  decoder_callbacks_->addDecodedData(data, false);\n\n  if (end_stream) {\n    onComplete();\n  }\n\n  return Http::FilterDataStatus::StopIterationNoBuffer;\n}\n```\n\n**Key Finding**: Request body data is buffered in the internal decoder buffer.\n\n### 1.7 Request Routing to Handler\n\n**File**: `source/server/admin/admin_filter.cc:83-107` (onComplete) and `admin.cc:381-412` (makeRequest)\n\n```cpp\nvoid AdminFilter::onComplete() {\n  absl::string_view path = request_headers_->getPathValue();\n  ENVOY_STREAM_LOG(debug, \"request complete: path: {}\", *decoder_callbacks_, path);\n\n  auto header_map = Http::ResponseHeaderMapImpl::create();\n  RELEASE_ASSERT(request_headers_, \"\");\n  Admin::RequestPtr handler = admin_.makeRequest(*this);  // <-- Route to handler\n  Http::Code code = handler->start(*header_map);\n  // ... encode response ...\n}\n```\n\n**In admin.cc:381-412** (`makeRequest`):\n\n```cpp\nAdmin::RequestPtr AdminImpl::makeRequest(AdminStream& admin_stream) const {\n  absl::string_view path_and_query = admin_stream.getRequestHeaders().getPathValue();\n  std::string::size_type query_index = path_and_query.find('?');\n  if (query_index == std::string::npos) {\n    query_index = path_and_query.size();\n  }\n\n  for (const UrlHandler& handler : handlers_) {\n    if (path_and_query.compare(0, query_index, handler.prefix_) == 0) {\n      if (handler.mutates_server_state_) {\n        const absl::string_view method = admin_stream.getRequestHeaders().getMethodValue();\n        if (method != Http::Headers::get().MethodValues.Post) {\n          ENVOY_LOG(error, \"admin path \\\"{}\\\" mutates state, method={} rather than POST\",\n                    handler.prefix_, method);\n          return Admin::makeStaticTextRequest(\n              fmt::format(\"Method {} not allowed, POST required.\", method),\n              Http::Code::MethodNotAllowed);\n        }\n      }\n\n      ASSERT(admin_stream.getRequestHeaders().getPathValue() == path_and_query);\n      return handler.handler_(admin_stream);  // <-- Call handler\n    }\n  }\n\n  // Handler not found - return 404\n  Buffer::OwnedImpl error_response;\n  error_response.add(\"invalid path. \");\n  getHelp(error_response);\n  return Admin::makeStaticTextRequest(error_response, Http::Code::NotFound);\n}\n```\n\n**Key Finding**:\n- The path is extracted from request headers\n- Handler search is linear prefix match (line 389)\n- State-mutating handlers require POST method (lines 390-398)\n- The matching handler is invoked (line 402)\n\n### 1.8 Drain Listeners Handler Registration\n\n**File**: `source/server/admin/admin.cc:200-213`\n\n```cpp\nmakeHandler(\n    \"/drain_listeners\", \"drain listeners\",\n    MAKE_ADMIN_HANDLER(listeners_handler_.handlerDrainListeners), false, true,\n    {{ParamDescriptor::Type::Boolean, \"graceful\",\n      \"When draining listeners, enter a graceful drain period prior to closing \"\n      \"listeners. This behaviour and duration is configurable via server options \"\n      \"or CLI\"},\n     {ParamDescriptor::Type::Boolean, \"skip_exit\",\n      \"When draining listeners, do not exit after the drain period. \"\n      \"This must be used with graceful\"},\n     {ParamDescriptor::Type::Boolean, \"inboundonly\",\n      \"Drains all inbound listeners. traffic_direction field in \"\n      \"envoy_v3_api_msg_config.listener.v3.Listener is used to determine whether a \"\n      \"listener is inbound or outbound.\"}})\n```\n\n**Key Finding**:\n- Handler prefix: `/drain_listeners`\n- `mutates_server_state_ = true` (4th parameter)\n- Requires POST method due to state mutation\n- Handler: `listeners_handler_.handlerDrainListeners`\n\n### 1.9 Handler Execution\n\n**File**: `source/server/admin/listeners_handler.cc:15-47`\n\n```cpp\nHttp::Code ListenersHandler::handlerDrainListeners(Http::ResponseHeaderMap&,\n                                                   Buffer::Instance& response,\n                                                   AdminStream& admin_query) {\n  const Http::Utility::QueryParamsMulti params = admin_query.queryParams();\n\n  ListenerManager::StopListenersType stop_listeners_type =\n      params.getFirstValue(\"inboundonly\").has_value()\n          ? ListenerManager::StopListenersType::InboundOnly\n          : ListenerManager::StopListenersType::All;\n\n  const bool graceful = params.getFirstValue(\"graceful\").has_value();\n  const bool skip_exit = params.getFirstValue(\"skip_exit\").has_value();\n  if (skip_exit && !graceful) {\n    response.add(\"skip_exit requires graceful\\n\");\n    return Http::Code::BadRequest;\n  }\n  if (graceful) {\n    // Ignore calls to /drain_listeners?graceful if the drain sequence has\n    // already started.\n    if (!server_.drainManager().draining()) {\n      server_.drainManager().startDrainSequence([this, stop_listeners_type, skip_exit]() {\n        if (!skip_exit) {\n          server_.listenerManager().stopListeners(stop_listeners_type, {});\n        }\n      });\n    }\n  } else {\n    server_.listenerManager().stopListeners(stop_listeners_type, {});  // <-- CRITICAL ACTION\n  }\n\n  response.add(\"OK\\n\");\n  return Http::Code::OK;\n}\n```\n\n**Key Finding**: This handler directly invokes `server_.listenerManager().stopListeners()` at line 37 or 42, which forcibly drains/closes all listeners and their connections.\n\n---\n\n## 2. Protection Mechanisms: Architectural Isolation\n\n### 2.1 Separate Socket Binding\n\n**Isolation Level: NETWORK LEVEL**\n\nThe admin interface binds to a completely separate network address specified in the bootstrap configuration:\n\n```yaml\nadmin:\n  address:\n    socket_address:\n      protocol: TCP\n      address: 127.0.0.1  # Or configured address\n      port_value: 9901     # Or configured port\n```\n\nData plane listeners are configured separately:\n\n```yaml\nstatic_resources:\n  listeners:\n  - name: listener_0\n    address:\n      socket_address:\n        address: 0.0.0.0  # External facing\n        port_value: 8080\n```\n\n**Code Location**: `source/server/admin/admin.cc:58`\n- Admin: `Network::TcpListenSocket(address, socket_options, true)`\n- Data plane: Configured via `bootstrap.static_resources.listeners[]`\n\n### 2.2 Separate HTTP Connection Manager\n\n**Isolation Level: HTTP PROTOCOL LEVEL**\n\nEach listener has its own HTTP::ConnectionManagerImpl instance:\n\n- **Admin listener**: Created in `AdminImpl::createNetworkFilterChain()` (admin.cc:293)\n- **Data plane listeners**: Created by the HTTP connection manager filter configured in the listener's filter chain\n\nThese are completely independent HTTP processing stacks.\n\n### 2.3 Exclusive Filter Chain\n\n**Isolation Level: HTTP FILTER LEVEL**\n\nThe admin listener has a dedicated filter chain containing only the AdminFilter:\n\n**File**: `source/server/admin/admin.cc:300-307`\n\n```cpp\nbool AdminImpl::createFilterChain(Http::FilterChainManager& manager, bool,\n                                const Http::FilterChainOptions&) const {\n  Http::FilterFactoryCb factory = [this](Http::FilterChainFactoryCallbacks& callbacks) {\n    callbacks.addStreamFilter(std::make_shared<AdminFilter>(*this));  // ONLY filter\n  };\n  manager.applyFilterFactoryCb({}, factory);\n  return true;\n}\n```\n\nThe AdminFilter is a terminal filter (`Http::PassThroughFilter`) that:\n1. Intercepts all HTTP requests on the admin listener\n2. Routes them exclusively to admin handlers\n3. Does NOT forward to any upstream clusters\n4. Does NOT apply any data plane routes\n\n### 2.4 Hardcoded Handler Registry\n\n**Isolation Level: APPLICATION LEVEL**\n\nThe `/drain_listeners` handler is registered only in the admin listener's handler registry:\n\n**File**: `source/server/admin/admin.cc:126-260` (AdminImpl constructor)\n\nThe handlers are initialized as a static list in the admin server constructor. These handlers are NOT registered in the data plane routing configuration. A data plane HTTP request cannot match any of these hardcoded admin paths because:\n\n1. Data plane uses route-based dispatching (via Router filter with RDS/CDS)\n2. Admin uses handler-based dispatching (via hardcoded prefix matching in AdminFilter::onComplete)\n3. These are completely separate code paths\n\n---\n\n## 3. Access Control Model: Boundary Analysis\n\n### 3.1 Data Plane Request Flow (External Traffic)\n\n```\n[External Client]\n         |\n         | (Connect to data plane listener port, e.g., 0.0.0.0:8080)\n         v\n    [Network Listener]\n         |\n         | (Network filter chain - TLS, etc.)\n         v\n    [HTTP Connection Manager]\n         |\n         | (HTTP/1.1 or HTTP/2 decode)\n         v\n    [HTTP Filter Chain]\n    (e.g., router filter, auth filter, etc.)\n         |\n         | Routes to upstream clusters based on HTTP routing config\n         v\n    [Upstream Cluster]\n         |\n         | NO WAY TO REACH ADMIN HANDLERS\n```\n\n### 3.2 Admin Interface Request Flow (Local/Internal Traffic)\n\n```\n[Local/Authorized Client]\n         |\n         | (Connect to admin listener port, e.g., 127.0.0.1:9901)\n         v\n    [Admin Network Listener]\n         |\n         | (Network filter chain - minimal)\n         v\n    [Admin HTTP Connection Manager]\n         |\n         | (HTTP/1.1 or HTTP/2 decode)\n         v\n    [AdminFilter]\n    (Terminal filter - exclusive to admin)\n         |\n         | Prefix matches request path against hardcoded admin handlers\n         v\n    [Admin Handler: handlerDrainListeners]\n         |\n         | server_.listenerManager().stopListeners()\n         v\n    [IMPACT: Close all data plane listeners]\n```\n\n### 3.3 Critical Boundary: No Cross-Listener Communication\n\n**Code Evidence**:\n\n1. **Different Listener Configs**:\n   - AdminListener (admin.h:366-418): Uses `AdminImpl` as both FilterChainManager and FilterChainFactory\n   - Data plane Listener: Uses configured filter chains from the listener config\n\n2. **Different HTTP Connection Managers**:\n   - Admin: `AdminImpl::createNetworkFilterChain()` creates dedicated HTTP::ConnectionManagerImpl\n   - Data plane: HTTP::ConnectionManagerImpl created by listener's network filter chain\n\n3. **Different Route/Handler Dispatching**:\n   - Admin: `AdminFilter::onComplete()` \u2192 `AdminImpl::makeRequest()` \u2192 hardcoded handler lookup\n   - Data plane: Router filter \u2192 Route table \u2192 upstream cluster selection\n\n**Key Code Reference**: `source/server/admin/admin_filter.cc:89`\n\n```cpp\nAdmin::RequestPtr handler = admin_.makeRequest(*this);\n```\n\nThis call can ONLY happen if:\n1. The request arrived on the admin listener socket\n2. The AdminFilter was invoked (only on admin listener)\n3. Therefore, `admin_.makeRequest()` can only route to admin handlers\n\n---\n\n## 4. Exploitability Assessment\n\n### 4.1 Attack Vector Analysis\n\n**Scenario 1: Direct network connection to admin port**\n- **Requirement**: Network access to admin socket address (e.g., 127.0.0.1:9901)\n- **Difficulty**: LOW if on same host, HIGH if admin bound to 127.0.0.1 only\n- **Exploitability**: YES, but requires privileged network access\n- **Mitigation**: Default admin address is 127.0.0.1 (localhost only)\n\n**Scenario 2: HTTP request through data plane listener**\n- **Requirement**: Send `/drain_listeners` HTTP request to data plane port\n- **Difficulty**: TRIVIAL if it were possible\n- **Exploitability**: NO - not reachable through data plane\n- **Reason**: Data plane listener does not route to admin handlers\n\n**Scenario 3: HTTP/2 Port Reuse/Upgrade**\n- **Requirement**: Exploit HTTP/2 settings frame to upgrade connection\n- **Difficulty**: N/A - separate sockets, separate connection managers\n- **Exploitability**: NO - separate socket binding\n- **Reason**: HTTP/2 upgrade happens within a single TCP connection, which must first connect to admin port\n\n**Scenario 4: HTTP Request Smuggling**\n- **Requirement**: Inject admin request into data plane traffic\n- **Difficulty**: N/A - separate HTTP connection managers\n- **Exploitability**: NO\n- **Reason**: Each connection manager independently parses HTTP frames\n\n### 4.2 Reachability Verdict\n\n| Component | Reachable from External Input? | Why? |\n|-----------|------|------|\n| Admin Socket | NO (default) | Default admin address: 127.0.0.1:9901 |\n| Admin HTTP Connection Manager | NO | Only exists on admin socket |\n| AdminFilter | NO | Only on admin listener's filter chain |\n| Admin Handler Registry | NO | Only queried by AdminFilter |\n| `/drain_listeners` handler | NO | Only registered in admin handler registry |\n| `handlerDrainListeners()` | NO | Only called if admin handler matches path |\n\n**CONCLUSION: This endpoint is NOT externally exploitable unless:**\n\n1. Admin interface is bound to a public address (not 127.0.0.1)\n2. AND network firewall allows external access to admin port\n3. AND POST request with `/drain_listeners` path is sent\n\n---\n\n## 5. Configuration-Dependent Exposure\n\n### 5.1 Vulnerable Configuration Example\n\n```yaml\nadmin:\n  address:\n    socket_address:\n      protocol: TCP\n      address: 0.0.0.0      # <-- DANGER: All interfaces\n      port_value: 9901\n```\n\nIn this misconfiguration:\n- Admin interface is publicly accessible\n- External attacker can connect to port 9901\n- Can invoke `/drain_listeners` via POST\n- Can drain all listeners, causing DoS\n\n### 5.2 Secure Configuration Example (Default)\n\n```yaml\nadmin:\n  address:\n    socket_address:\n      protocol: TCP\n      address: 127.0.0.1    # <-- SECURE: Localhost only\n      port_value: 9901\n```\n\nResult:\n- Only local processes can access admin interface\n- `/drain_listeners` cannot be reached from external network\n- Requires OS-level privilege escalation to exploit from different user\n\n### 5.3 Secure Configuration Example (Internal Network)\n\n```yaml\nadmin:\n  address:\n    socket_address:\n      protocol: TCP\n      address: 10.0.0.5     # <-- SECURE: Internal network only\n      port_value: 9901\n```\n\nResult:\n- Only processes on the internal network can access\n- Requires internal network penetration first\n\n---\n\n## 6. Evidence Summary\n\n### Call Chain Documentation\n\n```\nExternal HTTP Request (port 8080)\n    \u2193\nData Plane Listener (Network Listener)\n    \u2193\nHTTP Connection Manager (data plane)\n    \u2193\nRouter Filter\n    \u2193\nRoute Match \u2192 Upstream Cluster\n    X CANNOT REACH ADMIN HANDLERS\n\n---\n\nAdmin HTTP Request (port 9901)\n    \u2193\nAdmin Listener (Network Listener - separate socket)\n    \u2193\nHTTP Connection Manager (admin-specific instance)\n    \u2193\nAdminFilter (terminal filter)\n    \u2193\nAdminImpl::makeRequest()\n    \u2193\nHandler Match: /drain_listeners\n    \u2193\nListenersHandler::handlerDrainListeners()\n    \u2193\nserver_.listenerManager().stopListeners()\n    \u2193\nIMPACT: All listeners closed\n```\n\n### Code References\n\n| Aspect | File | Line(s) |\n|--------|------|---------|\n| Admin listener creation | admin.cc | 53-76 |\n| Admin socket binding | admin.cc | 58-60 |\n| Network filter chain | admin.cc | 289-298 |\n| HTTP filter chain | admin.cc | 300-307 |\n| AdminFilter addition | admin.cc | 303 |\n| Admin handler routing | admin.cc | 381-412 |\n| Drain listeners handler registration | admin.cc | 200-213 |\n| Drain listeners implementation | listeners_handler.cc | 15-47 |\n| Admin listener config | admin.h | 366-418 |\n| Server initialization | server.cc | 714-735 |\n\n---\n\n## 7. Recommendations\n\n### For Security Practitioners\n\n1. **Verify Admin Binding**: Confirm admin address is bound to 127.0.0.1 or internal network only\n   ```bash\n   netstat -tlnp | grep 9901\n   curl http://127.0.0.1:9901/ # Should work\n   curl http://<public-ip>:9901/ # Should fail\n   ```\n\n2. **Network Segmentation**: If admin needs broader access, use firewall rules (not address binding)\n\n3. **Authentication**: Envoy admin interface has no built-in auth - use reverse proxy if needed\n\n4. **Monitoring**: Alert on POST requests to `/drain_listeners` endpoint\n\n### For Envoy Operators\n\n1. **Keep Default Configuration**: Don't change admin address from 127.0.0.1 unless necessary\n\n2. **Use Network Policies**: If admin needs access from other hosts, use iptables/firewall rules\n\n3. **Separate Admin Network**: Run admin listener on internal management network\n\n4. **Access Control**: Restrict SSH/console access to Envoy hosts\n\n---\n\n## Conclusion\n\nThe `AdminImpl::handlerDrainListeners()` function implements a legitimate admin operation to drain listeners, but it **is NOT reachable from external HTTP input** due to architectural isolation. The admin interface listens on a separate port/address from the data plane, and requests cannot cross between them due to:\n\n1. **Network Level**: Separate socket bindings\n2. **HTTP Level**: Separate HTTP connection managers\n3. **Filter Level**: Separate filter chains with terminal AdminFilter\n4. **Application Level**: Hardcoded handler registry not shared with data plane routing\n\n**Security Status**: SAFE (architecturally protected) when using default configuration (admin bound to 127.0.0.1)\n\n**Risk**: HIGH if misconfigured with admin bound to public address (0.0.0.0)\n\n",
+          "file_path": "/logs/agent/triage.md",
+          "sequence": 44,
+          "type": "write"
+        }
+      ],
+      "conversation_events": [
+        {
+          "payload": {},
+          "sequence": 1,
+          "subtype": "message",
+          "text": "# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repositories (version-pinned mirrors):**\n\n- `github.com/sg-evals/envoy--v1.31.2` \u2014 use `repo:^github.com/sg-evals/envoy--v1.31.2$` filter\n\nScope ALL keyword_search/nls_search queries to these repos.\nUse the repo name as the `repo` parameter for read_file/go_to_definition/find_references.\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repository:** `github.com/sg-evals/envoy--v1.31.2`\n- Use `repo:^github.com/sg-evals/envoy--v1.31.2$` filter in keyword_search\n- Use `github.com/sg-evals/envoy--v1.31.2` as the `repo` parameter for go_to_definition/find_references/read_file\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n# Security Reachability Analysis: Envoy Admin Interface\n\n## Scenario\n\nYou are performing a security audit of Envoy Proxy's administration interface. During static analysis, you identified a function with potentially dangerous operations:\n\n**Function**: `AdminImpl::handlerDrainListeners()` in `source/server/admin/admin.cc`\n\nThis function handles the `/drain_listeners` endpoint, which forcibly drains all active listeners, closing existing connections and rejecting new ones. The implementation modifies critical server state and could be used for denial-of-service attacks.\n\n## Your Task\n\nDetermine whether this function is **exploitable from external HTTP input** (i.e., from the internet-facing data plane). Specifically:\n\n1. **Trace the call path**: Identify all code paths from external HTTP request reception to `handlerDrainListeners()`\n2. **Identify protection mechanisms**: Is this endpoint restricted to specific network interfaces, ports, or authentication?\n3. **Assess exploitability**: Can an external attacker reach this function? Or is it isolated to internal/admin-only access?\n4. **Document the access control model**: What prevents external traffic from triggering admin endpoints?\n\n## Codebase Context\n\n- **Repository**: github.com/sg-evals/envoy--v1.31.2 (mirror of envoyproxy/envoy) @ v1.31.1\n- **Language**: C++\n- **Focus Area**: Admin interface architecture and access control\n\n## Background: Admin Interface vs Data Plane\n\nEnvoy has two separate network interfaces:\n\n1. **Data Plane** (e.g., port 8080): Processes customer/external HTTP traffic\n   - Configured via `listeners` in envoy.yaml\n   - Typically bound to 0.0.0.0 or public IP\n   - Handles production traffic\n\n2. **Admin Interface** (e.g., port 9901): Debug and management endpoints\n   - Configured via `admin` section in envoy.yaml\n   - Typically bound to 127.0.0.1 (localhost only)\n   - NOT meant for external access\n\n## Expected Deliverable\n\nWrite your analysis to `/logs/agent/triage.md`.\n\nInclude enough evidence to support your exploitability conclusion, including:\n- the full call chain from request reception to the target handler\n- the boundary between data-plane and admin-plane request handling\n- the controls that prevent or permit external reachability\n- the network/configuration conditions under which the endpoint would become externally reachable\n\n## Important Notes\n\n- Focus on **reachability analysis**, not on fixing the vulnerability\n- Use static analysis and code review techniques\n- Consider both HTTP/1.1 and HTTP/2 code paths\n- Document your reasoning and evidence for each conclusion\n- Be specific about validation checks (don't just say \"input is validated\" - cite the specific check and where it occurs)\n\n## Success Criteria\n\nYour analysis will be scored on:\n- Correct identification of all call paths (25%)\n- Accurate identification of protection mechanisms (30%)\n- Correct exploitability assessment (25%)\n- Quality of evidence and reasoning (20%)",
+          "timestamp": "2026-03-01T07:14:37.362Z",
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "payload": {},
+          "sequence": 3,
+          "subtype": "message",
+          "text": "I'll help you perform a security reachability analysis of Envoy's admin interface to determine if `AdminImpl::handlerDrainListeners()` is exploitable from external HTTP input. Let me start by exploring the codebase.",
+          "timestamp": "2026-03-01T07:14:40.337Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 4,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01TpbjFKbBy4rhzLkGo8fRdB",
+          "timestamp": "2026-03-01T07:14:40.609Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 6,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_011jQtbQs4PiH7ba5Fqiwvm9",
+          "timestamp": "2026-03-01T07:14:41.842Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 8,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01KV6f3ZT7Y8hkCPtTsU66cD",
+          "timestamp": "2026-03-01T07:14:43.678Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 10,
+          "subtype": "message",
+          "text": "Let me continue reading to understand the broader admin interface structure:",
+          "timestamp": "2026-03-01T07:14:45.407Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 11,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_016z7kC6wDjtFRyZ5LVkWq5V",
+          "timestamp": "2026-03-01T07:14:45.882Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 13,
+          "subtype": "message",
+          "text": "Now let me look at the AdminFilter to see how requests enter the admin interface:",
+          "timestamp": "2026-03-01T07:14:49.555Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 14,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01EPt8YbvZDwAFHexdpVwZfW",
+          "timestamp": "2026-03-01T07:14:49.878Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 16,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01L5hXogdfYB39d9zfFeqYBh",
+          "timestamp": "2026-03-01T07:14:51.586Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 18,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_011grFEnk8sdXABJzVQrX8V4",
+          "timestamp": "2026-03-01T07:14:53.281Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 20,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01QirLvBiUA1dpLX5hY1hcGz",
+          "timestamp": "2026-03-01T07:14:54.753Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 22,
+          "subtype": "message",
+          "text": "Now let me understand the admin listener lifecycle and how it differs from data plane listeners:",
+          "timestamp": "2026-03-01T07:14:57.345Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 23,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_013vPQcjhYbmQ2RbNsx1R5Zs",
+          "timestamp": "2026-03-01T07:14:57.799Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 25,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01NQXQMMf5mZwo383V5dDi8z",
+          "timestamp": "2026-03-01T07:15:00.033Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 27,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01YHtH1ReDb2jKijwEMapvcM",
+          "timestamp": "2026-03-01T07:15:02.409Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 29,
+          "subtype": "message",
+          "text": "Let me search for the admin listener socket factory to understand the isolation:",
+          "timestamp": "2026-03-01T07:15:04.203Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 30,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_014ue1AZNkHMtEiNsQuZopyf",
+          "timestamp": "2026-03-01T07:15:04.572Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 32,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01UZCFB4uB2tH2aAavcBBDbg",
+          "timestamp": "2026-03-01T07:15:06.334Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 34,
+          "subtype": "message",
+          "text": "Now let me search for how the data plane listeners are created and configured:",
+          "timestamp": "2026-03-01T07:15:08.885Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 35,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_017SeQ6W6U94pstUzqb2mRmm",
+          "timestamp": "2026-03-01T07:15:09.412Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 37,
+          "subtype": "message",
+          "text": "Let me verify the complete separation by looking at how the server routes requests to the admin vs data plane:",
+          "timestamp": "2026-03-01T07:15:12.008Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 38,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01F87JAVJGkEWXDwujZVDmp4",
+          "timestamp": "2026-03-01T07:15:13.220Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 40,
+          "subtype": "message",
+          "text": "Let me check if there's any path for data plane requests to reach the admin handlers:",
+          "timestamp": "2026-03-01T07:15:19.285Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 41,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_019Wzo6Tk8PHXwCwfU2itCRW",
+          "timestamp": "2026-03-01T07:15:19.676Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 43,
+          "subtype": "message",
+          "text": "Now I have enough information to write a comprehensive analysis. Let me create the triage document:",
+          "timestamp": "2026-03-01T07:15:22.319Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 44,
+          "subtype": "message",
+          "text": "Executed Write toolu_01Q4QiTrzuNLWS18YQvhagbk",
+          "timestamp": "2026-03-01T07:16:18.667Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 46,
+          "subtype": "message",
+          "text": "Perfect! I've completed a comprehensive security reachability analysis of Envoy's admin interface and the `handlerDrainListeners()` endpoint. Let me verify the file was created:",
+          "timestamp": "2026-03-01T07:16:20.239Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 47,
+          "subtype": "message",
+          "text": "Executed Read toolu_01VCprEKghGdTXWQtmskvGx4",
+          "timestamp": "2026-03-01T07:16:20.474Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 49,
+          "subtype": "message",
+          "text": "Excellent! I've completed a comprehensive security reachability analysis of Envoy's admin interface. Here's a summary of my findings:\n\n## Analysis Summary\n\n**File**: `/logs/agent/triage.md` \u2705\n\n### Key Findings:\n\n**CONCLUSION: NOT EXPLOITABLE FROM EXTERNAL HTTP INPUT**\n\nThe `AdminImpl::handlerDrainListeners()` endpoint (`/drain_listeners`) is **architecturally protected** and **NOT reachable from external internet-facing traffic**. Here's why:\n\n### Multi-Layer Isolation:\n\n1. **Network Level (Layer 1)**: \n   - Admin listener binds to a **separate address/port** (default: 127.0.0.1:9901)\n   - Data plane listens on different addresses (e.g., 0.0.0.0:8080)\n   - They listen on completely independent TCP sockets\n\n2. **HTTP Protocol Level (Layer 2)**:\n   - Each listener has its own `Http::ConnectionManagerImpl` instance\n   - Completely independent HTTP/1.1 and HTTP/2 parsing stacks\n   - No connection sharing between admin and data plane\n\n3. **HTTP Filter Level (Layer 3)**:\n   - Admin listener has exclusive `AdminFilter` (terminal filter)\n   - Only exists in admin listener's filter chain\n   - Data plane filters cannot access admin handlers\n\n4. **Application Level (Layer 4)**:\n   - Admin uses hardcoded handler registry (`/drain_listeners`, `/stats`, etc.)\n   - Data plane uses HTTP routing (Router filter with RDS/CDS)\n   - Completely separate code paths - no crossover possible\n\n### Complete Call Chain (in document):\n- Request reception \u2192 Socket binding \u2192 HTTP connection manager \u2192 Filter routing \u2192 Handler invocation\n- Each step shows the architectural separation between admin and data plane\n\n### Risk Assessment:\n- **Default Configuration (127.0.0.1)**: \u2705 SAFE - Localhost only\n- **Misconfigured (0.0.0.0)**: \u274c VULNERABLE - Publicly accessible if firewall allows\n\nThe analysis includes:\n- \u2705 Full call path from HTTP request to handler (9 detailed sections)\n- \u2705 All protection mechanisms with code locations\n- \u2705 Access control model and boundary analysis\n- \u2705 Configuration-dependent exposure scenarios\n- \u2705 Evidence table with line-by-line code references\n- \u2705 Attack vector analysis for multiple scenarios\n- \u2705 Operator recommendations",
+          "timestamp": "2026-03-01T07:16:26.949Z",
+          "tool": null,
+          "type": "agent"
+        }
+      ],
+      "step_count": 49,
+      "tool_counts_by_name": {
+        "Read": 1,
+        "Write": 1,
+        "mcp__sourcegraph__sg_keyword_search": 9,
+        "mcp__sourcegraph__sg_read_file": 7
+      },
+      "tool_event_count": 18,
+      "tool_events": [
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/envoy--v1.31.2$ AdminImpl::handlerDrainListeners"
+          },
+          "step_id": 4,
+          "timestamp": "2026-03-01T07:14:40.609Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/envoy--v1.31.2$ handlerDrainListeners"
+          },
+          "step_id": 6,
+          "timestamp": "2026-03-01T07:14:41.842Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 250,
+            "path": "source/server/admin/admin.cc",
+            "repo": "github.com/sg-evals/envoy--v1.31.2",
+            "startLine": 1
+          },
+          "step_id": 8,
+          "timestamp": "2026-03-01T07:14:43.678Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 500,
+            "path": "source/server/admin/admin.cc",
+            "repo": "github.com/sg-evals/envoy--v1.31.2",
+            "startLine": 250
+          },
+          "step_id": 11,
+          "timestamp": "2026-03-01T07:14:45.882Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/envoy--v1.31.2$ AdminFilter class"
+          },
+          "step_id": 14,
+          "timestamp": "2026-03-01T07:14:49.878Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "path": "source/server/admin/admin_filter.h",
+            "repo": "github.com/sg-evals/envoy--v1.31.2"
+          },
+          "step_id": 16,
+          "timestamp": "2026-03-01T07:14:51.586Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/envoy--v1.31.2$ AdminFilter::decodeHeaders admin_filter.cc"
+          },
+          "step_id": 18,
+          "timestamp": "2026-03-01T07:14:53.281Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "path": "source/server/admin/admin_filter.cc",
+            "repo": "github.com/sg-evals/envoy--v1.31.2"
+          },
+          "step_id": 20,
+          "timestamp": "2026-03-01T07:14:54.753Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/envoy--v1.31.2$ startHttpListener admin listener server initialization"
+          },
+          "step_id": 23,
+          "timestamp": "2026-03-01T07:14:57.799Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 750,
+            "path": "source/server/server.cc",
+            "repo": "github.com/sg-evals/envoy--v1.31.2",
+            "startLine": 700
+          },
+          "step_id": 25,
+          "timestamp": "2026-03-01T07:15:00.033Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/envoy--v1.31.2$ listeners configuration bootstrap"
+          },
+          "step_id": 27,
+          "timestamp": "2026-03-01T07:15:02.409Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/envoy--v1.31.2$ AdminListenSocketFactory AdminListener"
+          },
+          "step_id": 30,
+          "timestamp": "2026-03-01T07:15:04.572Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 430,
+            "path": "source/server/admin/admin.h",
+            "repo": "github.com/sg-evals/envoy--v1.31.2",
+            "startLine": 340
+          },
+          "step_id": 32,
+          "timestamp": "2026-03-01T07:15:06.334Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/envoy--v1.31.2$ Listener configuration v3 listener.proto address bind"
+          },
+          "step_id": 35,
+          "timestamp": "2026-03-01T07:15:09.412Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 80,
+            "path": "source/server/admin/listeners_handler.cc",
+            "repo": "github.com/sg-evals/envoy--v1.31.2",
+            "startLine": 1
+          },
+          "step_id": 38,
+          "timestamp": "2026-03-01T07:15:13.220Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/envoy--v1.31.2$ HttpConnectionManager filter routing listener configuration"
+          },
+          "step_id": 41,
+          "timestamp": "2026-03-01T07:15:19.676Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "content": "# Security Reachability Analysis: Envoy AdminImpl::handlerDrainListeners()\n\n**Repository**: github.com/sg-evals/envoy--v1.31.2 (Envoy v1.31.1)\n**Target Function**: `AdminImpl::handlerDrainListeners()` in `source/server/admin/listeners_handler.cc:15-47`\n**Endpoint**: `/drain_listeners` (POST)\n\n## Executive Summary\n\n**CONCLUSION: NOT EXPLOITABLE FROM EXTERNAL HTTP INPUT**\n\nThe `handlerDrainListeners()` function is **NOT reachable from external internet-facing traffic**. This function is protected by architectural isolation: it exists solely within the admin HTTP listener, which listens on a completely separate network address and port from the data plane. External attackers cannot reach this endpoint unless they have direct network access to the admin listening address (which defaults to 127.0.0.1:9901).\n\n---\n\n## 1. Call Path: HTTP Request Reception to Handler\n\n### 1.1 Admin Listener Creation (Server Initialization)\n\n**File**: `source/server/server.cc:714-735`\n\n```cpp\nif (initial_config.admin().address()) {\n#ifdef ENVOY_ADMIN_FUNCTIONALITY\n    admin_->startHttpListener(initial_config.admin().accessLogs(),\n                             initial_config.admin().address(),\n                             initial_config.admin().socketOptions());\n#else\n    return absl::InvalidArgumentError(\"Admin address configured but admin support compiled out\");\n#endif\n} else {\n    ENVOY_LOG(info, \"No admin address given, so no admin HTTP server started.\");\n}\n```\n\n**Key Finding**: The admin HTTP listener is ONLY started if `bootstrap.admin.address` is configured. This is a completely separate address from any data plane listeners.\n\n### 1.2 Admin Socket Factory & Listener Setup\n\n**File**: `source/server/admin/admin.cc:53-76`\n\n```cpp\nvoid AdminImpl::startHttpListener(std::list<AccessLog::InstanceSharedPtr> access_logs,\n                                Network::Address::InstanceConstSharedPtr address,\n                                Network::Socket::OptionsSharedPtr socket_options) {\n  access_logs_ = std::move(access_logs);\n\n  socket_ = std::make_shared<Network::TcpListenSocket>(address, socket_options, true);\n  RELEASE_ASSERT(0 == socket_->ioHandle().listen(ENVOY_TCP_BACKLOG_SIZE).return_value_,\n                \"listen() failed on admin listener\");\n  socket_factories_.emplace_back(std::make_unique<AdminListenSocketFactory>(socket_));\n  listener_ = std::make_unique<AdminListener>(*this, factory_context_.listenerScope());\n\n  ENVOY_LOG(info, \"admin address: {}\",\n            socket().connectionInfoProvider().localAddress()->asString());\n}\n```\n\n**Key Finding**:\n- A separate TCP socket is created and bound to the admin address (line 58)\n- The socket listens on the configured admin address only\n- An `AdminListener` is instantiated as a separate `Network::ListenerConfig` (line 62)\n\n### 1.3 Network Filter Chain Creation\n\n**File**: `source/server/admin/admin.cc:289-298`\n\n```cpp\nbool AdminImpl::createNetworkFilterChain(Network::Connection& connection,\n                                       const Filter::NetworkFilterFactoriesList&) {\n  // Pass in the null overload manager so that the admin interface is accessible even when Envoy\n  // is overloaded.\n  connection.addReadFilter(Network::ReadFilterSharedPtr{new Http::ConnectionManagerImpl(\n      shared_from_this(), server_.drainManager(), server_.api().randomGenerator(),\n      server_.httpContext(), server_.runtime(), server_.localInfo(), server_.clusterManager(),\n      server_.nullOverloadManager(), server_.timeSource())});\n  return true;\n}\n```\n\n**Key Finding**:\n- Only TCP connections to the admin socket trigger this path\n- An `Http::ConnectionManagerImpl` is created specifically for the admin interface\n- This is different from data plane listeners which have their own HTTP connection managers\n\n### 1.4 HTTP Filter Chain Setup\n\n**File**: `source/server/admin/admin.cc:300-307`\n\n```cpp\nbool AdminImpl::createFilterChain(Http::FilterChainManager& manager, bool,\n                                const Http::FilterChainOptions&) const {\n  Http::FilterFactoryCb factory = [this](Http::FilterChainFactoryCallbacks& callbacks) {\n    callbacks.addStreamFilter(std::make_shared<AdminFilter>(*this));\n  };\n  manager.applyFilterFactoryCb({}, factory);\n  return true;\n}\n```\n\n**Key Finding**: The `AdminFilter` is added as the only HTTP filter in the admin listener's filter chain.\n\n### 1.5 HTTP Request Reception & Initial Processing\n\n**File**: `source/server/admin/admin_filter.cc:10-18`\n\n```cpp\nHttp::FilterHeadersStatus AdminFilter::decodeHeaders(Http::RequestHeaderMap& headers,\n                                                     bool end_stream) {\n  request_headers_ = &headers;\n  if (end_stream) {\n    onComplete();\n  }\n  return Http::FilterHeadersStatus::StopIteration;\n}\n```\n\n**Key Finding**: When HTTP headers arrive on an admin connection, they are captured and the filter stops iteration (terminal filter).\n\n### 1.6 Request Data Buffering\n\n**File**: `source/server/admin/admin_filter.cc:20-32`\n\n```cpp\nHttp::FilterDataStatus AdminFilter::decodeData(Buffer::Instance& data, bool end_stream) {\n  // Currently we generically buffer all admin request data in case a handler wants to use it.\n  decoder_callbacks_->addDecodedData(data, false);\n\n  if (end_stream) {\n    onComplete();\n  }\n\n  return Http::FilterDataStatus::StopIterationNoBuffer;\n}\n```\n\n**Key Finding**: Request body data is buffered in the internal decoder buffer.\n\n### 1.7 Request Routing to Handler\n\n**File**: `source/server/admin/admin_filter.cc:83-107` (onComplete) and `admin.cc:381-412` (makeRequest)\n\n```cpp\nvoid AdminFilter::onComplete() {\n  absl::string_view path = request_headers_->getPathValue();\n  ENVOY_STREAM_LOG(debug, \"request complete: path: {}\", *decoder_callbacks_, path);\n\n  auto header_map = Http::ResponseHeaderMapImpl::create();\n  RELEASE_ASSERT(request_headers_, \"\");\n  Admin::RequestPtr handler = admin_.makeRequest(*this);  // <-- Route to handler\n  Http::Code code = handler->start(*header_map);\n  // ... encode response ...\n}\n```\n\n**In admin.cc:381-412** (`makeRequest`):\n\n```cpp\nAdmin::RequestPtr AdminImpl::makeRequest(AdminStream& admin_stream) const {\n  absl::string_view path_and_query = admin_stream.getRequestHeaders().getPathValue();\n  std::string::size_type query_index = path_and_query.find('?');\n  if (query_index == std::string::npos) {\n    query_index = path_and_query.size();\n  }\n\n  for (const UrlHandler& handler : handlers_) {\n    if (path_and_query.compare(0, query_index, handler.prefix_) == 0) {\n      if (handler.mutates_server_state_) {\n        const absl::string_view method = admin_stream.getRequestHeaders().getMethodValue();\n        if (method != Http::Headers::get().MethodValues.Post) {\n          ENVOY_LOG(error, \"admin path \\\"{}\\\" mutates state, method={} rather than POST\",\n                    handler.prefix_, method);\n          return Admin::makeStaticTextRequest(\n              fmt::format(\"Method {} not allowed, POST required.\", method),\n              Http::Code::MethodNotAllowed);\n        }\n      }\n\n      ASSERT(admin_stream.getRequestHeaders().getPathValue() == path_and_query);\n      return handler.handler_(admin_stream);  // <-- Call handler\n    }\n  }\n\n  // Handler not found - return 404\n  Buffer::OwnedImpl error_response;\n  error_response.add(\"invalid path. \");\n  getHelp(error_response);\n  return Admin::makeStaticTextRequest(error_response, Http::Code::NotFound);\n}\n```\n\n**Key Finding**:\n- The path is extracted from request headers\n- Handler search is linear prefix match (line 389)\n- State-mutating handlers require POST method (lines 390-398)\n- The matching handler is invoked (line 402)\n\n### 1.8 Drain Listeners Handler Registration\n\n**File**: `source/server/admin/admin.cc:200-213`\n\n```cpp\nmakeHandler(\n    \"/drain_listeners\", \"drain listeners\",\n    MAKE_ADMIN_HANDLER(listeners_handler_.handlerDrainListeners), false, true,\n    {{ParamDescriptor::Type::Boolean, \"graceful\",\n      \"When draining listeners, enter a graceful drain period prior to closing \"\n      \"listeners. This behaviour and duration is configurable via server options \"\n      \"or CLI\"},\n     {ParamDescriptor::Type::Boolean, \"skip_exit\",\n      \"When draining listeners, do not exit after the drain period. \"\n      \"This must be used with graceful\"},\n     {ParamDescriptor::Type::Boolean, \"inboundonly\",\n      \"Drains all inbound listeners. traffic_direction field in \"\n      \"envoy_v3_api_msg_config.listener.v3.Listener is used to determine whether a \"\n      \"listener is inbound or outbound.\"}})\n```\n\n**Key Finding**:\n- Handler prefix: `/drain_listeners`\n- `mutates_server_state_ = true` (4th parameter)\n- Requires POST method due to state mutation\n- Handler: `listeners_handler_.handlerDrainListeners`\n\n### 1.9 Handler Execution\n\n**File**: `source/server/admin/listeners_handler.cc:15-47`\n\n```cpp\nHttp::Code ListenersHandler::handlerDrainListeners(Http::ResponseHeaderMap&,\n                                                   Buffer::Instance& response,\n                                                   AdminStream& admin_query) {\n  const Http::Utility::QueryParamsMulti params = admin_query.queryParams();\n\n  ListenerManager::StopListenersType stop_listeners_type =\n      params.getFirstValue(\"inboundonly\").has_value()\n          ? ListenerManager::StopListenersType::InboundOnly\n          : ListenerManager::StopListenersType::All;\n\n  const bool graceful = params.getFirstValue(\"graceful\").has_value();\n  const bool skip_exit = params.getFirstValue(\"skip_exit\").has_value();\n  if (skip_exit && !graceful) {\n    response.add(\"skip_exit requires graceful\\n\");\n    return Http::Code::BadRequest;\n  }\n  if (graceful) {\n    // Ignore calls to /drain_listeners?graceful if the drain sequence has\n    // already started.\n    if (!server_.drainManager().draining()) {\n      server_.drainManager().startDrainSequence([this, stop_listeners_type, skip_exit]() {\n        if (!skip_exit) {\n          server_.listenerManager().stopListeners(stop_listeners_type, {});\n        }\n      });\n    }\n  } else {\n    server_.listenerManager().stopListeners(stop_listeners_type, {});  // <-- CRITICAL ACTION\n  }\n\n  response.add(\"OK\\n\");\n  return Http::Code::OK;\n}\n```\n\n**Key Finding**: This handler directly invokes `server_.listenerManager().stopListeners()` at line 37 or 42, which forcibly drains/closes all listeners and their connections.\n\n---\n\n## 2. Protection Mechanisms: Architectural Isolation\n\n### 2.1 Separate Socket Binding\n\n**Isolation Level: NETWORK LEVEL**\n\nThe admin interface binds to a completely separate network address specified in the bootstrap configuration:\n\n```yaml\nadmin:\n  address:\n    socket_address:\n      protocol: TCP\n      address: 127.0.0.1  # Or configured address\n      port_value: 9901     # Or configured port\n```\n\nData plane listeners are configured separately:\n\n```yaml\nstatic_resources:\n  listeners:\n  - name: listener_0\n    address:\n      socket_address:\n        address: 0.0.0.0  # External facing\n        port_value: 8080\n```\n\n**Code Location**: `source/server/admin/admin.cc:58`\n- Admin: `Network::TcpListenSocket(address, socket_options, true)`\n- Data plane: Configured via `bootstrap.static_resources.listeners[]`\n\n### 2.2 Separate HTTP Connection Manager\n\n**Isolation Level: HTTP PROTOCOL LEVEL**\n\nEach listener has its own HTTP::ConnectionManagerImpl instance:\n\n- **Admin listener**: Created in `AdminImpl::createNetworkFilterChain()` (admin.cc:293)\n- **Data plane listeners**: Created by the HTTP connection manager filter configured in the listener's filter chain\n\nThese are completely independent HTTP processing stacks.\n\n### 2.3 Exclusive Filter Chain\n\n**Isolation Level: HTTP FILTER LEVEL**\n\nThe admin listener has a dedicated filter chain containing only the AdminFilter:\n\n**File**: `source/server/admin/admin.cc:300-307`\n\n```cpp\nbool AdminImpl::createFilterChain(Http::FilterChainManager& manager, bool,\n                                const Http::FilterChainOptions&) const {\n  Http::FilterFactoryCb factory = [this](Http::FilterChainFactoryCallbacks& callbacks) {\n    callbacks.addStreamFilter(std::make_shared<AdminFilter>(*this));  // ONLY filter\n  };\n  manager.applyFilterFactoryCb({}, factory);\n  return true;\n}\n```\n\nThe AdminFilter is a terminal filter (`Http::PassThroughFilter`) that:\n1. Intercepts all HTTP requests on the admin listener\n2. Routes them exclusively to admin handlers\n3. Does NOT forward to any upstream clusters\n4. Does NOT apply any data plane routes\n\n### 2.4 Hardcoded Handler Registry\n\n**Isolation Level: APPLICATION LEVEL**\n\nThe `/drain_listeners` handler is registered only in the admin listener's handler registry:\n\n**File**: `source/server/admin/admin.cc:126-260` (AdminImpl constructor)\n\nThe handlers are initialized as a static list in the admin server constructor. These handlers are NOT registered in the data plane routing configuration. A data plane HTTP request cannot match any of these hardcoded admin paths because:\n\n1. Data plane uses route-based dispatching (via Router filter with RDS/CDS)\n2. Admin uses handler-based dispatching (via hardcoded prefix matching in AdminFilter::onComplete)\n3. These are completely separate code paths\n\n---\n\n## 3. Access Control Model: Boundary Analysis\n\n### 3.1 Data Plane Request Flow (External Traffic)\n\n```\n[External Client]\n         |\n         | (Connect to data plane listener port, e.g., 0.0.0.0:8080)\n         v\n    [Network Listener]\n         |\n         | (Network filter chain - TLS, etc.)\n         v\n    [HTTP Connection Manager]\n         |\n         | (HTTP/1.1 or HTTP/2 decode)\n         v\n    [HTTP Filter Chain]\n    (e.g., router filter, auth filter, etc.)\n         |\n         | Routes to upstream clusters based on HTTP routing config\n         v\n    [Upstream Cluster]\n         |\n         | NO WAY TO REACH ADMIN HANDLERS\n```\n\n### 3.2 Admin Interface Request Flow (Local/Internal Traffic)\n\n```\n[Local/Authorized Client]\n         |\n         | (Connect to admin listener port, e.g., 127.0.0.1:9901)\n         v\n    [Admin Network Listener]\n         |\n         | (Network filter chain - minimal)\n         v\n    [Admin HTTP Connection Manager]\n         |\n         | (HTTP/1.1 or HTTP/2 decode)\n         v\n    [AdminFilter]\n    (Terminal filter - exclusive to admin)\n         |\n         | Prefix matches request path against hardcoded admin handlers\n         v\n    [Admin Handler: handlerDrainListeners]\n         |\n         | server_.listenerManager().stopListeners()\n         v\n    [IMPACT: Close all data plane listeners]\n```\n\n### 3.3 Critical Boundary: No Cross-Listener Communication\n\n**Code Evidence**:\n\n1. **Different Listener Configs**:\n   - AdminListener (admin.h:366-418): Uses `AdminImpl` as both FilterChainManager and FilterChainFactory\n   - Data plane Listener: Uses configured filter chains from the listener config\n\n2. **Different HTTP Connection Managers**:\n   - Admin: `AdminImpl::createNetworkFilterChain()` creates dedicated HTTP::ConnectionManagerImpl\n   - Data plane: HTTP::ConnectionManagerImpl created by listener's network filter chain\n\n3. **Different Route/Handler Dispatching**:\n   - Admin: `AdminFilter::onComplete()` \u2192 `AdminImpl::makeRequest()` \u2192 hardcoded handler lookup\n   - Data plane: Router filter \u2192 Route table \u2192 upstream cluster selection\n\n**Key Code Reference**: `source/server/admin/admin_filter.cc:89`\n\n```cpp\nAdmin::RequestPtr handler = admin_.makeRequest(*this);\n```\n\nThis call can ONLY happen if:\n1. The request arrived on the admin listener socket\n2. The AdminFilter was invoked (only on admin listener)\n3. Therefore, `admin_.makeRequest()` can only route to admin handlers\n\n---\n\n## 4. Exploitability Assessment\n\n### 4.1 Attack Vector Analysis\n\n**Scenario 1: Direct network connection to admin port**\n- **Requirement**: Network access to admin socket address (e.g., 127.0.0.1:9901)\n- **Difficulty**: LOW if on same host, HIGH if admin bound to 127.0.0.1 only\n- **Exploitability**: YES, but requires privileged network access\n- **Mitigation**: Default admin address is 127.0.0.1 (localhost only)\n\n**Scenario 2: HTTP request through data plane listener**\n- **Requirement**: Send `/drain_listeners` HTTP request to data plane port\n- **Difficulty**: TRIVIAL if it were possible\n- **Exploitability**: NO - not reachable through data plane\n- **Reason**: Data plane listener does not route to admin handlers\n\n**Scenario 3: HTTP/2 Port Reuse/Upgrade**\n- **Requirement**: Exploit HTTP/2 settings frame to upgrade connection\n- **Difficulty**: N/A - separate sockets, separate connection managers\n- **Exploitability**: NO - separate socket binding\n- **Reason**: HTTP/2 upgrade happens within a single TCP connection, which must first connect to admin port\n\n**Scenario 4: HTTP Request Smuggling**\n- **Requirement**: Inject admin request into data plane traffic\n- **Difficulty**: N/A - separate HTTP connection managers\n- **Exploitability**: NO\n- **Reason**: Each connection manager independently parses HTTP frames\n\n### 4.2 Reachability Verdict\n\n| Component | Reachable from External Input? | Why? |\n|-----------|------|------|\n| Admin Socket | NO (default) | Default admin address: 127.0.0.1:9901 |\n| Admin HTTP Connection Manager | NO | Only exists on admin socket |\n| AdminFilter | NO | Only on admin listener's filter chain |\n| Admin Handler Registry | NO | Only queried by AdminFilter |\n| `/drain_listeners` handler | NO | Only registered in admin handler registry |\n| `handlerDrainListeners()` | NO | Only called if admin handler matches path |\n\n**CONCLUSION: This endpoint is NOT externally exploitable unless:**\n\n1. Admin interface is bound to a public address (not 127.0.0.1)\n2. AND network firewall allows external access to admin port\n3. AND POST request with `/drain_listeners` path is sent\n\n---\n\n## 5. Configuration-Dependent Exposure\n\n### 5.1 Vulnerable Configuration Example\n\n```yaml\nadmin:\n  address:\n    socket_address:\n      protocol: TCP\n      address: 0.0.0.0      # <-- DANGER: All interfaces\n      port_value: 9901\n```\n\nIn this misconfiguration:\n- Admin interface is publicly accessible\n- External attacker can connect to port 9901\n- Can invoke `/drain_listeners` via POST\n- Can drain all listeners, causing DoS\n\n### 5.2 Secure Configuration Example (Default)\n\n```yaml\nadmin:\n  address:\n    socket_address:\n      protocol: TCP\n      address: 127.0.0.1    # <-- SECURE: Localhost only\n      port_value: 9901\n```\n\nResult:\n- Only local processes can access admin interface\n- `/drain_listeners` cannot be reached from external network\n- Requires OS-level privilege escalation to exploit from different user\n\n### 5.3 Secure Configuration Example (Internal Network)\n\n```yaml\nadmin:\n  address:\n    socket_address:\n      protocol: TCP\n      address: 10.0.0.5     # <-- SECURE: Internal network only\n      port_value: 9901\n```\n\nResult:\n- Only processes on the internal network can access\n- Requires internal network penetration first\n\n---\n\n## 6. Evidence Summary\n\n### Call Chain Documentation\n\n```\nExternal HTTP Request (port 8080)\n    \u2193\nData Plane Listener (Network Listener)\n    \u2193\nHTTP Connection Manager (data plane)\n    \u2193\nRouter Filter\n    \u2193\nRoute Match \u2192 Upstream Cluster\n    X CANNOT REACH ADMIN HANDLERS\n\n---\n\nAdmin HTTP Request (port 9901)\n    \u2193\nAdmin Listener (Network Listener - separate socket)\n    \u2193\nHTTP Connection Manager (admin-specific instance)\n    \u2193\nAdminFilter (terminal filter)\n    \u2193\nAdminImpl::makeRequest()\n    \u2193\nHandler Match: /drain_listeners\n    \u2193\nListenersHandler::handlerDrainListeners()\n    \u2193\nserver_.listenerManager().stopListeners()\n    \u2193\nIMPACT: All listeners closed\n```\n\n### Code References\n\n| Aspect | File | Line(s) |\n|--------|------|---------|\n| Admin listener creation | admin.cc | 53-76 |\n| Admin socket binding | admin.cc | 58-60 |\n| Network filter chain | admin.cc | 289-298 |\n| HTTP filter chain | admin.cc | 300-307 |\n| AdminFilter addition | admin.cc | 303 |\n| Admin handler routing | admin.cc | 381-412 |\n| Drain listeners handler registration | admin.cc | 200-213 |\n| Drain listeners implementation | listeners_handler.cc | 15-47 |\n| Admin listener config | admin.h | 366-418 |\n| Server initialization | server.cc | 714-735 |\n\n---\n\n## 7. Recommendations\n\n### For Security Practitioners\n\n1. **Verify Admin Binding**: Confirm admin address is bound to 127.0.0.1 or internal network only\n   ```bash\n   netstat -tlnp | grep 9901\n   curl http://127.0.0.1:9901/ # Should work\n   curl http://<public-ip>:9901/ # Should fail\n   ```\n\n2. **Network Segmentation**: If admin needs broader access, use firewall rules (not address binding)\n\n3. **Authentication**: Envoy admin interface has no built-in auth - use reverse proxy if needed\n\n4. **Monitoring**: Alert on POST requests to `/drain_listeners` endpoint\n\n### For Envoy Operators\n\n1. **Keep Default Configuration**: Don't change admin address from 127.0.0.1 unless necessary\n\n2. **Use Network Policies**: If admin needs access from other hosts, use iptables/firewall rules\n\n3. **Separate Admin Network**: Run admin listener on internal management network\n\n4. **Access Control**: Restrict SSH/console access to Envoy hosts\n\n---\n\n## Conclusion\n\nThe `AdminImpl::handlerDrainListeners()` function implements a legitimate admin operation to drain listeners, but it **is NOT reachable from external HTTP input** due to architectural isolation. The admin interface listens on a separate port/address from the data plane, and requests cannot cross between them due to:\n\n1. **Network Level**: Separate socket bindings\n2. **HTTP Level**: Separate HTTP connection managers\n3. **Filter Level**: Separate filter chains with terminal AdminFilter\n4. **Application Level**: Hardcoded handler registry not shared with data plane routing\n\n**Security Status**: SAFE (architecturally protected) when using default configuration (admin bound to 127.0.0.1)\n\n**Risk**: HIGH if misconfigured with admin bound to public address (0.0.0.0)\n\n",
+            "file_path": "/logs/agent/triage.md"
+          },
+          "step_id": 44,
+          "timestamp": "2026-03-01T07:16:18.667Z",
+          "tool": "Write"
+        },
+        {
+          "arguments": {
+            "file_path": "/logs/agent/triage.md",
+            "limit": 50
+          },
+          "step_id": 47,
+          "timestamp": "2026-03-01T07:16:20.474Z",
+          "tool": "Read"
+        }
+      ]
+    },
+    "transcript": {
+      "json_line_count": 69,
+      "line_count": 69,
+      "message_event_count": 48,
+      "messages": [
+        {
+          "sequence": 0,
+          "subtype": "init",
+          "text": null,
+          "tool": null,
+          "type": "system"
+        },
+        {
+          "sequence": 1,
+          "subtype": "text",
+          "text": "I'll help you perform a security reachability analysis of Envoy's admin interface to determine if `AdminImpl::handlerDrainListeners()` is exploitable from external HTTP input. Let me start by exploring the codebase.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 2,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 3,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 4,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 5,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 6,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 7,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 8,
+          "subtype": "text",
+          "text": "Let me continue reading to understand the broader admin interface structure:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 9,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 10,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 11,
+          "subtype": "text",
+          "text": "Now let me look at the AdminFilter to see how requests enter the admin interface:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 12,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 13,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 14,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 15,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 16,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 17,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 18,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 19,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 20,
+          "subtype": "text",
+          "text": "Now let me understand the admin listener lifecycle and how it differs from data plane listeners:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 21,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 22,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 23,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 24,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 25,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 26,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 27,
+          "subtype": "text",
+          "text": "Let me search for the admin listener socket factory to understand the isolation:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 28,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 29,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 30,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 31,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 32,
+          "subtype": "text",
+          "text": "Now let me search for how the data plane listeners are created and configured:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 33,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 34,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 35,
+          "subtype": "text",
+          "text": "Let me verify the complete separation by looking at how the server routes requests to the admin vs data plane:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 36,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 37,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 38,
+          "subtype": "text",
+          "text": "Let me check if there's any path for data plane requests to reach the admin handlers:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 39,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 40,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 41,
+          "subtype": "text",
+          "text": "Now I have enough information to write a comprehensive analysis. Let me create the triage document:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 42,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Write",
+          "type": "assistant"
+        },
+        {
+          "sequence": 43,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 44,
+          "subtype": "text",
+          "text": "Perfect! I've completed a comprehensive security reachability analysis of Envoy's admin interface and the `handlerDrainListeners()` endpoint. Let me verify the file was created:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 45,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 46,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 47,
+          "subtype": "text",
+          "text": "Excellent! I've completed a comprehensive security reachability analysis of Envoy's admin interface. Here's a summary of my findings:  ## Analysis Summary  **File**: `/logs/agent/triage.md` \u2705  ### Key Findings:  **CONCLU...",
+          "tool": null,
+          "type": "assistant"
+        }
+      ],
+      "tool_event_count": 18,
+      "tool_events": [
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "Write"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "checksums": {
+      "result_json_sha256": "4dec00b92f65e853781b83766e1262cf197d03141a133908f19ed0ed5c90e229",
+      "trajectory_sha256": "33050690984dae64a0435fd168e142783a20b75e03e04473ecbbbac8ac079889",
+      "transcript_sha256": "f6d902c5e40e5ab702fd4f0b0a5778a5dcf6bf516888a8b2fedb3799c161322f"
+    },
+    "config": "mcp-remote-direct",
+    "result_path": "runs/official/secure_haiku_20260301_071231/mcp-remote-direct/ccb_secure_envoy-vuln-reachability-001_mcp-remote-direct/sgonly_envoy-vuln-reachability-0__E2pCjcY/result.json",
+    "run_dir": "secure_haiku_20260301_071231",
+    "suite": "csb_sdlc_secure",
+    "task_dir": "runs/official/secure_haiku_20260301_071231/mcp-remote-direct/ccb_secure_envoy-vuln-reachability-001_mcp-remote-direct/sgonly_envoy-vuln-reachability-0__E2pCjcY",
+    "task_name": "sgonly_envoy-vuln-reachability-001",
+    "trace_paths": {
+      "trajectory": "runs/official/secure_haiku_20260301_071231/mcp-remote-direct/ccb_secure_envoy-vuln-reachability-001_mcp-remote-direct/sgonly_envoy-vuln-reachability-0__E2pCjcY/agent/trajectory.json",
+      "transcript": "runs/official/secure_haiku_20260301_071231/mcp-remote-direct/ccb_secure_envoy-vuln-reachability-001_mcp-remote-direct/sgonly_envoy-vuln-reachability-0__E2pCjcY/agent/claude-code.txt"
+    }
+  },
+  "score": {
+    "reward": 0.66,
+    "status": "passed",
+    "timed_out": false
+  }
+}

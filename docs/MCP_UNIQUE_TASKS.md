@@ -119,7 +119,7 @@ python3 scripts/generate_mcp_unique_tasks.py --use-case-ids 1 --validate
 ```
 
 The generator reads `configs/use_case_registry.json` to fill
-`templates/mcp_unique_task/*.j2` templates.
+`templates/csb-org/*.j2` templates.
 
 ### Worked Example: CCX-dep-trace-001
 

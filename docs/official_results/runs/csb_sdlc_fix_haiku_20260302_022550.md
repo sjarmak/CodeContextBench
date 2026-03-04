@@ -8,7 +8,7 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [openlibrary-fntocli-adapter-fix-001](../tasks/csb_sdlc_fix_haiku_20260302_022550--baseline-local-direct--openlibrary-fntocli-adapter-fix-001.html) | `passed` | 0.667 | 0.000 | 79 | traj, tx |
+| [openlibrary-fntocli-adapter-fix-001](../tasks/csb_sdlc_fix_haiku_20260302_022550--baseline-local-direct--openlibrary-fntocli-adapter-fix-001--839981c821.html) | `passed` | 0.667 | 0.000 | 79 | traj, tx |
 
 ## mcp-remote-direct
 
@@ -18,4 +18,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [mcp_openlibrary-fntocli-adapter-fix-001_4qeugz](../tasks/csb_sdlc_fix_haiku_20260302_022550--mcp-remote-direct--mcp_openlibrary-fntocli-adapter-fix-001_4qeugz.html) | `passed` | 1.000 | 0.194 | 31 | traj, tx |
+| [mcp_openlibrary-fntocli-adapter-fix-001_4qeugz](../tasks/csb_sdlc_fix_haiku_20260302_022550--mcp-remote-direct--mcp_openlibrary-fntocli-adapter-fix-001_4qeugz--21548905f7.html) | `passed` | 1.000 | 0.194 | 31 | traj, tx |

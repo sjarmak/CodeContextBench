@@ -8,9 +8,9 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [ccx-domain-071](../tasks/csb_org_domain_haiku_20260226_145828--baseline-local-direct--ccx-domain-071.html) | `passed` | 0.811 | 0.000 | 32 | traj, tx |
-| [ccx-domain-072](../tasks/csb_org_domain_haiku_20260226_145828--baseline-local-direct--ccx-domain-072.html) | `passed` | 0.535 | 0.000 | 33 | traj, tx |
-| [ccx-domain-073](../tasks/csb_org_domain_haiku_20260226_145828--baseline-local-direct--ccx-domain-073.html) | `passed` | 0.637 | 0.000 | 31 | traj, tx |
-| [ccx-domain-074](../tasks/csb_org_domain_haiku_20260226_145828--baseline-local-direct--ccx-domain-074.html) | `passed` | 0.586 | 0.000 | 35 | traj, tx |
-| [ccx-domain-101](../tasks/csb_org_domain_haiku_20260226_145828--baseline-local-direct--ccx-domain-101.html) | `passed` | 0.531 | 0.000 | 34 | traj, tx |
-| [ccx-domain-112](../tasks/csb_org_domain_haiku_20260226_145828--baseline-local-direct--ccx-domain-112.html) | `passed` | 0.606 | 0.000 | 12 | traj, tx |
+| [ccx-domain-071](../tasks/csb_org_domain_haiku_20260226_145828--baseline-local-direct--ccx-domain-071--574d9182d5.html) | `passed` | 0.811 | 0.000 | 32 | traj, tx |
+| [ccx-domain-072](../tasks/csb_org_domain_haiku_20260226_145828--baseline-local-direct--ccx-domain-072--adc012beaa.html) | `passed` | 0.535 | 0.000 | 33 | traj, tx |
+| [ccx-domain-073](../tasks/csb_org_domain_haiku_20260226_145828--baseline-local-direct--ccx-domain-073--43c727a764.html) | `passed` | 0.637 | 0.000 | 31 | traj, tx |
+| [ccx-domain-074](../tasks/csb_org_domain_haiku_20260226_145828--baseline-local-direct--ccx-domain-074--079f5b7583.html) | `passed` | 0.586 | 0.000 | 35 | traj, tx |
+| [ccx-domain-101](../tasks/csb_org_domain_haiku_20260226_145828--baseline-local-direct--ccx-domain-101--145f12dadc.html) | `passed` | 0.531 | 0.000 | 34 | traj, tx |
+| [ccx-domain-112](../tasks/csb_org_domain_haiku_20260226_145828--baseline-local-direct--ccx-domain-112--a1ae8bdf1b.html) | `passed` | 0.606 | 0.000 | 12 | traj, tx |

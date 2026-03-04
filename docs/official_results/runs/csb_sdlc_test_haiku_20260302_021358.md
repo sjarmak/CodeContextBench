@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [mcp_curl-security-review-001_xyaq6z](../tasks/csb_sdlc_test_haiku_20260302_021358--mcp-remote-direct--mcp_curl-security-review-001_xyaq6z.html) | `passed` | 0.620 | 0.900 | 40 | traj, tx |
+| [mcp_curl-security-review-001_xyaq6z](../tasks/csb_sdlc_test_haiku_20260302_021358--mcp-remote-direct--mcp_curl-security-review-001_xyaq6z--8ccff2afe5.html) | `passed` | 0.620 | 0.900 | 40 | traj, tx |

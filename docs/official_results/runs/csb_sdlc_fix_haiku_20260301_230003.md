@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [flink-window-late-data-fix-001](../tasks/csb_sdlc_fix_haiku_20260301_230003--baseline-local-direct--flink-window-late-data-fix-001.html) | `passed` | 0.667 | 0.000 | 97 | traj, tx |
+| [flink-window-late-data-fix-001](../tasks/csb_sdlc_fix_haiku_20260301_230003--baseline-local-direct--flink-window-late-data-fix-001--5b906bd71e.html) | `passed` | 0.667 | 0.000 | 97 | traj, tx |

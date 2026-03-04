@@ -1,0 +1,1202 @@
+{
+  "metrics": {
+    "agent_execution_seconds": 116.693245,
+    "cache_tokens": 2471429,
+    "context_metrics": {
+      "context_window_peak_pct": 0.3792,
+      "environment_setup_seconds": 1.586066,
+      "files_modified": 1,
+      "lines_added": 939,
+      "lines_removed": 0,
+      "task_context_length": 850000,
+      "verifier_seconds": 1.517317
+    },
+    "input_tokens": 2495752,
+    "ir_metrics": {},
+    "mcp_ratio": 0.0,
+    "output_tokens": 12643,
+    "search_calls_deepsearch": null,
+    "search_calls_keyword": null,
+    "search_calls_nls": null,
+    "tool_calls_by_name": {
+      "Bash": 13,
+      "Glob": 4,
+      "Read": 10,
+      "Write": 1
+    },
+    "tool_calls_local": 28,
+    "tool_calls_mcp": 0,
+    "tool_calls_total": 28,
+    "wall_clock_seconds": 145.991261
+  },
+  "parsed_trace": {
+    "trajectory": {
+      "bash_commands": [
+        {
+          "command": "find /workspace -maxdepth 2 -type d | head -20",
+          "sequence": 4
+        },
+        {
+          "command": "ls -la /workspace | grep envoy",
+          "sequence": 6
+        },
+        {
+          "command": "diff -u /workspace/envoy-v1.30/source/extensions/filters/http/ext_proc/ext_proc.cc /workspace/envoy-v1.31/source/extensions/filters/http/ext_proc/ext_proc.cc | head -150",
+          "sequence": 20
+        },
+        {
+          "command": "diff -u /workspace/envoy-v1.30/source/extensions/filters/http/ext_proc/ext_proc.cc /workspace/envoy-v1.31/source/extensions/filters/http/ext_proc/ext_proc.cc | wc -l",
+          "sequence": 22
+        },
+        {
+          "command": "find /workspace/envoy-v1.30/source/extensions/filters/http/ext_proc -name \"*.h\"",
+          "sequence": 24
+        },
+        {
+          "command": "find /workspace/envoy-v1.30/docs -name \"*ext_proc*\" -o -name \"*external*\" | grep -i ext",
+          "sequence": 33
+        },
+        {
+          "command": "find /workspace/envoy-v1.31/changelogs -name \"*.yaml\" | xargs grep -l \"ext_proc\\|external\" | head -5",
+          "sequence": 39
+        },
+        {
+          "command": "ls /workspace/envoy-v1.31/changelogs | grep -E \"^1\\.31\" | head -5",
+          "sequence": 41
+        },
+        {
+          "command": "ls /workspace/envoy-v1.31/changelogs | sort -V | tail -10",
+          "sequence": 43
+        },
+        {
+          "command": "grep -A 20 \"ext_proc\" /workspace/envoy-v1.31/changelogs/current.yaml | head -40",
+          "sequence": 45
+        },
+        {
+          "command": "grep -B 2 -A 5 \"ext_proc\" /workspace/envoy-v1.31/changelogs/current.yaml",
+          "sequence": 47
+        },
+        {
+          "command": "diff -u /workspace/envoy-v1.30/source/extensions/filters/http/ext_proc/processor_state.cc /workspace/envoy-v1.31/source/extensions/filters/http/ext_proc/processor_state.cc | grep -A 5 -B 5 \"route_cache\\|clear_route\" | head -60",
+          "sequence": 49
+        },
+        {
+          "command": "diff -u /workspace/envoy-v1.30/source/extensions/filters/http/ext_proc/client_impl.cc /workspace/envoy-v1.31/source/extensions/filters/http/ext_proc/client_impl.cc | head -100",
+          "sequence": 51
+        }
+      ],
+      "code_changes": [
+        {
+          "content": "# Envoy External Processing Filter Migration Guide: v1.30 \u2192 v1.31\n\n## Overview\n\nThis guide provides comprehensive information for migrating the Envoy External Processing (ext_proc) HTTP filter from version 1.30.0 to version 1.31.0. The upgrade includes:\n\n- **New route cache action configuration** providing more granular control over route cache clearing behavior\n- **Deferred stream closure timeout** for improved observability mode handling\n- **Enhanced observability mode** with better stream lifecycle management\n- **HTTP status code change** for timeout errors (504 instead of 500)\n- **Improved gRPC tracing context propagation**\n\nThe migration involves both configuration changes and behavioral adjustments. While most existing configurations remain backward compatible, new features are available to improve performance and observability.\n\n---\n\n## Breaking Changes\n\n### 1. Route Cache Clearing Behavior (HIGH PRIORITY)\n\n**What Changed:** The route cache clearing behavior has been refactored from a simple boolean flag to a three-state enum, with changes to the clearing logic.\n\n**Impact Level:** MEDIUM\n\n**Details:**\n\nIn v1.30, route cache clearing was controlled by a single boolean field:\n- `disable_clear_route_cache`: If `true`, prevents clearing the route cache\n\nIn v1.31, this has been replaced by a more flexible enum-based approach:\n```protobuf\nenum RouteCacheAction {\n  DEFAULT = 0;   // Clear if clear_route_cache is set AND header mutation exists\n  CLEAR = 1;     // Always clear (ignoring the clear_route_cache bit)\n  RETAIN = 2;    // Never clear (equivalent to disable_clear_route_cache = true)\n}\n```\n\n**Key Behavioral Differences:**\n\n| Scenario | v1.30 Behavior | v1.31 Behavior (route_cache_action) |\n|----------|----------------|--------------------------------------|\n| No header mutation | Route cache NOT cleared | Route cache NOT cleared (regardless of `route_cache_action`); `clear_route_cache_ignored` stat incremented |\n| Header mutation + `clear_route_cache=true` + `disable_clear_route_cache=false` | Cache cleared | **Depends on mode:**<br/>- DEFAULT: Cache cleared<br/>- CLEAR: Cache cleared<br/>- RETAIN: NOT cleared |\n| Upstream filter chain | Route cache NOT cleared | Route cache NOT cleared (upstream route cache not clearable) |\n\n**Configuration Examples:**\n\nBefore (v1.30):\n```yaml\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  disable_clear_route_cache: false  # Default behavior\n```\n\nAfter (v1.31) - Equivalent configurations:\n```yaml\n# Option 1: DEFAULT behavior (matches v1.30 behavior)\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  route_cache_action: DEFAULT\n\n# Option 2: Always clear (when mutations occur)\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  route_cache_action: CLEAR\n\n# Option 3: Never clear (equivalent to v1.30's disable_clear_route_cache=true)\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  route_cache_action: RETAIN\n```\n\n**Backward Compatibility Note:** The field `disable_clear_route_cache` is still supported in v1.31 with a migration annotation. When `disable_clear_route_cache=true` is set, it is automatically converted to `route_cache_action=RETAIN`. However, **you cannot set both fields to non-default values** - this will cause a configuration validation error:\n> \"disable_clear_route_cache and route_cache_action can not be set to none-default at the same time.\"\n\n---\n\n### 2. External Processor Timeout Error Status Code\n\n**What Changed:** Timeout errors from the external processor now return HTTP 504 (Gateway Timeout) instead of HTTP 500 (Internal Server Error).\n\n**Impact Level:** LOW\n\n**Details:**\n\n**v1.30 Behavior:** When a message timeout occurred waiting for a response from the external processor:\n- Return status code: **500 Internal Server Error**\n- Error response was sent to downstream clients\n\n**v1.31 Behavior:** Same timeout condition:\n- Return status code: **504 Gateway Timeout**\n- More semantically correct for upstream service timeouts\n\n**Why This Matters:**\n- Downstream clients may differentiate handling based on status code\n- Monitoring/alerting systems may track 5xx vs 4xx errors differently\n- Load balancers may handle 504 differently than 500 (some don't retry 504s by default)\n\n**Migration Action:**\n- Review downstream client error handling code\n- Update monitoring/alerting rules that count 500 errors\n- Verify load balancer retry policies handle 504 appropriately\n- Test retry behavior with external processor timeouts\n\n---\n\n## Deprecated Features\n\n### 1. `disable_clear_route_cache` Field (DEPRECATION)\n\n**Deprecation Status:** DEPRECATED (still functional in v1.31, planned for removal in v1.32+)\n\n**Details:**\n\nThe boolean field `disable_clear_route_cache` is now superseded by the `route_cache_action` enum:\n\n```protobuf\n// v1.30 & v1.31 (deprecated in v1.31)\nbool disable_clear_route_cache = 11;\n\n// v1.31 (new, recommended)\nRouteCacheAction route_cache_action = 18;\n```\n\n**Migration Path:**\n\n| Current Configuration | Migration Path |\n|----------------------|----------------|\n| `disable_clear_route_cache: false` (default) | Use `route_cache_action: DEFAULT` or omit (DEFAULT is the default) |\n| `disable_clear_route_cache: true` | Use `route_cache_action: RETAIN` |\n| Not set (defaults to false) | No action needed; system defaults to DEFAULT behavior |\n\n**Recommended Timeline:**\n1. **Immediately:** Migrate to `route_cache_action` in new configurations\n2. **Within 1-2 releases:** Update existing configurations to use `route_cache_action`\n3. **Future release:** `disable_clear_route_cache` will be removed\n\n---\n\n## New Features\n\n### 1. Route Cache Action Enum\n\n**Availability:** v1.31.0+\n\n**Purpose:** Provides three distinct strategies for handling route cache clearing in response to external processor responses.\n\n**Configuration Field:**\n```protobuf\nmessage ExternalProcessor {\n  enum RouteCacheAction {\n    DEFAULT = 0;\n    CLEAR = 1;\n    RETAIN = 2;\n  }\n\n  RouteCacheAction route_cache_action = 18;\n}\n```\n\n**Use Cases:**\n\n- **DEFAULT (recommended):** Respects the external processor's `clear_route_cache` flag only when header mutations are present. Best for most use cases where the processor decides when cache clearing is needed.\n\n- **CLEAR:** Always clears the route cache when the external processor responds to request headers. Useful when you want to ensure routes are recalculated after every ext_proc interaction, regardless of the processor's response.\n\n- **RETAIN:** Never clears the route cache, ignoring any `clear_route_cache` requests from the processor. Use when you're confident routes don't change or want to maximize route cache hit rates.\n\n**Configuration Examples:**\n\n```yaml\n# Example 1: DEFAULT mode (recommended)\n- name: ext_proc_default\n  typed_config:\n    \"@type\": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor\n    grpc_service:\n      envoy_grpc:\n        cluster_name: ext_proc_cluster\n    route_cache_action: DEFAULT\n    processing_mode:\n      request_header_mode: SEND\n      response_header_mode: SEND\n\n# Example 2: CLEAR mode (always refresh routes)\n- name: ext_proc_always_clear\n  typed_config:\n    \"@type\": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor\n    grpc_service:\n      envoy_grpc:\n        cluster_name: ext_proc_cluster\n    route_cache_action: CLEAR\n    processing_mode:\n      request_header_mode: SEND\n      response_header_mode: SEND\n\n# Example 3: RETAIN mode (never clear cache)\n- name: ext_proc_never_clear\n  typed_config:\n    \"@type\": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor\n    grpc_service:\n      envoy_grpc:\n        cluster_name: ext_proc_cluster\n    route_cache_action: RETAIN\n    processing_mode:\n      request_header_mode: SEND\n      response_header_mode: SEND\n```\n\n---\n\n### 2. Deferred Stream Closure Timeout\n\n**Availability:** v1.31.0+\n\n**Purpose:** Controls how long gRPC streams to the external processor remain open after filter destruction in observability mode.\n\n**Configuration Field:**\n```protobuf\nmessage ExternalProcessor {\n  google.protobuf.Duration deferred_close_timeout = 19;\n}\n```\n\n**Default Value:** 5000 milliseconds (5 seconds)\n\n**Details:**\n\nIn observability mode (`observability_mode: true`), the external processor stream may be kept open independently of the main HTTP request/response stream. This timeout controls how long Envoy will wait before forcefully closing that stream if it hasn't closed gracefully.\n\n**When This Matters:**\n\n- **Observability mode enabled:** The external processor receives messages asynchronously and may process them after the HTTP response completes\n- **Filter destruction:** When the filter is destroyed (request complete), instead of immediately closing the stream, it defers the closure\n- **Timeout:** If the stream doesn't close naturally within `deferred_close_timeout`, Envoy forcefully terminates it\n\n**Configuration Examples:**\n\n```yaml\n# Example 1: Default timeout (5 seconds)\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  observability_mode: true\n  deferred_close_timeout: 5s  # Optional, this is the default\n\n# Example 2: Shorter timeout (1 second) for faster cleanup\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  observability_mode: true\n  deferred_close_timeout: 1s\n\n# Example 3: Longer timeout (10 seconds) to allow more processing time\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  observability_mode: true\n  deferred_close_timeout: 10s\n```\n\n**Performance Implications:**\n\n- **Too short:** External processor may not complete processing; stream closed prematurely\n- **Too long:** More memory/connection overhead; slower resource cleanup\n- **Optimal:** Choose based on typical external processor response time\n\n**Related to Observability Mode:**\n\nThe `deferred_close_timeout` is specifically for the async/deferred handling in observability mode:\n\n```yaml\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  observability_mode: true  # Enable \"Send and Go\" mode\n  deferred_close_timeout: 5s  # Control cleanup timing\n  processing_mode:\n    request_header_mode: SEND\n    request_body_mode: STREAMED\n    response_header_mode: SEND\n    response_body_mode: STREAMED\n```\n\nIn observability mode:\n1. Envoy sends messages to the external processor without waiting for responses\n2. The processor observes data but responses are ignored\n3. When the HTTP stream ends, the ext_proc stream is marked for deferred closure\n4. After `deferred_close_timeout` expires, the stream is forcefully closed\n\n---\n\n### 3. Enhanced Observability Mode\n\n**Availability:** v1.31.0+ (improved from v1.30)\n\n**Enhancements:**\n\n1. **Better Stream Lifecycle Management:** Streams are now managed by a thread-local stream manager, preventing premature closure while the external processor is still processing\n\n2. **Deferred Closure:** Streams remain open for a configured duration after the HTTP request completes, allowing the external processor to complete its work\n\n3. **Flow Control Support:** Added support for gRPC side-stream flow control with watermark callbacks\n\n4. **Safer Async Processing:** Improved handling of filter destruction timing to prevent use-after-free bugs\n\n**Configuration:**\n\n```yaml\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  observability_mode: true\n  deferred_close_timeout: 5s\n  processing_mode:\n    request_header_mode: SEND\n    request_body_mode: STREAMED\n    response_header_mode: SEND\n    response_body_mode: STREAMED\n```\n\n**Key Points:**\n\n- The external processor should **not** send response messages; they are ignored\n- Only STREAMED and NONE body processing modes are supported\n- Flow control is now available to prevent overwhelming the processor\n- Deferred closure ensures graceful stream cleanup\n\n---\n\n## Configuration Updates\n\n### Step 1: Identify Current Usage of `disable_clear_route_cache`\n\nSearch your Envoy configurations for any use of `disable_clear_route_cache`:\n\n```bash\n# Find all ext_proc configurations with disable_clear_route_cache\ngrep -r \"disable_clear_route_cache\" /path/to/configs/\n```\n\n### Step 2: Update Route Cache Configuration\n\nFor each configuration using `disable_clear_route_cache`:\n\n**If `disable_clear_route_cache: false` or omitted (default):**\n```yaml\n# Old\next_proc:\n  disable_clear_route_cache: false\n\n# New (explicit, recommended)\next_proc:\n  route_cache_action: DEFAULT\n```\n\n**If `disable_clear_route_cache: true`:**\n```yaml\n# Old\next_proc:\n  disable_clear_route_cache: true\n\n# New\next_proc:\n  route_cache_action: RETAIN\n```\n\n### Step 3: Consider Using CLEAR Mode if Applicable\n\nIf you want to ensure routes are always refreshed after ext_proc processing:\n\n```yaml\next_proc:\n  route_cache_action: CLEAR\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n```\n\n### Step 4: Configure Deferred Close Timeout (if using observability_mode)\n\nIf observability mode is enabled, explicitly set the deferred close timeout based on your workload:\n\n```yaml\next_proc:\n  observability_mode: true\n  deferred_close_timeout: 5s  # Adjust based on processor response time\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n```\n\n### Step 5: Test Error Handling for 504 Responses\n\nUpdate any downstream error handling code that specifically catches or handles 500 errors from ext_proc timeouts:\n\n```python\n# Example: If you had code like this\ntry:\n    response = requests.get(envoy_url)\nexcept requests.HTTPError as e:\n    if e.response.status_code == 500:\n        # Might have been an ext_proc timeout\n        # Now it will be 504 instead\nexcept requests.HTTPError as e:\n    if e.response.status_code == 504:\n        # This is now the ext_proc timeout code\n```\n\n---\n\n## Behavioral Changes\n\n### 1. Route Cache Clearing Logic\n\n**v1.30 Logic:**\n```\nif clear_route_cache AND NOT disable_clear_route_cache:\n    clear_route_cache()\nelse:\n    do_nothing()\n```\n\n**v1.31 Logic:**\n```\nif no header mutation:\n    do_nothing()  # No reason to clear\nelse:\n    switch route_cache_action:\n        case DEFAULT:\n            if clear_route_cache:\n                clear_route_cache()\n        case CLEAR:\n            clear_route_cache()  # Always\n        case RETAIN:\n            do_nothing()  # Never\n```\n\n**Key Difference:** v1.31 adds a check for header mutations, preventing unnecessary cache clearing when headers aren't modified.\n\n**Impact:**\n- Fewer unnecessary route cache clears\n- Better performance in scenarios with many header-only requests\n- More explicit control through `route_cache_action` enum\n\n### 2. Stream Management in Observability Mode\n\n**v1.30:**\n- Streams closed immediately on filter destruction\n- Risk of message loss if processor still processing\n- No flow control support\n\n**v1.31:**\n- Streams deferred closure via thread-local manager\n- Processor gets `deferred_close_timeout` to finish\n- Flow control supported via watermark callbacks\n- Safer async handling\n\n### 3. Error Response Status Code\n\n**v1.30:**\n- Timeout \u2192 **500 Internal Server Error**\n- May mislead about error source\n\n**v1.31:**\n- Timeout \u2192 **504 Gateway Timeout**\n- More accurate semantic for upstream timeouts\n- Clearer for monitoring/alerting\n\n### 4. Tracing Context Propagation\n\n**v1.30:**\n- Tracing context headers not always propagated to ext_proc\n\n**v1.31:**\n- Tracing context headers consistently propagated in bidirectional streams\n- Better distributed tracing support\n- Improved observability\n\n---\n\n## Migration Steps\n\n### Phase 1: Preparation (Pre-Upgrade)\n\n1. **Audit Current Configuration:**\n   ```bash\n   grep -r \"ext_proc\\|external_processor\" /path/to/configs/ | grep -E \"yml|yaml\"\n   ```\n\n2. **Document Current Behavior:**\n   - Note which ext_proc filters use `disable_clear_route_cache`\n   - Record current route cache hit rates if monitored\n   - Document timeout error handling code\n\n3. **Test Timeout Error Handling:**\n   - Simulate ext_proc service timeouts\n   - Verify downstream services handle 500 errors\n   - Plan for 504 response handling\n\n### Phase 2: Configuration Update (Upgrade Compatible)\n\n1. **Update Configurations to Use `route_cache_action`:**\n   ```yaml\n   # For each ext_proc filter\n   ext_proc:\n     # Remove: disable_clear_route_cache: true/false\n     # Add one of:\n     route_cache_action: DEFAULT    # Recommended\n     # OR\n     route_cache_action: CLEAR      # If always clearing\n     # OR\n     route_cache_action: RETAIN     # If never clearing\n   ```\n\n2. **If Using Observability Mode, Set Deferred Timeout:**\n   ```yaml\n   ext_proc:\n     observability_mode: true\n     deferred_close_timeout: 5s  # Adjust to your needs\n   ```\n\n3. **Validate Configurations:**\n   ```bash\n   envoy -c /path/to/config.yaml --mode validate-only\n   ```\n\n### Phase 3: Testing (Before Production Deployment)\n\n1. **Unit/Integration Tests:**\n   - Test ext_proc with various `route_cache_action` settings\n   - Verify header mutation detection\n   - Test timeout scenarios\n\n2. **Performance Testing:**\n   - Route cache hit rates with DEFAULT vs CLEAR\n   - Stream cleanup timing with various `deferred_close_timeout` values\n   - Memory usage in observability mode\n\n3. **Error Handling Tests:**\n   - Timeout responses (verify 504 status code)\n   - Downstream client behavior with 504 vs 500\n   - Monitoring/alerting rule accuracy\n\n### Phase 4: Staging Deployment\n\n1. **Canary Deployment:**\n   - Deploy v1.31 to small percentage of traffic\n   - Monitor error rates and latency\n   - Watch for 504 errors from ext_proc timeouts\n\n2. **Configuration Validation:**\n   - Verify all ext_proc filters use `route_cache_action`\n   - Confirm deferred close timeout works correctly\n   - Test observability mode if enabled\n\n3. **Rollback Plan:**\n   - Revert to v1.30 if critical issues found\n   - Have configuration rollback prepared\n\n### Phase 5: Production Deployment\n\n1. **Gradual Rollout:**\n   - Start with low traffic percentage\n   - Gradually increase based on metrics\n   - Monitor for issues\n\n2. **Monitoring:**\n   - Track `clear_route_cache_*` stats changes\n   - Watch for 504 errors\n   - Monitor route cache hit rates\n\n3. **Post-Deployment Verification:**\n   - Confirm expected route cache behavior\n   - Validate error handling works\n   - Review performance metrics\n\n### Phase 6: Cleanup (Post-Deployment)\n\n1. **Remove Old Comments:**\n   - Update documentation to reflect v1.31\n   - Remove references to `disable_clear_route_cache`\n\n2. **Optimize Configuration:**\n   - Fine-tune `route_cache_action` based on metrics\n   - Adjust `deferred_close_timeout` if needed\n\n3. **Plan Future Deprecation:**\n   - Mark calendar for removal of `disable_clear_route_cache` support\n   - Plan removal of `async_mode` (being replaced by `observability_mode`)\n\n---\n\n## Testing Recommendations\n\n### 1. Unit Tests\n\n**Route Cache Behavior:**\n```python\n# Test DEFAULT mode with header mutation\nconfig.route_cache_action = DEFAULT\nconfig.disable_clear_route_cache = False\nresponse.clear_route_cache = True\nheaders_mutated = True\nassert route_cache_cleared() == True\n\n# Test DEFAULT mode without header mutation\nconfig.route_cache_action = DEFAULT\nresponse.clear_route_cache = True\nheaders_mutated = False\nassert route_cache_cleared() == False\n\n# Test CLEAR mode always clears\nconfig.route_cache_action = CLEAR\nresponse.clear_route_cache = False\nheaders_mutated = True\nassert route_cache_cleared() == True\n\n# Test RETAIN mode never clears\nconfig.route_cache_action = RETAIN\nresponse.clear_route_cache = True\nheaders_mutated = True\nassert route_cache_cleared() == False\n```\n\n**Status Code for Timeouts:**\n```python\n# Simulate ext_proc timeout\next_proc_service.delay = 10 * timeout\nresponse = send_request()\nassert response.status_code == 504  # v1.31 change\n# (v1.30 would return 500)\n```\n\n### 2. Integration Tests\n\n**Stream Closure in Observability Mode:**\n```python\nconfig.observability_mode = True\nconfig.deferred_close_timeout = Duration(millis=1000)\n\nrequest = http_request()\nrequest.send()\n\n# Verify stream stays open during deferred_close_timeout\nassert stream_open() for 1 second\n\n# Verify stream closes after timeout\nawait sleep(1.1 seconds)\nassert stream_closed()\n```\n\n**Multiple Ext_Proc Filters:**\n```python\n# Test with different route_cache_action modes\nenv.add_ext_proc(action=DEFAULT, name=\"default_filter\")\nenv.add_ext_proc(action=CLEAR, name=\"clear_filter\")\nenv.add_ext_proc(action=RETAIN, name=\"retain_filter\")\n\n# Verify each behaves independently\nrequest.route_to(\"default_filter\")\nassert default_behavior()\n\nrequest.route_to(\"clear_filter\")\nassert clear_behavior()\n\nrequest.route_to(\"retain_filter\")\nassert retain_behavior()\n```\n\n### 3. Performance Tests\n\n**Route Cache Hit Rates:**\n```\nMetric: Route cache hit ratio\nBefore: baseline\nAfter (DEFAULT): should be same or better\nAfter (CLEAR): likely lower\nAfter (RETAIN): likely higher (but may be incorrect)\n```\n\n**Stream Lifecycle:**\n```\nMetric: Memory usage per stream\nObservability mode with deferred closure:\n- Peak memory: ~same (stream still held)\n- Peak duration: longer (deferred wait)\n- Cleanup: cleaner (less premature closure)\n```\n\n**Error Handling Latency:**\n```\nMetric: Time to return 504 error\nShould be similar to previous 500 error time\n(Just different status code, same timeout)\n```\n\n### 4. Load Testing\n\n**Concurrent Streams in Observability Mode:**\n```\nConfig:\n- observability_mode: true\n- deferred_close_timeout: 5s\n\nLoad: 1000 concurrent requests\nMeasure:\n- Peak connection count (should be manageable)\n- Memory growth over time (should be bounded)\n- Stream closure rate (should be steady)\n```\n\n---\n\n## Rollback Guidance\n\n### If Issues Occur After Upgrade\n\n**Immediate Rollback (0-5 minutes):**\n1. Revert Envoy to v1.30.0\n2. Keep old configuration (both formats supported)\n3. Monitor metrics to verify behavior\n\n**Configuration Rollback (if needed):**\n```yaml\n# If v1.31 config doesn't work\n# Revert to v1.30 style\n\n# Change this:\next_proc:\n  route_cache_action: DEFAULT\n\n# Back to this:\next_proc:\n  disable_clear_route_cache: false\n```\n\n### Troubleshooting Common Issues\n\n**Issue: Configuration validation fails**\n```\nError: \"disable_clear_route_cache and route_cache_action\ncan not be set to none-default at the same time.\"\n\nSolution:\n- Remove disable_clear_route_cache from config\n- Keep only route_cache_action\n```\n\n**Issue: Route cache not clearing as expected**\n```\nProblem: route_cache_action: DEFAULT but cache not cleared\n\nDiagnostic:\n1. Check if headers are being mutated\n2. Check if clear_route_cache flag is set by processor\n3. Check upstream vs downstream filter chain\n\nSolution:\n- Use route_cache_action: CLEAR to force clearing\n- Or verify processor sets clear_route_cache: true\n```\n\n**Issue: Observability mode streams not closing**\n```\nProblem: gRPC connections to ext_proc staying open too long\n\nSolution:\n1. Reduce deferred_close_timeout value\n2. Verify processor is handling stream closure correctly\n3. Check for processor-side hanging connections\n```\n\n**Issue: 504 errors being handled as 500**\n```\nProblem: Downstream expecting 500 from ext_proc timeout\n\nSolution:\n1. Update error handling code to expect 504\n2. Update monitoring/alerting rules\n3. Verify load balancer doesn't treat 504 specially\n```\n\n---\n\n## Pro Tips for Successful Migration\n\n### 1. Gradual Migration by Filter\nMigrate ext_proc filters one at a time rather than all at once:\n```yaml\n# Filter 1: Already migrated (using route_cache_action)\n- name: ext_proc_v1\n  typed_config:\n    \"@type\": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor\n    route_cache_action: DEFAULT\n\n# Filter 2: Still using old style (still works)\n- name: ext_proc_v2\n  typed_config:\n    \"@type\": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor\n    disable_clear_route_cache: false\n```\n\n### 2. Monitor Route Cache Statistics\nTrack the stats to understand behavior:\n- `http.connection_manager.route_cache.hits`\n- `http.connection_manager.route_cache.misses`\n- `ext_proc.clear_route_cache_ignored`\n- `ext_proc.clear_route_cache_disabled`\n\n### 3. Use DEFAULT Mode for Most Cases\nUnless you have specific requirements, use `route_cache_action: DEFAULT`:\n- Most compatible with v1.30 behavior\n- Respects processor decisions\n- Good performance\n\n### 4. Test External Processor Timeout Handling\nExplicitly test what happens when ext_proc times out:\n```bash\n# Simulate delay in ext_proc service\n# Observe that client receives 504 (not 500)\n# Verify retry logic handles 504 appropriately\n```\n\n### 5. Document Configuration Choices\nFor each ext_proc filter, document why you chose a particular `route_cache_action`:\n```yaml\next_proc:\n  # Using CLEAR because this processor frequently modifies routing headers\n  # and we need routes to be recalculated every time\n  route_cache_action: CLEAR\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n```\n\n---\n\n## Deprecated Features Timeline\n\n| Feature | Deprecated | Removal Target | Status |\n|---------|-----------|-----------------|--------|\n| `disable_clear_route_cache` | v1.31 | v1.32+ | Still functional, use `route_cache_action` |\n| `async_mode` | v1.30+ | TBD | Hidden from API; use `observability_mode` |\n\n---\n\n## Reference\n\n### Proto Messages\n\n**New Enum (v1.31):**\n```protobuf\nmessage ExternalProcessor {\n  enum RouteCacheAction {\n    // DEFAULT: Clear cache only if processor sets clear_route_cache AND headers mutated\n    DEFAULT = 0;\n\n    // CLEAR: Always clear cache (ignore processor's clear_route_cache flag)\n    CLEAR = 1;\n\n    // RETAIN: Never clear cache (ignore processor's clear_route_cache flag)\n    RETAIN = 2;\n  }\n}\n```\n\n**New Field (v1.31):**\n```protobuf\nmessage ExternalProcessor {\n  // Specifies the action to be taken when an external processor response\n  // is received in response to request headers.\n  RouteCacheAction route_cache_action = 18;\n\n  // Timeout for deferred stream closure in observability mode.\n  // Default: 5000 milliseconds\n  google.protobuf.Duration deferred_close_timeout = 19;\n}\n```\n\n**Deprecated Field (still present in v1.31):**\n```protobuf\nmessage ExternalProcessor {\n  // DEPRECATED: Use route_cache_action instead\n  bool disable_clear_route_cache = 11;\n}\n```\n\n### Related Files\n\n**Proto Definitions:**\n- `api/envoy/extensions/filters/http/ext_proc/v3/ext_proc.proto`\n\n**Implementation:**\n- `source/extensions/filters/http/ext_proc/ext_proc.cc`\n- `source/extensions/filters/http/ext_proc/ext_proc.h`\n- `source/extensions/filters/http/ext_proc/processor_state.cc`\n- `source/extensions/filters/http/ext_proc/client_impl.cc`\n\n**Documentation:**\n- `docs/root/configuration/http/http_filters/ext_proc_filter.rst`\n\n### Key Statistics\n\n**New stats (v1.31):** None new\n\n**Updated stats (v1.31):**\n- `clear_route_cache_ignored`: Now incremented when no header mutation detected\n- `clear_route_cache_disabled`: Now incremented when `route_cache_action: RETAIN`\n\n---\n\n## Support and Questions\n\nFor additional help with the migration:\n1. Review the [Envoy documentation](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter)\n2. Check the [release notes](https://github.com/envoyproxy/envoy/releases) for v1.31.0\n3. Consult the [changelog](https://github.com/envoyproxy/envoy/blob/main/changelogs/current.yaml)\n4. Engage with the [Envoy community](https://www.envoyproxy.io/community)\n\n---\n\n**Document Version:** 1.0\n**Envoy Versions Covered:** v1.30.0 \u2192 v1.31.0\n**Last Updated:** March 1, 2026\n",
+          "file_path": "/workspace/documentation.md",
+          "sequence": 54,
+          "type": "write"
+        }
+      ],
+      "conversation_events": [
+        {
+          "payload": {},
+          "sequence": 1,
+          "subtype": "message",
+          "text": "# Migration Guide: Envoy External Processing Filter (v1.30 \u2192 v1.31)\n\n## Task\n\nGenerate a comprehensive migration guide for upgrading the Envoy External Processing (ext_proc) HTTP filter from **version 1.30.0 to version 1.31.0**.\n\n## Context\n\nThe workspace contains two versions of the Envoy codebase:\n- `/workspace/envoy-v1.30/` - Envoy v1.30.0 (April 2024)\n- `/workspace/envoy-v1.31/` - Envoy v1.31.0 (July 2024)\n\n## Scope\n\nFocus specifically on the **External Processing (ext_proc) HTTP filter** configuration and implementation changes. This filter allows external services to process HTTP requests and responses.\n\nYour migration guide should identify and document:\n\n1. **Breaking Changes** - Incompatible configuration or behavioral changes\n2. **Deprecated Features** - Fields or modes marked for future removal\n3. **New Features** - Added capabilities and configuration options\n4. **Configuration Updates** - Required or recommended changes to ext_proc filter configuration\n5. **Behavioral Changes** - Modifications to filter behavior or runtime semantics\n\n## Relevant Components\n\nThe ext_proc filter is primarily located in:\n- Proto definitions: `api/envoy/extensions/filters/http/ext_proc/v3/`\n- Implementation: `source/extensions/filters/http/ext_proc/`\n- Documentation: `docs/root/configuration/http/http_filters/ext_proc_filter.rst`\n\n## Deliverable\n\nWrite your migration guide to `/workspace/documentation.md` in Markdown format with the following sections:\n\n1. **Overview** - Summary of the migration and major changes\n2. **Breaking Changes** - Critical incompatible changes requiring action\n3. **Deprecated Features** - Features marked for deprecation with migration advice\n4. **New Features** - New capabilities and how to use them\n5. **Migration Steps** - Step-by-step instructions for upgrading configurations\n6. **Testing Recommendations** - How to validate the migration\n7. **Rollback Guidance** - How to revert if issues occur\n\n## Requirements\n\n- Provide specific proto field names and types\n- Include before/after configuration examples for each breaking change\n- Explain the motivation or benefit behind major changes\n- Cite specific source files where implementations changed\n- Recommend best practices for adopting new features\n- Identify common migration pitfalls or edge cases\n\n## Tips\n\n- Compare the two version directories to identify changed proto fields and implementation files\n- Search for all API modifications in the ext_proc filter\n- Trace configuration usage patterns across both versions\n- Look for related documentation updates",
+          "timestamp": "2026-03-01T07:16:35.383Z",
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "payload": {},
+          "sequence": 3,
+          "subtype": "message",
+          "text": "I'll help you create a comprehensive migration guide for the Envoy External Processing filter from v1.30 to v1.31. Let me start by exploring the workspace structure to understand the codebase.",
+          "timestamp": "2026-03-01T07:16:37.376Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 4,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01YcDFnuJxvT4T36Wm14DiRh",
+          "timestamp": "2026-03-01T07:16:37.695Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 6,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01U3ksPxWTHyLjv8CvXVQsQ9",
+          "timestamp": "2026-03-01T07:16:41.299Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 8,
+          "subtype": "message",
+          "text": "Executed Glob toolu_01Ewj2Na8yDmEGE34aZQ6haT",
+          "timestamp": "2026-03-01T07:16:43.368Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 9,
+          "subtype": "message",
+          "text": "Executed Glob toolu_01PTRpX9CEZnRjWgtjWn1GKq",
+          "timestamp": "2026-03-01T07:16:43.387Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 11,
+          "subtype": "message",
+          "text": "Executed Read toolu_01NGvnAYeYL7H5D1UvL869z5",
+          "timestamp": "2026-03-01T07:16:44.968Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 12,
+          "subtype": "message",
+          "text": "Executed Read toolu_015bCr6K7bwyqKXCx4rvjL2v",
+          "timestamp": "2026-03-01T07:16:44.694Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 14,
+          "subtype": "message",
+          "text": "Executed Read toolu_0146b7X3EQsP8YfhYpRoPCqB",
+          "timestamp": "2026-03-01T07:16:49.109Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 15,
+          "subtype": "message",
+          "text": "Executed Read toolu_01YPw8ekFmVUWSASMLn4g9cp",
+          "timestamp": "2026-03-01T07:16:48.869Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 17,
+          "subtype": "message",
+          "text": "Executed Glob toolu_01JKPfXUGbofeeLvcgwxToDu",
+          "timestamp": "2026-03-01T07:16:51.169Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 18,
+          "subtype": "message",
+          "text": "Executed Glob toolu_01NAmg5f2MR2hdAf9cc3cagV",
+          "timestamp": "2026-03-01T07:16:51.359Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 20,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01E2t2s3nMEycrYXxPdSGfU6",
+          "timestamp": "2026-03-01T07:16:53.152Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 22,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01DCkrb6agvZnMhhoBW6cVF3",
+          "timestamp": "2026-03-01T07:16:55.011Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 24,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01K4NnhNb5YPniKxwEhrjbuC",
+          "timestamp": "2026-03-01T07:16:56.410Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 26,
+          "subtype": "message",
+          "text": "Executed Read toolu_01SU9yfW6Ri58tbGUbeJfjnB",
+          "timestamp": "2026-03-01T07:16:57.500Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 27,
+          "subtype": "message",
+          "text": "Executed Read toolu_01EsWdko7CACBehgD3ZAvn9T",
+          "timestamp": "2026-03-01T07:16:57.979Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 29,
+          "subtype": "message",
+          "text": "Executed Read toolu_011878ssEvtuATH2eMz4DcCv",
+          "timestamp": "2026-03-01T07:16:59.817Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 31,
+          "subtype": "message",
+          "text": "Executed Read toolu_01QPEtJKYtBzDxc7FHzQVu9M",
+          "timestamp": "2026-03-01T07:17:01.274Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 33,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01Xay9zybJLmKHNysSx2qSiA",
+          "timestamp": "2026-03-01T07:17:03.227Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 35,
+          "subtype": "message",
+          "text": "Executed Read toolu_011ALWdKAgQSq1FFFrv9kx9b",
+          "timestamp": "2026-03-01T07:17:06.271Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 37,
+          "subtype": "message",
+          "text": "Executed Read toolu_01VS4A3B4d2xfEJEqUjf1XdN",
+          "timestamp": "2026-03-01T07:17:07.900Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 39,
+          "subtype": "message",
+          "text": "Executed Bash toolu_0178RoZnDAavoM4gSahVdi9Y",
+          "timestamp": "2026-03-01T07:17:09.854Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 41,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01XPeUMmwMeZLKWRxK1DTu9W",
+          "timestamp": "2026-03-01T07:17:11.099Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 43,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01Qv9mGXfvSVue1fzzR21QqK",
+          "timestamp": "2026-03-01T07:17:12.442Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 45,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01SbG5HfwB7466G2f8Exzx1m",
+          "timestamp": "2026-03-01T07:17:13.775Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 47,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01KxctGENiWqRp7vHr47wt2o",
+          "timestamp": "2026-03-01T07:17:15.019Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 49,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01EsnnfSYcskh1uoL5D73kBw",
+          "timestamp": "2026-03-01T07:17:16.920Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 51,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01QrTobYGsVH5cweqKNJtksQ",
+          "timestamp": "2026-03-01T07:17:18.674Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 53,
+          "subtype": "message",
+          "text": "Now I'll create a comprehensive migration guide. Let me compile all the changes I've found and write the documentation.",
+          "timestamp": "2026-03-01T07:17:24.816Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 54,
+          "subtype": "message",
+          "text": "Executed Write toolu_01RuvGCMSH33JZaGy32m3zMH",
+          "timestamp": "2026-03-01T07:18:23.542Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 56,
+          "subtype": "message",
+          "text": "Perfect! I've created a comprehensive migration guide for the Envoy External Processing filter from v1.30 to v1.31. Here's what I've documented:\n\n## Summary of Migration Guide Contents\n\n### **Breaking Changes**\n1. **Route Cache Clearing Behavior** - New enum-based `route_cache_action` replaces boolean `disable_clear_route_cache`\n   - Three modes: DEFAULT, CLEAR, RETAIN\n   - Enhanced logic that checks for actual header mutations\n   \n2. **HTTP Status Code Change** - Ext_proc timeouts now return 504 (Gateway Timeout) instead of 500\n\n### **Deprecated Features**\n- `disable_clear_route_cache` field - Superseded by `route_cache_action` enum\n\n### **New Features**\n1. **Route Cache Action Enum** - Provides granular control over route cache clearing with three distinct strategies\n2. **Deferred Stream Closure Timeout** - Controls how long gRPC streams remain open in observability mode (default: 5 seconds)\n3. **Enhanced Observability Mode** - Improved stream lifecycle management with thread-local stream manager\n\n### **Key Changes Documented**\n- Configuration examples (before/after)\n- Behavioral differences with detailed comparison tables\n- Step-by-step migration instructions\n- Testing recommendations\n- Rollback guidance\n- Common troubleshooting\n- Pro tips for successful migration\n\n### **Practical Sections**\n- 6-phase migration process\n- Unit, integration, performance, and load testing guidance\n- Timeline for deprecation removal\n- Reference materials and file locations\n\nThe guide includes **48 sections** covering everything needed to upgrade from v1.30 to v1.31 safely and successfully. The document has been saved to `/workspace/documentation.md` and is ready for use!",
+          "timestamp": "2026-03-01T07:18:29.381Z",
+          "tool": null,
+          "type": "agent"
+        }
+      ],
+      "step_count": 56,
+      "tool_counts_by_name": {
+        "Bash": 13,
+        "Glob": 4,
+        "Read": 10,
+        "Write": 1
+      },
+      "tool_event_count": 28,
+      "tool_events": [
+        {
+          "arguments": {
+            "command": "find /workspace -maxdepth 2 -type d | head -20",
+            "description": "List top-level directories in workspace"
+          },
+          "step_id": 4,
+          "timestamp": "2026-03-01T07:16:37.695Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "ls -la /workspace | grep envoy",
+            "description": "List envoy directories in workspace"
+          },
+          "step_id": 6,
+          "timestamp": "2026-03-01T07:16:41.299Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "pattern": "/workspace/envoy-v1.30/api/envoy/extensions/filters/http/ext_proc/**/*.proto"
+          },
+          "step_id": 8,
+          "timestamp": "2026-03-01T07:16:43.368Z",
+          "tool": "Glob"
+        },
+        {
+          "arguments": {
+            "pattern": "/workspace/envoy-v1.31/api/envoy/extensions/filters/http/ext_proc/**/*.proto"
+          },
+          "step_id": 9,
+          "timestamp": "2026-03-01T07:16:43.387Z",
+          "tool": "Glob"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/envoy-v1.31/api/envoy/extensions/filters/http/ext_proc/v3/ext_proc.proto"
+          },
+          "step_id": 11,
+          "timestamp": "2026-03-01T07:16:44.968Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/envoy-v1.30/api/envoy/extensions/filters/http/ext_proc/v3/ext_proc.proto"
+          },
+          "step_id": 12,
+          "timestamp": "2026-03-01T07:16:44.694Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/envoy-v1.31/api/envoy/extensions/filters/http/ext_proc/v3/processing_mode.proto"
+          },
+          "step_id": 14,
+          "timestamp": "2026-03-01T07:16:49.109Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/envoy-v1.30/api/envoy/extensions/filters/http/ext_proc/v3/processing_mode.proto"
+          },
+          "step_id": 15,
+          "timestamp": "2026-03-01T07:16:48.869Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "pattern": "/workspace/envoy-v1.30/source/extensions/filters/http/ext_proc/**/*.cc"
+          },
+          "step_id": 17,
+          "timestamp": "2026-03-01T07:16:51.169Z",
+          "tool": "Glob"
+        },
+        {
+          "arguments": {
+            "pattern": "/workspace/envoy-v1.31/source/extensions/filters/http/ext_proc/**/*.cc"
+          },
+          "step_id": 18,
+          "timestamp": "2026-03-01T07:16:51.359Z",
+          "tool": "Glob"
+        },
+        {
+          "arguments": {
+            "command": "diff -u /workspace/envoy-v1.30/source/extensions/filters/http/ext_proc/ext_proc.cc /workspace/envoy-v1.31/source/extensions/filters/http/ext_proc/ext_proc.cc | head -150",
+            "description": "Show first 150 lines of diff between ext_proc.cc files"
+          },
+          "step_id": 20,
+          "timestamp": "2026-03-01T07:16:53.152Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "diff -u /workspace/envoy-v1.30/source/extensions/filters/http/ext_proc/ext_proc.cc /workspace/envoy-v1.31/source/extensions/filters/http/ext_proc/ext_proc.cc | wc -l",
+            "description": "Count total lines of diff"
+          },
+          "step_id": 22,
+          "timestamp": "2026-03-01T07:16:55.011Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "find /workspace/envoy-v1.30/source/extensions/filters/http/ext_proc -name \"*.h\"",
+            "description": "Find header files in ext_proc v1.30"
+          },
+          "step_id": 24,
+          "timestamp": "2026-03-01T07:16:56.410Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/envoy-v1.30/source/extensions/filters/http/ext_proc/config.h"
+          },
+          "step_id": 26,
+          "timestamp": "2026-03-01T07:16:57.500Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/envoy-v1.31/source/extensions/filters/http/ext_proc/config.h"
+          },
+          "step_id": 27,
+          "timestamp": "2026-03-01T07:16:57.979Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/envoy-v1.30/source/extensions/filters/http/ext_proc/ext_proc.h"
+          },
+          "step_id": 29,
+          "timestamp": "2026-03-01T07:16:59.817Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/envoy-v1.31/source/extensions/filters/http/ext_proc/ext_proc.h"
+          },
+          "step_id": 31,
+          "timestamp": "2026-03-01T07:17:01.274Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "command": "find /workspace/envoy-v1.30/docs -name \"*ext_proc*\" -o -name \"*external*\" | grep -i ext",
+            "description": "Find ext_proc related documentation files"
+          },
+          "step_id": 33,
+          "timestamp": "2026-03-01T07:17:03.227Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/envoy-v1.30/docs/root/configuration/http/http_filters/ext_proc_filter.rst",
+            "limit": 100
+          },
+          "step_id": 35,
+          "timestamp": "2026-03-01T07:17:06.271Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/envoy-v1.31/docs/root/configuration/http/http_filters/ext_proc_filter.rst",
+            "limit": 100
+          },
+          "step_id": 37,
+          "timestamp": "2026-03-01T07:17:07.900Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "command": "find /workspace/envoy-v1.31/changelogs -name \"*.yaml\" | xargs grep -l \"ext_proc\\|external\" | head -5",
+            "description": "Find changelogs mentioning ext_proc or external"
+          },
+          "step_id": 39,
+          "timestamp": "2026-03-01T07:17:09.854Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "ls /workspace/envoy-v1.31/changelogs | grep -E \"^1\\.31\" | head -5",
+            "description": "List v1.31 changelog files"
+          },
+          "step_id": 41,
+          "timestamp": "2026-03-01T07:17:11.099Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "ls /workspace/envoy-v1.31/changelogs | sort -V | tail -10",
+            "description": "List newest changelog files"
+          },
+          "step_id": 43,
+          "timestamp": "2026-03-01T07:17:12.442Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "grep -A 20 \"ext_proc\" /workspace/envoy-v1.31/changelogs/current.yaml | head -40",
+            "description": "Search for ext_proc entries in current.yaml"
+          },
+          "step_id": 45,
+          "timestamp": "2026-03-01T07:17:13.775Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "grep -B 2 -A 5 \"ext_proc\" /workspace/envoy-v1.31/changelogs/current.yaml",
+            "description": "Get all ext_proc entries from changelog"
+          },
+          "step_id": 47,
+          "timestamp": "2026-03-01T07:17:15.019Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "diff -u /workspace/envoy-v1.30/source/extensions/filters/http/ext_proc/processor_state.cc /workspace/envoy-v1.31/source/extensions/filters/http/ext_proc/processor_state.cc | grep -A 5 -B 5 \"route_cache\\|clear_route\" | head -60",
+            "description": "Show route cache related changes in processor_state.cc"
+          },
+          "step_id": 49,
+          "timestamp": "2026-03-01T07:17:16.920Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "diff -u /workspace/envoy-v1.30/source/extensions/filters/http/ext_proc/client_impl.cc /workspace/envoy-v1.31/source/extensions/filters/http/ext_proc/client_impl.cc | head -100",
+            "description": "Show diff of client_impl.cc"
+          },
+          "step_id": 51,
+          "timestamp": "2026-03-01T07:17:18.674Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "content": "# Envoy External Processing Filter Migration Guide: v1.30 \u2192 v1.31\n\n## Overview\n\nThis guide provides comprehensive information for migrating the Envoy External Processing (ext_proc) HTTP filter from version 1.30.0 to version 1.31.0. The upgrade includes:\n\n- **New route cache action configuration** providing more granular control over route cache clearing behavior\n- **Deferred stream closure timeout** for improved observability mode handling\n- **Enhanced observability mode** with better stream lifecycle management\n- **HTTP status code change** for timeout errors (504 instead of 500)\n- **Improved gRPC tracing context propagation**\n\nThe migration involves both configuration changes and behavioral adjustments. While most existing configurations remain backward compatible, new features are available to improve performance and observability.\n\n---\n\n## Breaking Changes\n\n### 1. Route Cache Clearing Behavior (HIGH PRIORITY)\n\n**What Changed:** The route cache clearing behavior has been refactored from a simple boolean flag to a three-state enum, with changes to the clearing logic.\n\n**Impact Level:** MEDIUM\n\n**Details:**\n\nIn v1.30, route cache clearing was controlled by a single boolean field:\n- `disable_clear_route_cache`: If `true`, prevents clearing the route cache\n\nIn v1.31, this has been replaced by a more flexible enum-based approach:\n```protobuf\nenum RouteCacheAction {\n  DEFAULT = 0;   // Clear if clear_route_cache is set AND header mutation exists\n  CLEAR = 1;     // Always clear (ignoring the clear_route_cache bit)\n  RETAIN = 2;    // Never clear (equivalent to disable_clear_route_cache = true)\n}\n```\n\n**Key Behavioral Differences:**\n\n| Scenario | v1.30 Behavior | v1.31 Behavior (route_cache_action) |\n|----------|----------------|--------------------------------------|\n| No header mutation | Route cache NOT cleared | Route cache NOT cleared (regardless of `route_cache_action`); `clear_route_cache_ignored` stat incremented |\n| Header mutation + `clear_route_cache=true` + `disable_clear_route_cache=false` | Cache cleared | **Depends on mode:**<br/>- DEFAULT: Cache cleared<br/>- CLEAR: Cache cleared<br/>- RETAIN: NOT cleared |\n| Upstream filter chain | Route cache NOT cleared | Route cache NOT cleared (upstream route cache not clearable) |\n\n**Configuration Examples:**\n\nBefore (v1.30):\n```yaml\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  disable_clear_route_cache: false  # Default behavior\n```\n\nAfter (v1.31) - Equivalent configurations:\n```yaml\n# Option 1: DEFAULT behavior (matches v1.30 behavior)\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  route_cache_action: DEFAULT\n\n# Option 2: Always clear (when mutations occur)\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  route_cache_action: CLEAR\n\n# Option 3: Never clear (equivalent to v1.30's disable_clear_route_cache=true)\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  route_cache_action: RETAIN\n```\n\n**Backward Compatibility Note:** The field `disable_clear_route_cache` is still supported in v1.31 with a migration annotation. When `disable_clear_route_cache=true` is set, it is automatically converted to `route_cache_action=RETAIN`. However, **you cannot set both fields to non-default values** - this will cause a configuration validation error:\n> \"disable_clear_route_cache and route_cache_action can not be set to none-default at the same time.\"\n\n---\n\n### 2. External Processor Timeout Error Status Code\n\n**What Changed:** Timeout errors from the external processor now return HTTP 504 (Gateway Timeout) instead of HTTP 500 (Internal Server Error).\n\n**Impact Level:** LOW\n\n**Details:**\n\n**v1.30 Behavior:** When a message timeout occurred waiting for a response from the external processor:\n- Return status code: **500 Internal Server Error**\n- Error response was sent to downstream clients\n\n**v1.31 Behavior:** Same timeout condition:\n- Return status code: **504 Gateway Timeout**\n- More semantically correct for upstream service timeouts\n\n**Why This Matters:**\n- Downstream clients may differentiate handling based on status code\n- Monitoring/alerting systems may track 5xx vs 4xx errors differently\n- Load balancers may handle 504 differently than 500 (some don't retry 504s by default)\n\n**Migration Action:**\n- Review downstream client error handling code\n- Update monitoring/alerting rules that count 500 errors\n- Verify load balancer retry policies handle 504 appropriately\n- Test retry behavior with external processor timeouts\n\n---\n\n## Deprecated Features\n\n### 1. `disable_clear_route_cache` Field (DEPRECATION)\n\n**Deprecation Status:** DEPRECATED (still functional in v1.31, planned for removal in v1.32+)\n\n**Details:**\n\nThe boolean field `disable_clear_route_cache` is now superseded by the `route_cache_action` enum:\n\n```protobuf\n// v1.30 & v1.31 (deprecated in v1.31)\nbool disable_clear_route_cache = 11;\n\n// v1.31 (new, recommended)\nRouteCacheAction route_cache_action = 18;\n```\n\n**Migration Path:**\n\n| Current Configuration | Migration Path |\n|----------------------|----------------|\n| `disable_clear_route_cache: false` (default) | Use `route_cache_action: DEFAULT` or omit (DEFAULT is the default) |\n| `disable_clear_route_cache: true` | Use `route_cache_action: RETAIN` |\n| Not set (defaults to false) | No action needed; system defaults to DEFAULT behavior |\n\n**Recommended Timeline:**\n1. **Immediately:** Migrate to `route_cache_action` in new configurations\n2. **Within 1-2 releases:** Update existing configurations to use `route_cache_action`\n3. **Future release:** `disable_clear_route_cache` will be removed\n\n---\n\n## New Features\n\n### 1. Route Cache Action Enum\n\n**Availability:** v1.31.0+\n\n**Purpose:** Provides three distinct strategies for handling route cache clearing in response to external processor responses.\n\n**Configuration Field:**\n```protobuf\nmessage ExternalProcessor {\n  enum RouteCacheAction {\n    DEFAULT = 0;\n    CLEAR = 1;\n    RETAIN = 2;\n  }\n\n  RouteCacheAction route_cache_action = 18;\n}\n```\n\n**Use Cases:**\n\n- **DEFAULT (recommended):** Respects the external processor's `clear_route_cache` flag only when header mutations are present. Best for most use cases where the processor decides when cache clearing is needed.\n\n- **CLEAR:** Always clears the route cache when the external processor responds to request headers. Useful when you want to ensure routes are recalculated after every ext_proc interaction, regardless of the processor's response.\n\n- **RETAIN:** Never clears the route cache, ignoring any `clear_route_cache` requests from the processor. Use when you're confident routes don't change or want to maximize route cache hit rates.\n\n**Configuration Examples:**\n\n```yaml\n# Example 1: DEFAULT mode (recommended)\n- name: ext_proc_default\n  typed_config:\n    \"@type\": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor\n    grpc_service:\n      envoy_grpc:\n        cluster_name: ext_proc_cluster\n    route_cache_action: DEFAULT\n    processing_mode:\n      request_header_mode: SEND\n      response_header_mode: SEND\n\n# Example 2: CLEAR mode (always refresh routes)\n- name: ext_proc_always_clear\n  typed_config:\n    \"@type\": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor\n    grpc_service:\n      envoy_grpc:\n        cluster_name: ext_proc_cluster\n    route_cache_action: CLEAR\n    processing_mode:\n      request_header_mode: SEND\n      response_header_mode: SEND\n\n# Example 3: RETAIN mode (never clear cache)\n- name: ext_proc_never_clear\n  typed_config:\n    \"@type\": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor\n    grpc_service:\n      envoy_grpc:\n        cluster_name: ext_proc_cluster\n    route_cache_action: RETAIN\n    processing_mode:\n      request_header_mode: SEND\n      response_header_mode: SEND\n```\n\n---\n\n### 2. Deferred Stream Closure Timeout\n\n**Availability:** v1.31.0+\n\n**Purpose:** Controls how long gRPC streams to the external processor remain open after filter destruction in observability mode.\n\n**Configuration Field:**\n```protobuf\nmessage ExternalProcessor {\n  google.protobuf.Duration deferred_close_timeout = 19;\n}\n```\n\n**Default Value:** 5000 milliseconds (5 seconds)\n\n**Details:**\n\nIn observability mode (`observability_mode: true`), the external processor stream may be kept open independently of the main HTTP request/response stream. This timeout controls how long Envoy will wait before forcefully closing that stream if it hasn't closed gracefully.\n\n**When This Matters:**\n\n- **Observability mode enabled:** The external processor receives messages asynchronously and may process them after the HTTP response completes\n- **Filter destruction:** When the filter is destroyed (request complete), instead of immediately closing the stream, it defers the closure\n- **Timeout:** If the stream doesn't close naturally within `deferred_close_timeout`, Envoy forcefully terminates it\n\n**Configuration Examples:**\n\n```yaml\n# Example 1: Default timeout (5 seconds)\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  observability_mode: true\n  deferred_close_timeout: 5s  # Optional, this is the default\n\n# Example 2: Shorter timeout (1 second) for faster cleanup\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  observability_mode: true\n  deferred_close_timeout: 1s\n\n# Example 3: Longer timeout (10 seconds) to allow more processing time\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  observability_mode: true\n  deferred_close_timeout: 10s\n```\n\n**Performance Implications:**\n\n- **Too short:** External processor may not complete processing; stream closed prematurely\n- **Too long:** More memory/connection overhead; slower resource cleanup\n- **Optimal:** Choose based on typical external processor response time\n\n**Related to Observability Mode:**\n\nThe `deferred_close_timeout` is specifically for the async/deferred handling in observability mode:\n\n```yaml\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  observability_mode: true  # Enable \"Send and Go\" mode\n  deferred_close_timeout: 5s  # Control cleanup timing\n  processing_mode:\n    request_header_mode: SEND\n    request_body_mode: STREAMED\n    response_header_mode: SEND\n    response_body_mode: STREAMED\n```\n\nIn observability mode:\n1. Envoy sends messages to the external processor without waiting for responses\n2. The processor observes data but responses are ignored\n3. When the HTTP stream ends, the ext_proc stream is marked for deferred closure\n4. After `deferred_close_timeout` expires, the stream is forcefully closed\n\n---\n\n### 3. Enhanced Observability Mode\n\n**Availability:** v1.31.0+ (improved from v1.30)\n\n**Enhancements:**\n\n1. **Better Stream Lifecycle Management:** Streams are now managed by a thread-local stream manager, preventing premature closure while the external processor is still processing\n\n2. **Deferred Closure:** Streams remain open for a configured duration after the HTTP request completes, allowing the external processor to complete its work\n\n3. **Flow Control Support:** Added support for gRPC side-stream flow control with watermark callbacks\n\n4. **Safer Async Processing:** Improved handling of filter destruction timing to prevent use-after-free bugs\n\n**Configuration:**\n\n```yaml\next_proc:\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n  observability_mode: true\n  deferred_close_timeout: 5s\n  processing_mode:\n    request_header_mode: SEND\n    request_body_mode: STREAMED\n    response_header_mode: SEND\n    response_body_mode: STREAMED\n```\n\n**Key Points:**\n\n- The external processor should **not** send response messages; they are ignored\n- Only STREAMED and NONE body processing modes are supported\n- Flow control is now available to prevent overwhelming the processor\n- Deferred closure ensures graceful stream cleanup\n\n---\n\n## Configuration Updates\n\n### Step 1: Identify Current Usage of `disable_clear_route_cache`\n\nSearch your Envoy configurations for any use of `disable_clear_route_cache`:\n\n```bash\n# Find all ext_proc configurations with disable_clear_route_cache\ngrep -r \"disable_clear_route_cache\" /path/to/configs/\n```\n\n### Step 2: Update Route Cache Configuration\n\nFor each configuration using `disable_clear_route_cache`:\n\n**If `disable_clear_route_cache: false` or omitted (default):**\n```yaml\n# Old\next_proc:\n  disable_clear_route_cache: false\n\n# New (explicit, recommended)\next_proc:\n  route_cache_action: DEFAULT\n```\n\n**If `disable_clear_route_cache: true`:**\n```yaml\n# Old\next_proc:\n  disable_clear_route_cache: true\n\n# New\next_proc:\n  route_cache_action: RETAIN\n```\n\n### Step 3: Consider Using CLEAR Mode if Applicable\n\nIf you want to ensure routes are always refreshed after ext_proc processing:\n\n```yaml\next_proc:\n  route_cache_action: CLEAR\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n```\n\n### Step 4: Configure Deferred Close Timeout (if using observability_mode)\n\nIf observability mode is enabled, explicitly set the deferred close timeout based on your workload:\n\n```yaml\next_proc:\n  observability_mode: true\n  deferred_close_timeout: 5s  # Adjust based on processor response time\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n```\n\n### Step 5: Test Error Handling for 504 Responses\n\nUpdate any downstream error handling code that specifically catches or handles 500 errors from ext_proc timeouts:\n\n```python\n# Example: If you had code like this\ntry:\n    response = requests.get(envoy_url)\nexcept requests.HTTPError as e:\n    if e.response.status_code == 500:\n        # Might have been an ext_proc timeout\n        # Now it will be 504 instead\nexcept requests.HTTPError as e:\n    if e.response.status_code == 504:\n        # This is now the ext_proc timeout code\n```\n\n---\n\n## Behavioral Changes\n\n### 1. Route Cache Clearing Logic\n\n**v1.30 Logic:**\n```\nif clear_route_cache AND NOT disable_clear_route_cache:\n    clear_route_cache()\nelse:\n    do_nothing()\n```\n\n**v1.31 Logic:**\n```\nif no header mutation:\n    do_nothing()  # No reason to clear\nelse:\n    switch route_cache_action:\n        case DEFAULT:\n            if clear_route_cache:\n                clear_route_cache()\n        case CLEAR:\n            clear_route_cache()  # Always\n        case RETAIN:\n            do_nothing()  # Never\n```\n\n**Key Difference:** v1.31 adds a check for header mutations, preventing unnecessary cache clearing when headers aren't modified.\n\n**Impact:**\n- Fewer unnecessary route cache clears\n- Better performance in scenarios with many header-only requests\n- More explicit control through `route_cache_action` enum\n\n### 2. Stream Management in Observability Mode\n\n**v1.30:**\n- Streams closed immediately on filter destruction\n- Risk of message loss if processor still processing\n- No flow control support\n\n**v1.31:**\n- Streams deferred closure via thread-local manager\n- Processor gets `deferred_close_timeout` to finish\n- Flow control supported via watermark callbacks\n- Safer async handling\n\n### 3. Error Response Status Code\n\n**v1.30:**\n- Timeout \u2192 **500 Internal Server Error**\n- May mislead about error source\n\n**v1.31:**\n- Timeout \u2192 **504 Gateway Timeout**\n- More accurate semantic for upstream timeouts\n- Clearer for monitoring/alerting\n\n### 4. Tracing Context Propagation\n\n**v1.30:**\n- Tracing context headers not always propagated to ext_proc\n\n**v1.31:**\n- Tracing context headers consistently propagated in bidirectional streams\n- Better distributed tracing support\n- Improved observability\n\n---\n\n## Migration Steps\n\n### Phase 1: Preparation (Pre-Upgrade)\n\n1. **Audit Current Configuration:**\n   ```bash\n   grep -r \"ext_proc\\|external_processor\" /path/to/configs/ | grep -E \"yml|yaml\"\n   ```\n\n2. **Document Current Behavior:**\n   - Note which ext_proc filters use `disable_clear_route_cache`\n   - Record current route cache hit rates if monitored\n   - Document timeout error handling code\n\n3. **Test Timeout Error Handling:**\n   - Simulate ext_proc service timeouts\n   - Verify downstream services handle 500 errors\n   - Plan for 504 response handling\n\n### Phase 2: Configuration Update (Upgrade Compatible)\n\n1. **Update Configurations to Use `route_cache_action`:**\n   ```yaml\n   # For each ext_proc filter\n   ext_proc:\n     # Remove: disable_clear_route_cache: true/false\n     # Add one of:\n     route_cache_action: DEFAULT    # Recommended\n     # OR\n     route_cache_action: CLEAR      # If always clearing\n     # OR\n     route_cache_action: RETAIN     # If never clearing\n   ```\n\n2. **If Using Observability Mode, Set Deferred Timeout:**\n   ```yaml\n   ext_proc:\n     observability_mode: true\n     deferred_close_timeout: 5s  # Adjust to your needs\n   ```\n\n3. **Validate Configurations:**\n   ```bash\n   envoy -c /path/to/config.yaml --mode validate-only\n   ```\n\n### Phase 3: Testing (Before Production Deployment)\n\n1. **Unit/Integration Tests:**\n   - Test ext_proc with various `route_cache_action` settings\n   - Verify header mutation detection\n   - Test timeout scenarios\n\n2. **Performance Testing:**\n   - Route cache hit rates with DEFAULT vs CLEAR\n   - Stream cleanup timing with various `deferred_close_timeout` values\n   - Memory usage in observability mode\n\n3. **Error Handling Tests:**\n   - Timeout responses (verify 504 status code)\n   - Downstream client behavior with 504 vs 500\n   - Monitoring/alerting rule accuracy\n\n### Phase 4: Staging Deployment\n\n1. **Canary Deployment:**\n   - Deploy v1.31 to small percentage of traffic\n   - Monitor error rates and latency\n   - Watch for 504 errors from ext_proc timeouts\n\n2. **Configuration Validation:**\n   - Verify all ext_proc filters use `route_cache_action`\n   - Confirm deferred close timeout works correctly\n   - Test observability mode if enabled\n\n3. **Rollback Plan:**\n   - Revert to v1.30 if critical issues found\n   - Have configuration rollback prepared\n\n### Phase 5: Production Deployment\n\n1. **Gradual Rollout:**\n   - Start with low traffic percentage\n   - Gradually increase based on metrics\n   - Monitor for issues\n\n2. **Monitoring:**\n   - Track `clear_route_cache_*` stats changes\n   - Watch for 504 errors\n   - Monitor route cache hit rates\n\n3. **Post-Deployment Verification:**\n   - Confirm expected route cache behavior\n   - Validate error handling works\n   - Review performance metrics\n\n### Phase 6: Cleanup (Post-Deployment)\n\n1. **Remove Old Comments:**\n   - Update documentation to reflect v1.31\n   - Remove references to `disable_clear_route_cache`\n\n2. **Optimize Configuration:**\n   - Fine-tune `route_cache_action` based on metrics\n   - Adjust `deferred_close_timeout` if needed\n\n3. **Plan Future Deprecation:**\n   - Mark calendar for removal of `disable_clear_route_cache` support\n   - Plan removal of `async_mode` (being replaced by `observability_mode`)\n\n---\n\n## Testing Recommendations\n\n### 1. Unit Tests\n\n**Route Cache Behavior:**\n```python\n# Test DEFAULT mode with header mutation\nconfig.route_cache_action = DEFAULT\nconfig.disable_clear_route_cache = False\nresponse.clear_route_cache = True\nheaders_mutated = True\nassert route_cache_cleared() == True\n\n# Test DEFAULT mode without header mutation\nconfig.route_cache_action = DEFAULT\nresponse.clear_route_cache = True\nheaders_mutated = False\nassert route_cache_cleared() == False\n\n# Test CLEAR mode always clears\nconfig.route_cache_action = CLEAR\nresponse.clear_route_cache = False\nheaders_mutated = True\nassert route_cache_cleared() == True\n\n# Test RETAIN mode never clears\nconfig.route_cache_action = RETAIN\nresponse.clear_route_cache = True\nheaders_mutated = True\nassert route_cache_cleared() == False\n```\n\n**Status Code for Timeouts:**\n```python\n# Simulate ext_proc timeout\next_proc_service.delay = 10 * timeout\nresponse = send_request()\nassert response.status_code == 504  # v1.31 change\n# (v1.30 would return 500)\n```\n\n### 2. Integration Tests\n\n**Stream Closure in Observability Mode:**\n```python\nconfig.observability_mode = True\nconfig.deferred_close_timeout = Duration(millis=1000)\n\nrequest = http_request()\nrequest.send()\n\n# Verify stream stays open during deferred_close_timeout\nassert stream_open() for 1 second\n\n# Verify stream closes after timeout\nawait sleep(1.1 seconds)\nassert stream_closed()\n```\n\n**Multiple Ext_Proc Filters:**\n```python\n# Test with different route_cache_action modes\nenv.add_ext_proc(action=DEFAULT, name=\"default_filter\")\nenv.add_ext_proc(action=CLEAR, name=\"clear_filter\")\nenv.add_ext_proc(action=RETAIN, name=\"retain_filter\")\n\n# Verify each behaves independently\nrequest.route_to(\"default_filter\")\nassert default_behavior()\n\nrequest.route_to(\"clear_filter\")\nassert clear_behavior()\n\nrequest.route_to(\"retain_filter\")\nassert retain_behavior()\n```\n\n### 3. Performance Tests\n\n**Route Cache Hit Rates:**\n```\nMetric: Route cache hit ratio\nBefore: baseline\nAfter (DEFAULT): should be same or better\nAfter (CLEAR): likely lower\nAfter (RETAIN): likely higher (but may be incorrect)\n```\n\n**Stream Lifecycle:**\n```\nMetric: Memory usage per stream\nObservability mode with deferred closure:\n- Peak memory: ~same (stream still held)\n- Peak duration: longer (deferred wait)\n- Cleanup: cleaner (less premature closure)\n```\n\n**Error Handling Latency:**\n```\nMetric: Time to return 504 error\nShould be similar to previous 500 error time\n(Just different status code, same timeout)\n```\n\n### 4. Load Testing\n\n**Concurrent Streams in Observability Mode:**\n```\nConfig:\n- observability_mode: true\n- deferred_close_timeout: 5s\n\nLoad: 1000 concurrent requests\nMeasure:\n- Peak connection count (should be manageable)\n- Memory growth over time (should be bounded)\n- Stream closure rate (should be steady)\n```\n\n---\n\n## Rollback Guidance\n\n### If Issues Occur After Upgrade\n\n**Immediate Rollback (0-5 minutes):**\n1. Revert Envoy to v1.30.0\n2. Keep old configuration (both formats supported)\n3. Monitor metrics to verify behavior\n\n**Configuration Rollback (if needed):**\n```yaml\n# If v1.31 config doesn't work\n# Revert to v1.30 style\n\n# Change this:\next_proc:\n  route_cache_action: DEFAULT\n\n# Back to this:\next_proc:\n  disable_clear_route_cache: false\n```\n\n### Troubleshooting Common Issues\n\n**Issue: Configuration validation fails**\n```\nError: \"disable_clear_route_cache and route_cache_action\ncan not be set to none-default at the same time.\"\n\nSolution:\n- Remove disable_clear_route_cache from config\n- Keep only route_cache_action\n```\n\n**Issue: Route cache not clearing as expected**\n```\nProblem: route_cache_action: DEFAULT but cache not cleared\n\nDiagnostic:\n1. Check if headers are being mutated\n2. Check if clear_route_cache flag is set by processor\n3. Check upstream vs downstream filter chain\n\nSolution:\n- Use route_cache_action: CLEAR to force clearing\n- Or verify processor sets clear_route_cache: true\n```\n\n**Issue: Observability mode streams not closing**\n```\nProblem: gRPC connections to ext_proc staying open too long\n\nSolution:\n1. Reduce deferred_close_timeout value\n2. Verify processor is handling stream closure correctly\n3. Check for processor-side hanging connections\n```\n\n**Issue: 504 errors being handled as 500**\n```\nProblem: Downstream expecting 500 from ext_proc timeout\n\nSolution:\n1. Update error handling code to expect 504\n2. Update monitoring/alerting rules\n3. Verify load balancer doesn't treat 504 specially\n```\n\n---\n\n## Pro Tips for Successful Migration\n\n### 1. Gradual Migration by Filter\nMigrate ext_proc filters one at a time rather than all at once:\n```yaml\n# Filter 1: Already migrated (using route_cache_action)\n- name: ext_proc_v1\n  typed_config:\n    \"@type\": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor\n    route_cache_action: DEFAULT\n\n# Filter 2: Still using old style (still works)\n- name: ext_proc_v2\n  typed_config:\n    \"@type\": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor\n    disable_clear_route_cache: false\n```\n\n### 2. Monitor Route Cache Statistics\nTrack the stats to understand behavior:\n- `http.connection_manager.route_cache.hits`\n- `http.connection_manager.route_cache.misses`\n- `ext_proc.clear_route_cache_ignored`\n- `ext_proc.clear_route_cache_disabled`\n\n### 3. Use DEFAULT Mode for Most Cases\nUnless you have specific requirements, use `route_cache_action: DEFAULT`:\n- Most compatible with v1.30 behavior\n- Respects processor decisions\n- Good performance\n\n### 4. Test External Processor Timeout Handling\nExplicitly test what happens when ext_proc times out:\n```bash\n# Simulate delay in ext_proc service\n# Observe that client receives 504 (not 500)\n# Verify retry logic handles 504 appropriately\n```\n\n### 5. Document Configuration Choices\nFor each ext_proc filter, document why you chose a particular `route_cache_action`:\n```yaml\next_proc:\n  # Using CLEAR because this processor frequently modifies routing headers\n  # and we need routes to be recalculated every time\n  route_cache_action: CLEAR\n  grpc_service:\n    envoy_grpc:\n      cluster_name: ext_proc_cluster\n```\n\n---\n\n## Deprecated Features Timeline\n\n| Feature | Deprecated | Removal Target | Status |\n|---------|-----------|-----------------|--------|\n| `disable_clear_route_cache` | v1.31 | v1.32+ | Still functional, use `route_cache_action` |\n| `async_mode` | v1.30+ | TBD | Hidden from API; use `observability_mode` |\n\n---\n\n## Reference\n\n### Proto Messages\n\n**New Enum (v1.31):**\n```protobuf\nmessage ExternalProcessor {\n  enum RouteCacheAction {\n    // DEFAULT: Clear cache only if processor sets clear_route_cache AND headers mutated\n    DEFAULT = 0;\n\n    // CLEAR: Always clear cache (ignore processor's clear_route_cache flag)\n    CLEAR = 1;\n\n    // RETAIN: Never clear cache (ignore processor's clear_route_cache flag)\n    RETAIN = 2;\n  }\n}\n```\n\n**New Field (v1.31):**\n```protobuf\nmessage ExternalProcessor {\n  // Specifies the action to be taken when an external processor response\n  // is received in response to request headers.\n  RouteCacheAction route_cache_action = 18;\n\n  // Timeout for deferred stream closure in observability mode.\n  // Default: 5000 milliseconds\n  google.protobuf.Duration deferred_close_timeout = 19;\n}\n```\n\n**Deprecated Field (still present in v1.31):**\n```protobuf\nmessage ExternalProcessor {\n  // DEPRECATED: Use route_cache_action instead\n  bool disable_clear_route_cache = 11;\n}\n```\n\n### Related Files\n\n**Proto Definitions:**\n- `api/envoy/extensions/filters/http/ext_proc/v3/ext_proc.proto`\n\n**Implementation:**\n- `source/extensions/filters/http/ext_proc/ext_proc.cc`\n- `source/extensions/filters/http/ext_proc/ext_proc.h`\n- `source/extensions/filters/http/ext_proc/processor_state.cc`\n- `source/extensions/filters/http/ext_proc/client_impl.cc`\n\n**Documentation:**\n- `docs/root/configuration/http/http_filters/ext_proc_filter.rst`\n\n### Key Statistics\n\n**New stats (v1.31):** None new\n\n**Updated stats (v1.31):**\n- `clear_route_cache_ignored`: Now incremented when no header mutation detected\n- `clear_route_cache_disabled`: Now incremented when `route_cache_action: RETAIN`\n\n---\n\n## Support and Questions\n\nFor additional help with the migration:\n1. Review the [Envoy documentation](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter)\n2. Check the [release notes](https://github.com/envoyproxy/envoy/releases) for v1.31.0\n3. Consult the [changelog](https://github.com/envoyproxy/envoy/blob/main/changelogs/current.yaml)\n4. Engage with the [Envoy community](https://www.envoyproxy.io/community)\n\n---\n\n**Document Version:** 1.0\n**Envoy Versions Covered:** v1.30.0 \u2192 v1.31.0\n**Last Updated:** March 1, 2026\n",
+            "file_path": "/workspace/documentation.md"
+          },
+          "step_id": 54,
+          "timestamp": "2026-03-01T07:18:23.542Z",
+          "tool": "Write"
+        }
+      ]
+    },
+    "transcript": {
+      "json_line_count": 86,
+      "line_count": 86,
+      "message_event_count": 60,
+      "messages": [
+        {
+          "sequence": 0,
+          "subtype": "init",
+          "text": null,
+          "tool": null,
+          "type": "system"
+        },
+        {
+          "sequence": 1,
+          "subtype": "text",
+          "text": "I'll help you create a comprehensive migration guide for the Envoy External Processing filter from v1.30 to v1.31. Let me start by exploring the workspace structure to understand the codebase.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 2,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 3,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 4,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 5,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 6,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Glob",
+          "type": "assistant"
+        },
+        {
+          "sequence": 7,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Glob",
+          "type": "assistant"
+        },
+        {
+          "sequence": 8,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 9,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 10,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 11,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 12,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 13,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 14,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 15,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 16,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 17,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 18,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Glob",
+          "type": "assistant"
+        },
+        {
+          "sequence": 19,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Glob",
+          "type": "assistant"
+        },
+        {
+          "sequence": 20,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 21,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 22,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 23,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 24,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 25,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 26,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 27,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 28,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 29,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 30,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 31,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 32,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 33,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 34,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 35,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 36,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 37,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 38,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 39,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 40,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 41,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 42,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 43,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 44,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 45,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 46,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 47,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 48,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 49,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 50,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 51,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 52,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 53,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 54,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 55,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 56,
+          "subtype": "text",
+          "text": "Now I'll create a comprehensive migration guide. Let me compile all the changes I've found and write the documentation.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 57,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Write",
+          "type": "assistant"
+        },
+        {
+          "sequence": 58,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 59,
+          "subtype": "text",
+          "text": "Perfect! I've created a comprehensive migration guide for the Envoy External Processing filter from v1.30 to v1.31. Here's what I've documented:  ## Summary of Migration Guide Contents  ### **Breaking Changes** 1. **Rout...",
+          "tool": null,
+          "type": "assistant"
+        }
+      ],
+      "tool_event_count": 28,
+      "tool_events": [
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Glob"
+        },
+        {
+          "timestamp": null,
+          "tool": "Glob"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Glob"
+        },
+        {
+          "timestamp": null,
+          "tool": "Glob"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Write"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "checksums": {
+      "result_json_sha256": "8464c655851241c16ce5ea7858cfb685c398df70036ae4d769c776083522a194",
+      "trajectory_sha256": "78b4d9a40266f8ff0635c37556ba3997a9dfe8a181c439fff2f53051e6d5877b",
+      "transcript_sha256": "25e0272b9c02a1af31dd81cacce663d4903257ceabbb3ab0286047434a998519"
+    },
+    "config": "baseline-local-direct",
+    "result_path": "runs/official/document_haiku_20260301_071228/baseline-local-direct/ccb_document_envoy-migration-doc-gen-001_baseline-local-direct/envoy-migration-doc-gen-001__PbUHEyu/result.json",
+    "run_dir": "document_haiku_20260301_071228",
+    "suite": "csb_sdlc_document",
+    "task_dir": "runs/official/document_haiku_20260301_071228/baseline-local-direct/ccb_document_envoy-migration-doc-gen-001_baseline-local-direct/envoy-migration-doc-gen-001__PbUHEyu",
+    "task_name": "envoy-migration-doc-gen-001",
+    "trace_paths": {
+      "trajectory": "runs/official/document_haiku_20260301_071228/baseline-local-direct/ccb_document_envoy-migration-doc-gen-001_baseline-local-direct/envoy-migration-doc-gen-001__PbUHEyu/agent/trajectory.json",
+      "transcript": "runs/official/document_haiku_20260301_071228/baseline-local-direct/ccb_document_envoy-migration-doc-gen-001_baseline-local-direct/envoy-migration-doc-gen-001__PbUHEyu/agent/claude-code.txt"
+    }
+  },
+  "score": {
+    "reward": 0.72,
+    "status": "passed",
+    "timed_out": false
+  }
+}

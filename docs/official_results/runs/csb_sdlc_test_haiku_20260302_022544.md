@@ -8,7 +8,7 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [openhands-search-file-test-001](../tasks/csb_sdlc_test_haiku_20260302_022544--baseline-local-direct--openhands-search-file-test-001.html) | `passed` | 0.200 | 0.000 | 48 | traj, tx |
-| [test-coverage-gap-002](../tasks/csb_sdlc_test_haiku_20260302_022544--baseline-local-direct--test-coverage-gap-002.html) | `passed` | 0.940 | 0.000 | 67 | traj, tx |
-| [test-integration-001](../tasks/csb_sdlc_test_haiku_20260302_022544--baseline-local-direct--test-integration-001.html) | `passed` | 1.000 | 0.000 | 66 | traj, tx |
-| [test-unitgen-go-001](../tasks/csb_sdlc_test_haiku_20260302_022544--baseline-local-direct--test-unitgen-go-001.html) | `passed` | 0.960 | 0.000 | 50 | traj, tx |
+| [openhands-search-file-test-001](../tasks/csb_sdlc_test_haiku_20260302_022544--baseline-local-direct--openhands-search-file-test-001--f861fcf318.html) | `passed` | 0.200 | 0.000 | 48 | traj, tx |
+| [test-coverage-gap-002](../tasks/csb_sdlc_test_haiku_20260302_022544--baseline-local-direct--test-coverage-gap-002--cf965c0358.html) | `passed` | 0.940 | 0.000 | 67 | traj, tx |
+| [test-integration-001](../tasks/csb_sdlc_test_haiku_20260302_022544--baseline-local-direct--test-integration-001--fb4ca44f8e.html) | `passed` | 1.000 | 0.000 | 66 | traj, tx |
+| [test-unitgen-go-001](../tasks/csb_sdlc_test_haiku_20260302_022544--baseline-local-direct--test-unitgen-go-001--942a9e1d11.html) | `passed` | 0.960 | 0.000 | 50 | traj, tx |

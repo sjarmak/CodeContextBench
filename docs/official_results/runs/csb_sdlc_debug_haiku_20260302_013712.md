@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [teleport-ssh-regression-prove-001](../tasks/csb_sdlc_debug_haiku_20260302_013712--baseline-local-direct--teleport-ssh-regression-prove-001.html) | `passed` | 0.500 | 0.000 | 72 | traj, tx |
+| [teleport-ssh-regression-prove-001](../tasks/csb_sdlc_debug_haiku_20260302_013712--baseline-local-direct--teleport-ssh-regression-prove-001--f44bdeacbd.html) | `passed` | 0.500 | 0.000 | 72 | traj, tx |

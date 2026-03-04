@@ -8,8 +8,8 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [teleport-ssh-regression-prove-001](../tasks/csb_sdlc_debug_haiku_20260302_004746--baseline-local-direct--teleport-ssh-regression-prove-001.html) | `passed` | 1.000 | 0.000 | 128 | traj, tx |
-| [tutanota-search-regression-prove-001](../tasks/csb_sdlc_debug_haiku_20260302_004746--baseline-local-direct--tutanota-search-regression-prove-001.html) | `passed` | 0.500 | 0.000 | 88 | traj, tx |
+| [teleport-ssh-regression-prove-001](../tasks/csb_sdlc_debug_haiku_20260302_004746--baseline-local-direct--teleport-ssh-regression-prove-001--301fafd1b8.html) | `passed` | 1.000 | 0.000 | 128 | traj, tx |
+| [tutanota-search-regression-prove-001](../tasks/csb_sdlc_debug_haiku_20260302_004746--baseline-local-direct--tutanota-search-regression-prove-001--7f69617f43.html) | `passed` | 0.500 | 0.000 | 88 | traj, tx |
 
 ## mcp-remote-direct
 
@@ -19,5 +19,5 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [mcp_teleport-ssh-regression-prove-001_fzxnag](../tasks/csb_sdlc_debug_haiku_20260302_004746--mcp-remote-direct--mcp_teleport-ssh-regression-prove-001_fzxnag.html) | `passed` | 0.500 | 0.800 | 45 | traj, tx |
-| [mcp_tutanota-search-regression-prove-001_s03ep4](../tasks/csb_sdlc_debug_haiku_20260302_004746--mcp-remote-direct--mcp_tutanota-search-regression-prove-001_s03ep4.html) | `passed` | 0.500 | 0.455 | 55 | traj, tx |
+| [mcp_teleport-ssh-regression-prove-001_fzxnag](../tasks/csb_sdlc_debug_haiku_20260302_004746--mcp-remote-direct--mcp_teleport-ssh-regression-prove-001_fzxnag--2b3597fe4b.html) | `passed` | 0.500 | 0.800 | 45 | traj, tx |
+| [mcp_tutanota-search-regression-prove-001_s03ep4](../tasks/csb_sdlc_debug_haiku_20260302_004746--mcp-remote-direct--mcp_tutanota-search-regression-prove-001_s03ep4--8df0a68e2e.html) | `passed` | 0.500 | 0.455 | 55 | traj, tx |

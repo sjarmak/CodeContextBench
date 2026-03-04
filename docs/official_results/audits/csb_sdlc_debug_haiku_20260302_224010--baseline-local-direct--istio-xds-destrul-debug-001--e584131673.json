@@ -1,0 +1,1241 @@
+{
+  "metrics": {
+    "agent_execution_seconds": 119.328672,
+    "cache_tokens": 2185819,
+    "context_metrics": {},
+    "input_tokens": 2186477,
+    "ir_metrics": {},
+    "mcp_ratio": 0.0,
+    "output_tokens": 11960,
+    "search_calls_deepsearch": null,
+    "search_calls_keyword": null,
+    "search_calls_nls": null,
+    "tool_calls_by_name": {
+      "Bash": 16,
+      "Read": 10,
+      "Write": 2
+    },
+    "tool_calls_local": 28,
+    "tool_calls_mcp": 0,
+    "tool_calls_total": 28,
+    "wall_clock_seconds": 142.623179
+  },
+  "parsed_trace": {
+    "trajectory": {
+      "bash_commands": [
+        {
+          "command": "find /workspace -type f -name \"destination_rule.go\" | head -5",
+          "sequence": 6
+        },
+        {
+          "command": "grep -n \"AddConfigDependencies\\|DependsOnConfig\\|configDependencies\" /workspace/pilot/pkg/model/sidecar.go | head -20",
+          "sequence": 13
+        },
+        {
+          "command": "grep -n \"func.*destinationRule\" /workspace/pilot/pkg/model/sidecar.go | head -10",
+          "sequence": 17
+        },
+        {
+          "command": "grep -n \"func.*destinationRule\\|destinationRuleIndex\" /workspace/pilot/pkg/model/push_context.go | head -20",
+          "sequence": 19
+        },
+        {
+          "command": "grep -n \"SetDestinationRules\\|func (ps \\*PushContext).*destRules\" /workspace/pilot/pkg/model/push_context.go | head -20",
+          "sequence": 23
+        },
+        {
+          "command": "find /workspace/pilot/pkg/xds -type f -name \"*.go\" | head -5",
+          "sequence": 28
+        },
+        {
+          "command": "grep -r \"DependsOnConfig\" /workspace/pilot/pkg/xds --include=\"*.go\" | head -10",
+          "sequence": 30
+        },
+        {
+          "command": "grep -r \"ConfigsUpdated\" /workspace/pilot/pkg/model --include=\"*.go\" | grep -E \"(ConfigKey|Name|Namespace)\" | head -15",
+          "sequence": 34
+        },
+        {
+          "command": "find /workspace/pilot/pkg/config -type f -name \"*.go\" | head -5",
+          "sequence": 36
+        },
+        {
+          "command": "grep -r \"ConfigKey{\" /workspace/pilot/pkg --include=\"*.go\" | grep -E \"(Kind|Name|Namespace)\" | head -20",
+          "sequence": 38
+        },
+        {
+          "command": "grep -r \"func.*ConfigKey\" /workspace/pilot/pkg/model --include=\"*.go\" | head -10",
+          "sequence": 40
+        },
+        {
+          "command": "grep -n \"type ConfigKey\\|ConfigKey{\" /workspace/pilot/pkg/model/config.go | head -20",
+          "sequence": 42
+        },
+        {
+          "command": "grep -A3 \"dr.Name\\|dr.Namespace\" /workspace/pilot/pkg/networking/core/v1alpha3/route/route_cache.go | head -20",
+          "sequence": 48
+        },
+        {
+          "command": "grep -B5 -A3 \"model.ConfigKey{Kind: gvk.DestinationRule, Name:\" /workspace/pilot/pkg/networking/core/v1alpha3/cluster_builder.go",
+          "sequence": 50
+        },
+        {
+          "command": "grep -n \"type consolidatedDestRules\\|type processedDestRules\\|destRules.*map\" /workspace/pilot/pkg/model/push_context.go | head -20",
+          "sequence": 52
+        },
+        {
+          "command": "mkdir -p /logs/agent/sessions/projects/-workspace/memory",
+          "sequence": 56
+        }
+      ],
+      "code_changes": [
+        {
+          "content": "# Investigation Report: Stale Envoy Route Configuration After DestinationRule Update in Istio\n\n## Summary\n\nWhen multiple DestinationRules target the same host (e.g., one defining subsets, another defining traffic policy), updating one of them fails to trigger an xDS push to affected Envoy sidecars. The root cause is that Istio's DestinationRule merging logic consolidates multiple DRs into a single merged configuration, but only the first DR's name/namespace metadata survives in the consolidated structure. When the second DR is updated, its ConfigKey is not registered as a dependency, so the xDS push filtering logic correctly determines the proxy doesn't depend on \"what it thinks\" is the changed resource.\n\n## Root Cause\n\nThe root cause spans multiple components in a causal chain:\n\n1. **Primary Issue (destination_rule.go):** The `mergeDestinationRule()` function at line 38-109 modifies the first DestinationRule in-place when merging with subsequent DRs for the same host. The merged DR retains only the first DR's `config.Config` metadata (Name/Namespace) while subsets and traffic policies from all DRs are combined. Contributing DRs' metadata is permanently lost.\n\n2. **Secondary Issue (sidecar.go):** When building SidecarScope dependencies at lines 219-227, the code iterates `out.destinationRules` and registers `ConfigKey{Kind: gvk.DestinationRule, Name: dr.Name, Namespace: dr.Namespace}` for each DR. However, since `destinationRules` contains only the merged DR (with the first DR's name/namespace), only that single ConfigKey is registered, not the original contributing DRs' ConfigKeys.\n\n3. **Push Filtering Gap (proxy_dependencies.go):** When a config update event occurs at line 32-58 (`ConfigAffectsProxy`), the system checks `checkProxyDependencies()` which calls `SidecarScope.DependsOnConfig()` at line 64. The `DependsOnConfig()` method (sidecar.go:523-539) performs a hash lookup in `configDependencies` using `config.HashCode()`. If the updated DR is the one that was merged away, its ConfigKey won't be found, returning false and causing the push to be incorrectly skipped.\n\n## Evidence\n\n### 1. DestinationRule Merging (destination_rule.go:38-109)\n\n**File:** `pilot/pkg/model/destination_rule.go`\n\nThe function signature indicates it merges DRs for a given host:\n```go\nfunc (ps *PushContext) mergeDestinationRule(p *consolidatedDestRules,\n    destRuleConfig config.Config, exportToMap map[visibility.Instance]bool)\n```\n\n**Critical merge behavior (lines 41-104):**\n```go\nif mdrList, exists := p.destRules[resolvedHost]; exists {\n    for i, mdr := range mdrList {\n        // ... validation logic ...\n\n        // Deep copy existing DR at index i\n        copied := mdr.DeepCopy()\n        p.destRules[resolvedHost][i] = &copied\n        mergedRule := copied.Spec.(*networking.DestinationRule)\n\n        // Merge subsets from new rule into existing rule\n        for _, subset := range rule.Subsets {\n            // ... add subset logic ...\n            mergedRule.Subsets = append(mergedRule.Subsets, subset)\n        }\n\n        // Merge traffic policy if not present\n        if mergedRule.TrafficPolicy == nil && rule.TrafficPolicy != nil {\n            mergedRule.TrafficPolicy = rule.TrafficPolicy\n        }\n    }\n    // Only add as new entry if workload selectors don't match\n    if addRuleToProcessedDestRules {\n        p.destRules[resolvedHost] = append(p.destRules[resolvedHost], &destRuleConfig)\n    }\n    return  // <<< Returns here, doesn't add contributing DR separately\n}\n// First time seeing this host\np.destRules[resolvedHost] = append(p.destRules[resolvedHost], &destRuleConfig)\n```\n\n**Key insight:** The merged DR keeps its original metadata (`Name`, `Namespace` from `destRuleConfig`), while the incoming DR's metadata is permanently discarded. The first DR processed becomes the \"primary\" entry with merged content from all subsequent DRs.\n\n### 2. Dependency Registration (sidecar.go:209-227)\n\n**File:** `pilot/pkg/model/sidecar.go`\n\nIn `DefaultSidecarScopeForNamespace()`:\n```go\n// Line 209-211: Get merged DRs from PushContext\nif dr := ps.destinationRule(configNamespace, s); dr != nil {\n    out.destinationRules[s.Hostname] = dr  // dr is []*config.Config (slice)\n}\n\n// Lines 219-227: Register dependencies for EACH DR\nfor _, drList := range out.destinationRules {\n    for _, dr := range drList {\n        out.AddConfigDependencies(ConfigKey{\n            Kind:      gvk.DestinationRule,\n            Name:      dr.Name,              // <<< Uses merged DR's name\n            Namespace: dr.Namespace,          // <<< Uses merged DR's namespace\n        })\n    }\n}\n```\n\nThe `ps.destinationRule()` call (line 209) returns `[]*config.Config` from the merged `destRules` index in `push_context.go:990-1066`. Since the index was built by `mergeDestinationRule()`, it contains the consolidated DRs with only the first DR's metadata.\n\nThe loop at lines 219-227 registers **only one ConfigKey per hostname**, corresponding to the merged DR's metadata.\n\n### 3. Push Filtering with DependsOnConfig (proxy_dependencies.go:32-74)\n\n**File:** `pilot/pkg/xds/proxy_dependencies.go`\n\n```go\nfunc ConfigAffectsProxy(req *model.PushRequest, proxy *model.Proxy) bool {\n    // req.ConfigsUpdated contains ConfigKey{Kind, Name, Namespace} for changed resources\n\n    for config := range req.ConfigsUpdated {\n        // ... type-specific filtering ...\n\n        if affected && checkProxyDependencies(proxy, config) {\n            return true  // Push needed\n        }\n    }\n    return false  // No push\n}\n\nfunc checkProxyDependencies(proxy *model.Proxy, config model.ConfigKey) bool {\n    switch proxy.Type {\n    case model.SidecarProxy:\n        if proxy.SidecarScope.DependsOnConfig(config) {\n            return true\n        } else if proxy.PrevSidecarScope != nil &&\n                  proxy.PrevSidecarScope.DependsOnConfig(config) {\n            return true\n        }\n    }\n    return false  // <<< Returns false if config not in dependencies\n}\n```\n\n**File:** `pilot/pkg/model/sidecar.go` (DependsOnConfig method)\n\n```go\nfunc (sc *SidecarScope) DependsOnConfig(config ConfigKey) bool {\n    // ... simplified logging logic ...\n    _, exists := sc.configDependencies[config.HashCode()]\n    return exists  // False if ConfigKey not registered\n}\n\nfunc (sc *SidecarScope) AddConfigDependencies(dependencies ...ConfigKey) {\n    // ... logic ...\n    sc.configDependencies[config.HashCode()] = struct{}{}\n}\n```\n\n**File:** `pilot/pkg/model/config.go` (ConfigKey.HashCode)\n\n```go\nfunc (key ConfigKey) HashCode() uint64 {\n    hash := md5.New()\n    for _, v := range []string{\n        key.Name,\n        key.Namespace,\n        key.Kind.Kind,\n        key.Kind.Group,\n        key.Kind.Version,\n    } {\n        hash.Write([]byte(v))\n    }\n    return binary.BigEndian.Uint64(hash.Sum(tmp[:0]))\n}\n```\n\n**The Gap:** When `reviews-subsets` DR is updated, a ConfigKey is created with:\n- `Kind: gvk.DestinationRule`\n- `Name: \"reviews-subsets\"`\n- `Namespace: \"default\"`\n\nBut the proxy's `configDependencies` only contains the hash for:\n- `Name: \"reviews-traffic-policy\"` (the first DR that was merged)\n- `Namespace: \"default\"`\n\nThe hash lookup fails, `DependsOnConfig()` returns `false`, and the push is skipped.\n\n### 4. Route/Cluster Configuration Dependencies (route_cache.go, cluster_builder.go)\n\n**File:** `pilot/pkg/networking/core/v1alpha3/route/route_cache.go`\n\nThe route cache also builds ConfigKey dependencies:\n```go\nconfigs = append(configs, model.ConfigKey{\n    Kind:      gvk.DestinationRule,\n    Name:      dr.Name,              // <<< Merged DR's name\n    Namespace: dr.Namespace,          // <<< Merged DR's namespace\n})\n```\n\n**File:** `pilot/pkg/networking/core/v1alpha3/cluster_builder.go`\n\n```go\nfunc (t clusterCache) DependentConfigs() []model.ConfigKey {\n    configs := []model.ConfigKey{}\n    if t.destinationRule != nil {\n        configs = append(configs, model.ConfigKey{\n            Kind:      gvk.DestinationRule,\n            Name:      t.destinationRule.Name,       // <<< Merged DR's name\n            Namespace: t.destinationRule.Namespace,  // <<< Merged DR's namespace\n        })\n    }\n    return configs\n}\n```\n\nThese components depend on the DR metadata from `SidecarScope.destinationRules`, which is already contaminated with only the first DR's metadata.\n\n### 5. PushContext.destinationRule() and Merging Pipeline (push_context.go:990-1066, 1668-1768)\n\n**File:** `pilot/pkg/model/push_context.go`\n\nThe `SetDestinationRules()` function at line 1672 is called during PushContext initialization:\n\n```go\nfunc (ps *PushContext) SetDestinationRules(configs []config.Config) {\n    // Lines 1675-1676: Sort by creation time\n    sortConfigByCreationTime(configs)\n\n    // Lines 1681-1743: For each namespace+host, call mergeDestinationRule\n    for i := range configs {\n        rule := configs[i].Spec.(*networking.DestinationRule)\n        rule.Host = string(ResolveShortnameToFQDN(rule.Host, configs[i].Meta))\n        exportToMap := make(map[visibility.Instance]bool)\n\n        // ... exportTo logic ...\n\n        // Lines 1716, 1739, 1742: Merge each DR into consolidated structure\n        ps.mergeDestinationRule(namespaceLocalDestRules[configs[i].Namespace],\n            configs[i], exportToMap)\n    }\n\n    // Lines 1764-1767: Store in index\n    ps.destinationRuleIndex.namespaceLocal = namespaceLocalDestRules\n    ps.destinationRuleIndex.exportedByNamespace = exportedDestRulesByNamespace\n    ps.destinationRuleIndex.rootNamespaceLocal = rootNamespaceLocalDestRules\n}\n```\n\nThe `destinationRule()` method (line 990-1066) retrieves merged DRs from these indexes:\n```go\nfunc (ps *PushContext) destinationRule(proxyNameSpace string, service *Service) []*config.Config {\n    // Returns []*config.Config from the merged index\n    // Each entry is the consolidated DR with only first DR's metadata\n}\n```\n\nThis obscures the fact that multiple DRs contributed to the merged configuration.\n\n## Affected Components\n\n1. **pilot/pkg/model/destination_rule.go** - `mergeDestinationRule()` function performs in-place merge\n2. **pilot/pkg/model/push_context.go** - `SetDestinationRules()` and `destinationRule()` manage the merged index\n3. **pilot/pkg/model/sidecar.go** - `DefaultSidecarScopeForNamespace()` and `ConvertToSidecarScope()` register dependencies based on merged DRs\n4. **pilot/pkg/xds/proxy_dependencies.go** - `ConfigAffectsProxy()` and `checkProxyDependencies()` filter pushes based on incomplete dependency information\n5. **pilot/pkg/networking/core/v1alpha3/cluster_builder.go** - `DependentConfigs()` uses merged DR metadata\n6. **pilot/pkg/networking/core/v1alpha3/route/route_cache.go** - Routes also depend on merged DR metadata\n7. **pilot/pkg/config/schema/gvk/** - The GroupVersionKind definitions used throughout\n\n## Causal Chain\n\n1. **Symptom:** Envoy sidecar continues serving stale cluster and route configuration after a DestinationRule is updated.\n\n2. **Hop 1 - Configuration Collection:** When PushContext is initialized, `SetDestinationRules()` receives all DestinationRule configs from the API server.\n\n3. **Hop 2 - Merging Loss of Identity:** For multiple DRs targeting the same host (e.g., `reviews.default.svc.cluster.local`), `mergeDestinationRule()` is called. The function merges subsets and traffic policies from all DRs into the **first DR**, modifying it in-place and discarding the subsequent DRs' metadata entirely.\n\n4. **Hop 3 - Incomplete Dependency Registration:** When building SidecarScope for a proxy, the code iterates the merged `destinationRules` index and calls `AddConfigDependencies()` with each DR's name/namespace. Since only the merged DR exists in the index (with the first original DR's metadata), only that one ConfigKey is registered in `configDependencies`.\n\n5. **Hop 4 - Update Event Triggers Wrong ConfigKey:** An operator updates the second DestinationRule (e.g., `reviews-subsets`). The config store generates a ConfigKey with:\n   - `Name: \"reviews-subsets\"`\n   - `Namespace: \"default\"`\n   - This ConfigKey is added to the PushRequest's `ConfigsUpdated` set.\n\n6. **Hop 5 - Push Filter Finds No Match:** When determining if the proxy needs a push, `ConfigAffectsProxy()` calls `checkProxyDependencies()`, which calls `proxy.SidecarScope.DependsOnConfig()` with the `reviews-subsets` ConfigKey.\n\n7. **Hop 6 - Hash Lookup Fails:** The `DependsOnConfig()` method computes the ConfigKey's hash and looks it up in the proxy's `configDependencies` map. The map only contains the hash for `reviews-traffic-policy` (the first DR), not `reviews-subsets`. The lookup fails.\n\n8. **Root Cause Effect:** `DependsOnConfig()` returns `false`, indicating the proxy does NOT depend on the updated config. `ConfigAffectsProxy()` returns `false`, and the xDS push to this proxy is **skipped**.\n\n9. **Final Symptom:** The Envoy sidecar never receives the updated cluster/route configuration. The `/debug/config_dump` endpoint shows the old configuration. Only restarting the pod (which rebuilds the SidecarScope with a new PushContext) picks up the change.\n\n## Recommendation\n\n### Fix Strategy\n\nThe fix requires tracking **all contributing DRs** (not just the merged one) when consolidating multiple DRs for the same host:\n\n1. **Preserve Contributing DR Metadata:** Modify `mergeDestinationRule()` to return or track a list of all DestinationRules that contributed to the merged configuration, not just the merged spec.\n\n2. **Register All Contributing DRs as Dependencies:** Update `DefaultSidecarScopeForNamespace()` and `ConvertToSidecarScope()` to register ConfigKeys for **all** contributing DRs, not just the merged DR.\n\n3. **Option A - Modify consolidatedDestRules:**\n   - Change the structure to store not just the merged `config.Config`, but also a slice of contributing DR ConfigKeys:\n   ```go\n   type consolidatedDestRules struct {\n       destRules map[host.Name][]*config.Config\n       contributingDRs map[host.Name][]ConfigKey  // <<< NEW\n   }\n   ```\n   - Update `mergeDestinationRule()` to populate `contributingDRs` instead of discarding them.\n   - When registering dependencies in `sidecar.go`, iterate both the merged DR and the contributing DR list.\n\n4. **Option B - Create a Wrapper Type:**\n   - Create a new wrapper type that pairs a merged `config.Config` with the list of contributing DRs:\n   ```go\n   type MergedDestinationRule struct {\n       Config          *config.Config\n       ContributingDRs []ConfigKey\n   }\n   ```\n   - Update all index structures to use this wrapper type instead of `*config.Config`.\n\n### Diagnostic Steps\n\nTo verify the root cause in an affected cluster:\n\n1. **Check SidecarScope Dependencies:**\n   ```bash\n   # Enable debug logging in Pilot for sidecar scope creation\n   # The logs should show ConfigKey dependencies being registered\n   ```\n\n2. **Verify Configuration Index:**\n   ```bash\n   # Inspect Pilot's internal state to see if destinationRules index\n   # contains only one DR per hostname when multiple DRs exist\n   ```\n\n3. **Test Incremental Push:**\n   - Create two DRs for the same host\n   - Update the second DR\n   - Check Pilot logs to see if `ConfigAffectsProxy()` returns false for proxies in the affected namespace\n\n4. **Trace ConfigKey Hash:**\n   - When a DR is updated, log the ConfigKey hash generated\n   - Cross-reference with proxy's `configDependencies` map to confirm mismatch\n\n### Prevention\n\n- Add validation tests in `TestDestinationRuleConfiguration` to verify that all contributing DRs are properly tracked when multiple DRs target the same host.\n- Add a metric to track \"dropped DR metadata during merge\" to detect this issue in production.\n- Document the DestinationRule merging behavior and its limitations in the Istio API documentation.\n\n## References\n\n- `pilot/pkg/model/destination_rule.go:38-109` - Core merge logic\n- `pilot/pkg/model/sidecar.go:219-227` - Dependency registration loop\n- `pilot/pkg/model/push_context.go:1672-1768` - SetDestinationRules consolidation\n- `pilot/pkg/xds/proxy_dependencies.go:32-74` - Push filtering decision\n- `pilot/pkg/model/sidecar.go:523-539` - DependsOnConfig hash lookup\n- `pilot/pkg/model/config.go:54-74` - ConfigKey definition and hashing\n",
+          "file_path": "/logs/agent/investigation.md",
+          "sequence": 58,
+          "type": "write"
+        },
+        {
+          "content": "# Istio Investigation Memory\n\n## DestinationRule Merging Bug\n\n**Status:** Investigation Complete\n\n### Key Findings\n\nWhen multiple DestinationRules target the same host:\n- `mergeDestinationRule()` (destination_rule.go:38-109) merges DRs in-place into the first DR\n- Only the first DR's name/namespace metadata survives\n- Contributing DRs' ConfigKeys are never registered as dependencies\n- When a contributed DR is updated, its ConfigKey is not in proxy's configDependencies\n- xDS push filtering correctly rejects the push because DependsOnConfig() returns false\n- Result: Envoy sidecar gets stale configuration\n\n### Root Cause Location\n\n**Primary:** `pilot/pkg/model/destination_rule.go:38-109` - `mergeDestinationRule()`\n- Merges multiple DRs for same host into first DR\n- Loses metadata of contributing DRs permanently\n\n**Secondary Gap:** `pilot/pkg/model/sidecar.go:219-227` - Dependency registration\n- Only registers merged DR's ConfigKey, not contributing DRs'\n\n**Push Filter:** `pilot/pkg/xds/proxy_dependencies.go:60-74` - `checkProxyDependencies()`\n- Uses `SidecarScope.DependsOnConfig()` which does hash lookup\n- Hash lookup fails for updated DR if it's not the \"first\" DR\n\n### Fix Strategy\n\nNeed to track ALL contributing DRs when consolidating multiple DRs:\n1. Modify `consolidatedDestRules` to store contributing DR ConfigKeys\n2. Update `mergeDestinationRule()` to populate this list\n3. Update `sidecar.go` dependency registration to include all contributing DRs\n4. Option: Create `MergedDestinationRule` wrapper type\n\n### Affected Packages\n\n- `pilot/pkg/model/` - merging and dependency tracking\n- `pilot/pkg/xds/` - push filtering logic\n- `pilot/pkg/networking/core/` - route and cluster building\n- `pilot/pkg/config/` - ConfigKey definition and hashing\n",
+          "file_path": "/logs/agent/sessions/projects/-workspace/memory/MEMORY.md",
+          "sequence": 60,
+          "type": "write"
+        }
+      ],
+      "conversation_events": [
+        {
+          "payload": {},
+          "sequence": 1,
+          "subtype": "message",
+          "text": "# Investigation: Stale Envoy Route Configuration After DestinationRule Update in Istio\n\n**Repository:** istio/istio\n**Task Type:** Deep Causal Chain (investigation only \u2014 no code fixes)\n\n## Scenario\n\nAn Istio service mesh operator reports that updating a DestinationRule in their cluster **silently fails to propagate** to Envoy sidecars. Specifically, when they have multiple DestinationRules for the same host (e.g., one defining subsets, another defining traffic policy), updating one of them does not trigger an xDS push \u2014 the Envoy sidecar continues serving the **stale** cluster and route configuration.\n\nThe operator has two DestinationRules for `reviews.default.svc.cluster.local`:\n\n**DR-1 (traffic policy):**\n```yaml\napiVersion: networking.istio.io/v1alpha3\nkind: DestinationRule\nmetadata:\n  name: reviews-traffic-policy\n  namespace: default\nspec:\n  host: reviews.default.svc.cluster.local\n  trafficPolicy:\n    connectionPool:\n      tcp:\n        maxConnections: 100\n      http:\n        h2UpgradePolicy: UPGRADE\n```\n\n**DR-2 (subsets):**\n```yaml\napiVersion: networking.istio.io/v1alpha3\nkind: DestinationRule\nmetadata:\n  name: reviews-subsets\n  namespace: default\nspec:\n  host: reviews.default.svc.cluster.local\n  subsets:\n    - name: v1\n      labels:\n        version: v1\n    - name: v2\n      labels:\n        version: v2\n```\n\nWhen the operator updates `reviews-subsets` (e.g., adding a `v3` subset), the Envoy sidecar does **not** receive updated CDS/RDS config. Only restarting the pod picks up the change. Updating `reviews-traffic-policy` also has no effect.\n\nIstio debug endpoint `GET /debug/config_dump` on the sidecar shows the old configuration even after the DestinationRule has been updated in the Kubernetes API server.\n\n## Your Task\n\nInvestigate the root cause of why updating a merged DestinationRule fails to trigger an xDS push, and produce a report at `/logs/agent/investigation.md`.\n\nYour report MUST cover:\n\n1. **How Istio merges multiple DestinationRules for the same host** \u2014 specifically the `mergeDestinationRule()` function in `pilot/pkg/model/destination_rule.go` and how it combines subsets and traffic policies from multiple DRs into a single merged config\n2. **How the merged DestinationRule loses identity metadata** \u2014 when two DRs are merged, only one DR's `config.Config` metadata (name/namespace) survives in the `consolidatedDestRules` structure. The metadata of contributing DRs is lost.\n3. **How SidecarScope builds config dependencies** \u2014 the `AddConfigDependencies()` calls in `pilot/pkg/model/sidecar.go` that register which config resources a proxy depends on. Specifically, how `DefaultSidecarScopeForNamespace()` and `ConvertToSidecarScope()` iterate over `destinationRules` and add `ConfigKey{Kind: DestinationRule, Name: dr.Name, Namespace: dr.Namespace}` for each DR\n4. **The specific gap: only one DR's ConfigKey is registered** \u2014 because the merged DR has only one name/namespace, `AddConfigDependencies` registers only that one DR. The other contributing DR(s) are not tracked.\n5. **How the xDS push filter uses DependsOnConfig** \u2014 when a config change event occurs, `pilot/pkg/xds/` calls `SidecarScope.DependsOnConfig(configKey)` to decide if the proxy needs a push. If the updated DR is the one whose metadata was lost during merging, `DependsOnConfig` returns `false` and the push is **incorrectly skipped**.\n6. **The relationship between PushContext.destinationRule() and the merge pipeline** \u2014 how `pilot/pkg/model/push_context.go` stores the `destinationRuleIndex` and how `destinationRule()` returns the merged config, obscuring the fact that multiple DRs contributed to it\n\n## Output Requirements\n\nWrite your investigation report to `/logs/agent/investigation.md` with these sections:\n\n```\n# Investigation Report\n\n## Summary\n<1-2 sentence finding>\n\n## Root Cause\n<Specific file, function, and mechanism>\n\n## Evidence\n<Code references with file paths and line numbers>\n\n## Affected Components\n<List of packages/modules impacted>\n\n## Causal Chain\n<Ordered list: symptom \u2192 intermediate hops \u2192 root cause>\n\n## Recommendation\n<Fix strategy and diagnostic steps>\n```\n\n## Constraints\n\n- Do NOT write any code fixes\n- Do NOT modify any source files\n- Your job is investigation and analysis only\n- The causal chain spans at least 4 packages: `pilot/pkg/model/`, `pilot/pkg/xds/`, `pilot/pkg/networking/core/`, and `pilot/pkg/config/`\n- Focus on how the DestinationRule merging in `destination_rule.go` interacts with dependency tracking in `sidecar.go` and push filtering in the xDS layer",
+          "timestamp": "2026-03-02T22:40:51.982Z",
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "payload": {},
+          "sequence": 3,
+          "subtype": "message",
+          "text": "I'll help you investigate this Istio issue. Let me start by checking my memory for any relevant context, then systematically explore the codebase to understand the root cause.",
+          "timestamp": "2026-03-02T22:40:55.043Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 4,
+          "subtype": "message",
+          "text": "Executed Read toolu_01DhZxFNmP56Ao8LMrnv37PZ",
+          "timestamp": "2026-03-02T22:40:55.369Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 6,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01HEsAf5fefqSjqchbewv3MK",
+          "timestamp": "2026-03-02T22:40:56.978Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 8,
+          "subtype": "message",
+          "text": "Executed Read toolu_01CAydLBLw4EgyXidM24aWQx",
+          "timestamp": "2026-03-02T22:40:58.453Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 10,
+          "subtype": "message",
+          "text": "Now let me check the sidecar.go file to understand how dependencies are tracked:",
+          "timestamp": "2026-03-02T22:41:01.732Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 11,
+          "subtype": "message",
+          "text": "Executed Read toolu_011g3SuG67En9VBN55JWhLje",
+          "timestamp": "2026-03-02T22:41:01.949Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 13,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01T8UqWjkve3n7UVNAfRTtCw",
+          "timestamp": "2026-03-02T22:41:04.327Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 15,
+          "subtype": "message",
+          "text": "Executed Read toolu_01MudRgz1TwVrSzvQ3qBMA6h",
+          "timestamp": "2026-03-02T22:41:06.826Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 17,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01E9g8ZHJKBwGdSNUrd3AQHt",
+          "timestamp": "2026-03-02T22:41:10.168Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 19,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01Tgz3927YzvXCYF8St4HD3k",
+          "timestamp": "2026-03-02T22:41:11.521Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 21,
+          "subtype": "message",
+          "text": "Executed Read toolu_01Ti7FGQtfLgLSKa8r8uJxyK",
+          "timestamp": "2026-03-02T22:41:12.888Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 23,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01YKuhipXUkctZ1iN1oxSRBo",
+          "timestamp": "2026-03-02T22:41:14.883Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 25,
+          "subtype": "message",
+          "text": "Executed Read toolu_01PPg4WeFC1mMXXHawWT3Mok",
+          "timestamp": "2026-03-02T22:41:16.035Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 27,
+          "subtype": "message",
+          "text": "Let me now look at the xDS push filtering to see how it decides whether to push:",
+          "timestamp": "2026-03-02T22:41:21.315Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 28,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01RLMXj3uPcCU9mnUbzyub3H",
+          "timestamp": "2026-03-02T22:41:21.522Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 30,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01VFAZ2YiVAoaEfSTqGJ7msU",
+          "timestamp": "2026-03-02T22:41:23.149Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 32,
+          "subtype": "message",
+          "text": "Executed Read toolu_01F7U3S6BGmPNTT2K8dqPp6A",
+          "timestamp": "2026-03-02T22:41:24.381Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 34,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01WuRoeGMnbabsV1pXQCjKis",
+          "timestamp": "2026-03-02T22:41:27.868Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 36,
+          "subtype": "message",
+          "text": "Executed Bash toolu_014GEobuGnB4y4o4KwwHZnMe",
+          "timestamp": "2026-03-02T22:41:29.206Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 38,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01YbFZQFyv19PKyvjJEKsqt3",
+          "timestamp": "2026-03-02T22:41:30.803Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 40,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01P5Mon5iEAu9MWfWZq78nPt",
+          "timestamp": "2026-03-02T22:41:32.495Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 42,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01RbSThYKK2YE2FGzDqAwEk8",
+          "timestamp": "2026-03-02T22:41:33.688Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 44,
+          "subtype": "message",
+          "text": "Executed Read toolu_016JBQ6UV9KQjCeFiP2GQoRB",
+          "timestamp": "2026-03-02T22:41:34.700Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 46,
+          "subtype": "message",
+          "text": "Executed Read toolu_01VRpGu1Zu4amwqjHGK2Khg2",
+          "timestamp": "2026-03-02T22:41:37.816Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 48,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01Qtuq2eiNG4jPUR9nyQR1B5",
+          "timestamp": "2026-03-02T22:41:45.323Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 50,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01CsHJBbCEhCpWSnjCvCqVw3",
+          "timestamp": "2026-03-02T22:41:46.790Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 52,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01NVRA36udZZ3iZoE4dF9mAh",
+          "timestamp": "2026-03-02T22:41:48.886Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 54,
+          "subtype": "message",
+          "text": "Executed Read toolu_01U9sFmQPGofvnZUanDVu4mZ",
+          "timestamp": "2026-03-02T22:41:50.076Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 56,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01HP4hLA6fk7yWesTGCpd8R2",
+          "timestamp": "2026-03-02T22:41:51.859Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 58,
+          "subtype": "message",
+          "text": "Executed Write toolu_01UVXqHtnDWbCgGTo9A3bjU9",
+          "timestamp": "2026-03-02T22:42:32.394Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 60,
+          "subtype": "message",
+          "text": "Executed Write toolu_01BqfWFL9THVAWj3tyfRQPUF",
+          "timestamp": "2026-03-02T22:42:38.673Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 62,
+          "subtype": "message",
+          "text": "Perfect! I've completed a comprehensive investigation of the Istio DestinationRule stale configuration issue. Here's what I found:\n\n## Summary\n\nThe root cause is a **metadata loss during DestinationRule merging** that cascades through the dependency tracking and xDS push filtering systems.\n\n## Key Findings\n\n### The Core Issue\n\nWhen Istio merges multiple DestinationRules for the same host (e.g., one with subsets, another with traffic policy), the `mergeDestinationRule()` function consolidates them into a **single merged configuration** using the **first DR's metadata** (name/namespace). The contributing DRs' metadata is permanently discarded.\n\n### The Causal Chain\n\n1. **Merging Phase** (`destination_rule.go:38-109`): Multiple DRs for `reviews.default.svc.cluster.local` are processed. The first DR gets all subsets and traffic policies merged into it in-place. The second DR's metadata is lost.\n\n2. **Dependency Registration** (`sidecar.go:219-227`): When building SidecarScope dependencies, only the **merged DR's ConfigKey** is registered. The ConfigKey for the second DR (e.g., `reviews-subsets`) is never added to `configDependencies`.\n\n3. **Update Event** (`proxy_dependencies.go:32-74`): When the operator updates `reviews-subsets`, a ConfigKey is created with its actual name/namespace. But the proxy's `configDependencies` only contains the hash for the merged DR's metadata.\n\n4. **Push Filter Failure** (`sidecar.go:523-539`): The `DependsOnConfig()` method performs a hash lookup. The ConfigKey for `reviews-subsets` is not found, returning `false`. The xDS push is skipped.\n\n5. **Result**: Envoy sidecar continues using stale configuration. Only pod restart picks up the change.\n\n### Affected Components (4+ packages)\n\n- `pilot/pkg/model/destination_rule.go` - In-place merging loses metadata\n- `pilot/pkg/model/sidecar.go` - Registers only merged DR as dependency  \n- `pilot/pkg/xds/proxy_dependencies.go` - Push filter works correctly but with incomplete dependency info\n- `pilot/pkg/networking/core/v1alpha3/` - Route and cluster builders depend on merged DR metadata\n- `pilot/pkg/model/push_context.go` - Maintains the merged index\n\n### The Gap in the System\n\nThe push filtering logic in `proxy_dependencies.go` is actually working **correctly** \u2014 it's supposed to check if a proxy depends on a config before pushing. The problem is that the dependency information flowing in from `sidecar.go` is **incomplete**. It only tracks the first DR's ConfigKey, not all contributing DRs.\n\n## Full Report\n\nI've written a detailed investigation report at `/logs/agent/investigation.md` that includes:\n\n- Exact code references with line numbers\n- The complete causal chain from symptom to root cause\n- Evidence from 7 different source files  \n- Specific diagnostic steps to verify the issue\n- Fix strategies (creating a wrapper type or extending the consolidatedDestRules structure)\n- Prevention recommendations\n\nThe investigation is **analysis-only** with no code modifications, as requested.",
+          "timestamp": "2026-03-02T22:42:49.159Z",
+          "tool": null,
+          "type": "agent"
+        }
+      ],
+      "step_count": 62,
+      "tool_counts_by_name": {
+        "Bash": 16,
+        "Read": 10,
+        "Write": 2
+      },
+      "tool_event_count": 28,
+      "tool_events": [
+        {
+          "arguments": {
+            "file_path": "/logs/agent/sessions/projects/-workspace/memory"
+          },
+          "step_id": 4,
+          "timestamp": "2026-03-02T22:40:55.369Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "command": "find /workspace -type f -name \"destination_rule.go\" | head -5",
+            "description": "Find destination_rule.go files"
+          },
+          "step_id": 6,
+          "timestamp": "2026-03-02T22:40:56.978Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/pilot/pkg/model/destination_rule.go"
+          },
+          "step_id": 8,
+          "timestamp": "2026-03-02T22:40:58.453Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/pilot/pkg/model/sidecar.go",
+            "limit": 100
+          },
+          "step_id": 11,
+          "timestamp": "2026-03-02T22:41:01.949Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "command": "grep -n \"AddConfigDependencies\\|DependsOnConfig\\|configDependencies\" /workspace/pilot/pkg/model/sidecar.go | head -20",
+            "description": "Find dependency tracking methods in sidecar.go"
+          },
+          "step_id": 13,
+          "timestamp": "2026-03-02T22:41:04.327Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/pilot/pkg/model/sidecar.go",
+            "limit": 150,
+            "offset": 200
+          },
+          "step_id": 15,
+          "timestamp": "2026-03-02T22:41:06.826Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "command": "grep -n \"func.*destinationRule\" /workspace/pilot/pkg/model/sidecar.go | head -10",
+            "description": "Find destinationRule method in sidecar.go"
+          },
+          "step_id": 17,
+          "timestamp": "2026-03-02T22:41:10.168Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "grep -n \"func.*destinationRule\\|destinationRuleIndex\" /workspace/pilot/pkg/model/push_context.go | head -20",
+            "description": "Find destinationRule method and index in push_context.go"
+          },
+          "step_id": 19,
+          "timestamp": "2026-03-02T22:41:11.521Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/pilot/pkg/model/push_context.go",
+            "limit": 100,
+            "offset": 990
+          },
+          "step_id": 21,
+          "timestamp": "2026-03-02T22:41:12.888Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "command": "grep -n \"SetDestinationRules\\|func (ps \\*PushContext).*destRules\" /workspace/pilot/pkg/model/push_context.go | head -20",
+            "description": "Find SetDestinationRules in push_context.go"
+          },
+          "step_id": 23,
+          "timestamp": "2026-03-02T22:41:14.883Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/pilot/pkg/model/push_context.go",
+            "limit": 200,
+            "offset": 1668
+          },
+          "step_id": 25,
+          "timestamp": "2026-03-02T22:41:16.035Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "command": "find /workspace/pilot/pkg/xds -type f -name \"*.go\" | head -5",
+            "description": "Find xDS related files"
+          },
+          "step_id": 28,
+          "timestamp": "2026-03-02T22:41:21.522Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "grep -r \"DependsOnConfig\" /workspace/pilot/pkg/xds --include=\"*.go\" | head -10",
+            "description": "Find usage of DependsOnConfig in xds package"
+          },
+          "step_id": 30,
+          "timestamp": "2026-03-02T22:41:23.149Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/pilot/pkg/xds/proxy_dependencies.go"
+          },
+          "step_id": 32,
+          "timestamp": "2026-03-02T22:41:24.381Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "command": "grep -r \"ConfigsUpdated\" /workspace/pilot/pkg/model --include=\"*.go\" | grep -E \"(ConfigKey|Name|Namespace)\" | head -15",
+            "description": "Find where ConfigKey is created in push events"
+          },
+          "step_id": 34,
+          "timestamp": "2026-03-02T22:41:27.868Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "find /workspace/pilot/pkg/config -type f -name \"*.go\" | head -5",
+            "description": "Find config related files"
+          },
+          "step_id": 36,
+          "timestamp": "2026-03-02T22:41:29.206Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "grep -r \"ConfigKey{\" /workspace/pilot/pkg --include=\"*.go\" | grep -E \"(Kind|Name|Namespace)\" | head -20",
+            "description": "Find where ConfigKey is instantiated"
+          },
+          "step_id": 38,
+          "timestamp": "2026-03-02T22:41:30.803Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "grep -r \"func.*ConfigKey\" /workspace/pilot/pkg/model --include=\"*.go\" | head -10",
+            "description": "Find ConfigKey related functions"
+          },
+          "step_id": 40,
+          "timestamp": "2026-03-02T22:41:32.495Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "grep -n \"type ConfigKey\\|ConfigKey{\" /workspace/pilot/pkg/model/config.go | head -20",
+            "description": "Find ConfigKey definition"
+          },
+          "step_id": 42,
+          "timestamp": "2026-03-02T22:41:33.688Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/pilot/pkg/model/config.go",
+            "limit": 80,
+            "offset": 50
+          },
+          "step_id": 44,
+          "timestamp": "2026-03-02T22:41:34.700Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/pilot/pkg/model/sidecar.go",
+            "limit": 120,
+            "offset": 100
+          },
+          "step_id": 46,
+          "timestamp": "2026-03-02T22:41:37.816Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "command": "grep -A3 \"dr.Name\\|dr.Namespace\" /workspace/pilot/pkg/networking/core/v1alpha3/route/route_cache.go | head -20",
+            "description": "Check how route cache uses DR name and namespace"
+          },
+          "step_id": 48,
+          "timestamp": "2026-03-02T22:41:45.323Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "grep -B5 -A3 \"model.ConfigKey{Kind: gvk.DestinationRule, Name:\" /workspace/pilot/pkg/networking/core/v1alpha3/cluster_builder.go",
+            "description": "Check how cluster builder uses DR name and namespace"
+          },
+          "step_id": 50,
+          "timestamp": "2026-03-02T22:41:46.790Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "command": "grep -n \"type consolidatedDestRules\\|type processedDestRules\\|destRules.*map\" /workspace/pilot/pkg/model/push_context.go | head -20",
+            "description": "Find consolidatedDestRules definition"
+          },
+          "step_id": 52,
+          "timestamp": "2026-03-02T22:41:48.886Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "file_path": "/workspace/pilot/pkg/model/push_context.go",
+            "limit": 30,
+            "offset": 250
+          },
+          "step_id": 54,
+          "timestamp": "2026-03-02T22:41:50.076Z",
+          "tool": "Read"
+        },
+        {
+          "arguments": {
+            "command": "mkdir -p /logs/agent/sessions/projects/-workspace/memory",
+            "description": "Create memory directory for investigation notes"
+          },
+          "step_id": 56,
+          "timestamp": "2026-03-02T22:41:51.859Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "content": "# Investigation Report: Stale Envoy Route Configuration After DestinationRule Update in Istio\n\n## Summary\n\nWhen multiple DestinationRules target the same host (e.g., one defining subsets, another defining traffic policy), updating one of them fails to trigger an xDS push to affected Envoy sidecars. The root cause is that Istio's DestinationRule merging logic consolidates multiple DRs into a single merged configuration, but only the first DR's name/namespace metadata survives in the consolidated structure. When the second DR is updated, its ConfigKey is not registered as a dependency, so the xDS push filtering logic correctly determines the proxy doesn't depend on \"what it thinks\" is the changed resource.\n\n## Root Cause\n\nThe root cause spans multiple components in a causal chain:\n\n1. **Primary Issue (destination_rule.go):** The `mergeDestinationRule()` function at line 38-109 modifies the first DestinationRule in-place when merging with subsequent DRs for the same host. The merged DR retains only the first DR's `config.Config` metadata (Name/Namespace) while subsets and traffic policies from all DRs are combined. Contributing DRs' metadata is permanently lost.\n\n2. **Secondary Issue (sidecar.go):** When building SidecarScope dependencies at lines 219-227, the code iterates `out.destinationRules` and registers `ConfigKey{Kind: gvk.DestinationRule, Name: dr.Name, Namespace: dr.Namespace}` for each DR. However, since `destinationRules` contains only the merged DR (with the first DR's name/namespace), only that single ConfigKey is registered, not the original contributing DRs' ConfigKeys.\n\n3. **Push Filtering Gap (proxy_dependencies.go):** When a config update event occurs at line 32-58 (`ConfigAffectsProxy`), the system checks `checkProxyDependencies()` which calls `SidecarScope.DependsOnConfig()` at line 64. The `DependsOnConfig()` method (sidecar.go:523-539) performs a hash lookup in `configDependencies` using `config.HashCode()`. If the updated DR is the one that was merged away, its ConfigKey won't be found, returning false and causing the push to be incorrectly skipped.\n\n## Evidence\n\n### 1. DestinationRule Merging (destination_rule.go:38-109)\n\n**File:** `pilot/pkg/model/destination_rule.go`\n\nThe function signature indicates it merges DRs for a given host:\n```go\nfunc (ps *PushContext) mergeDestinationRule(p *consolidatedDestRules,\n    destRuleConfig config.Config, exportToMap map[visibility.Instance]bool)\n```\n\n**Critical merge behavior (lines 41-104):**\n```go\nif mdrList, exists := p.destRules[resolvedHost]; exists {\n    for i, mdr := range mdrList {\n        // ... validation logic ...\n\n        // Deep copy existing DR at index i\n        copied := mdr.DeepCopy()\n        p.destRules[resolvedHost][i] = &copied\n        mergedRule := copied.Spec.(*networking.DestinationRule)\n\n        // Merge subsets from new rule into existing rule\n        for _, subset := range rule.Subsets {\n            // ... add subset logic ...\n            mergedRule.Subsets = append(mergedRule.Subsets, subset)\n        }\n\n        // Merge traffic policy if not present\n        if mergedRule.TrafficPolicy == nil && rule.TrafficPolicy != nil {\n            mergedRule.TrafficPolicy = rule.TrafficPolicy\n        }\n    }\n    // Only add as new entry if workload selectors don't match\n    if addRuleToProcessedDestRules {\n        p.destRules[resolvedHost] = append(p.destRules[resolvedHost], &destRuleConfig)\n    }\n    return  // <<< Returns here, doesn't add contributing DR separately\n}\n// First time seeing this host\np.destRules[resolvedHost] = append(p.destRules[resolvedHost], &destRuleConfig)\n```\n\n**Key insight:** The merged DR keeps its original metadata (`Name`, `Namespace` from `destRuleConfig`), while the incoming DR's metadata is permanently discarded. The first DR processed becomes the \"primary\" entry with merged content from all subsequent DRs.\n\n### 2. Dependency Registration (sidecar.go:209-227)\n\n**File:** `pilot/pkg/model/sidecar.go`\n\nIn `DefaultSidecarScopeForNamespace()`:\n```go\n// Line 209-211: Get merged DRs from PushContext\nif dr := ps.destinationRule(configNamespace, s); dr != nil {\n    out.destinationRules[s.Hostname] = dr  // dr is []*config.Config (slice)\n}\n\n// Lines 219-227: Register dependencies for EACH DR\nfor _, drList := range out.destinationRules {\n    for _, dr := range drList {\n        out.AddConfigDependencies(ConfigKey{\n            Kind:      gvk.DestinationRule,\n            Name:      dr.Name,              // <<< Uses merged DR's name\n            Namespace: dr.Namespace,          // <<< Uses merged DR's namespace\n        })\n    }\n}\n```\n\nThe `ps.destinationRule()` call (line 209) returns `[]*config.Config` from the merged `destRules` index in `push_context.go:990-1066`. Since the index was built by `mergeDestinationRule()`, it contains the consolidated DRs with only the first DR's metadata.\n\nThe loop at lines 219-227 registers **only one ConfigKey per hostname**, corresponding to the merged DR's metadata.\n\n### 3. Push Filtering with DependsOnConfig (proxy_dependencies.go:32-74)\n\n**File:** `pilot/pkg/xds/proxy_dependencies.go`\n\n```go\nfunc ConfigAffectsProxy(req *model.PushRequest, proxy *model.Proxy) bool {\n    // req.ConfigsUpdated contains ConfigKey{Kind, Name, Namespace} for changed resources\n\n    for config := range req.ConfigsUpdated {\n        // ... type-specific filtering ...\n\n        if affected && checkProxyDependencies(proxy, config) {\n            return true  // Push needed\n        }\n    }\n    return false  // No push\n}\n\nfunc checkProxyDependencies(proxy *model.Proxy, config model.ConfigKey) bool {\n    switch proxy.Type {\n    case model.SidecarProxy:\n        if proxy.SidecarScope.DependsOnConfig(config) {\n            return true\n        } else if proxy.PrevSidecarScope != nil &&\n                  proxy.PrevSidecarScope.DependsOnConfig(config) {\n            return true\n        }\n    }\n    return false  // <<< Returns false if config not in dependencies\n}\n```\n\n**File:** `pilot/pkg/model/sidecar.go` (DependsOnConfig method)\n\n```go\nfunc (sc *SidecarScope) DependsOnConfig(config ConfigKey) bool {\n    // ... simplified logging logic ...\n    _, exists := sc.configDependencies[config.HashCode()]\n    return exists  // False if ConfigKey not registered\n}\n\nfunc (sc *SidecarScope) AddConfigDependencies(dependencies ...ConfigKey) {\n    // ... logic ...\n    sc.configDependencies[config.HashCode()] = struct{}{}\n}\n```\n\n**File:** `pilot/pkg/model/config.go` (ConfigKey.HashCode)\n\n```go\nfunc (key ConfigKey) HashCode() uint64 {\n    hash := md5.New()\n    for _, v := range []string{\n        key.Name,\n        key.Namespace,\n        key.Kind.Kind,\n        key.Kind.Group,\n        key.Kind.Version,\n    } {\n        hash.Write([]byte(v))\n    }\n    return binary.BigEndian.Uint64(hash.Sum(tmp[:0]))\n}\n```\n\n**The Gap:** When `reviews-subsets` DR is updated, a ConfigKey is created with:\n- `Kind: gvk.DestinationRule`\n- `Name: \"reviews-subsets\"`\n- `Namespace: \"default\"`\n\nBut the proxy's `configDependencies` only contains the hash for:\n- `Name: \"reviews-traffic-policy\"` (the first DR that was merged)\n- `Namespace: \"default\"`\n\nThe hash lookup fails, `DependsOnConfig()` returns `false`, and the push is skipped.\n\n### 4. Route/Cluster Configuration Dependencies (route_cache.go, cluster_builder.go)\n\n**File:** `pilot/pkg/networking/core/v1alpha3/route/route_cache.go`\n\nThe route cache also builds ConfigKey dependencies:\n```go\nconfigs = append(configs, model.ConfigKey{\n    Kind:      gvk.DestinationRule,\n    Name:      dr.Name,              // <<< Merged DR's name\n    Namespace: dr.Namespace,          // <<< Merged DR's namespace\n})\n```\n\n**File:** `pilot/pkg/networking/core/v1alpha3/cluster_builder.go`\n\n```go\nfunc (t clusterCache) DependentConfigs() []model.ConfigKey {\n    configs := []model.ConfigKey{}\n    if t.destinationRule != nil {\n        configs = append(configs, model.ConfigKey{\n            Kind:      gvk.DestinationRule,\n            Name:      t.destinationRule.Name,       // <<< Merged DR's name\n            Namespace: t.destinationRule.Namespace,  // <<< Merged DR's namespace\n        })\n    }\n    return configs\n}\n```\n\nThese components depend on the DR metadata from `SidecarScope.destinationRules`, which is already contaminated with only the first DR's metadata.\n\n### 5. PushContext.destinationRule() and Merging Pipeline (push_context.go:990-1066, 1668-1768)\n\n**File:** `pilot/pkg/model/push_context.go`\n\nThe `SetDestinationRules()` function at line 1672 is called during PushContext initialization:\n\n```go\nfunc (ps *PushContext) SetDestinationRules(configs []config.Config) {\n    // Lines 1675-1676: Sort by creation time\n    sortConfigByCreationTime(configs)\n\n    // Lines 1681-1743: For each namespace+host, call mergeDestinationRule\n    for i := range configs {\n        rule := configs[i].Spec.(*networking.DestinationRule)\n        rule.Host = string(ResolveShortnameToFQDN(rule.Host, configs[i].Meta))\n        exportToMap := make(map[visibility.Instance]bool)\n\n        // ... exportTo logic ...\n\n        // Lines 1716, 1739, 1742: Merge each DR into consolidated structure\n        ps.mergeDestinationRule(namespaceLocalDestRules[configs[i].Namespace],\n            configs[i], exportToMap)\n    }\n\n    // Lines 1764-1767: Store in index\n    ps.destinationRuleIndex.namespaceLocal = namespaceLocalDestRules\n    ps.destinationRuleIndex.exportedByNamespace = exportedDestRulesByNamespace\n    ps.destinationRuleIndex.rootNamespaceLocal = rootNamespaceLocalDestRules\n}\n```\n\nThe `destinationRule()` method (line 990-1066) retrieves merged DRs from these indexes:\n```go\nfunc (ps *PushContext) destinationRule(proxyNameSpace string, service *Service) []*config.Config {\n    // Returns []*config.Config from the merged index\n    // Each entry is the consolidated DR with only first DR's metadata\n}\n```\n\nThis obscures the fact that multiple DRs contributed to the merged configuration.\n\n## Affected Components\n\n1. **pilot/pkg/model/destination_rule.go** - `mergeDestinationRule()` function performs in-place merge\n2. **pilot/pkg/model/push_context.go** - `SetDestinationRules()` and `destinationRule()` manage the merged index\n3. **pilot/pkg/model/sidecar.go** - `DefaultSidecarScopeForNamespace()` and `ConvertToSidecarScope()` register dependencies based on merged DRs\n4. **pilot/pkg/xds/proxy_dependencies.go** - `ConfigAffectsProxy()` and `checkProxyDependencies()` filter pushes based on incomplete dependency information\n5. **pilot/pkg/networking/core/v1alpha3/cluster_builder.go** - `DependentConfigs()` uses merged DR metadata\n6. **pilot/pkg/networking/core/v1alpha3/route/route_cache.go** - Routes also depend on merged DR metadata\n7. **pilot/pkg/config/schema/gvk/** - The GroupVersionKind definitions used throughout\n\n## Causal Chain\n\n1. **Symptom:** Envoy sidecar continues serving stale cluster and route configuration after a DestinationRule is updated.\n\n2. **Hop 1 - Configuration Collection:** When PushContext is initialized, `SetDestinationRules()` receives all DestinationRule configs from the API server.\n\n3. **Hop 2 - Merging Loss of Identity:** For multiple DRs targeting the same host (e.g., `reviews.default.svc.cluster.local`), `mergeDestinationRule()` is called. The function merges subsets and traffic policies from all DRs into the **first DR**, modifying it in-place and discarding the subsequent DRs' metadata entirely.\n\n4. **Hop 3 - Incomplete Dependency Registration:** When building SidecarScope for a proxy, the code iterates the merged `destinationRules` index and calls `AddConfigDependencies()` with each DR's name/namespace. Since only the merged DR exists in the index (with the first original DR's metadata), only that one ConfigKey is registered in `configDependencies`.\n\n5. **Hop 4 - Update Event Triggers Wrong ConfigKey:** An operator updates the second DestinationRule (e.g., `reviews-subsets`). The config store generates a ConfigKey with:\n   - `Name: \"reviews-subsets\"`\n   - `Namespace: \"default\"`\n   - This ConfigKey is added to the PushRequest's `ConfigsUpdated` set.\n\n6. **Hop 5 - Push Filter Finds No Match:** When determining if the proxy needs a push, `ConfigAffectsProxy()` calls `checkProxyDependencies()`, which calls `proxy.SidecarScope.DependsOnConfig()` with the `reviews-subsets` ConfigKey.\n\n7. **Hop 6 - Hash Lookup Fails:** The `DependsOnConfig()` method computes the ConfigKey's hash and looks it up in the proxy's `configDependencies` map. The map only contains the hash for `reviews-traffic-policy` (the first DR), not `reviews-subsets`. The lookup fails.\n\n8. **Root Cause Effect:** `DependsOnConfig()` returns `false`, indicating the proxy does NOT depend on the updated config. `ConfigAffectsProxy()` returns `false`, and the xDS push to this proxy is **skipped**.\n\n9. **Final Symptom:** The Envoy sidecar never receives the updated cluster/route configuration. The `/debug/config_dump` endpoint shows the old configuration. Only restarting the pod (which rebuilds the SidecarScope with a new PushContext) picks up the change.\n\n## Recommendation\n\n### Fix Strategy\n\nThe fix requires tracking **all contributing DRs** (not just the merged one) when consolidating multiple DRs for the same host:\n\n1. **Preserve Contributing DR Metadata:** Modify `mergeDestinationRule()` to return or track a list of all DestinationRules that contributed to the merged configuration, not just the merged spec.\n\n2. **Register All Contributing DRs as Dependencies:** Update `DefaultSidecarScopeForNamespace()` and `ConvertToSidecarScope()` to register ConfigKeys for **all** contributing DRs, not just the merged DR.\n\n3. **Option A - Modify consolidatedDestRules:**\n   - Change the structure to store not just the merged `config.Config`, but also a slice of contributing DR ConfigKeys:\n   ```go\n   type consolidatedDestRules struct {\n       destRules map[host.Name][]*config.Config\n       contributingDRs map[host.Name][]ConfigKey  // <<< NEW\n   }\n   ```\n   - Update `mergeDestinationRule()` to populate `contributingDRs` instead of discarding them.\n   - When registering dependencies in `sidecar.go`, iterate both the merged DR and the contributing DR list.\n\n4. **Option B - Create a Wrapper Type:**\n   - Create a new wrapper type that pairs a merged `config.Config` with the list of contributing DRs:\n   ```go\n   type MergedDestinationRule struct {\n       Config          *config.Config\n       ContributingDRs []ConfigKey\n   }\n   ```\n   - Update all index structures to use this wrapper type instead of `*config.Config`.\n\n### Diagnostic Steps\n\nTo verify the root cause in an affected cluster:\n\n1. **Check SidecarScope Dependencies:**\n   ```bash\n   # Enable debug logging in Pilot for sidecar scope creation\n   # The logs should show ConfigKey dependencies being registered\n   ```\n\n2. **Verify Configuration Index:**\n   ```bash\n   # Inspect Pilot's internal state to see if destinationRules index\n   # contains only one DR per hostname when multiple DRs exist\n   ```\n\n3. **Test Incremental Push:**\n   - Create two DRs for the same host\n   - Update the second DR\n   - Check Pilot logs to see if `ConfigAffectsProxy()` returns false for proxies in the affected namespace\n\n4. **Trace ConfigKey Hash:**\n   - When a DR is updated, log the ConfigKey hash generated\n   - Cross-reference with proxy's `configDependencies` map to confirm mismatch\n\n### Prevention\n\n- Add validation tests in `TestDestinationRuleConfiguration` to verify that all contributing DRs are properly tracked when multiple DRs target the same host.\n- Add a metric to track \"dropped DR metadata during merge\" to detect this issue in production.\n- Document the DestinationRule merging behavior and its limitations in the Istio API documentation.\n\n## References\n\n- `pilot/pkg/model/destination_rule.go:38-109` - Core merge logic\n- `pilot/pkg/model/sidecar.go:219-227` - Dependency registration loop\n- `pilot/pkg/model/push_context.go:1672-1768` - SetDestinationRules consolidation\n- `pilot/pkg/xds/proxy_dependencies.go:32-74` - Push filtering decision\n- `pilot/pkg/model/sidecar.go:523-539` - DependsOnConfig hash lookup\n- `pilot/pkg/model/config.go:54-74` - ConfigKey definition and hashing\n",
+            "file_path": "/logs/agent/investigation.md"
+          },
+          "step_id": 58,
+          "timestamp": "2026-03-02T22:42:32.394Z",
+          "tool": "Write"
+        },
+        {
+          "arguments": {
+            "content": "# Istio Investigation Memory\n\n## DestinationRule Merging Bug\n\n**Status:** Investigation Complete\n\n### Key Findings\n\nWhen multiple DestinationRules target the same host:\n- `mergeDestinationRule()` (destination_rule.go:38-109) merges DRs in-place into the first DR\n- Only the first DR's name/namespace metadata survives\n- Contributing DRs' ConfigKeys are never registered as dependencies\n- When a contributed DR is updated, its ConfigKey is not in proxy's configDependencies\n- xDS push filtering correctly rejects the push because DependsOnConfig() returns false\n- Result: Envoy sidecar gets stale configuration\n\n### Root Cause Location\n\n**Primary:** `pilot/pkg/model/destination_rule.go:38-109` - `mergeDestinationRule()`\n- Merges multiple DRs for same host into first DR\n- Loses metadata of contributing DRs permanently\n\n**Secondary Gap:** `pilot/pkg/model/sidecar.go:219-227` - Dependency registration\n- Only registers merged DR's ConfigKey, not contributing DRs'\n\n**Push Filter:** `pilot/pkg/xds/proxy_dependencies.go:60-74` - `checkProxyDependencies()`\n- Uses `SidecarScope.DependsOnConfig()` which does hash lookup\n- Hash lookup fails for updated DR if it's not the \"first\" DR\n\n### Fix Strategy\n\nNeed to track ALL contributing DRs when consolidating multiple DRs:\n1. Modify `consolidatedDestRules` to store contributing DR ConfigKeys\n2. Update `mergeDestinationRule()` to populate this list\n3. Update `sidecar.go` dependency registration to include all contributing DRs\n4. Option: Create `MergedDestinationRule` wrapper type\n\n### Affected Packages\n\n- `pilot/pkg/model/` - merging and dependency tracking\n- `pilot/pkg/xds/` - push filtering logic\n- `pilot/pkg/networking/core/` - route and cluster building\n- `pilot/pkg/config/` - ConfigKey definition and hashing\n",
+            "file_path": "/logs/agent/sessions/projects/-workspace/memory/MEMORY.md"
+          },
+          "step_id": 60,
+          "timestamp": "2026-03-02T22:42:38.673Z",
+          "tool": "Write"
+        }
+      ]
+    },
+    "transcript": {
+      "json_line_count": 92,
+      "line_count": 92,
+      "message_event_count": 61,
+      "messages": [
+        {
+          "sequence": 0,
+          "subtype": "init",
+          "text": null,
+          "tool": null,
+          "type": "system"
+        },
+        {
+          "sequence": 1,
+          "subtype": "text",
+          "text": "I'll help you investigate this Istio issue. Let me start by checking my memory for any relevant context, then systematically explore the codebase to understand the root cause.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 2,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 3,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 4,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 5,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 6,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 7,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 8,
+          "subtype": "text",
+          "text": "Now let me check the sidecar.go file to understand how dependencies are tracked:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 9,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 10,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 11,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 12,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 13,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 14,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 15,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 16,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 17,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 18,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 19,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 20,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 21,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 22,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 23,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 24,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 25,
+          "subtype": "text",
+          "text": "Let me now look at the xDS push filtering to see how it decides whether to push:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 26,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 27,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 28,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 29,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 30,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 31,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 32,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 33,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 34,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 35,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 36,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 37,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 38,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 39,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 40,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 41,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 42,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 43,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 44,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 45,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 46,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 47,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 48,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 49,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 50,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 51,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 52,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Read",
+          "type": "assistant"
+        },
+        {
+          "sequence": 53,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 54,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 55,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 56,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Write",
+          "type": "assistant"
+        },
+        {
+          "sequence": 57,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 58,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Write",
+          "type": "assistant"
+        },
+        {
+          "sequence": 59,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 60,
+          "subtype": "text",
+          "text": "Perfect! I've completed a comprehensive investigation of the Istio DestinationRule stale configuration issue. Here's what I found:  ## Summary  The root cause is a **metadata loss during DestinationRule merging** that ca...",
+          "tool": null,
+          "type": "assistant"
+        }
+      ],
+      "tool_event_count": 28,
+      "tool_events": [
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Read"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Write"
+        },
+        {
+          "timestamp": null,
+          "tool": "Write"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "checksums": {
+      "result_json_sha256": "2941ab5123d4f79626fdea957dd080be973f0536b29e1a898778ee359aee3bb2",
+      "trajectory_sha256": "a989b9436d4535ffdcb3e6ee5b18c836791a8ad7f5289da313139b200d0b4eae",
+      "transcript_sha256": "7730bc2cc1434c4dff4a44dc1a8b8aafb5fa759ffc7ad3c0711798cb405d4e30"
+    },
+    "config": "baseline-local-direct",
+    "result_path": "runs/official/csb_sdlc_debug_haiku_20260302_224010/baseline-local-direct/2026-03-02__22-40-30/istio-xds-destrul-debug-001__s2PxqYU/result.json",
+    "run_dir": "csb_sdlc_debug_haiku_20260302_224010",
+    "suite": "csb_sdlc_debug",
+    "task_dir": "runs/official/csb_sdlc_debug_haiku_20260302_224010/baseline-local-direct/2026-03-02__22-40-30/istio-xds-destrul-debug-001__s2PxqYU",
+    "task_name": "istio-xds-destrul-debug-001",
+    "trace_paths": {
+      "trajectory": "runs/official/csb_sdlc_debug_haiku_20260302_224010/baseline-local-direct/2026-03-02__22-40-30/istio-xds-destrul-debug-001__s2PxqYU/agent/trajectory.json",
+      "transcript": "runs/official/csb_sdlc_debug_haiku_20260302_224010/baseline-local-direct/2026-03-02__22-40-30/istio-xds-destrul-debug-001__s2PxqYU/agent/claude-code.txt"
+    }
+  },
+  "score": {
+    "reward": 0.95,
+    "status": "passed",
+    "timed_out": false
+  }
+}

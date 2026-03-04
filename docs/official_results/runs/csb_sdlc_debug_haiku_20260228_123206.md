@@ -8,5 +8,5 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [linux-acpi-backlight-fault-001](../tasks/csb_sdlc_debug_haiku_20260228_123206--baseline-local-direct--linux-acpi-backlight-fault-001.html) | `passed` | 0.300 | 0.000 | 17 | traj, tx |
-| [linux-nfs-inode-revalidate-fault-001](../tasks/csb_sdlc_debug_haiku_20260228_123206--baseline-local-direct--linux-nfs-inode-revalidate-fault-001.html) | `passed` | 0.300 | 0.000 | 65 | traj, tx |
+| [linux-acpi-backlight-fault-001](../tasks/csb_sdlc_debug_haiku_20260228_123206--baseline-local-direct--linux-acpi-backlight-fault-001--e25782b3cd.html) | `passed` | 0.300 | 0.000 | 17 | traj, tx |
+| [linux-nfs-inode-revalidate-fault-001](../tasks/csb_sdlc_debug_haiku_20260228_123206--baseline-local-direct--linux-nfs-inode-revalidate-fault-001--aab457ee0c.html) | `passed` | 0.300 | 0.000 | 65 | traj, tx |

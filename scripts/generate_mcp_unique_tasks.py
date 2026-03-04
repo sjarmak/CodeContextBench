@@ -2,7 +2,7 @@
 """Generate MCP-unique benchmark task directories from the use case registry.
 
 Reads configs/use_case_registry.json and fixtures/repo_sets/*.json, fills
-templates from templates/mcp_unique_task/, and writes task directories under
+templates from templates/csb-org/, and writes task directories under
 benchmarks/<mcp_suite>/<task_slug>/.
 
 Usage:
@@ -112,7 +112,7 @@ def _fixture_path(project_root: Path, repo_set_id: str) -> Path:
 
 
 def _templates_dir(project_root: Path) -> Path:
-    return project_root / "templates" / "mcp_unique_task"
+    return project_root / "templates" / "csb-org"
 
 
 def _task_dir(project_root: Path, mcp_suite: str, task_slug: str) -> Path:

@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [mcp_openlibrary-fntocli-adapter-fix-001_3citzd](../tasks/csb_sdlc_fix_haiku_20260302_015531--mcp-remote-direct--mcp_openlibrary-fntocli-adapter-fix-001_3citzd.html) | `passed` | 1.000 | 0.250 | 24 | traj, tx |
+| [mcp_openlibrary-fntocli-adapter-fix-001_3citzd](../tasks/csb_sdlc_fix_haiku_20260302_015531--mcp-remote-direct--mcp_openlibrary-fntocli-adapter-fix-001_3citzd--b390922412.html) | `passed` | 1.000 | 0.250 | 24 | traj, tx |

@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [ccx-migration-276](../tasks/csb_org_migration_haiku_20260301_235018--baseline-local-direct--ccx-migration-276.html) | `passed` | 0.741 | 0.000 | 32 | traj, tx |
+| [ccx-migration-276](../tasks/csb_org_migration_haiku_20260301_235018--baseline-local-direct--ccx-migration-276--c0be8efa23.html) | `passed` | 0.741 | 0.000 | 32 | traj, tx |

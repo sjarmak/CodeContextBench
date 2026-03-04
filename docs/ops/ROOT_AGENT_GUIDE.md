@@ -5,11 +5,11 @@ Keep it small. Use it to route to the right workflow and local guide, not as the
 full operations manual.
 
 ## Non-Negotiables
-- All work happens on `main`. Do not create feature branches.
+- All work happens on `main` by default. If you use feature branches, keep them small, short-lived, and easy to fast-forward back into `main`.
 - Every `harbor run` must be gated by interactive confirmation.
 - Before commit/push, run `python3 scripts/repo_health.py` (or `--quick` for docs/config-only changes).
-- **Daytona is the default execution environment.** Do not use local Docker unless a task is Daytona-incompatible (18 sweap-images tasks). See `docs/DAYTONA.md`.
-- **Parallelism**: Daytona runs 62 task pairs (124 sandboxes, 1 headroom from Tier 3 limit of 125). Local Docker runs at 12 slots (3 accounts x 4 sessions). Never artificially cap Daytona parallelism below these values.
+- Prefer a **remote execution environment** (e.g., Daytona) for large benchmark runs; use local Docker only when a task’s image or registry is incompatible with your cloud environment. See `docs/DAYTONA.md`.
+- Set **parallelism based on your own account and model limits**. Avoid exceeding documented concurrency or rate caps for your environment or provider.
 
 ## Minimal Loading Policy
 - Default load order: this file + one relevant skill + one relevant doc.

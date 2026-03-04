@@ -1,0 +1,1163 @@
+{
+  "metrics": {
+    "agent_execution_seconds": 194.98293,
+    "cache_tokens": 3194639,
+    "context_metrics": {},
+    "input_tokens": 3195094,
+    "ir_metrics": {},
+    "mcp_ratio": 0.8846153846153846,
+    "output_tokens": 17627,
+    "search_calls_deepsearch": null,
+    "search_calls_keyword": null,
+    "search_calls_nls": null,
+    "tool_calls_by_name": {
+      "Bash": 1,
+      "Write": 1,
+      "bash": 1,
+      "mcp__sourcegraph__sg_commit_search": 2,
+      "mcp__sourcegraph__sg_diff_search": 2,
+      "mcp__sourcegraph__sg_keyword_search": 9,
+      "mcp__sourcegraph__sg_list_files": 1,
+      "mcp__sourcegraph__sg_nls_search": 1,
+      "mcp__sourcegraph__sg_read_file": 8
+    },
+    "tool_calls_local": 3,
+    "tool_calls_mcp": 23,
+    "tool_calls_total": 26,
+    "wall_clock_seconds": 213.447201
+  },
+  "parsed_trace": {
+    "trajectory": {
+      "bash_commands": [
+        {
+          "command": "cat /logs/agent/sessions/projects/-workspace/ff4b3d24-ed86-492c-a51d-07abee1d7189/tool-results/mcp-sourcegraph-sg_read_file-1772491271743.txt | head -100",
+          "sequence": 9
+        }
+      ],
+      "code_changes": [
+        {
+          "content": "# Investigation Report: Remote-Write Queue Resharding Failure\n\n## Summary\n\nThe intermittent stalling of remote-write shards after resharding is caused by a **race condition in the metrics counter reset** combined with **asynchronous queue shutdown timing**. When `start()` is called on new shards, it immediately resets `pendingSamples` to zero, but old shards are still in the background flushing data and decrementing this same counter. Additionally, samples enqueued during the transition window between `stop()` and `start()` may end up in queues that are being hard-shutdown before they can be sent.\n\n## Root Cause\n\n**Location:** `storage/remote/queue_manager.go:1237-1266` (`start()` method) and lines 1184-1199 (`reshardLoop()`)\n\n**Mechanism:**\n\nThe resharding process has a critical flaw in how it manages the pending samples metric during queue transitions:\n\n1. **Premature Counter Reset** (line 1241):\n   ```go\n   func (s *shards) start(n int) {\n       s.mtx.Lock()\n       defer s.mtx.Unlock()\n       s.qm.metrics.pendingSamples.Set(0)  // <-- RESETS COUNTER IMMEDIATELY\n       ...\n   }\n   ```\n   This resets the counter to 0 immediately when new shards start.\n\n2. **Race with Old Shards Cleanup**:\n   ```go\n   func (t *QueueManager) reshardLoop() {\n       for {\n           select {\n           case numShards := <-t.reshardChan:\n               t.shards.stop()         // Old shards close softShutdown, start flushing\n               t.shards.start(numShards)  // New shards created, counter reset to 0\n           ...\n           }\n       }\n   }\n   ```\n\n   Between `stop()` and `start()`:\n   - Old shards close `softShutdown` channel to block new enqueues\n   - Old shards begin `FlushAndShutdown()` on their queues\n   - If flush takes longer than expected, old shards hard-shutdown via context cancellation\n   - **Concurrently**: `start()` resets `pendingSamples` to 0\n   - Old shards' `runShard()` goroutines continue decrementing this counter as they finish sending\n\n3. **Hard Shutdown Timeout Behavior** (line 1286-1294):\n   ```go\n   select {\n   case <-s.done:\n       return\n   case <-time.After(s.qm.flushDeadline):  // Typically 30 seconds\n   }\n   // Force an unclean shutdown\n   s.hardShutdown()  // Cancels context, old runShard goroutines exit\n   <-s.done\n   ```\n\n   If old shards don't complete flushing within `flushDeadline`:\n   - Context is cancelled via `s.hardShutdown()`\n   - Remaining samples in old queues are dropped\n   - Old `runShard` goroutines decrement `pendingSamples` for these dropped samples\n   - But counter was already reset to 0, so it never recovers\n\n## Evidence\n\n### Code References\n\n**File: `storage/remote/queue_manager.go`**\n\n- **Lines 1071-1074** (`updateShardsLoop`): Updates `t.numShards` immediately after sending reshape request, before actual resharding completes\n  ```go\n  case t.reshardChan <- desiredShards:\n      t.logger.Info(\"Remote storage resharding\", \"from\", t.numShards, \"to\", desiredShards)\n      t.numShards = desiredShards  // <-- Updated before reshardLoop processes it\n  ```\n\n- **Lines 1184-1199** (`reshardLoop`): Asynchronously processes reshard requests\n  ```go\n  func (t *QueueManager) reshardLoop() {\n      for {\n          select {\n          case numShards := <-t.reshardChan:\n              t.shards.stop()         // Closes softShutdown, begins flushing\n              t.shards.start(numShards)  // Creates new queues, resets counter\n          ...\n          }\n      }\n  }\n  ```\n\n- **Lines 1237-1266** (`start`): Problematic counter reset\n  ```go\n  func (s *shards) start(n int) {\n      s.mtx.Lock()\n      defer s.mtx.Unlock()\n      s.qm.metrics.pendingSamples.Set(0)  // BUG: Resets while old shards still active\n      ...\n      s.queues = newQueues\n      ...\n      for i := range n {\n          go s.runShard(hardShutdownCtx, i, newQueues[i])\n      }\n  }\n  ```\n\n- **Lines 1325-1327** (enqueue): Increments counter when samples enqueued\n  ```go\n  case tSample:\n      s.qm.metrics.pendingSamples.Inc()\n      s.enqueuedSamples.Inc()\n  ```\n\n- **Lines 1689-1691** (updateMetrics): Decrements counter when samples sent\n  ```go\n  s.qm.metrics.pendingSamples.Sub(float64(sampleCount))\n  ```\n\n- **Lines 1563-1578** (runShard hard shutdown): Drops samples when context cancelled\n  ```go\n  case <-ctx.Done():\n      droppedSamples := int(s.enqueuedSamples.Load())\n      s.qm.metrics.pendingSamples.Sub(float64(droppedSamples))  // <-- Sub after Set(0)\n      ...\n  ```\n\n### Intermittency Explanation\n\nThe issue is intermittent because:\n\n1. **Timing-dependent**: The race condition only manifests when:\n   - Target discovery changes trigger resharding during active sample ingestion\n   - Old shards' flush takes longer than expected (> flushDeadline)\n   - New samples are enqueued during the transition window\n\n2. **Load-dependent**: Occurs more frequently under:\n   - High sample ingestion rates (more samples in flight during transition)\n   - Slow remote storage endpoints (longer flush time for old shards)\n   - Frequent target discovery changes (more resharding events)\n\n3. **Scale-dependent**: More visible at:\n   - Larger shard counts (more goroutines in transition)\n   - Higher capacity configs (more samples buffered in queues)\n\n## Affected Components\n\n1. **`storage/remote/queue_manager.go`**:\n   - `QueueManager` struct (manages resharding)\n   - `shards` struct (represents parallel send queues)\n   - `start()` method (initializes new shards)\n   - `stop()` method (shuts down old shards)\n   - `reshardLoop()` (processes reshard events)\n   - `updateShardsLoop()` (decides when to reshard)\n   - `enqueue()` function (enqueues samples to shards)\n   - `runShard()` goroutine (sends batches, updates metrics)\n\n2. **`storage/remote` package**:\n   - Metrics tracking pending samples\n   - WAL watcher integration that calls `Append()`\n\n## Root Cause Analysis: Why Shards Stall\n\nThe stalling occurs through this sequence:\n\n1. **Reshape triggered**: Target discovery change \u2192 desired shards change (e.g., 4 \u2192 6)\n\n2. **Async reshard starts**:\n   ```\n   updateShardsLoop sends to reshardChan\n   reshardLoop receives: stop() old shards, start() new shards\n   ```\n\n3. **Old shards shutdown**:\n   - `stop()` closes `softShutdown` channel\n   - WAL watcher's `enqueue()` calls fail (return false)\n   - New samples in-flight retry with backoff\n\n4. **Critical race - Counter reset**:\n   - `start()` acquires write lock\n   - Sets `pendingSamples = 0` (line 1241)\n   - Creates new queues and starts new `runShard` goroutines\n   - Releases lock\n\n5. **Samples enqueued to new shards**:\n   - WAL watcher's retries succeed on new shards\n   - Samples are `Append()`ed to new queues\n   - `pendingSamples` is incremented for each sample\n\n6. **Potential stall scenarios**:\n\n   **Scenario A - Partial batch buffering**:\n   - New samples are buffered in queue's partial batch\n   - Batch doesn't fill up to capacity\n   - Batch timeout (10+ seconds) waiting for more samples\n   - If no new samples arrive, `runShard` timer eventually flushes batch\n\n   **Scenario B - Hard shutdown during transition**:\n   - Old shards exceed `flushDeadline` waiting to send\n   - `hardShutdown()` cancels old context\n   - Old `runShard` goroutines exit, dropping queued samples\n   - They call `Sub(droppedSamples)` on counter already reset to 0\n   - Counter tracking becomes inconsistent\n\n   **Scenario C - Queue channel deadlock**:\n   - Sample enqueued during transition window\n   - Ends up in old shard's batch that's never flushed\n   - Or in new shard queue that runShard never reads from\n\n## Recommendation\n\n### Fix Strategy\n\nThe `start()` method should NOT reset `pendingSamples` to 0 unconditionally. Instead:\n\n1. **Preserve old shard metrics**: Don't reset the counter; let old shards naturally decrement it as they complete\n2. **Alternative**: Only reset counter AFTER confirming old shards are fully stopped\n3. **Or**: Atomically transfer pending count from old shards to new shards\n\n### Diagnostic Steps\n\nTo confirm this root cause in a live system:\n\n1. **Monitor these metrics during resharding**:\n   - `prometheus_remote_storage_samples_pending` (should not jump to 0)\n   - `prometheus_remote_storage_shards` (actual number of shards)\n   - `prometheus_remote_storage_shards_desired` (target number)\n\n2. **Enable debug logging** in queue_manager:\n   - Watch for \"Remote storage resharding\" messages\n   - Check timestamps against \"Resharding done\"\n   - Look for \"(Currently resharding, skipping.)\" messages (queue blocked)\n\n3. **Examine for stuck samples**:\n   ```promql\n   # High pending with zero output rate\n   prometheus_remote_storage_samples_pending > 0\n   and\n   rate(prometheus_remote_storage_samples_total[1m]) == 0\n\n   # Check for specific shards stuck\n   prometheus_remote_storage_samples_pending\n   without (job, instance) by (shard)\n   ```\n\n4. **Look for dropped samples**:\n   - Check if `prometheus_remote_storage_samples_failed_total` increased during resharding\n   - This would indicate hard shutdown occurred\n\n5. **Check logs for timeout messages**:\n   - Search for flush deadline exceeded during resharding\n   - These correlate with hard shutdown dropping samples\n\n### Prevention Measures\n\n1. **Increase `flushDeadline`** in queue config if resharding frequently fails\n2. **Reduce resharding frequency** by tuning `shardUpdateDuration` (currently 10 seconds)\n3. **Monitor resharding events** and correlation with:\n   - Target discovery changes\n   - Sample ingestion rate spikes\n   - Remote storage latency increases\n\n## Related Code\n\n- CHANGELOG.md mentions issue #7122 \"Fixed blocked resharding edge case\" (line 1457)\n- This investigation suggests the fix may have been incomplete or partially reverted\n- The core issue of counter reset during transition persists\n",
+          "file_path": "/logs/agent/investigation.md",
+          "sequence": 52,
+          "type": "write"
+        }
+      ],
+      "conversation_events": [
+        {
+          "payload": {},
+          "sequence": 1,
+          "subtype": "message",
+          "text": "# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repository:** `github.com/sg-evals/prometheus--ba14bc4`\n- Use `repo:^github.com/sg-evals/prometheus--ba14bc4$` filter in keyword_search\n- Use `github.com/sg-evals/prometheus--ba14bc4` as the `repo` parameter for go_to_definition/find_references/read_file\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repository:** `github.com/sg-evals/prometheus--ba14bc4`\n- Use `repo:^github.com/sg-evals/prometheus--ba14bc4$` filter in keyword_search\n- Use `github.com/sg-evals/prometheus--ba14bc4` as the `repo` parameter for go_to_definition/find_references/read_file\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n# Investigation: Remote-Write Queue Resharding Failure\n\n**Repository:** github.com/sg-evals/prometheus--ba14bc4 (mirror of github.com/sg-evals)/prometheus--ba14bc4 (mirror of prometheus/prometheus)\n**Task Type:** Cross-Service Debug (investigation only \u2014 no code fixes)\n\n## Scenario\n\nAfter a Prometheus upgrade, remote-write destinations intermittently stop receiving samples. The issue correlates with target discovery changes \u2014 when targets are added or removed, some remote-write shards stall.\n\nPrometheus logs show:\n```\nlevel=info msg=\"Resharding queues\" from=4 to=6\nlevel=info msg=\"Resharding done\" numShards=6\n```\n\nBut after resharding, metrics show some shards have `prometheus_remote_storage_samples_pending` stuck at >0 with no progress.\n\n## Your Task\n\nInvestigate the root cause and produce a report at `/logs/agent/investigation.md`.\n\nYour report MUST cover:\n1. How remote-write queue resharding works (which files/functions)\n2. What changed in the resharding logic recently\n3. The specific mechanism causing shards to stall\n4. Why the issue is intermittent (timing/race condition)\n5. Which metrics or logs would confirm the root cause\n\n## Output Requirements\n\nWrite your investigation report to `/logs/agent/investigation.md` with these sections:\n\n```\n# Investigation Report\n\n## Summary\n<1-2 sentence finding>\n\n## Root Cause\n<Specific file, function, and mechanism>\n\n## Evidence\n<Code references with file paths and line numbers>\n\n## Affected Components\n<List of packages/modules impacted>\n\n## Recommendation\n<Fix strategy and diagnostic steps>\n```\n\n## Constraints\n\n- Do NOT write any code fixes\n- Do NOT modify any source files\n- Your job is investigation and analysis only\n- Focus on `storage/remote/` package, particularly queue management and shard calculation",
+          "timestamp": "2026-03-02T22:41:05.619Z",
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "payload": {},
+          "sequence": 3,
+          "subtype": "message",
+          "text": "I'll investigate this remote-write queue resharding issue in Prometheus. Let me start by exploring the relevant code to understand how queue resharding works and identify the root cause.",
+          "timestamp": "2026-03-02T22:41:08.428Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 4,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_011B5akXqtxqdmoVqpGUx3HD",
+          "timestamp": "2026-03-02T22:41:08.747Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 5,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_012GUk1Kbxk1ZQ6LSBLcYmS3",
+          "timestamp": "2026-03-02T22:41:09.024Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 7,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_016g6nQvqGrzD2thuULVzMfv",
+          "timestamp": "2026-03-02T22:41:11.488Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 9,
+          "subtype": "message",
+          "text": "Executed Bash toolu_0123YNmc5HK6wxR5TNbheJJ8",
+          "timestamp": "2026-03-02T22:41:13.219Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 11,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_0194LfFchtjFZvdVfmvNsoNt",
+          "timestamp": "2026-03-02T22:41:15.383Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 13,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01XfbEWah6mA47go2Ko3FNqv",
+          "timestamp": "2026-03-02T22:41:18.089Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 15,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01AUMUSJ2yuSyaf7SoFCnTjX",
+          "timestamp": "2026-03-02T22:41:22.581Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 16,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01XHMZFSLBA6CDVwRythUfPG",
+          "timestamp": "2026-03-02T22:41:22.679Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 18,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_014TsVbWLuEJhquWftDo7Knd",
+          "timestamp": "2026-03-02T22:41:24.465Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 20,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01CYcEjK8mmU5iCJFpXgmGAp",
+          "timestamp": "2026-03-02T22:41:32.581Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 21,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_commit_search toolu_01XpXg6NaTb6gFPZthzgC9m9",
+          "timestamp": "2026-03-02T22:41:32.588Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 23,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_commit_search toolu_01LMjZRC4256ZXHGvHxBKnuU",
+          "timestamp": "2026-03-02T22:41:35.461Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 24,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_diff_search toolu_01TUcaY3zAMatCBzYsv5WigW",
+          "timestamp": "2026-03-02T22:41:35.749Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 26,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01SLVUi8uVd4mqDM7u2tijuH",
+          "timestamp": "2026-03-02T22:41:51.993Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 28,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01EwZbb8crLsjKksDxLmtZWp",
+          "timestamp": "2026-03-02T22:41:55.845Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 30,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01PRm4Hys9TJPT1Vtihy6THQ",
+          "timestamp": "2026-03-02T22:41:57.666Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 32,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01Fk1B3QeXyzXfn432zjdJqM",
+          "timestamp": "2026-03-02T22:42:15.667Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 34,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_018NxG1nuwVMKUM88TrunZPy",
+          "timestamp": "2026-03-02T22:42:17.453Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 36,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01WX9HEkydY2pMDtFeB3Jouz",
+          "timestamp": "2026-03-02T22:42:32.596Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 37,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01UAGA5GAVURecJepPwDrtfF",
+          "timestamp": "2026-03-02T22:42:32.672Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 39,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01G1j99R8SwfAVQEnjQtbwHK",
+          "timestamp": "2026-03-02T22:42:35.078Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 41,
+          "subtype": "message",
+          "text": "Let me continue examining the queue and Append logic to understand the full flow:",
+          "timestamp": "2026-03-02T22:42:48.806Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 42,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01UfySM2egFCn6jsk8SLbsSF",
+          "timestamp": "2026-03-02T22:42:49.250Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 44,
+          "subtype": "message",
+          "text": "Now let me search for recent changes or issues related to resharding and the pending samples counter:",
+          "timestamp": "2026-03-02T22:43:18.127Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 45,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_diff_search toolu_01463NDebWWnFwe7n5SmoeiH",
+          "timestamp": "2026-03-02T22:43:18.158Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 46,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_nls_search toolu_01TiFwP2f1cH2BxhU9zdNc9a",
+          "timestamp": "2026-03-02T22:43:18.192Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 48,
+          "subtype": "message",
+          "text": "Now let me check one more critical area - the metrics and counter management during resharding:",
+          "timestamp": "2026-03-02T22:43:44.793Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 49,
+          "subtype": "message",
+          "text": "Executed bash toolu_017zsS3ZLufwyXNJEi8x9Hvf",
+          "timestamp": "2026-03-02T22:43:44.855Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 51,
+          "subtype": "message",
+          "text": "Based on my investigation of the Prometheus remote-write queue resharding code, I can now write a comprehensive analysis of the root cause. Let me create the investigation report:",
+          "timestamp": "2026-03-02T22:43:46.470Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 52,
+          "subtype": "message",
+          "text": "Executed Write toolu_012gBag7xV635aTVFe6AzzKU",
+          "timestamp": "2026-03-02T22:44:11.769Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 54,
+          "subtype": "message",
+          "text": "Perfect! I've completed a comprehensive investigation of the Prometheus remote-write queue resharding issue. Here's a summary of what I found:\n\n## Key Findings\n\n**Root Cause:** A **race condition in the metrics counter management** during queue resharding. When new shards are started, the `pendingSamples` counter is immediately reset to 0 (via `Set(0)` at line 1241), but old shards are still running in background goroutines and decrementing this same counter. This creates a critical race condition.\n\n**The Mechanism:**\n1. Old shards begin shutting down via `stop()` which closes the `softShutdown` channel\n2. Concurrently, `start()` is called which resets `pendingSamples` to 0 while new queues are created\n3. If old shards hard-shutdown (exceed `flushDeadline`), they drop remaining samples and decrement the already-reset counter\n4. New samples enqueued to new shards increment the counter, but the metric becomes unreliable\n\n**Why It's Intermittent:**\n- Only manifests when target discovery changes trigger resharding during active ingestion\n- More likely with high sample rates, slow remote endpoints, or frequent resharding\n- Timing-dependent on old shard flush duration relative to `flushDeadline`\n\n**Evidence Points:**\n- Lines 1237-1266: `start()` method resets counter too early\n- Lines 1184-1199: `reshardLoop()` doesn't synchronize counter state\n- Lines 1071-1074: `numShards` updated before actual resharding completes\n- Lines 1563-1578: Old `runShard()` goroutines may decrement counter after hard shutdown\n\nThe report I created includes:\n- Detailed code references with line numbers\n- Specific race condition scenarios  \n- Why the issue is intermittent and load-dependent\n- Diagnostic steps to confirm the root cause in production\n- Recommended fix strategies\n\nThe investigation report has been written to `/logs/agent/investigation.md`.",
+          "timestamp": "2026-03-02T22:44:17.842Z",
+          "tool": null,
+          "type": "agent"
+        }
+      ],
+      "step_count": 54,
+      "tool_counts_by_name": {
+        "Bash": 1,
+        "Write": 1,
+        "bash": 1,
+        "mcp__sourcegraph__sg_commit_search": 2,
+        "mcp__sourcegraph__sg_diff_search": 2,
+        "mcp__sourcegraph__sg_keyword_search": 9,
+        "mcp__sourcegraph__sg_list_files": 1,
+        "mcp__sourcegraph__sg_nls_search": 1,
+        "mcp__sourcegraph__sg_read_file": 8
+      },
+      "tool_event_count": 26,
+      "tool_events": [
+        {
+          "arguments": {
+            "path": "storage/remote",
+            "repo": "github.com/sg-evals/prometheus--ba14bc4"
+          },
+          "step_id": 4,
+          "timestamp": "2026-03-02T22:41:08.747Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/prometheus--ba14bc4$ resharding shards"
+          },
+          "step_id": 5,
+          "timestamp": "2026-03-02T22:41:09.024Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "path": "storage/remote/queue_manager.go",
+            "repo": "github.com/sg-evals/prometheus--ba14bc4"
+          },
+          "step_id": 7,
+          "timestamp": "2026-03-02T22:41:11.488Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "command": "cat /logs/agent/sessions/projects/-workspace/ff4b3d24-ed86-492c-a51d-07abee1d7189/tool-results/mcp-sourcegraph-sg_read_file-1772491271743.txt | head -100"
+          },
+          "step_id": 9,
+          "timestamp": "2026-03-02T22:41:13.219Z",
+          "tool": "Bash"
+        },
+        {
+          "arguments": {
+            "endLine": 500,
+            "path": "storage/remote/queue_manager.go",
+            "repo": "github.com/sg-evals/prometheus--ba14bc4",
+            "startLine": 1
+          },
+          "step_id": 11,
+          "timestamp": "2026-03-02T22:41:15.383Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 1200,
+            "path": "storage/remote/queue_manager.go",
+            "repo": "github.com/sg-evals/prometheus--ba14bc4",
+            "startLine": 1000
+          },
+          "step_id": 13,
+          "timestamp": "2026-03-02T22:41:18.089Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/prometheus--ba14bc4$ type shards struct"
+          },
+          "step_id": 15,
+          "timestamp": "2026-03-02T22:41:22.581Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/prometheus--ba14bc4$ func.*shards.*stop start"
+          },
+          "step_id": 16,
+          "timestamp": "2026-03-02T22:41:22.679Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 1400,
+            "path": "storage/remote/queue_manager.go",
+            "repo": "github.com/sg-evals/prometheus--ba14bc4",
+            "startLine": 1200
+          },
+          "step_id": 18,
+          "timestamp": "2026-03-02T22:41:24.465Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/prometheus--ba14bc4$ blocked resharding edge case 7122"
+          },
+          "step_id": 20,
+          "timestamp": "2026-03-02T22:41:32.581Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "messageTerms": [
+              "7122",
+              "blocked resharding"
+            ],
+            "repos": [
+              "github.com/sg-evals/prometheus--ba14bc4"
+            ]
+          },
+          "step_id": 21,
+          "timestamp": "2026-03-02T22:41:32.588Z",
+          "tool": "mcp__sourcegraph__sg_commit_search"
+        },
+        {
+          "arguments": {
+            "files": [
+              "storage/remote/queue_manager.go"
+            ],
+            "messageTerms": [
+              "resharding"
+            ],
+            "repos": [
+              "github.com/sg-evals/prometheus--ba14bc4"
+            ]
+          },
+          "step_id": 23,
+          "timestamp": "2026-03-02T22:41:35.461Z",
+          "tool": "mcp__sourcegraph__sg_commit_search"
+        },
+        {
+          "arguments": {
+            "pattern": "enqueue.*shard",
+            "repos": [
+              "github.com/sg-evals/prometheus--ba14bc4"
+            ]
+          },
+          "step_id": 24,
+          "timestamp": "2026-03-02T22:41:35.749Z",
+          "tool": "mcp__sourcegraph__sg_diff_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/prometheus--ba14bc4$ pendingSamples.Dec pendingSamples.Sub"
+          },
+          "step_id": 26,
+          "timestamp": "2026-03-02T22:41:51.993Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/prometheus--ba14bc4$ pendingSamples Set Sub Inc"
+          },
+          "step_id": 28,
+          "timestamp": "2026-03-02T22:41:55.845Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 1750,
+            "path": "storage/remote/queue_manager.go",
+            "repo": "github.com/sg-evals/prometheus--ba14bc4",
+            "startLine": 1600
+          },
+          "step_id": 30,
+          "timestamp": "2026-03-02T22:41:57.666Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/prometheus--ba14bc4$ func.*runShard"
+          },
+          "step_id": 32,
+          "timestamp": "2026-03-02T22:42:15.667Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 1600,
+            "path": "storage/remote/queue_manager.go",
+            "repo": "github.com/sg-evals/prometheus--ba14bc4",
+            "startLine": 1450
+          },
+          "step_id": 34,
+          "timestamp": "2026-03-02T22:42:17.453Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/prometheus--ba14bc4$ watcher.Start.*enqueue"
+          },
+          "step_id": 36,
+          "timestamp": "2026-03-02T22:42:32.596Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/prometheus--ba14bc4$ WriteTo Append"
+          },
+          "step_id": 37,
+          "timestamp": "2026-03-02T22:42:32.672Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 850,
+            "path": "storage/remote/queue_manager.go",
+            "repo": "github.com/sg-evals/prometheus--ba14bc4",
+            "startLine": 700
+          },
+          "step_id": 39,
+          "timestamp": "2026-03-02T22:42:35.078Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 1460,
+            "path": "storage/remote/queue_manager.go",
+            "repo": "github.com/sg-evals/prometheus--ba14bc4",
+            "startLine": 1394
+          },
+          "step_id": 42,
+          "timestamp": "2026-03-02T22:42:49.250Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "added": true,
+            "pattern": "pendingSamples.*Set.*0",
+            "repos": [
+              "github.com/sg-evals/prometheus--ba14bc4"
+            ]
+          },
+          "step_id": 45,
+          "timestamp": "2026-03-02T22:43:18.158Z",
+          "tool": "mcp__sourcegraph__sg_diff_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/prometheus--ba14bc4$ enqueue retry samples stall pending"
+          },
+          "step_id": 46,
+          "timestamp": "2026-03-02T22:43:18.192Z",
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "arguments": {
+            "command": "cd /workspace && find . -name \"investigation.md\" 2>/dev/null | head -5"
+          },
+          "step_id": 49,
+          "timestamp": "2026-03-02T22:43:44.855Z",
+          "tool": "bash"
+        },
+        {
+          "arguments": {
+            "content": "# Investigation Report: Remote-Write Queue Resharding Failure\n\n## Summary\n\nThe intermittent stalling of remote-write shards after resharding is caused by a **race condition in the metrics counter reset** combined with **asynchronous queue shutdown timing**. When `start()` is called on new shards, it immediately resets `pendingSamples` to zero, but old shards are still in the background flushing data and decrementing this same counter. Additionally, samples enqueued during the transition window between `stop()` and `start()` may end up in queues that are being hard-shutdown before they can be sent.\n\n## Root Cause\n\n**Location:** `storage/remote/queue_manager.go:1237-1266` (`start()` method) and lines 1184-1199 (`reshardLoop()`)\n\n**Mechanism:**\n\nThe resharding process has a critical flaw in how it manages the pending samples metric during queue transitions:\n\n1. **Premature Counter Reset** (line 1241):\n   ```go\n   func (s *shards) start(n int) {\n       s.mtx.Lock()\n       defer s.mtx.Unlock()\n       s.qm.metrics.pendingSamples.Set(0)  // <-- RESETS COUNTER IMMEDIATELY\n       ...\n   }\n   ```\n   This resets the counter to 0 immediately when new shards start.\n\n2. **Race with Old Shards Cleanup**:\n   ```go\n   func (t *QueueManager) reshardLoop() {\n       for {\n           select {\n           case numShards := <-t.reshardChan:\n               t.shards.stop()         // Old shards close softShutdown, start flushing\n               t.shards.start(numShards)  // New shards created, counter reset to 0\n           ...\n           }\n       }\n   }\n   ```\n\n   Between `stop()` and `start()`:\n   - Old shards close `softShutdown` channel to block new enqueues\n   - Old shards begin `FlushAndShutdown()` on their queues\n   - If flush takes longer than expected, old shards hard-shutdown via context cancellation\n   - **Concurrently**: `start()` resets `pendingSamples` to 0\n   - Old shards' `runShard()` goroutines continue decrementing this counter as they finish sending\n\n3. **Hard Shutdown Timeout Behavior** (line 1286-1294):\n   ```go\n   select {\n   case <-s.done:\n       return\n   case <-time.After(s.qm.flushDeadline):  // Typically 30 seconds\n   }\n   // Force an unclean shutdown\n   s.hardShutdown()  // Cancels context, old runShard goroutines exit\n   <-s.done\n   ```\n\n   If old shards don't complete flushing within `flushDeadline`:\n   - Context is cancelled via `s.hardShutdown()`\n   - Remaining samples in old queues are dropped\n   - Old `runShard` goroutines decrement `pendingSamples` for these dropped samples\n   - But counter was already reset to 0, so it never recovers\n\n## Evidence\n\n### Code References\n\n**File: `storage/remote/queue_manager.go`**\n\n- **Lines 1071-1074** (`updateShardsLoop`): Updates `t.numShards` immediately after sending reshape request, before actual resharding completes\n  ```go\n  case t.reshardChan <- desiredShards:\n      t.logger.Info(\"Remote storage resharding\", \"from\", t.numShards, \"to\", desiredShards)\n      t.numShards = desiredShards  // <-- Updated before reshardLoop processes it\n  ```\n\n- **Lines 1184-1199** (`reshardLoop`): Asynchronously processes reshard requests\n  ```go\n  func (t *QueueManager) reshardLoop() {\n      for {\n          select {\n          case numShards := <-t.reshardChan:\n              t.shards.stop()         // Closes softShutdown, begins flushing\n              t.shards.start(numShards)  // Creates new queues, resets counter\n          ...\n          }\n      }\n  }\n  ```\n\n- **Lines 1237-1266** (`start`): Problematic counter reset\n  ```go\n  func (s *shards) start(n int) {\n      s.mtx.Lock()\n      defer s.mtx.Unlock()\n      s.qm.metrics.pendingSamples.Set(0)  // BUG: Resets while old shards still active\n      ...\n      s.queues = newQueues\n      ...\n      for i := range n {\n          go s.runShard(hardShutdownCtx, i, newQueues[i])\n      }\n  }\n  ```\n\n- **Lines 1325-1327** (enqueue): Increments counter when samples enqueued\n  ```go\n  case tSample:\n      s.qm.metrics.pendingSamples.Inc()\n      s.enqueuedSamples.Inc()\n  ```\n\n- **Lines 1689-1691** (updateMetrics): Decrements counter when samples sent\n  ```go\n  s.qm.metrics.pendingSamples.Sub(float64(sampleCount))\n  ```\n\n- **Lines 1563-1578** (runShard hard shutdown): Drops samples when context cancelled\n  ```go\n  case <-ctx.Done():\n      droppedSamples := int(s.enqueuedSamples.Load())\n      s.qm.metrics.pendingSamples.Sub(float64(droppedSamples))  // <-- Sub after Set(0)\n      ...\n  ```\n\n### Intermittency Explanation\n\nThe issue is intermittent because:\n\n1. **Timing-dependent**: The race condition only manifests when:\n   - Target discovery changes trigger resharding during active sample ingestion\n   - Old shards' flush takes longer than expected (> flushDeadline)\n   - New samples are enqueued during the transition window\n\n2. **Load-dependent**: Occurs more frequently under:\n   - High sample ingestion rates (more samples in flight during transition)\n   - Slow remote storage endpoints (longer flush time for old shards)\n   - Frequent target discovery changes (more resharding events)\n\n3. **Scale-dependent**: More visible at:\n   - Larger shard counts (more goroutines in transition)\n   - Higher capacity configs (more samples buffered in queues)\n\n## Affected Components\n\n1. **`storage/remote/queue_manager.go`**:\n   - `QueueManager` struct (manages resharding)\n   - `shards` struct (represents parallel send queues)\n   - `start()` method (initializes new shards)\n   - `stop()` method (shuts down old shards)\n   - `reshardLoop()` (processes reshard events)\n   - `updateShardsLoop()` (decides when to reshard)\n   - `enqueue()` function (enqueues samples to shards)\n   - `runShard()` goroutine (sends batches, updates metrics)\n\n2. **`storage/remote` package**:\n   - Metrics tracking pending samples\n   - WAL watcher integration that calls `Append()`\n\n## Root Cause Analysis: Why Shards Stall\n\nThe stalling occurs through this sequence:\n\n1. **Reshape triggered**: Target discovery change \u2192 desired shards change (e.g., 4 \u2192 6)\n\n2. **Async reshard starts**:\n   ```\n   updateShardsLoop sends to reshardChan\n   reshardLoop receives: stop() old shards, start() new shards\n   ```\n\n3. **Old shards shutdown**:\n   - `stop()` closes `softShutdown` channel\n   - WAL watcher's `enqueue()` calls fail (return false)\n   - New samples in-flight retry with backoff\n\n4. **Critical race - Counter reset**:\n   - `start()` acquires write lock\n   - Sets `pendingSamples = 0` (line 1241)\n   - Creates new queues and starts new `runShard` goroutines\n   - Releases lock\n\n5. **Samples enqueued to new shards**:\n   - WAL watcher's retries succeed on new shards\n   - Samples are `Append()`ed to new queues\n   - `pendingSamples` is incremented for each sample\n\n6. **Potential stall scenarios**:\n\n   **Scenario A - Partial batch buffering**:\n   - New samples are buffered in queue's partial batch\n   - Batch doesn't fill up to capacity\n   - Batch timeout (10+ seconds) waiting for more samples\n   - If no new samples arrive, `runShard` timer eventually flushes batch\n\n   **Scenario B - Hard shutdown during transition**:\n   - Old shards exceed `flushDeadline` waiting to send\n   - `hardShutdown()` cancels old context\n   - Old `runShard` goroutines exit, dropping queued samples\n   - They call `Sub(droppedSamples)` on counter already reset to 0\n   - Counter tracking becomes inconsistent\n\n   **Scenario C - Queue channel deadlock**:\n   - Sample enqueued during transition window\n   - Ends up in old shard's batch that's never flushed\n   - Or in new shard queue that runShard never reads from\n\n## Recommendation\n\n### Fix Strategy\n\nThe `start()` method should NOT reset `pendingSamples` to 0 unconditionally. Instead:\n\n1. **Preserve old shard metrics**: Don't reset the counter; let old shards naturally decrement it as they complete\n2. **Alternative**: Only reset counter AFTER confirming old shards are fully stopped\n3. **Or**: Atomically transfer pending count from old shards to new shards\n\n### Diagnostic Steps\n\nTo confirm this root cause in a live system:\n\n1. **Monitor these metrics during resharding**:\n   - `prometheus_remote_storage_samples_pending` (should not jump to 0)\n   - `prometheus_remote_storage_shards` (actual number of shards)\n   - `prometheus_remote_storage_shards_desired` (target number)\n\n2. **Enable debug logging** in queue_manager:\n   - Watch for \"Remote storage resharding\" messages\n   - Check timestamps against \"Resharding done\"\n   - Look for \"(Currently resharding, skipping.)\" messages (queue blocked)\n\n3. **Examine for stuck samples**:\n   ```promql\n   # High pending with zero output rate\n   prometheus_remote_storage_samples_pending > 0\n   and\n   rate(prometheus_remote_storage_samples_total[1m]) == 0\n\n   # Check for specific shards stuck\n   prometheus_remote_storage_samples_pending\n   without (job, instance) by (shard)\n   ```\n\n4. **Look for dropped samples**:\n   - Check if `prometheus_remote_storage_samples_failed_total` increased during resharding\n   - This would indicate hard shutdown occurred\n\n5. **Check logs for timeout messages**:\n   - Search for flush deadline exceeded during resharding\n   - These correlate with hard shutdown dropping samples\n\n### Prevention Measures\n\n1. **Increase `flushDeadline`** in queue config if resharding frequently fails\n2. **Reduce resharding frequency** by tuning `shardUpdateDuration` (currently 10 seconds)\n3. **Monitor resharding events** and correlation with:\n   - Target discovery changes\n   - Sample ingestion rate spikes\n   - Remote storage latency increases\n\n## Related Code\n\n- CHANGELOG.md mentions issue #7122 \"Fixed blocked resharding edge case\" (line 1457)\n- This investigation suggests the fix may have been incomplete or partially reverted\n- The core issue of counter reset during transition persists\n",
+            "file_path": "/logs/agent/investigation.md"
+          },
+          "step_id": 52,
+          "timestamp": "2026-03-02T22:44:11.769Z",
+          "tool": "Write"
+        }
+      ]
+    },
+    "transcript": {
+      "json_line_count": 83,
+      "line_count": 83,
+      "message_event_count": 59,
+      "messages": [
+        {
+          "sequence": 0,
+          "subtype": "init",
+          "text": null,
+          "tool": null,
+          "type": "system"
+        },
+        {
+          "sequence": 1,
+          "subtype": "text",
+          "text": "I'll investigate this remote-write queue resharding issue in Prometheus. Let me start by exploring the relevant code to understand how queue resharding works and identify the root cause.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 2,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 3,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 4,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 5,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 6,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 7,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 8,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 9,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 10,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 11,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 12,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 13,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 14,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 15,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 16,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 17,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 18,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 19,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 20,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 21,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_commit_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 22,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 23,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 24,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_commit_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 25,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_diff_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 26,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 27,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 28,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 29,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 30,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 31,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 32,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 33,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 34,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 35,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 36,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 37,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 38,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 39,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 40,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 41,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 42,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 43,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 44,
+          "subtype": "text",
+          "text": "Let me continue examining the queue and Append logic to understand the full flow:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 45,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 46,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 47,
+          "subtype": "text",
+          "text": "Now let me search for recent changes or issues related to resharding and the pending samples counter:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 48,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_diff_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 49,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_nls_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 50,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 51,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 52,
+          "subtype": "text",
+          "text": "Now let me check one more critical area - the metrics and counter management during resharding:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 53,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 54,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 55,
+          "subtype": "text",
+          "text": "Based on my investigation of the Prometheus remote-write queue resharding code, I can now write a comprehensive analysis of the root cause. Let me create the investigation report:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 56,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Write",
+          "type": "assistant"
+        },
+        {
+          "sequence": 57,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 58,
+          "subtype": "text",
+          "text": "Perfect! I've completed a comprehensive investigation of the Prometheus remote-write queue resharding issue. Here's a summary of what I found:  ## Key Findings  **Root Cause:** A **race condition in the metrics counter m...",
+          "tool": null,
+          "type": "assistant"
+        }
+      ],
+      "tool_event_count": 26,
+      "tool_events": [
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_commit_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_commit_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_diff_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_diff_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_nls_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Write"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "checksums": {
+      "result_json_sha256": "01d7edaf83f4b3397da85c116f96ae751be7356bb6d607f78dedf7974e16665d",
+      "trajectory_sha256": "e08dfc23b02637f3cf5ef5e22902778175860aa703c3db635ff3a7eb2e85ed39",
+      "transcript_sha256": "204551fd8f5577febb08bf04de8ecadb7656cb9ada3b251551d0f7bfe5ae7c0c"
+    },
+    "config": "mcp-remote-direct",
+    "result_path": "runs/official/csb_sdlc_debug_haiku_20260302_224010/mcp-remote-direct/2026-03-02__22-40-49/mcp_prometheus-queue-reshard-deb__DATp3Xz/result.json",
+    "run_dir": "csb_sdlc_debug_haiku_20260302_224010",
+    "suite": "csb_sdlc_debug",
+    "task_dir": "runs/official/csb_sdlc_debug_haiku_20260302_224010/mcp-remote-direct/2026-03-02__22-40-49/mcp_prometheus-queue-reshard-deb__DATp3Xz",
+    "task_name": "mcp_prometheus-queue-reshard-debug-001_rhqmve",
+    "trace_paths": {
+      "trajectory": "runs/official/csb_sdlc_debug_haiku_20260302_224010/mcp-remote-direct/2026-03-02__22-40-49/mcp_prometheus-queue-reshard-deb__DATp3Xz/agent/trajectory.json",
+      "transcript": "runs/official/csb_sdlc_debug_haiku_20260302_224010/mcp-remote-direct/2026-03-02__22-40-49/mcp_prometheus-queue-reshard-deb__DATp3Xz/agent/claude-code.txt"
+    }
+  },
+  "score": {
+    "reward": 0.52,
+    "status": "passed",
+    "timed_out": false
+  }
+}

@@ -8,4 +8,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [mcp_ansible-abc-imports-fix-001_e4qdm1](../tasks/csb_sdlc_fix_haiku_20260302_013713--mcp-remote-direct--mcp_ansible-abc-imports-fix-001_e4qdm1.html) | `passed` | 1.000 | 0.188 | 80 | traj, tx |
+| [mcp_ansible-abc-imports-fix-001_e4qdm1](../tasks/csb_sdlc_fix_haiku_20260302_013713--mcp-remote-direct--mcp_ansible-abc-imports-fix-001_e4qdm1--3df660d178.html) | `passed` | 1.000 | 0.188 | 80 | traj, tx |

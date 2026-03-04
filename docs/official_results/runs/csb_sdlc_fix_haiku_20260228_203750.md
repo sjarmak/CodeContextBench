@@ -8,6 +8,6 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [django-modelchoice-fk-fix-001](../tasks/csb_sdlc_fix_haiku_20260228_203750--baseline-local-direct--django-modelchoice-fk-fix-001.html) | `passed` | 0.450 | 0.000 | 142 | traj, tx |
-| [django-select-for-update-fix-001](../tasks/csb_sdlc_fix_haiku_20260228_203750--baseline-local-direct--django-select-for-update-fix-001.html) | `passed` | 0.670 | 0.000 | 55 | traj, tx |
-| [flipt-eval-latency-fix-001](../tasks/csb_sdlc_fix_haiku_20260228_203750--baseline-local-direct--flipt-eval-latency-fix-001.html) | `passed` | 0.250 | 0.000 | 34 | traj, tx |
+| [django-modelchoice-fk-fix-001](../tasks/csb_sdlc_fix_haiku_20260228_203750--baseline-local-direct--django-modelchoice-fk-fix-001--dfc97b4f0e.html) | `passed` | 0.450 | 0.000 | 142 | traj, tx |
+| [django-select-for-update-fix-001](../tasks/csb_sdlc_fix_haiku_20260228_203750--baseline-local-direct--django-select-for-update-fix-001--3268bbcbd8.html) | `passed` | 0.670 | 0.000 | 55 | traj, tx |
+| [flipt-eval-latency-fix-001](../tasks/csb_sdlc_fix_haiku_20260228_203750--baseline-local-direct--flipt-eval-latency-fix-001--b24fb205b7.html) | `passed` | 0.250 | 0.000 | 34 | traj, tx |

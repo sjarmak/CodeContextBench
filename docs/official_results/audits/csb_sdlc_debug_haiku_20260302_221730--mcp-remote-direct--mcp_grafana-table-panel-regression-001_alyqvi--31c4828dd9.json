@@ -1,0 +1,1326 @@
+{
+  "metrics": {
+    "agent_execution_seconds": 167.349371,
+    "cache_tokens": 4941592,
+    "context_metrics": {},
+    "input_tokens": 4942166,
+    "ir_metrics": {},
+    "mcp_ratio": 0.967741935483871,
+    "output_tokens": 17033,
+    "search_calls_deepsearch": null,
+    "search_calls_keyword": null,
+    "search_calls_nls": null,
+    "tool_calls_by_name": {
+      "Write": 1,
+      "mcp__sourcegraph__sg_keyword_search": 11,
+      "mcp__sourcegraph__sg_list_files": 2,
+      "mcp__sourcegraph__sg_read_file": 17
+    },
+    "tool_calls_local": 1,
+    "tool_calls_mcp": 30,
+    "tool_calls_total": 31,
+    "wall_clock_seconds": 202.796468
+  },
+  "parsed_trace": {
+    "trajectory": {
+      "bash_commands": [],
+      "code_changes": [
+        {
+          "content": "# Investigation Report: Dashboard Migration v38 Table Panel Regression\n\n## Summary\nThe v38 dashboard schema migration has a regression where table panel field overrides are conditionally processed based on the presence of `fieldConfig.defaults.custom`, even though field overrides can exist independently. When a table panel has field overrides with `custom.displayMode` but no `fieldConfig.defaults.custom`, the frontend migration handler skips critical initialization logic, causing the table panel's migration handler to execute on an improperly structured fieldConfig.\n\n## Root Cause\n**File:** `public/app/features/dashboard/state/DashboardMigrator.ts:644-674`\n**Function:** Schema version 38 migration handler\n**Specific Issue:** Conditional logic gates the entire table panel migration on the presence of `fieldConfig.defaults.custom`\n\nThe problematic code structure:\n```typescript\n// Line 644-674: V38 Migration Handler\nif (oldVersion < 38 && finalTargetVersion >= 38) {\n  panelUpgrades.push((panel: PanelModel) => {\n    if (panel.type === 'table' && panel.fieldConfig !== undefined) {\n      const displayMode = panel.fieldConfig.defaults?.custom?.displayMode;  // Line 647\n\n      // Update field configuration\n      if (displayMode !== undefined) {  // Line 650: CONDITIONAL BLOCK\n        // Migrate any options for the panel\n        panel.fieldConfig.defaults.custom.cellOptions = migrateTableDisplayModeToCellOptions(displayMode);\n        delete panel.fieldConfig.defaults.custom.displayMode;\n      }\n\n      // Update any overrides referencing the cell display mode\n      if (panel.fieldConfig?.overrides) {  // Line 659: INDEPENDENT BLOCK\n        for (const override of panel.fieldConfig.overrides) {\n          for (let j = 0; j < (override.properties?.length || 0); j++) {\n            if (override.properties[j].id === 'custom.displayMode') {\n              override.properties[j].id = 'custom.cellOptions';\n              override.properties[j].value = migrateTableDisplayModeToCellOptions(overrideDisplayMode);\n            }\n          }\n        }\n      }\n    }\n    return panel;\n  });\n}\n```\n\n## Exact Conditional Logic Failure\n\n**The bug manifests when:**\n1. A table panel has `fieldConfig.overrides` with `custom.displayMode` properties\n2. The same panel does NOT have `fieldConfig.defaults.custom` defined\n3. The optional chaining `panel.fieldConfig.defaults?.custom?.displayMode` evaluates to `undefined`\n4. This causes the defaults migration block (lines 650-656) to be SKIPPED\n5. However, the overrides ARE processed (lines 659-669), converting `custom.displayMode` \u2192 `custom.cellOptions`\n\n**The cascading failure:**\nAfter the v38 migration completes, the table panel's migration handler (`tableMigrationHandler` in `public/app/plugins/panel/table/migrations.ts`) is invoked. This handler calls `migrateTextWrapToFieldLevel()` which assumes `panel.fieldConfig.defaults` exists and is properly initialized. When the defaults structure is incomplete or missing the `custom` object:\n\n```typescript\n// Line 329 of public/app/plugins/panel/table/migrations.ts\npanel.fieldConfig.defaults.custom = panel.fieldConfig.defaults.custom ?? {};\n```\n\nThis creates or initializes `defaults.custom` only AFTER the overrides have already been processed. The missing initialization can cause subsequent field configuration operations to fail or be skipped.\n\n## Why Dashboards WITH Explicit `defaults.custom` Are Unaffected\n\nDashboards that explicitly define `fieldConfig.defaults.custom` in the saved JSON work correctly because:\n\n1. When `defaults.custom` is explicitly set, the optional chaining chain completes successfully\n2. Line 647 retrieves the `displayMode` value (not undefined)\n3. Line 650 condition is TRUE, so the defaults migration block executes\n4. This ensures proper initialization of the `custom` object structure\n5. When the table panel migration handler runs, `defaults.custom` is already properly initialized\n\n## Schema Version and Trigger Point\n\n**Affected Schema Version:** 38 (and all versions >= 38)\n**Dashboard Migration Timeline:**\n- v10.3 and earlier: Table panels could have incomplete fieldConfig structures\n- v10.4 (when schema v38 was introduced): The v38 migration assumes `defaults.custom` always exists when processing displayMode\n- Regression: Dashboards migrating from v10.3 to v10.4 with certain table panel configurations lose field overrides\n\n## Migration Chain Analysis\n\n### Frontend Migration Path (DashboardMigrator.ts)\n1. **Line 647:** Extract displayMode with optional chaining (returns undefined if defaults.custom doesn't exist)\n2. **Line 650-656:** Only migrate defaults.custom if displayMode is defined\n3. **Line 659-669:** Process overrides independently (migrations happen but structure may be incomplete)\n4. Table panel plugin's `tableMigrationHandler()` is called afterward\n5. `migrateTextWrapToFieldLevel()` assumes proper fieldConfig initialization\n\n### Backend Migration Path (apps/dashboard/pkg/migration/schemaversion/v38.go)\n1. **Line 116-127:** Process `defaults.custom` only if it exists\n2. **Line 129-131:** Call `migrateOverrides()` regardless of defaults.custom presence\n3. **migrateOverrides() (lines 135-176):** Correctly processes all overrides\n4. This backend migration is more defensive and handles both cases\n\n**Key Difference:** The backend migration in `v38.go` calls `migrateOverrides()` unconditionally, while the frontend migration's logic flow doesn't properly initialize `defaults.custom` before the table panel handler executes.\n\n## Files and Functions Involved\n\n### Primary Regression Location\n- **File:** `public/app/features/dashboard/state/DashboardMigrator.ts`\n- **Function:** v38 migration handler (anonymous, lines 644-674)\n- **Issue:** Conditional field override processing based on defaults.custom presence\n\n### Secondary Impact Points\n- **File:** `public/app/plugins/panel/table/migrations.ts`\n- **Function:** `migrateTextWrapToFieldLevel()` (lines 306-334)\n- **Issue:** Assumes `fieldConfig.defaults` structure is fully initialized\n\n- **File:** `apps/dashboard/pkg/migration/schemaversion/v38.go`\n- **Function:** `processPanelsV38()` (lines 89-133)\n- **Status:** Correctly handles both cases (has proper defensive checks)\n\n### Supporting Files\n- **File:** `apps/dashboard/pkg/migration/frontend_defaults.go`\n- **Function:** `trackOriginalFieldConfigCustom()` (lines 1138-1169)\n- **Status:** Correctly tracks panels that had fieldConfig.defaults.custom for preservation during cleanup\n\n## Evidence: Code References\n\n1. **V38 Migration Handler Decision Point:**\n   - `DashboardMigrator.ts:647` - Extracts displayMode with optional chaining\n   - `DashboardMigrator.ts:650` - Conditional block gated on displayMode !== undefined\n   - `DashboardMigrator.ts:659` - Independent override processing\n\n2. **Backend v38 (Correct Implementation):**\n   - `v38.go:115-127` - Processes defaults.custom if exists\n   - `v38.go:129-131` - Calls migrateOverrides unconditionally\n   - `v38.go:135-176` - migrateOverrides function properly handles all cases\n\n3. **Table Panel Migration Handler Issues:**\n   - `migrations.ts:306-310` - Early return based on wrapText check\n   - `migrations.ts:314` - Assumes fieldConfig.overrides exists\n   - `migrations.ts:329` - Creates/initializes defaults.custom\n\n## Affected Components\n\n- **Dashboard Migration Pipeline:** Core migration orchestration\n- **Table Panel Plugin:** Field configuration migration handlers\n- **Schema Version 38:** displayMode to cellOptions conversion\n- **Field Configuration System:** defaults and overrides handling\n- **Frontend-Backend Sync:** Inconsistent handling between frontend (DashboardMigrator) and backend (v38.go)\n\n## Recommendation\n\n**The fix requires ensuring that `fieldConfig.defaults.custom` is always initialized before any migration operation that depends on its existence, regardless of whether a displayMode value exists.**\n\nSpecifically:\n1. In `DashboardMigrator.ts` line 644-674, restructure the v38 migration to ensure `fieldConfig.defaults.custom` is initialized even when no displayMode exists in defaults\n2. Move the initialization logic outside the conditional block or add an explicit pre-initialization step\n3. Ensure all field override migrations have access to a properly structured defaults object\n4. Consider adding a validation step to match the defensive approach used in the backend `v38.go` migration\n\nThis regression demonstrates a critical difference in migration robustness between the frontend (DashboardMigrator.ts) and backend (v38.go) implementations, with the backend implementation being more defensive.\n",
+          "file_path": "/logs/agent/investigation.md",
+          "sequence": 68,
+          "type": "write"
+        }
+      ],
+      "conversation_events": [
+        {
+          "payload": {},
+          "sequence": 1,
+          "subtype": "message",
+          "text": "# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repository:** `github.com/sg-evals/grafana--26d36ec`\n- Use `repo:^github.com/sg-evals/grafana--26d36ec$` filter in keyword_search\n- Use `github.com/sg-evals/grafana--26d36ec` as the `repo` parameter for go_to_definition/find_references/read_file\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repository:** `github.com/sg-evals/grafana--26d36ec`\n- Use `repo:^github.com/sg-evals/grafana--26d36ec$` filter in keyword_search\n- Use `github.com/sg-evals/grafana--26d36ec` as the `repo` parameter for go_to_definition/find_references/read_file\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n# Investigation: Dashboard Migration v38 Table Panel Regression\n\n**Repository:** github.com/sg-evals/grafana--26d36ec (mirror of github.com/sg-evals)/grafana--26d36ec (mirror of grafana/grafana)\n**Task Type:** Regression Hunt (investigation only \u2014 no code fixes)\n\n## Scenario\n\nAfter upgrading Grafana from v10.3 to v10.4, some dashboards with table panels fail to render correctly. The table panel's field override configuration is silently dropped during dashboard import. Users see tables with missing column formatting (column widths, text alignment, cell display modes).\n\nThe bug only affects dashboards where `fieldConfig.defaults.custom` was not explicitly set in the saved dashboard JSON. Dashboards with explicit custom config render correctly.\n\n## Your Task\n\nInvestigate the root cause and produce a report at `/logs/agent/investigation.md`.\n\nYour report MUST cover:\n1. Which migration function is responsible for the regression\n2. The exact conditional logic that fails for dashboards without explicit `defaults.custom`\n3. Why dashboards with explicit `defaults.custom` are unaffected\n4. Which dashboard schema version triggers the issue\n5. The files and functions involved in the migration chain\n\n## Output Requirements\n\nWrite your investigation report to `/logs/agent/investigation.md` with these sections:\n\n```\n# Investigation Report\n\n## Summary\n<1-2 sentence finding>\n\n## Root Cause\n<Specific file, function, and mechanism>\n\n## Evidence\n<Code references with file paths and line numbers>\n\n## Affected Components\n<List of packages/modules impacted>\n\n## Recommendation\n<Fix strategy>\n```\n\n## Constraints\n\n- Do NOT write any code fixes\n- Do NOT modify any source files\n- Your job is investigation and analysis only\n- Focus on the dashboard migration pipeline, particularly schema version handlers",
+          "timestamp": "2026-03-02T22:18:19.630Z",
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "payload": {},
+          "sequence": 3,
+          "subtype": "message",
+          "text": "I'll investigate the dashboard migration regression in Grafana. Let me start by exploring the repository structure and finding the relevant migration code.",
+          "timestamp": "2026-03-02T22:18:23.163Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 4,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01KQhYvBTX1KP5TzLLqq3bnN",
+          "timestamp": "2026-03-02T22:18:23.245Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 6,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_018mp5XYj1DP9ZYihibBmPrN",
+          "timestamp": "2026-03-02T22:18:25.931Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 8,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_013Xi9pR54QftUqkBD9GyMHu",
+          "timestamp": "2026-03-02T22:18:28.335Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 10,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01XgGfFtsKjenZ7GZQqGscDx",
+          "timestamp": "2026-03-02T22:18:30.222Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 12,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01Jc3YusgXLZc3vaMLjcTVrz",
+          "timestamp": "2026-03-02T22:18:41.462Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 14,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_0196ZvFbK2LMisYKsdaLZQJd",
+          "timestamp": "2026-03-02T22:18:43.440Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 16,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01JJoLyhWkBQbfqRyY8DjzAc",
+          "timestamp": "2026-03-02T22:18:52.681Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 18,
+          "subtype": "message",
+          "text": "Now let me search for code that handles the initialization or defaults of fieldConfig to understand what might be dropping field override configuration.",
+          "timestamp": "2026-03-02T22:19:06.238Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 19,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01WyQsW5P1HSVAobvUDciuX1",
+          "timestamp": "2026-03-02T22:19:06.526Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 21,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01L6do1v3kr9bUAMkSjpNiK5",
+          "timestamp": "2026-03-02T22:19:08.905Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 23,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_018LCq2R7XP9uLNQa7JKq2kB",
+          "timestamp": "2026-03-02T22:19:11.013Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 25,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_0182XcQ4hKNdeTYdUMEzfdm2",
+          "timestamp": "2026-03-02T22:19:12.816Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 27,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_019xFKR3Hz9ciybtwgXnCbmx",
+          "timestamp": "2026-03-02T22:19:14.427Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 29,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_015aGY9TCHvMxLjzMPgyfrxF",
+          "timestamp": "2026-03-02T22:19:15.805Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 31,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01FwAgRoTYQNRqwwpaGTQytf",
+          "timestamp": "2026-03-02T22:19:17.605Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 33,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01AWrQ8dftDb4RbYGb6EV3Qe",
+          "timestamp": "2026-03-02T22:19:18.905Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 35,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01UA6dUJRk4aLtKuoXVT3A37",
+          "timestamp": "2026-03-02T22:19:20.270Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 37,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_019aRV8Th2j2mH2ex3qzKJ7o",
+          "timestamp": "2026-03-02T22:19:22.183Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 39,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01PDmb1XuMP9XiqXez2foCzM",
+          "timestamp": "2026-03-02T22:19:24.395Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 41,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01E9j4EmmEwSD1Zh4NfyUN8j",
+          "timestamp": "2026-03-02T22:19:25.566Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 43,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01K1VJdjK4ZSj5JuFxxw7NYD",
+          "timestamp": "2026-03-02T22:19:27.396Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 45,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01F77HQntNiRNv5aSb69otc2",
+          "timestamp": "2026-03-02T22:19:30.327Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 47,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01EJv7cJzPDRkQutfvspENQq",
+          "timestamp": "2026-03-02T22:19:47.517Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 49,
+          "subtype": "message",
+          "text": "Now let me look at a specific test case to understand the issue better. Let me search for tests related to v38 migration or table field overrides.",
+          "timestamp": "2026-03-02T22:19:50.054Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 50,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01HK1Dh2Zv1YcvKq5AUqVngZ",
+          "timestamp": "2026-03-02T22:19:50.358Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 52,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01G41h25tedUttffAxqFcZom",
+          "timestamp": "2026-03-02T22:19:52.163Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 54,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_015bR1THCWgm9vn4o1gezjHv",
+          "timestamp": "2026-03-02T22:19:54.376Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 56,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01Lw9sF6uNneYcUvJMTnM8sz",
+          "timestamp": "2026-03-02T22:19:57.008Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 58,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01U6qRwXiood1PLao3sxSbq5",
+          "timestamp": "2026-03-02T22:19:59.182Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 60,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01EFMxzRR3PSRrpfJGd4j7k2",
+          "timestamp": "2026-03-02T22:20:01.200Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 62,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01A5Umk13epqcZqu3WWY2khT",
+          "timestamp": "2026-03-02T22:20:04.048Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 64,
+          "subtype": "message",
+          "text": "Now let me write a comprehensive investigation by looking at how the frontend and backend migrations interact. Let me examine what happens when a panel doesn't have `defaults.custom` but has field overrides.",
+          "timestamp": "2026-03-02T22:20:06.447Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 65,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_011RahW2PSWdcYrGG3rJgrUt",
+          "timestamp": "2026-03-02T22:20:06.809Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 67,
+          "subtype": "message",
+          "text": "Based on my deep analysis of the Grafana codebase, I now have enough information to create a comprehensive investigation report. Let me write it:",
+          "timestamp": "2026-03-02T22:20:38.615Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 68,
+          "subtype": "message",
+          "text": "Executed Write toolu_017T3MyLfs8mCDZ4eb5Z6HvW",
+          "timestamp": "2026-03-02T22:20:56.432Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 70,
+          "subtype": "message",
+          "text": "Perfect! I've completed the investigation and created a comprehensive report at `/logs/agent/investigation.md`.\n\n## Summary\n\nThe investigation has uncovered a **conditional logic regression in the frontend v38 dashboard migration** that specifically affects table panels. Here are the key findings:\n\n### Root Cause\nThe v38 migration handler in `DashboardMigrator.ts` (lines 644-674) uses optional chaining to extract `displayMode` from `fieldConfig.defaults.custom`. When this value is undefined (because the panel doesn't have explicit `defaults.custom`), the entire defaults initialization block is skipped. However, the field overrides are still processed independently, creating an asymmetric migration where:\n\n- \u2705 Field overrides ARE migrated (`custom.displayMode` \u2192 `custom.cellOptions`)\n- \u274c `fieldConfig.defaults.custom` is NOT initialized\n- This breaks the table panel migration handler which assumes proper fieldConfig structure\n\n### Why Dashboards WITH Explicit `defaults.custom` Work\nDashboards that explicitly define `fieldConfig.defaults.custom` in their JSON work correctly because the optional chaining chain completes successfully, triggering the full initialization logic.\n\n### The Key Bug\nThe condition at line 650 gates the defaults initialization:\n```typescript\nif (displayMode !== undefined) {  // This is FALSE when defaults.custom doesn't exist\n  panel.fieldConfig.defaults.custom.cellOptions = ...\n}\n```\n\nWhen this condition is false, the `defaults.custom` object isn't initialized before the table panel's `migrateTextWrapToFieldLevel()` handler runs, which expects it to exist.\n\n### Evidence\n- **Frontend:** `DashboardMigrator.ts` lines 644-674 - Conditional migration\n- **Backend:** `v38.go` lines 115-131 - Properly handles both cases with unconditional `migrateOverrides()` call\n- **Impact:** `table/migrations.ts` lines 306-334 - Fails on incomplete fieldConfig structure\n\nThe report has been saved to `/logs/agent/investigation.md` with complete details on the migration chain, affected components, and recommended fix strategy.",
+          "timestamp": "2026-03-02T22:21:04.505Z",
+          "tool": null,
+          "type": "agent"
+        }
+      ],
+      "step_count": 70,
+      "tool_counts_by_name": {
+        "Write": 1,
+        "mcp__sourcegraph__sg_keyword_search": 11,
+        "mcp__sourcegraph__sg_list_files": 2,
+        "mcp__sourcegraph__sg_read_file": 17
+      },
+      "tool_event_count": 31,
+      "tool_events": [
+        {
+          "arguments": {
+            "path": ".",
+            "repo": "github.com/sg-evals/grafana--26d36ec"
+          },
+          "step_id": 4,
+          "timestamp": "2026-03-02T22:18:23.245Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/grafana--26d36ec$ migration table panel fieldConfig"
+          },
+          "step_id": 6,
+          "timestamp": "2026-03-02T22:18:25.931Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "path": "apps/dashboard/pkg/migration/schemaversion/v38.go",
+            "repo": "github.com/sg-evals/grafana--26d36ec"
+          },
+          "step_id": 8,
+          "timestamp": "2026-03-02T22:18:28.335Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 700,
+            "path": "public/app/features/dashboard/state/DashboardMigrator.ts",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 640
+          },
+          "step_id": 10,
+          "timestamp": "2026-03-02T22:18:30.222Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 50,
+            "path": "public/app/features/dashboard/state/DashboardMigrator.ts",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 1
+          },
+          "step_id": 12,
+          "timestamp": "2026-03-02T22:18:41.462Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 750,
+            "path": "public/app/features/dashboard/state/DashboardMigrator.ts",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 600
+          },
+          "step_id": 14,
+          "timestamp": "2026-03-02T22:18:43.440Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "path": "public/app/plugins/panel/table/migrations.ts",
+            "repo": "github.com/sg-evals/grafana--26d36ec"
+          },
+          "step_id": 16,
+          "timestamp": "2026-03-02T22:18:52.681Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/grafana--26d36ec$ fieldConfig defaults custom not explicitly set"
+          },
+          "step_id": 19,
+          "timestamp": "2026-03-02T22:19:06.526Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 1200,
+            "path": "apps/dashboard/pkg/migration/frontend_defaults.go",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 1050
+          },
+          "step_id": 21,
+          "timestamp": "2026-03-02T22:19:08.905Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 100,
+            "path": "apps/dashboard/pkg/migration/frontend_defaults.go",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 1
+          },
+          "step_id": 23,
+          "timestamp": "2026-03-02T22:19:11.013Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 250,
+            "path": "apps/dashboard/pkg/migration/frontend_defaults.go",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 100
+          },
+          "step_id": 25,
+          "timestamp": "2026-03-02T22:19:12.816Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/grafana--26d36ec$ files:frontend_defaults.go migrate dashboard function"
+          },
+          "step_id": 27,
+          "timestamp": "2026-03-02T22:19:14.427Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 1050,
+            "path": "apps/dashboard/pkg/migration/frontend_defaults.go",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 900
+          },
+          "step_id": 29,
+          "timestamp": "2026-03-02T22:19:15.805Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/grafana--26d36ec$ files:.*migration\\.go$ Migrate func context dashboard"
+          },
+          "step_id": 31,
+          "timestamp": "2026-03-02T22:19:17.605Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "path": "apps/dashboard/pkg/migration",
+            "repo": "github.com/sg-evals/grafana--26d36ec"
+          },
+          "step_id": 33,
+          "timestamp": "2026-03-02T22:19:18.905Z",
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "arguments": {
+            "path": "apps/dashboard/pkg/migration/migrate.go",
+            "repo": "github.com/sg-evals/grafana--26d36ec"
+          },
+          "step_id": 35,
+          "timestamp": "2026-03-02T22:19:20.270Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/grafana--26d36ec$ cleanupDashboardForSave function panel fieldConfig"
+          },
+          "step_id": 37,
+          "timestamp": "2026-03-02T22:19:22.183Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/grafana--26d36ec$ files:frontend_defaults.go cleanupDashboardForSave"
+          },
+          "step_id": 39,
+          "timestamp": "2026-03-02T22:19:24.395Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/grafana--26d36ec$ cleanupDashboardForSave"
+          },
+          "step_id": 41,
+          "timestamp": "2026-03-02T22:19:25.566Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 550,
+            "path": "apps/dashboard/pkg/migration/frontend_defaults.go",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 400
+          },
+          "step_id": 43,
+          "timestamp": "2026-03-02T22:19:27.396Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 700,
+            "path": "apps/dashboard/pkg/migration/frontend_defaults.go",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 550
+          },
+          "step_id": 45,
+          "timestamp": "2026-03-02T22:19:30.327Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/grafana--26d36ec$ table panelcfg.gen defaults custom"
+          },
+          "step_id": 47,
+          "timestamp": "2026-03-02T22:19:47.517Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/grafana--26d36ec$ test table migration v38 overrides displayMode"
+          },
+          "step_id": 50,
+          "timestamp": "2026-03-02T22:19:50.358Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 150,
+            "path": "apps/dashboard/pkg/migration/testdata/input/v38.table_displaymode_comprehensive.json",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 1
+          },
+          "step_id": 52,
+          "timestamp": "2026-03-02T22:19:52.163Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/grafana--26d36ec$ table migration no explicit defaults custom missing fieldConfig"
+          },
+          "step_id": 54,
+          "timestamp": "2026-03-02T22:19:54.376Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/grafana--26d36ec$ DashboardMigrator fieldConfig displayMode defaults"
+          },
+          "step_id": 56,
+          "timestamp": "2026-03-02T22:19:57.008Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "arguments": {
+            "endLine": 2500,
+            "path": "public/app/features/dashboard/state/DashboardMigrator.test.ts",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 2340
+          },
+          "step_id": 58,
+          "timestamp": "2026-03-02T22:19:59.182Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 2360,
+            "path": "public/app/features/dashboard/state/DashboardMigrator.test.ts",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 2200
+          },
+          "step_id": 60,
+          "timestamp": "2026-03-02T22:20:01.200Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 2220,
+            "path": "public/app/features/dashboard/state/DashboardMigrator.test.ts",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 2100
+          },
+          "step_id": 62,
+          "timestamp": "2026-03-02T22:20:04.048Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "endLine": 700,
+            "path": "public/app/features/dashboard/state/DashboardMigrator.ts",
+            "repo": "github.com/sg-evals/grafana--26d36ec",
+            "startLine": 644
+          },
+          "step_id": 65,
+          "timestamp": "2026-03-02T22:20:06.809Z",
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "arguments": {
+            "content": "# Investigation Report: Dashboard Migration v38 Table Panel Regression\n\n## Summary\nThe v38 dashboard schema migration has a regression where table panel field overrides are conditionally processed based on the presence of `fieldConfig.defaults.custom`, even though field overrides can exist independently. When a table panel has field overrides with `custom.displayMode` but no `fieldConfig.defaults.custom`, the frontend migration handler skips critical initialization logic, causing the table panel's migration handler to execute on an improperly structured fieldConfig.\n\n## Root Cause\n**File:** `public/app/features/dashboard/state/DashboardMigrator.ts:644-674`\n**Function:** Schema version 38 migration handler\n**Specific Issue:** Conditional logic gates the entire table panel migration on the presence of `fieldConfig.defaults.custom`\n\nThe problematic code structure:\n```typescript\n// Line 644-674: V38 Migration Handler\nif (oldVersion < 38 && finalTargetVersion >= 38) {\n  panelUpgrades.push((panel: PanelModel) => {\n    if (panel.type === 'table' && panel.fieldConfig !== undefined) {\n      const displayMode = panel.fieldConfig.defaults?.custom?.displayMode;  // Line 647\n\n      // Update field configuration\n      if (displayMode !== undefined) {  // Line 650: CONDITIONAL BLOCK\n        // Migrate any options for the panel\n        panel.fieldConfig.defaults.custom.cellOptions = migrateTableDisplayModeToCellOptions(displayMode);\n        delete panel.fieldConfig.defaults.custom.displayMode;\n      }\n\n      // Update any overrides referencing the cell display mode\n      if (panel.fieldConfig?.overrides) {  // Line 659: INDEPENDENT BLOCK\n        for (const override of panel.fieldConfig.overrides) {\n          for (let j = 0; j < (override.properties?.length || 0); j++) {\n            if (override.properties[j].id === 'custom.displayMode') {\n              override.properties[j].id = 'custom.cellOptions';\n              override.properties[j].value = migrateTableDisplayModeToCellOptions(overrideDisplayMode);\n            }\n          }\n        }\n      }\n    }\n    return panel;\n  });\n}\n```\n\n## Exact Conditional Logic Failure\n\n**The bug manifests when:**\n1. A table panel has `fieldConfig.overrides` with `custom.displayMode` properties\n2. The same panel does NOT have `fieldConfig.defaults.custom` defined\n3. The optional chaining `panel.fieldConfig.defaults?.custom?.displayMode` evaluates to `undefined`\n4. This causes the defaults migration block (lines 650-656) to be SKIPPED\n5. However, the overrides ARE processed (lines 659-669), converting `custom.displayMode` \u2192 `custom.cellOptions`\n\n**The cascading failure:**\nAfter the v38 migration completes, the table panel's migration handler (`tableMigrationHandler` in `public/app/plugins/panel/table/migrations.ts`) is invoked. This handler calls `migrateTextWrapToFieldLevel()` which assumes `panel.fieldConfig.defaults` exists and is properly initialized. When the defaults structure is incomplete or missing the `custom` object:\n\n```typescript\n// Line 329 of public/app/plugins/panel/table/migrations.ts\npanel.fieldConfig.defaults.custom = panel.fieldConfig.defaults.custom ?? {};\n```\n\nThis creates or initializes `defaults.custom` only AFTER the overrides have already been processed. The missing initialization can cause subsequent field configuration operations to fail or be skipped.\n\n## Why Dashboards WITH Explicit `defaults.custom` Are Unaffected\n\nDashboards that explicitly define `fieldConfig.defaults.custom` in the saved JSON work correctly because:\n\n1. When `defaults.custom` is explicitly set, the optional chaining chain completes successfully\n2. Line 647 retrieves the `displayMode` value (not undefined)\n3. Line 650 condition is TRUE, so the defaults migration block executes\n4. This ensures proper initialization of the `custom` object structure\n5. When the table panel migration handler runs, `defaults.custom` is already properly initialized\n\n## Schema Version and Trigger Point\n\n**Affected Schema Version:** 38 (and all versions >= 38)\n**Dashboard Migration Timeline:**\n- v10.3 and earlier: Table panels could have incomplete fieldConfig structures\n- v10.4 (when schema v38 was introduced): The v38 migration assumes `defaults.custom` always exists when processing displayMode\n- Regression: Dashboards migrating from v10.3 to v10.4 with certain table panel configurations lose field overrides\n\n## Migration Chain Analysis\n\n### Frontend Migration Path (DashboardMigrator.ts)\n1. **Line 647:** Extract displayMode with optional chaining (returns undefined if defaults.custom doesn't exist)\n2. **Line 650-656:** Only migrate defaults.custom if displayMode is defined\n3. **Line 659-669:** Process overrides independently (migrations happen but structure may be incomplete)\n4. Table panel plugin's `tableMigrationHandler()` is called afterward\n5. `migrateTextWrapToFieldLevel()` assumes proper fieldConfig initialization\n\n### Backend Migration Path (apps/dashboard/pkg/migration/schemaversion/v38.go)\n1. **Line 116-127:** Process `defaults.custom` only if it exists\n2. **Line 129-131:** Call `migrateOverrides()` regardless of defaults.custom presence\n3. **migrateOverrides() (lines 135-176):** Correctly processes all overrides\n4. This backend migration is more defensive and handles both cases\n\n**Key Difference:** The backend migration in `v38.go` calls `migrateOverrides()` unconditionally, while the frontend migration's logic flow doesn't properly initialize `defaults.custom` before the table panel handler executes.\n\n## Files and Functions Involved\n\n### Primary Regression Location\n- **File:** `public/app/features/dashboard/state/DashboardMigrator.ts`\n- **Function:** v38 migration handler (anonymous, lines 644-674)\n- **Issue:** Conditional field override processing based on defaults.custom presence\n\n### Secondary Impact Points\n- **File:** `public/app/plugins/panel/table/migrations.ts`\n- **Function:** `migrateTextWrapToFieldLevel()` (lines 306-334)\n- **Issue:** Assumes `fieldConfig.defaults` structure is fully initialized\n\n- **File:** `apps/dashboard/pkg/migration/schemaversion/v38.go`\n- **Function:** `processPanelsV38()` (lines 89-133)\n- **Status:** Correctly handles both cases (has proper defensive checks)\n\n### Supporting Files\n- **File:** `apps/dashboard/pkg/migration/frontend_defaults.go`\n- **Function:** `trackOriginalFieldConfigCustom()` (lines 1138-1169)\n- **Status:** Correctly tracks panels that had fieldConfig.defaults.custom for preservation during cleanup\n\n## Evidence: Code References\n\n1. **V38 Migration Handler Decision Point:**\n   - `DashboardMigrator.ts:647` - Extracts displayMode with optional chaining\n   - `DashboardMigrator.ts:650` - Conditional block gated on displayMode !== undefined\n   - `DashboardMigrator.ts:659` - Independent override processing\n\n2. **Backend v38 (Correct Implementation):**\n   - `v38.go:115-127` - Processes defaults.custom if exists\n   - `v38.go:129-131` - Calls migrateOverrides unconditionally\n   - `v38.go:135-176` - migrateOverrides function properly handles all cases\n\n3. **Table Panel Migration Handler Issues:**\n   - `migrations.ts:306-310` - Early return based on wrapText check\n   - `migrations.ts:314` - Assumes fieldConfig.overrides exists\n   - `migrations.ts:329` - Creates/initializes defaults.custom\n\n## Affected Components\n\n- **Dashboard Migration Pipeline:** Core migration orchestration\n- **Table Panel Plugin:** Field configuration migration handlers\n- **Schema Version 38:** displayMode to cellOptions conversion\n- **Field Configuration System:** defaults and overrides handling\n- **Frontend-Backend Sync:** Inconsistent handling between frontend (DashboardMigrator) and backend (v38.go)\n\n## Recommendation\n\n**The fix requires ensuring that `fieldConfig.defaults.custom` is always initialized before any migration operation that depends on its existence, regardless of whether a displayMode value exists.**\n\nSpecifically:\n1. In `DashboardMigrator.ts` line 644-674, restructure the v38 migration to ensure `fieldConfig.defaults.custom` is initialized even when no displayMode exists in defaults\n2. Move the initialization logic outside the conditional block or add an explicit pre-initialization step\n3. Ensure all field override migrations have access to a properly structured defaults object\n4. Consider adding a validation step to match the defensive approach used in the backend `v38.go` migration\n\nThis regression demonstrates a critical difference in migration robustness between the frontend (DashboardMigrator.ts) and backend (v38.go) implementations, with the backend implementation being more defensive.\n",
+            "file_path": "/logs/agent/investigation.md"
+          },
+          "step_id": 68,
+          "timestamp": "2026-03-02T22:20:56.432Z",
+          "tool": "Write"
+        }
+      ]
+    },
+    "transcript": {
+      "json_line_count": 103,
+      "line_count": 103,
+      "message_event_count": 69,
+      "messages": [
+        {
+          "sequence": 0,
+          "subtype": "init",
+          "text": null,
+          "tool": null,
+          "type": "system"
+        },
+        {
+          "sequence": 1,
+          "subtype": "text",
+          "text": "I'll investigate the dashboard migration regression in Grafana. Let me start by exploring the repository structure and finding the relevant migration code.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 2,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 3,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 4,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 5,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 6,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 7,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 8,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 9,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 10,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 11,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 12,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 13,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 14,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 15,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 16,
+          "subtype": "text",
+          "text": "Now let me search for code that handles the initialization or defaults of fieldConfig to understand what might be dropping field override configuration.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 17,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 18,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 19,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 20,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 21,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 22,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 23,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 24,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 25,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 26,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 27,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 28,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 29,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 30,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 31,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 32,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 33,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 34,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 35,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 36,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 37,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 38,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 39,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 40,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 41,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 42,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 43,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 44,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 45,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 46,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 47,
+          "subtype": "text",
+          "text": "Now let me look at a specific test case to understand the issue better. Let me search for tests related to v38 migration or table field overrides.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 48,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 49,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 50,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 51,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 52,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 53,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 54,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 55,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 56,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 57,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 58,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 59,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 60,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 61,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 62,
+          "subtype": "text",
+          "text": "Now let me write a comprehensive investigation by looking at how the frontend and backend migrations interact. Let me examine what happens when a panel doesn't have `defaults.custom` but has field overrides.",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 63,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 64,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 65,
+          "subtype": "text",
+          "text": "Based on my deep analysis of the Grafana codebase, I now have enough information to create a comprehensive investigation report. Let me write it:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 66,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Write",
+          "type": "assistant"
+        },
+        {
+          "sequence": 67,
+          "subtype": "text",
+          "text": null,
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "sequence": 68,
+          "subtype": "text",
+          "text": "Perfect! I've completed the investigation and created a comprehensive report at `/logs/agent/investigation.md`.  ## Summary  The investigation has uncovered a **conditional logic regression in the frontend v38 dashboard ...",
+          "tool": null,
+          "type": "assistant"
+        }
+      ],
+      "tool_event_count": 31,
+      "tool_events": [
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "Write"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "checksums": {
+      "result_json_sha256": "cde6ff6dc18b0a9489bde24f69125226b5baf8635317ccfa187b2cce86bc6439",
+      "trajectory_sha256": "661670a3765e2d49bae3872900c686f6dc3fad0c2d0205defb49916b285c0576",
+      "transcript_sha256": "1fcdfe43d85dca303fe324363a66b35683e20bda2b75407e7d68a09f47a84a06"
+    },
+    "config": "mcp-remote-direct",
+    "result_path": "runs/official/csb_sdlc_debug_haiku_20260302_221730/mcp-remote-direct/2026-03-02__22-17-45/mcp_grafana-table-panel-regressi__rMkQEjv/result.json",
+    "run_dir": "csb_sdlc_debug_haiku_20260302_221730",
+    "suite": "csb_sdlc_debug",
+    "task_dir": "runs/official/csb_sdlc_debug_haiku_20260302_221730/mcp-remote-direct/2026-03-02__22-17-45/mcp_grafana-table-panel-regressi__rMkQEjv",
+    "task_name": "mcp_grafana-table-panel-regression-001_alyqvi",
+    "trace_paths": {
+      "trajectory": "runs/official/csb_sdlc_debug_haiku_20260302_221730/mcp-remote-direct/2026-03-02__22-17-45/mcp_grafana-table-panel-regressi__rMkQEjv/agent/trajectory.json",
+      "transcript": "runs/official/csb_sdlc_debug_haiku_20260302_221730/mcp-remote-direct/2026-03-02__22-17-45/mcp_grafana-table-panel-regressi__rMkQEjv/agent/claude-code.txt"
+    }
+  },
+  "score": {
+    "reward": 0.9,
+    "status": "passed",
+    "timed_out": false
+  }
+}

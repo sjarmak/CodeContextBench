@@ -8,7 +8,7 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [flink-window-late-data-fix-001](../tasks/csb_sdlc_fix_haiku_20260301_214459--baseline-local-direct--flink-window-late-data-fix-001.html) | `passed` | 0.500 | 0.000 | 98 | traj, tx |
+| [flink-window-late-data-fix-001](../tasks/csb_sdlc_fix_haiku_20260301_214459--baseline-local-direct--flink-window-late-data-fix-001--90cebdfbc1.html) | `passed` | 0.500 | 0.000 | 98 | traj, tx |
 
 ## mcp-remote-direct
 
@@ -18,4 +18,4 @@
 
 | Task | Status | Reward | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---:|---:|---|
-| [mcp_flink-window-late-data-fix-001_ludod6](../tasks/csb_sdlc_fix_haiku_20260301_214459--mcp-remote-direct--mcp_flink-window-late-data-fix-001_ludod6.html) | `passed` | 0.500 | 0.300 | 60 | traj, tx |
+| [mcp_flink-window-late-data-fix-001_ludod6](../tasks/csb_sdlc_fix_haiku_20260301_214459--mcp-remote-direct--mcp_flink-window-late-data-fix-001_ludod6--183f94448b.html) | `passed` | 0.500 | 0.300 | 60 | traj, tx |

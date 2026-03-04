@@ -8,7 +8,7 @@
 
 ## Abstract
 
-CodeScaleBench (CSB) is a benchmark suite of **370 software engineering tasks** spanning the full Software Development Lifecycle (SDLC), designed to measure whether external code intelligence tools -- specifically Sourcegraph's Model Context Protocol (MCP) tools -- improve AI coding agent performance. The benchmark evaluates agents under two controlled conditions: a baseline with full local source code and no external tools, and an MCP-augmented configuration where source code is unavailable locally and the agent must use remote code intelligence tools (semantic search, symbol resolution, dependency tracing, etc.) to navigate codebases. In the refreshed analysis snapshot used in this report update (generated March 3, 2026 from `runs/analysis`), there are **1,281 valid scored rows**, **1,822 total historical rows**, and **370 paired baseline/MCP tasks** after averaging multiple runs per task/config. The overall paired reward delta is **+0.0349** (MCP minus baseline), with **+0.0363** on SDLC and **+0.0339** on Org. Retrieval evaluation on the same snapshot yields **799** event files, **311** computable tasks, and aggregate file-level metrics of **0.4598 file recall** and **0.3644 MRR**. This report documents the benchmark design, construction, retrieval evaluation pipeline, verifier architecture, and current findings.
+CodeScaleBench (CSB) is a benchmark suite of **370 software engineering tasks** spanning the full Software Development Lifecycle (SDLC), designed to measure whether external code intelligence tools -- specifically Sourcegraph's Model Context Protocol (MCP) tools -- improve AI coding agent performance. The benchmark evaluates agents under two controlled conditions: a baseline with full local source code and no external tools, and an MCP-augmented configuration where source code is unavailable locally and the agent must use remote code intelligence tools (semantic search, symbol resolution, dependency tracing, etc.) to navigate codebases. In the analysis snapshot used in this report update (generated March 3, 2026 from `runs/analysis`), there are **1,281 valid scored rows**, **1,822 total historical rows**, and **370 paired baseline/MCP tasks** after averaging multiple runs per task/config. The overall paired reward delta is **+0.0349** (MCP minus baseline), with **+0.0363** on SDLC and **+0.0339** on Org. Retrieval evaluation on the same snapshot yields **799** event files, **311** computable tasks, and aggregate file-level metrics of **0.4598 file recall** and **0.3644 MRR**. This report documents the benchmark design, construction, retrieval evaluation pipeline, verifier architecture, and current findings.
 
 ---
 
@@ -852,7 +852,7 @@ Major verifier bugs discovered through QA audit (Feb 6):
 
 ### 11.1 Data Availability
 
-This section reflects the refreshed analysis export generated on **March 3, 2026** from `runs/analysis`:
+This section reflects the analysis export generated on **March 3, 2026** from `runs/analysis`:
 - Valid scored rows in export: **1,281**
 - Historical rows in `all_tasks`: **1,822**
 - Paired baseline/MCP tasks with both sides present: **370**
@@ -864,7 +864,7 @@ Compared with prior drafts, this is a different analysis slice and should be tre
 
 ### 11.2 SDLC Suite Results (Paired Comparison)
 
-Paired deltas for SDLC suites in the refreshed analysis set (computed from per-task means across all available runs, with variance on per-task deltas and 95% bootstrap CIs):
+Paired deltas for SDLC suites in the analysis set (computed from per-task means across all available runs, with variance on per-task deltas and 95% bootstrap CIs):
 
 | Suite | n | Mean Reward Delta (MCP - Baseline) | Var(Δ Reward) | 95% CI |
 |-------|---|-------------------------------------|---------------|--------|
@@ -882,7 +882,7 @@ Paired deltas for SDLC suites in the refreshed analysis set (computed from per-t
 
 ### 11.3 Org Suite Results (Paired Comparison)
 
-Paired deltas for Org suites in the refreshed analysis set:
+Paired deltas for Org suites in the analysis set:
 
 | Suite | n | Mean Reward Delta (MCP - Baseline) | Var(Δ Reward) | 95% CI |
 |-------|---|-------------------------------------|---------------|--------|
@@ -904,9 +904,9 @@ Paired deltas for Org suites in the refreshed analysis set:
 
 ### 11.4 V1 → V2 Results Comparison
 
-The refreshed analysis set supersedes the prior V2 numeric snapshot in this section. The key directional change from the old write-up is that reward deltas remain positive overall while efficiency metrics (time/cost) are now adverse in the current slice.
+The current analysis set supersedes the prior V2 numeric snapshot in this section. The key directional change from the old write-up is that reward deltas remain positive overall while efficiency metrics (time/cost) are now adverse in the current slice.
 
-| Metric | Refreshed Value |
+| Metric | Value |
 |--------|------------------|
 | Paired tasks | 370 |
 | Overall reward delta | +0.0349 (95% CI: [+0.0130, +0.0579]) |
@@ -951,7 +951,7 @@ MCP runs show higher recall and slightly higher ranking/efficiency metrics on co
 
 ### 11.6 Correlation Analysis
 
-Correlation was recomputed from the refreshed retrieval analysis output (`docs/analysis/ir_analysis_analysis_set_20260303.json`):
+Correlation was recomputed from the retrieval analysis output (`docs/analysis/ir_analysis_analysis_set_20260303.json`):
 
 | Correlation | Value |
 |-------------|-------|
@@ -993,11 +993,11 @@ raw = 0.4 * size_score + 0.4 * complexity_score + 0.2 * ground_truth_depth_score
 difficulty = "medium" if raw < 0.35 else "hard" if raw < 0.75 else "expert"
 ```
 
-The benchmark remains dominated by hard tasks. In this refreshed aggregation, hard and medium are positive on reward delta, while expert remains negative.
+The benchmark remains dominated by hard tasks. In this aggregation, hard and medium are positive on reward delta, while expert remains negative.
 
 ### 11.9 Impact by Codebase Size
 
-Codebase-size analysis in the refreshed pass uses two available proxies:
+Codebase-size analysis in this pass uses two available proxies:
 1) `context_length` bins from task metadata, and
 2) `files_count` bins.
 
@@ -1009,7 +1009,7 @@ Codebase-size analysis in the refreshed pass uses two available proxies:
 | 100K-1M tokens | 98 | 0.639 | 0.670 | +0.031 | 0.093518 |
 | unknown | 50 | 0.523 | 0.571 | +0.048 | 0.059717 |
 
-MCP reward delta is positive across all context-size bins in this refreshed slice.
+MCP reward delta is positive across all context-size bins in this slice.
 
 **By files-count bin:**
 
@@ -1023,7 +1023,7 @@ Across available bins, MCP reward delta is positive, with the strongest lift in 
 
 ### 11.10 MCP Tool Usage Patterns
 
-Based on all MCP run rows in the refreshed analysis (`n=910`):
+Based on all MCP run rows in the analysis snapshot (`n=910`):
 
 **Overall usage:**
 - Mean total tool calls per run: 32.12
@@ -1051,7 +1051,7 @@ The dominant pattern is unchanged: keyword search + read-file dominate MCP usage
 
 ### 11.11 Cost Analysis
 
-Token-based cost in this refreshed snapshot is derived from the `analysis_set_metrics_20260303.json` paired analysis.
+Token-based cost in this snapshot is derived from the `analysis_set_metrics_20260303.json` paired analysis.
 
 | Metric | Value |
 |--------|-------|
@@ -1061,6 +1061,7 @@ Token-based cost in this refreshed snapshot is derived from the `analysis_set_me
 | Cost delta (% of means) | **+13.49%** |
 
 Cost is slightly higher in MCP on this refreshed slice.
+The cost-paired count is 369 (not 370) because one paired task, `openlibrary-solr-boolean-fix-001`, has `null` MCP-side cost in all three MCP runs in the March 3 analysis set.
 
 **Cost per benchmark suite (per-task multi-run means):**
 
@@ -1089,7 +1090,7 @@ Cost is slightly higher in MCP on this refreshed slice.
 
 ### 11.12 Timing Analysis
 
-Timing in the refreshed snapshot:
+Timing in this snapshot:
 
 | Metric | Value |
 |--------|-------|
@@ -1100,7 +1101,7 @@ Timing in the refreshed snapshot:
 | Wall-clock delta (% of means) | **−9.87%** |
 | Mean paired agent-execution delta | **−101.06s** |
 
-MCP is faster on both wall-clock and agent-execution in the refreshed per-task averaged analysis.
+MCP is faster on both wall-clock and agent-execution in the per-task averaged analysis.
 
 ---
 
@@ -1161,11 +1162,9 @@ All current results use Claude Code as the sole agent harness. The framework alr
 
 ## 14. Development Process: Building a Benchmark with Claude Code
 
-### 14.1 Meta-Recursive Development
+CodeScaleBench was primarily developed with Claude Code. This section documents the development process for methodological transparency.
 
-CodeScaleBench was itself primarily developed using Claude Code, creating a meta-recursive situation: an AI coding agent building a benchmark to evaluate AI coding agents' use of code intelligence tools. This section documents the development process for both methodological transparency and as a case study in AI-assisted benchmark construction.
-
-### 14.2 Development Timeline
+### 14.1 Development Timeline
 
 ```
  Jan 30 ─── Feb 3 ─── Feb 6 ─── Feb 10 ─── Feb 15 ─── Feb 20 ─── Feb 25 ─── Mar 2 ── Mar 3
@@ -1179,11 +1178,11 @@ CodeScaleBench was itself primarily developed using Claude Code, creating a meta
             5→3 cfg    mirrors   reruns                                         Daytona
 ```
 
-### 14.3 Scale of Claude Code Usage
+### 14.2 Scale of Claude Code Usage
 
-The development produced **700+ conversation sessions** (JSONL transcripts) spanning January 30 -- March 3, 2026. Claude Code was used to:
+The development produced **~1,000 conversation sessions** (JSONL transcripts) spanning January 30 -- March 3, 2026. Claude Code was used to:
 
-- **Design and implement** the task selection algorithm and MCP scoring formula
+- **Design and implement** the task selection and benchmarking logic
 - **Generate** all 255 `Dockerfile.sg_only` variants and 85 `Dockerfile.artifact_only` files
 - **Build** the IR evaluation pipeline (5 stages, ~3,500 lines of Python)
 - **Create** the oracle evaluation system (7 check functions, 3-pass repo normalization)
@@ -1193,7 +1192,7 @@ The development produced **700+ conversation sessions** (JSONL transcripts) span
 - **Debug** critical issues (verifier bugs, git history bypass, MCP death spiral)
 - **Produce** analysis reports and statistical evaluation code
 
-### 14.4 Key Workflow Pattern
+### 14.3 Key Workflow Pattern
 
 The development followed a consistent pattern:
 
@@ -1204,25 +1203,11 @@ The development followed a consistent pattern:
 5. **User reviews and iterates** → identifies gaps, requests changes
 6. **QA and validation** → automated checks + manual audit
 
-### 14.5 Decisions Made Through Claude Code Dialogue
-
-Major architectural decisions emerged through iterative dialogue:
-
-1. **SDLC taxonomy** (Feb 1): User requested "more systematic approach to selecting benchmark tasks." Claude Code analyzed 200+ existing tasks and proposed the 8-phase SDLC mapping.
-
-2. **MCP scoring formula** (Feb 1): The 4-component weighted scoring formula was designed collaboratively, with Claude Code proposing the component weights based on analysis of task metadata.
-
-3. **SG_base dropping** (Feb 12): Claude Code analyzed run data showing SG_base offered no improvement over baseline, and recommended consolidation to 2 configs.
-
-4. **V5 preamble design** (Feb 20): After discovering the git history bypass bug, Claude Code designed the "truncation constraint" approach that leads with "files not present."
-
-5. **Oracle auto-curation** (Feb 24): Claude Code designed the Sourcegraph-query-based oracle curation pipeline and validated all 220 Org tasks (81 initial tasks expanded to 220 via scaffolding, promotion, and DOE-driven Neyman-optimal rebalancing).
-
-### 14.6 Lessons Learned
+### 14.4 Lessons Learned
 
 1. **AI is effective at benchmark infrastructure**: Generating Dockerfiles, writing evaluation scripts, and building metrics pipelines are well-suited to AI-assisted development.
 
-2. **Domain expertise remains critical**: The SDLC taxonomy, scoring methodology, and validity threat analysis required human judgment that couldn't be fully automated.
+2. **Domain expertise remains critical**: Methodology and validity threat analysis required human judgment that couldn't be fully automated.
 
 3. **Iterative QA is essential**: The Feb 6 QA audit found 28 issues (9 critical) in infrastructure that was largely AI-generated. Systematic validation caught bugs that individual reviews missed.
 
