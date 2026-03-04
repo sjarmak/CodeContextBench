@@ -11,6 +11,14 @@ full operations manual.
 - Prefer a **remote execution environment** (e.g., Daytona) for large benchmark runs; use local Docker only when a task’s image or registry is incompatible with your cloud environment. See `docs/DAYTONA.md`.
 - Set **parallelism based on your own account and model limits**. Avoid exceeding documented concurrency or rate caps for your environment or provider.
 
+## Beads Prerequisite
+- Keep the Beads CLI (`bd`, alias `beads`) up to date before running agent workflows that rely on task graphs.
+- Install or update with the official installer:
+```bash
+curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+```
+- Verify install/version with `bd --version` (or `beads --version`).
+
 ## Minimal Loading Policy
 - Default load order: this file + one relevant skill + one relevant doc.
 - Do not open broad catalogs (`docs/TASK_CATALOG.md`, large script lists, full reports) unless required.
