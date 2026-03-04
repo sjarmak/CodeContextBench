@@ -115,21 +115,19 @@ See [docs/MCP_UNIQUE_TASKS.md](docs/MCP_UNIQUE_TASKS.md) for the full task syste
 
 ## 2-Config Evaluation Matrix
 
-All benchmarks are evaluated across two primary configurations (Baseline vs MCP-Full). The concrete run config names differ by task type:
+All benchmarks are evaluated across two primary configurations (Baseline vs MCP). The concrete run config names differ by task type:
 
 - **SDLC suites** (`csb_sdlc_feature`, `csb_sdlc_refactor`, `csb_sdlc_fix`, etc.): `baseline-local-direct` + `mcp-remote-direct`
-- **Org suites** (`csb_org_*`): `baseline-local-direct` + `mcp-remote-direct` (some legacy runs used `baseline-local-artifact` + `mcp-remote-artifact`)
-
-Legacy run directory names (`baseline`, `sourcegraph_full`, `artifact_full`) may still appear in historical outputs and are handled by analysis scripts.
+- **Org suites** (`csb_org_*`): `baseline-local-direct` + `mcp-remote-direct`
 
 At a high level, the distinction is:
 
 | Config Name | Internal MCP mode | MCP Tools Available |
 |-------------------|---------------------|---------------------|
 | Baseline | `none` | None (agent uses only built-in tools) |
-| MCP-Full | `sourcegraph_full` / `artifact_full` (task-dependent) | All 13 Sourcegraph MCP tools including `sg_deepsearch`, `sg_deepsearch_read` |
+| MCP | `sourcegraph` / `artifact` (task-dependent) | All 13 Sourcegraph MCP tools including `sg_deepsearch`, `sg_deepsearch_read` |
 
-See [docs/reference/CONFIGS.md](docs/reference/CONFIGS.md) for the canonical configuration matrix and tool-by-tool breakdown. (`docs/CONFIGS.md` is a compatibility stub.)
+See [docs/reference/CONFIGS.md](docs/reference/CONFIGS.md) for the canonical configuration matrix and tool-by-tool breakdown.
 
 ---
 
@@ -224,17 +222,18 @@ Each suite directory contains per-task subdirectories with `instruction.md`, `ta
 
 ## Metrics Extraction Pipeline
 
-The `scripts/` directory contains a stdlib-only Python 3.10+ pipeline for extracting deterministic metrics from Harbor run output:
+The `scripts/` directory contains a stdlib-only Python 3.10+ pipeline for extracting deterministic metrics from Harbor run output.
+Use `runs/analysis` for active analysis runs (and `runs/official` when producing publishable exports):
 
 ```bash
-# Generate evaluation report from Harbor runs
+# Generate evaluation report from analysis runs
 python3 scripts/generate_eval_report.py \
-  --runs-dir /path/to/runs/official/ \
+  --runs-dir /path/to/runs/analysis/ \
   --output-dir ./eval_reports/
 
 # Generate LLM judge context files
 python3 -m scripts.csb_metrics.judge_context \
-  --runs-dir /path/to/runs/official/ \
+  --runs-dir /path/to/runs/analysis/ \
   --benchmarks-dir ./benchmarks/ \
   --output-dir ./judge_contexts/
 ```
@@ -247,9 +246,9 @@ The report generator produces:
 
 See `python3 scripts/generate_eval_report.py --help` for all options.
 
-### Publishable Official Results + Trace Browser
+### Official Results + Trace Browser
 
-To export GitHub-friendly official results (valid scored tasks only) with parsed
+To export official results (valid scored tasks only) with parsed
 trace summaries and local browsing UI:
 
 ```bash
@@ -264,7 +263,7 @@ This writes:
 - `docs/official_results/tasks/*.md` -- per-task metrics + parsed tool/trace view
 - `docs/official_results/data/official_results.json` -- machine-readable dataset
 - `docs/official_results/audits/*.json` -- per-task audit artifacts (checksums + parsed trace events)
-- `docs/official_results/traces/*/trajectory.json` -- bundled raw trajectory traces for GitHub audit
+- `docs/official_results/traces/*/trajectory.json` -- bundled raw trajectory traces
 - `docs/official_results/index.html` -- interactive local browser
 
 Suite summaries are deduplicated to the latest result per
