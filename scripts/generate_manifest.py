@@ -734,17 +734,18 @@ def main():
     parser.add_argument(
         "--selected-only",
         action="store_true",
-        default=True,
-        help="Filter to only tasks in selected_benchmark_tasks.json (default: True)",
+        default=False,
+        help="Filter to only tasks in selected_benchmark_tasks.json (default: False)",
     )
     parser.add_argument(
         "--no-selected-filter",
         action="store_true",
-        help="Disable filtering — include all tasks found on disk",
+        help="Deprecated no-op for backward compatibility (default already includes all tasks)",
     )
     cli_args = parser.parse_args()
-    if cli_args.no_selected_filter:
-        cli_args.selected_only = False
+    if cli_args.no_selected_filter and cli_args.selected_only:
+        print("ERROR: --selected-only and --no-selected-filter are mutually exclusive", file=sys.stderr)
+        sys.exit(2)
 
     if not RUNS_DIR.exists():
         print(f"ERROR: Runs directory not found: {RUNS_DIR}", file=sys.stderr)
