@@ -1,8 +1,8 @@
 # CodeScaleBench: A Systematic Evaluation Framework for Assessing the Impact of Enhanced Code Intelligence on AI Coding Agent Performance
 
-**White Paper Technical Report -- V2**
+**White Paper Technical Report**
 **Date:** March 3, 2026
-**Revision:** V2
+**Last Modified:** March 5, 2026
 
 ---
 
