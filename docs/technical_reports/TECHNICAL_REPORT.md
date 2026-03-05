@@ -72,54 +72,39 @@ CodeScaleBench is built on three core principles:
 
 ### 3.1 High-Level Architecture Diagram
 
-```
-                         CodeScaleBench Architecture
- ┌─────────────────────────────────────────────────────────────────────┐
- │                        TASK DEFINITIONS                            │
- │  benchmarks/                                                       │
- │  ├── csb_sdlc_understand/  (10 tasks)    ├── csb_org_crossrepo_tracing/ (22) │
- │  ├── csb_sdlc_design/      (14 tasks)    ├── csb_org_security/          (24) │
- │  ├── csb_sdlc_fix/         (26 tasks)    ├── csb_org_incident/          (20) │
- │  ├── csb_sdlc_feature/     (23 tasks)    ├── csb_org_onboarding/        (28) │
- │  ├── csb_sdlc_refactor/    (16 tasks)    ├── csb_org_compliance/        (18) │
- │  ├── csb_sdlc_test/        (18 tasks)    ├── csb_org_crossorg/          (15) │
- │  ├── csb_sdlc_document/    (13 tasks)    ├── csb_org_domain/            (20) │
- │  ├── csb_sdlc_secure/      (12 tasks)    ├── csb_org_migration/         (26) │
- │  └── csb_sdlc_debug/       (18 tasks)    ├── csb_org_org/               (15) │
- │       150 SDLC tasks (9 suites)     ├── csb_org_platform/          (18) │
- │                                     ├── csb_org_crossrepo/         (14) │
- │                                     └── 220 Org tasks (11 suites)       │
- └───────────────────┬─────────────────────────────────────────────────┘
-                     │
-                     ▼
- ┌─────────────────────────────────────────────────────────────────────┐
- │                     EXECUTION LAYER (Harbor)                       │
- │                                                                     │
- │  ┌──────────────────┐          ┌──────────────────┐                │
- │  │  Config: Baseline │          │ Config: MCP  │                │
- │  │  ┌──────────────┐ │          │ ┌──────────────┐  │                │
- │  │  │ Full source   │ │          │ │ Truncated src│  │                │
- │  │  │ Local tools   │ │          │ │ 13 SG MCP    │  │                │
- │  │  │ No MCP        │ │          │ │ tools         │  │                │
- │  │  │ Dockerfile    │ │          │ │ Dockerfile.  │  │                │
- │  │  │               │ │          │ │ sg_only      │  │                │
- │  │  └──────────────┘ │          │ └──────────────┘  │                │
- │  └──────────────────┘          └──────────────────┘                │
- │                     ▼                     ▼                         │
- │              result.json           result.json                      │
- │              trajectory.jsonl      trajectory.jsonl                  │
- └───────────────────┬─────────────────────────────────────────────────┘
-                     │
-                     ▼
- ┌─────────────────────────────────────────────────────────────────────┐
- │                   EVALUATION PIPELINE                               │
- │                                                                     │
- │  Layer 1: Deterministic Verifiers  ──→  reward (0.0-1.0)           │
- │  Layer 2: Optional LLM Judge       ──→  judge_score (0.0-1.0)      │
- │  Layer 3: IR Metrics Pipeline       ──→  file_recall, MRR, TTFR    │
- │  Layer 4: Statistical Analysis      ──→  bootstrap CIs, paired Δ   │
- │  Layer 5: Report Generation         ──→  MANIFEST.json, reports     │
- └─────────────────────────────────────────────────────────────────────┘
+```text
+CodeScaleBench Architecture
+===========================
+
+Task Definitions
+  SDLC suites: 150 tasks across 9 suites
+  Org suites:  220 tasks across 11 suites
+
+            (task + config)
+                  |
+                  v
+Execution Layer (Harbor)
+  Baseline config:
+    - full source code
+    - local tools only
+    - Dockerfile
+  MCP config:
+    - truncated local source
+    - Sourcegraph MCP tools
+    - Dockerfile.sg_only
+
+Outputs per run:
+  - result.json
+  - trajectory.jsonl
+
+                  |
+                  v
+Evaluation Pipeline
+  1) Deterministic verifier  -> reward (0.0-1.0)
+  2) Optional LLM judge      -> judge_score
+  3) IR metrics pipeline     -> file_recall, MRR, TTFR
+  4) Statistical analysis    -> paired deltas, bootstrap CIs
+  5) Report generation       -> manifests and reports
 ```
 
 ### 3.2 Per-Task Directory Structure
@@ -426,27 +411,23 @@ Every task produces a single reward score (0.0--1.0) via a deterministic, in-con
 
 Harbor uploads each task's `tests/` directory to `/tests/` inside the container and invokes the entry-point script after the agent finishes. The entry point writes a floating-point score to `/logs/verifier/reward.txt`. All verifiers follow the exit-code-first convention: exit 0 if score > 0.0, exit 1 otherwise.
 
-```
- Harbor Container
- ┌─────────────────────────────────────────────────────────┐
- │  Agent writes to /workspace/                            │
- │          │                                              │
- │          ▼                                              │
- │  /tests/test.sh  (SDLC tasks)                          │
- │  /tests/eval.sh  (Org tasks)                    │
- │          │                                              │
- │          ├── sources shared libraries as needed:        │
- │          │   ├── verifier_lib.sh  (IR metrics helpers)  │
- │          │   ├── answer_json_verifier_lib.sh            │
- │          │   │   (artifact mode extraction)             │
- │          │   └── sgonly_verifier_wrapper.sh             │
- │          │       (repo restoration for MCP)        │
- │          │                                              │
- │          ├── runs task-specific scoring logic            │
- │          │                                              │
- │          ▼                                              │
- │  /logs/verifier/reward.txt   (0.0 -- 1.0)              │
- └─────────────────────────────────────────────────────────┘
+```text
+Harbor Container Verifier Flow
+------------------------------
+Agent writes outputs to /workspace/
+        |
+        v
+/tests/test.sh (SDLC)  or  /tests/eval.sh (Org)
+        |
+        +-- shared libs (as needed):
+        |     - verifier_lib.sh
+        |     - answer_json_verifier_lib.sh
+        |     - sgonly_verifier_wrapper.sh
+        |
+        +-- task-specific scoring logic
+        |
+        v
+/logs/verifier/reward.txt  (0.0-1.0)
 ```
 
 ### 7.3 SDLC Task Verifiers (test.sh)
@@ -508,18 +489,20 @@ Four shared libraries handle cross-cutting concerns:
 
 A key design for fair MCP evaluation: during the agent's run, source code is truncated (empty files). At verification time, `sgonly_verifier_wrapper.sh` restores the full codebase:
 
-```
-                     Agent Runtime                    Verification Time
-                     ─────────────                    ─────────────────
- Dockerfile.sg_only:                    sgonly_verifier_wrapper.sh:
- ┌────────────────┐                    ┌──────────────────────┐
- │ Truncated src  │                    │ Read clone manifest  │
- │ (empty files)  │ ──Agent edits──→   │ Back up agent files  │
- │                │                    │ Clone mirror repos   │
- │ Agent uses MCP │                    │ Re-inject defects    │
- │ to read code   │                    │ Overlay agent changes│
- └────────────────┘                    │ Run original test.sh │
-                                       └──────────────────────┘
+```text
+SG-Only Clone-at-Verify Flow
+----------------------------
+Agent runtime (Dockerfile.sg_only):
+  - local source is truncated
+  - agent reads code via MCP and makes edits
+
+Verification runtime (sgonly_verifier_wrapper.sh):
+  1) Read clone manifest
+  2) Back up agent-edited files
+  3) Clone mirror repositories
+  4) Re-inject defects (if task requires)
+  5) Overlay agent edits
+  6) Run original verifier script
 ```
 
 The clone manifest (`/tmp/.sg_only_clone_manifest.json`) is written at Docker build time and specifies which `sg-evals` mirrors to clone and where to place them. This ensures the verifier operates on the same full codebase as the baseline configuration, producing comparable scores.
@@ -682,29 +665,21 @@ Each tool call is normalized into a structured event:
 
 The primary agent (`agents/claude_baseline_agent.py`, 2,090 lines) is a Harbor-compatible agent that wraps Claude Code for benchmark execution:
 
-```
- ┌─────────────────────────────────────────────────────────────┐
- │                Claude Baseline Agent                        │
- │                                                             │
- │  ┌─────────────────┐    ┌──────────────────────────────┐   │
- │  │ Config Detection │    │ V5 Preamble Template         │   │
- │  │ BASELINE_MCP_TYPE│    │ ┌──────────────────────────┐ │   │
- │  │ ├── none         │    │ │ # Source Code Access     │ │   │
- │  │ ├── sourcegraph  │    │ │ Files are NOT present.   │ │   │
- │  │ ├── sg_full      │────│ │ Use Sourcegraph MCP      │ │   │
- │  │ └── artifact_full│    │ │ tools to read code.      │ │   │
- │  └─────────────────┘    │ │ {repo_scope}             │ │   │
- │                          │ │ {workflow_tail}          │ │   │
- │  ┌─────────────────┐    │ └──────────────────────────┘ │   │
- │  │ Repo Resolution  │    └──────────────────────────────┘   │
- │  │ _get_repo_display│                                       │
- │  │ _get_repo_list   │    ┌──────────────────────────────┐   │
- │  │ Priority:        │    │ System Prompt Assembly       │   │
- │  │ 1. ENV vars      │    │ EVALUATION_CONTEXT +         │   │
- │  │ 2. Docker parse  │    │ MCP-specific guidance +      │   │
- │  │ 3. Fallback      │    │ Repo scoping rules           │   │
- │  └─────────────────┘    └──────────────────────────────┘   │
- └─────────────────────────────────────────────────────────────┘
+```text
+Claude Baseline Agent (Architecture)
+------------------------------------
+Config detection:
+  BASELINE_MCP_TYPE = none | sourcegraph | sg_full | artifact_full
+
+Repo resolution:
+  _get_repo_display / _get_repo_list
+  Priority: env vars -> Docker metadata -> fallback
+
+Prompt assembly:
+  EVALUATION_CONTEXT
+  + MCP guidance (when MCP config)
+  + repo scope filters
+  + workflow tail
 ```
 
 ### 9.2 MCP Preamble
@@ -740,23 +715,23 @@ The MCP configuration provides 13 Sourcegraph MCP tools:
 
 ### 9.4 Docker Environment Variants
 
-```
- ┌────────────────────────────────────────────────────────────────┐
- │                Three Dockerfile Variants                       │
- │                                                                │
- │  Dockerfile (Baseline)     Dockerfile.sg_only    Dockerfile.   │
- │  ┌────────────────────┐   ┌──────────────────┐  artifact_only │
- │  │ FROM base_image    │   │ FROM base_image  │  ┌────────────┐│
- │  │ CLONE full repo    │   │ CLONE + truncate │  │ FROM ubuntu ││
- │  │ at pinned commit   │   │ all source files │  │ No code     ││
- │  │                    │   │ recommit (no git │  │ .artifact_  ││
- │  │ Full source access │   │ history bypass)  │  │ only_mode   ││
- │  │                    │   │                  │  │ marker file ││
- │  │ Verifier runs      │   │ Clone manifest   │  │             ││
- │  │ against local code │   │ for verifier     │  │ Agent writes││
- │  │                    │   │ restoration      │  │ answer.json ││
- │  └────────────────────┘   └──────────────────┘  └────────────┘│
- └────────────────────────────────────────────────────────────────┘
+```text
+Three Dockerfile Variants
+-------------------------
+1) Dockerfile (Baseline)
+   - clone full repo at pinned commit
+   - full local source access
+   - verifier runs against local code
+
+2) Dockerfile.sg_only (MCP)
+   - clone repo then truncate source files
+   - remove local-source bypass paths
+   - write clone manifest for verify-time restoration
+
+3) Dockerfile.artifact_only (Org artifact mode)
+   - no source checkout
+   - marker file: .artifact_only_mode
+   - agent produces answer.json artifact
 ```
 
 **File extension truncation** (95+ types): `.py`, `.js`, `.ts`, `.go`, `.java`, `.rs`, `.c`, `.cpp`, `.h`, `.yaml`, `.toml`, `.json`, `.xml`, `.md`, and more.
