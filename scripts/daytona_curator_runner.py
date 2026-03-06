@@ -57,7 +57,7 @@ CURATOR_FILES = [
 SANDBOX_CPUS = 2
 SANDBOX_MEMORY_GB = 4
 SANDBOX_DISK_GB = 10  # Daytona Tier 3 max is 10GB per sandbox
-SANDBOX_TIMEOUT_SEC = 900  # 15 min per task
+SANDBOX_TIMEOUT_SEC = 1500  # 25 min per task (large repos need more time)
 
 # Max concurrent sandboxes (Tier 3 = 250 vCPU / 2 CPU per sandbox = 125 max)
 # Leave headroom for sandbox creation overlap and other users
@@ -148,12 +148,28 @@ def load_credentials() -> Dict[str, Any]:
 
 
 def exec_cmd(sandbox, cmd: str, description: str = "", timeout: int = 120) -> str:
-    """Execute a command in a Daytona sandbox."""
+    """Execute a command in a Daytona sandbox with enforced Python-level timeout."""
     label = f"[{sandbox.id[:8]}]"
     if description:
         log.debug("  %s %s", label, description)
+
+    def _run():
+        return sandbox.process.exec(cmd, timeout=timeout)
+
     try:
-        response = sandbox.process.exec(cmd, timeout=timeout)
+        # Use a daemon thread to enforce timeout since SDK timeout is unreliable.
+        # Avoid context manager — shutdown(wait=True) would block on hung threads.
+        from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _TE
+        pool = _TPE(max_workers=1)
+        future = pool.submit(_run)
+        try:
+            response = future.result(timeout=timeout + 15)
+        except _TE:
+            log.warning("  %s Python-level timeout after %ds: %s", label, timeout, description or cmd[:80])
+            pool.shutdown(wait=False, cancel_futures=True)
+            return ""
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
         if hasattr(response, "exit_code") and response.exit_code != 0:
             stderr = getattr(response, "stderr", "") or ""
             stdout = getattr(response, "result", "") or getattr(response, "stdout", "") or ""
@@ -194,7 +210,10 @@ def _extract_repo_info_for_sandbox(ctx: Dict[str, Any]) -> List[Dict[str, str]]:
         if url:
             # Only normalize GitHub URLs to ".git"; other hosts (e.g.
             # go.googlesource.com) often work best with the original URL.
-            if url.endswith(".git"):
+            # Substitute kernel.org with faster GitHub mirror for curator clones.
+            if "kernel.org" in url:
+                clone_url = "https://github.com/torvalds/linux.git"
+            elif url.endswith(".git"):
                 clone_url = url
             elif "github.com/" in url:
                 clone_url = url + ".git"
@@ -412,9 +431,10 @@ def setup_curator_sandbox(
         log.info("[%s] Cloning %s -> %s (commit: %s)",
                  sandbox.id[:8], url, target_dir, commit[:8] if commit != "HEAD" else "HEAD")
         for attempt in range(3):
+            clone_timeout = 540 if "kernel.org" in url else 280
             exec_cmd(sandbox,
-                f"git clone --no-checkout {url} {target_dir} 2>&1 | tail -3",
-                f"Cloning {name} (attempt {attempt+1})", timeout=300)
+                f"timeout {clone_timeout} git clone --no-checkout {url} {target_dir} 2>&1 | tail -3",
+                f"Cloning {name} (attempt {attempt+1})", timeout=clone_timeout + 20)
             # Verify clone succeeded
             check = exec_cmd(sandbox, f"test -d {target_dir}/.git && echo OK || echo FAIL")
             if "OK" in check:
@@ -509,7 +529,7 @@ import json, os, signal, subprocess, sys
 # whether subprocess.run(timeout=...) fires correctly. This prevents the
 # Daytona sandbox from hanging indefinitely when the SDK timeout fails.
 def _sigalrm_handler(signum, frame):
-    print("ERROR: OS-level timeout (SIGALRM) fired after 840s", file=sys.stderr)
+    print("ERROR: OS-level timeout (SIGALRM) fired after 1440s", file=sys.stderr)
     sys.exit(124)  # Standard timeout exit code
 
 signal.signal(signal.SIGALRM, _sigalrm_handler)
@@ -543,9 +563,9 @@ if config.get("mcp_config"):
 
 os.chdir(config.get("workdir", "/workspace/repo"))
 
-signal.alarm(840)  # Start OS-level timeout
+signal.alarm(1440)  # Start OS-level timeout (24 min)
 try:
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=840)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=1440)
 finally:
     signal.alarm(0)  # Cancel alarm if subprocess completes normally
 
@@ -767,8 +787,8 @@ def run_curator_in_sandbox(
     # Execute via Python (avoids all shell quoting issues)
     start = time.time()
     raw_output = exec_cmd(sandbox,
-        "su - claude -c 'python3 /tmp/run_curator.py 2>/tmp/curator_stderr.txt'",
-        "Running curator agent", timeout=SANDBOX_TIMEOUT_SEC)
+        f"timeout {SANDBOX_TIMEOUT_SEC} su - claude -c 'python3 /tmp/run_curator.py 2>/tmp/curator_stderr.txt'",
+        "Running curator agent", timeout=SANDBOX_TIMEOUT_SEC + 30)
     elapsed = time.time() - start
 
     # Collect stderr for debugging
@@ -1058,14 +1078,22 @@ def _run_sdlc_mode(args, creds: Dict[str, Any]) -> int:
         return 1
 
     # Skip unsupported task types (onboarding-search uses function_id schema)
+    # and tasks whose repos are too large to clone in Daytona (linux kernel ~3.5GB)
     SKIP_TASK_PATTERNS = ("ccx-onboard-search-",)
+    SKIP_TASK_NAMES = {
+        "linux-acpi-backlight-fault-001",
+        "linux-hda-intel-suspend-fault-001",
+        "linux-iwlwifi-subdevice-fault-001",
+        "linux-nfs-inode-revalidate-fault-001",
+    }
     before_skip = len(tasks)
     tasks = [
         t for t in tasks
         if not any(t.name.startswith(pat) for pat in SKIP_TASK_PATTERNS)
+        and t.name not in SKIP_TASK_NAMES
     ]
     if len(tasks) < before_skip:
-        log.info("Skipped %d unsupported task types (onboarding-search)",
+        log.info("Skipped %d unsupported/broken tasks",
                  before_skip - len(tasks))
 
     # Filter to missing-only if requested
