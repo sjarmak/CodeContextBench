@@ -129,6 +129,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/swap_default_branch.sh` - Infrastructure or mirror management script for swap default branch.
 - `scripts/sync_oracle_files.py` - Infrastructure or mirror management script for sync oracle files.
 - `scripts/sync_pytorch_verifiers.sh` - Infrastructure or mirror management script for sync pytorch verifiers.
+- `scripts/update_gt_registry.py` - Infrastructure or mirror management script for update gt registry.
 - `scripts/update_sg_only_mirrors.py` - Infrastructure or mirror management script for update sg only mirrors.
 
 ## Library / Helpers
@@ -166,6 +167,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 ## Misc
 
 - `scripts/add_verification_metadata.py` - Utility script for add verification metadata.
+- `scripts/audit_gt_coverage.py` - Utility script for audit gt coverage.
 - `scripts/audit_official_scores.py` - Utility script for audit official scores.
 - `scripts/audit_unpinned_repos.py` - Utility script for audit unpinned repos.
 - `scripts/audit_v2_report_data.py` - Utility script for audit v2 report data.
@@ -181,6 +183,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/context_retrieval_agent.py` - Utility script for context retrieval agent.
 - `scripts/control_plane.py` - Utility script for control plane.
 - `scripts/convert_harbor_to_contextbench.py` - Utility script for convert harbor to contextbench.
+- `scripts/cross_validate_gt.py` - Utility script for cross validate gt.
 - `scripts/cross_validate_oracles.py` - Utility script for cross validate oracles.
 - `scripts/daytona_curator_runner.py` - Utility script for daytona curator runner.
 - `scripts/daytona_poc_runner.py` - Utility script for daytona poc runner.
@@ -249,6 +252,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/select_contextbench_pilot.py` - Utility script for select contextbench pilot.
 - `scripts/smoke_artifact_verifier.py` - Utility script for smoke artifact verifier.
 - `scripts/smoke_test_tasks.py` - Utility script for smoke test tasks.
+- `scripts/verify_oracle_fail2pass.py` - Utility script for verify oracle fail2pass.
 - `scripts/verify_retrieval_eval_smoke.py` - Utility script for verify retrieval eval smoke.
 
 ## Regeneration

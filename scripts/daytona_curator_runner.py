@@ -69,6 +69,90 @@ TAC_REPO_MAP = {
     "openhands": {"slug": "All-Hands-AI/OpenHands", "commit": "HEAD"},
 }
 
+# SWEAP base image patterns — tasks using these must run on local Docker
+SWEAP_IMAGE_PATTERNS = ("sweap-images:", "swebench/")
+
+LOCAL_DOCKER_PARALLEL = 12
+DAYTONA_PARALLEL = 62
+
+
+def classify_task_environment(task_dir: Path) -> str:
+    """Classify whether a task should run on 'daytona' or 'local' Docker.
+
+    Tasks with SWEAP base images route to local Docker;
+    all others route to Daytona.
+    """
+    env_dir = task_dir / "environment"
+    if not env_dir.is_dir():
+        return "daytona"
+
+    for dockerfile in env_dir.iterdir():
+        if not dockerfile.name.startswith("Dockerfile"):
+            continue
+        try:
+            content = dockerfile.read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("FROM "):
+                for pattern in SWEAP_IMAGE_PATTERNS:
+                    if pattern in stripped:
+                        log.info("Task %s routes to LOCAL (SWEAP image: %s)",
+                                 task_dir.name, stripped.split()[1])
+                        return "local"
+
+    return "daytona"
+
+
+def _resolve_task_env(task_dir: Path, args) -> str:
+    """Resolve the execution environment for a task based on CLI flags."""
+    if args.local_only:
+        return "local"
+    if args.daytona_only:
+        return "daytona"
+    return classify_task_environment(task_dir)
+
+
+def load_manifest_tasks(manifest_path: str) -> List[Path]:
+    """Load task directories from a manifest JSON (output of audit_gt_coverage.py).
+
+    Filters to tasks with status 'missing', 'empty', or 'invalid-schema'.
+    Skips tasks that already have valid GT (idempotent re-runs).
+    """
+    data = json.loads(Path(manifest_path).read_text())
+    processable_statuses = {"missing", "empty", "invalid-schema"}
+    tasks = []
+
+    benchmarks_dir = REPO_ROOT / "benchmarks"
+    for entry in data:
+        if entry.get("status") not in processable_statuses:
+            continue
+        task_dir = benchmarks_dir / entry["suite"] / entry["task_id"]
+        if not task_dir.is_dir():
+            log.warning("Manifest task dir not found: %s/%s", entry["suite"], entry["task_id"])
+            continue
+        # Skip if already has valid GT (idempotent)
+        tests_dir = task_dir / "tests"
+        if tests_dir.is_dir():
+            for gt_name in ("ground_truth.json", "oracle_answer.json", "ground_truth_agent.json"):
+                gt = tests_dir / gt_name
+                if gt.exists():
+                    try:
+                        gt_data = json.loads(gt.read_text())
+                        if isinstance(gt_data, dict) and gt_data.get("files"):
+                            log.debug("Skipping %s — already has valid GT (%s)",
+                                      entry["task_id"], gt_name)
+                            break
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        pass
+            else:
+                tasks.append(task_dir)
+        else:
+            tasks.append(task_dir)
+
+    return tasks
+
 
 def cleanup_orphaned_sandboxes(daytona_client, label_filter: str = "curator") -> int:
     """Delete all sandboxes with purpose=curator label left from previous runs.
@@ -1066,13 +1150,17 @@ def _run_sdlc_mode(args, creds: Dict[str, Any]) -> int:
     """SDLC mode: generate ground truth for CodeScaleBench tasks."""
     from context_retrieval_agent import discover_tasks, load_task_context
 
-    # Discover tasks
-    tasks = discover_tasks(
-        suite=args.suite,
-        task_dir=args.task_dir,
-        sdlc_all=args.sdlc_all,
-        mcp_all=args.mcp_all,
-    )
+    # Discover tasks — manifest takes priority over discovery flags
+    if args.manifest:
+        tasks = load_manifest_tasks(args.manifest)
+        log.info("Loaded %d tasks from manifest %s", len(tasks), args.manifest)
+    else:
+        tasks = discover_tasks(
+            suite=args.suite,
+            task_dir=args.task_dir,
+            sdlc_all=args.sdlc_all,
+            mcp_all=args.mcp_all,
+        )
     if not tasks:
         log.error("No tasks found")
         return 1
@@ -1139,12 +1227,16 @@ def _run_sdlc_mode(args, creds: Dict[str, Any]) -> int:
              len(tasks), args.model, args.backend, args.parallel, args.prompt_version)
 
     if args.dry_run:
+        route_counts = {"daytona": 0, "local": 0}
         for i, t in enumerate(tasks):
             ctx = load_task_context(t)
             repos = _extract_repo_info_for_sandbox(ctx)
             repo_info = repos[0]["slug"] if repos else "NO_REPO"
-            print(f"  [{i+1}] {t.parent.name}/{t.name} ({repo_info})")
+            env = _resolve_task_env(t, args)
+            route_counts[env] += 1
+            print(f"  [{i+1}] {t.parent.name}/{t.name} ({repo_info}) [{env}]")
         print(f"\nTotal: {len(tasks)} tasks, {args.parallel} concurrent sandboxes")
+        print(f"Routing: {route_counts['daytona']} daytona, {route_counts['local']} local")
         return 0
 
     # Initialize Daytona client
@@ -1457,6 +1549,17 @@ def main() -> int:
                             help="Overwrite existing ground_truth.json (default: write to _agent variant)")
     sdlc_group.add_argument("--skip-agent-variants", action="store_true",
                             help="Skip tasks that already have *_agent.json files (idempotent re-runs)")
+    sdlc_group.add_argument("--manifest", type=str, default="",
+                            help="JSON manifest from audit_gt_coverage.py (filters to missing/empty/invalid tasks)")
+
+    # Environment routing flags
+    route_group = parser.add_argument_group("Environment routing")
+    route_group.add_argument("--auto-route", action="store_true", default=True,
+                             help="Auto-route tasks to Daytona or local Docker (default)")
+    route_group.add_argument("--local-only", action="store_true",
+                             help="Force all tasks to local Docker (max 12 concurrent)")
+    route_group.add_argument("--daytona-only", action="store_true",
+                             help="Force all tasks to Daytona (max 62 concurrent)")
 
     # ContextBench mode flags
     cb_group = parser.add_argument_group("ContextBench mode (calibration)")
@@ -1514,7 +1617,7 @@ def main() -> int:
             return 1
 
     # Dispatch to appropriate mode
-    sdlc_mode = args.sdlc_all or args.mcp_all or args.suite or args.task_dir
+    sdlc_mode = args.sdlc_all or args.mcp_all or args.suite or args.task_dir or args.manifest
     if sdlc_mode:
         return _run_sdlc_mode(args, creds)
     else:
