@@ -888,6 +888,56 @@ def check_r13_manifest() -> CriterionResult:
         remediation="Generate with: python3 scripts/generate_manifest.py",
     )
 
+def check_oa_equivalent_solutions(tasks: list[Path]) -> CriterionResult:
+    """O.a: Verifiers accept functionally equivalent solutions (no overly-strict matching)."""
+    issues = []
+    for task_dir in tasks:
+        verifier = _get_primary_verifier(task_dir)
+        if not verifier:
+            continue
+
+        content = verifier.read_text(errors="replace")
+        task_name = task_dir.name
+        task_issues = []
+
+        if verifier.suffix == ".sh":
+            # Flag grep -Fx (exact fixed-string line match)
+            if re.search(r"\bgrep\s+.*-[A-Za-z]*F[A-Za-z]*x|grep\s+.*-[A-Za-z]*x[A-Za-z]*F", content):
+                task_issues.append("grep -Fx (exact fixed-string match)")
+
+            # Flag direct string equality tests: [ "$var" = "hardcoded" ] or == "hardcoded"
+            strict_eq = re.findall(r'\[\s*"\$\w+"\s*==?\s*"([^"]+)"\s*\]', content)
+            if strict_eq:
+                task_issues.append(f"exact string comparison against: {', '.join(strict_eq[:3])}")
+
+            # Flag diff without any tolerance flags (allow diff -w, diff -b, diff --ignore)
+            diff_calls = re.finditer(r"\bdiff\s+([^\n|;&]+)", content)
+            for m in diff_calls:
+                args = m.group(1)
+                # Skip if tolerance flags present
+                if re.search(r"-[A-Za-z]*[wbBi]|--ignore|--strip", args):
+                    continue
+                # Skip if used with process substitution (usually flexible)
+                if "<(" in args:
+                    continue
+                task_issues.append("diff without tolerance flags (-w/-b/--ignore)")
+                break  # one flag per task is enough
+
+        if task_issues:
+            issues.append(f"{task_name}: {'; '.join(task_issues)}")
+
+    if not issues:
+        return CriterionResult(
+            criterion_id="O.a", status=Status.PASS,
+            evidence=f"No overly-strict matching found across {len(tasks)} verifiers",
+        )
+    return CriterionResult(
+        criterion_id="O.a", status=Status.WARN,
+        evidence="\n".join(issues[:10]),
+        remediation="Consider using flexible matching (regex, -i flag, tolerance) in verifiers",
+        details={"issue_count": len(issues), "issues": issues[:20]},
+    )
+
 
 # ---------------------------------------------------------------------------
 # Main auditor
@@ -901,6 +951,7 @@ TASK_CHECKS = {
     "T.4": check_t4_git_sha,
     "T.5": check_t5_no_solution_leak,
     "T.8": check_t8_oracle_exists,
+    "O.a": check_oa_equivalent_solutions,
     "O.c": check_oc_empty_solution_rejected,
     "O.d": check_od_error_handling,
     "O.e": check_oe_multiple_assertions,
@@ -929,7 +980,7 @@ PROJECT_CHECKS = {
 }
 
 # Semi-automated / manual checks (skip with note)
-SKIP_CHECKS = {"T.2", "T.9", "T.10", "O.a", "O.b", "O.f", "O.g", "R.6"}
+SKIP_CHECKS = {"T.2", "T.9", "T.10", "O.b", "O.f", "O.g", "R.6"}
 
 
 def audit_suite(suite: str, dimension: Optional[Dimension] = None) -> AuditReport:
