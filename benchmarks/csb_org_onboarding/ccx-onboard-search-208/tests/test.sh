@@ -29,7 +29,8 @@ if [ ! -f "$SOLUTION_FILE" ]; then
     exit 0
 fi
 
-cat > /tmp/verify.py << 'PYEOF'
+VERIFY_SCRIPT="$(mktemp /logs/verifier/verify_XXXXXX.py)"
+cat > "$VERIFY_SCRIPT" << 'PYEOF'
 import json, sys, re
 sys.path.insert(0, "/tests")
 from verifiers import SemanticRetrievalQAVerifier
@@ -67,5 +68,6 @@ except Exception as e:
         f.write("0.0")
 PYEOF
 
-python3 /tmp/verify.py 2>&1 | tee /logs/verifier/verify-debug.log
+python3 "$VERIFY_SCRIPT" 2>&1 | tee /logs/verifier/verify-debug.log
 exit 0
+rm -f "$VERIFY_SCRIPT"

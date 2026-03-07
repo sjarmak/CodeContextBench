@@ -397,7 +397,12 @@ def check_t9_false_positives(tasks: list[Path]) -> CriterionResult:
         content_checks = re.findall(
             r'\bgrep\b|\bdiff\b|\bcmp\b|\bpython.*(?:assert|json\.load|open)'
             r'|\bjq\b|\bwc\s+-[lw]|\bcat\b.*\|\s*\bgrep\b'
-            r'|\bpytest\b|\bassert\b|\btest\s+.*=',
+            r'|\bpytest\b|\bassert\b|\btest\s+.*='
+            # Detect content validation inside heredocs (e.g., Python verifier scripts)
+            r'|\bjson\.loads?\b|\bVerifier\b|\bverify\b.*\bresult\b'
+            r'|\bpython3\b.*\$.*SCRIPT\b|\bpython3\b.*verify'
+            r'|\bpython3\b.*<<\s*[\'"]?\w+[\'"]?'
+            r'|\bre\.search\b|\bcheck_any\b|\bcheck_all\b|\bratio\b',
             content,
         )
         if existence_checks and not content_checks:

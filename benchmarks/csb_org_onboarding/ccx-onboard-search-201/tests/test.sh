@@ -30,7 +30,7 @@ if [ ! -f "$SOLUTION_FILE" ]; then
     exit 0
 fi
 
-VERIFY_SCRIPT=$(mktemp /tmp/verify_XXXXXX.py)
+VERIFY_SCRIPT=$(mktemp /logs/verifier/verify_XXXXXX.py)
 cat > "$VERIFY_SCRIPT" << 'PYEOF'
 import json, sys, re
 sys.path.insert(0, "/tests")
