@@ -111,7 +111,6 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 
 ## Infra & Mirrors
 
-- `scripts/build_conversation_db.py` - Infrastructure or mirror management script for build conversation db.
 - `scripts/build_daytona_registry.py` - Infrastructure or mirror management script for build daytona registry.
 - `scripts/build_linux_base_images.sh` - Infrastructure or mirror management script for build linux base images.
 - `scripts/create_mcp_expansion_mirrors.sh` - Infrastructure or mirror management script for create mcp expansion mirrors.
@@ -176,9 +175,6 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/backfill_triage_from_manifest.py` [one_off] - Historical one-off script: backfill triage from manifest.
 - `scripts/check_harness_readiness.py` - Utility script for check harness readiness.
 - `scripts/compare_contextbench_results.py` - Utility script for compare contextbench results.
-- `scripts/compare_ir_old_vs_new_gt.py` - Utility script for compare ir old vs new gt.
-- `scripts/compare_old_new_ground_truth.py` - Utility script for compare old new ground truth.
-- `scripts/compute_analysis_ir_metrics.py` - Utility script for compute analysis ir metrics.
 - `scripts/compute_bootstrap_cis.py` - Utility script for compute bootstrap cis.
 - `scripts/context_retrieval_agent.py` - Utility script for context retrieval agent.
 - `scripts/control_plane.py` - Utility script for control plane.
@@ -188,7 +184,6 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/daytona_curator_runner.py` - Utility script for daytona curator runner.
 - `scripts/daytona_poc_runner.py` - Utility script for daytona poc runner.
 - `scripts/daytona_runner.py` - Utility script for daytona runner.
-- `scripts/daytona_snapshot_cleanup.py` - Utility script for daytona snapshot cleanup.
 - `scripts/dependeval_eval_dr.py` - Utility script for dependeval eval dr.
 - `scripts/dependeval_eval_me.py` - Utility script for dependeval eval me.
 - `scripts/docgen_quality_sweep.py` - Utility script for docgen quality sweep.
@@ -196,8 +191,6 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/doe_select_tasks.py` - Utility script for doe select tasks.
 - `scripts/ds_hybrid_retrieval.py` - Utility script for ds hybrid retrieval.
 - `scripts/ds_wrapper.sh` - Utility script for ds wrapper.
-- `scripts/export_conversation_blog_assets.py` - Utility script for export conversation blog assets.
-- `scripts/export_engineering_diary_assets.py` - Utility script for export engineering diary assets.
 - `scripts/export_official_results.py` - Utility script for export official results.
 - `scripts/extract_analysis_metrics.py` - Utility script for extract analysis metrics.
 - `scripts/extract_build_diary.py` - Utility script for extract build diary.
@@ -221,8 +214,6 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/plot_build_diary.py` - Utility script for plot build diary.
 - `scripts/plot_build_diary_supplementary.py` - Utility script for plot build diary supplementary.
 - `scripts/plot_build_narrative.py` - Utility script for plot build narrative.
-- `scripts/plot_conversation_blog_svgs.py` - Utility script for plot conversation blog svgs.
-- `scripts/plot_csb_mcp_blog_figures.py` - Utility script for plot csb mcp blog figures.
 - `scripts/prepare_analysis_runs.py` - Utility script for prepare analysis runs.
 - `scripts/promote_agent_oracles.py` - Utility script for promote agent oracles.
 - `scripts/promote_blocked.py` - Utility script for promote blocked.
