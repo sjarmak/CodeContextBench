@@ -415,6 +415,61 @@ echo ""
 echo "Tests completed - Score: $FINAL_SCORE (${SCORE}/${MAX_SCORE} checks passed)"
 ```
 
+#### Template 5: reviewers.json (SDLC — also applies to org-scale tasks)
+
+Write to `benchmarks/csb_sdlc_{BENCHMARK}/{TASK_ID}/reviewers.json`:
+
+After creating the task directory, generate a `reviewers.json` by querying GitHub for contributor and reviewer information. Use the backfill script or query the API directly:
+
+```bash
+# Option A: Use the backfill script for a single task
+python3 scripts/backfill_reviewers.py --task-dir benchmarks/csb_sdlc_{BENCHMARK}/{TASK_ID}
+
+# Option B: Manual generation via gh CLI
+gh api "repos/{REPO}/commits?path={CODE_AREA}&per_page=30" --jq '.[].author.login' | sort | uniq -c | sort -rn | head -5
+```
+
+If the task was mined from a specific PR (Phase 3), include the full PR metadata:
+
+```json
+{
+  "task_id": "{TASK_ID}",
+  "repos": ["{REPO}"],
+  "source_pr": {
+    "number": {PR_NUMBER},
+    "url": "https://github.com/{REPO}/pull/{PR_NUMBER}",
+    "author": "{PR_AUTHOR}",
+    "merged_by": "{MERGER}",
+    "reviewers": ["{REVIEWER1}", "{REVIEWER2}"]
+  },
+  "top_contributors": [
+    {"login": "{CONTRIBUTOR1}", "commits": {N}},
+    {"login": "{CONTRIBUTOR2}", "commits": {M}}
+  ],
+  "code_areas": ["{DIR1}/", "{DIR2}/"],
+  "suggested_reviewers": ["{REVIEWER1}", "{CONTRIBUTOR1}", "{PR_AUTHOR}"],
+  "discovery_method": "source_pr"
+}
+```
+
+If no source PR is available, use the git log frequency method:
+
+```json
+{
+  "task_id": "{TASK_ID}",
+  "repos": ["{REPO}"],
+  "top_contributors": [
+    {"login": "{CONTRIBUTOR1}", "commits": {N}},
+    {"login": "{CONTRIBUTOR2}", "commits": {M}}
+  ],
+  "code_areas": ["{DIR1}/", "{DIR2}/"],
+  "suggested_reviewers": ["{CONTRIBUTOR1}", "{CONTRIBUTOR2}", "{CONTRIBUTOR3}"],
+  "discovery_method": "git_log_frequency"
+}
+```
+
+Exclude bot accounts from all lists: dependabot, renovate, bors, k8s-ci-robot, copybara-service, etc.
+
 ---
 
 ### Org-Scale Templates
@@ -768,6 +823,7 @@ Scaffolded task: {TASK_ID}
 Files created:
   benchmarks/csb_{sdlc|org}_{BENCHMARK}/{TASK_ID}/task.toml
   benchmarks/csb_{sdlc|org}_{BENCHMARK}/{TASK_ID}/instruction.md
+  benchmarks/csb_{sdlc|org}_{BENCHMARK}/{TASK_ID}/reviewers.json
   benchmarks/csb_{sdlc|org}_{BENCHMARK}/{TASK_ID}/environment/Dockerfile
   benchmarks/csb_{sdlc|org}_{BENCHMARK}/{TASK_ID}/tests/test.sh
   [org-scale only] benchmarks/csb_org_{BENCHMARK}/{TASK_ID}/tests/eval.sh

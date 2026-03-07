@@ -194,6 +194,50 @@ Build a task proposal for each:
 }
 ```
 
+### Step 3e: Extract Reviewer Information
+
+For each candidate PR, extract reviewer and contributor metadata for `reviewers.json`:
+
+```bash
+# Get PR reviewer details
+gh pr view NUMBER --repo owner/repo --json author,mergedBy,reviews
+
+# Get reviews with reviewer logins
+gh api repos/owner/repo/pulls/NUMBER/reviews --jq '.[].user.login'
+```
+
+Also query top contributors for the code areas touched by the PR:
+
+```bash
+# For each changed directory, find frequent committers
+gh api "repos/owner/repo/commits?path=pkg/changed_dir/&per_page=30" --jq '.[].author.login' | sort | uniq -c | sort -rn | head -5
+```
+
+Add a `reviewers` field to the task proposal:
+
+```json
+{
+  "reviewers": {
+    "source_pr": {
+      "number": NUMBER,
+      "url": "https://github.com/owner/repo/pull/NUMBER",
+      "author": "pr_author_login",
+      "merged_by": "merger_login",
+      "reviewers": ["reviewer1", "reviewer2"]
+    },
+    "top_contributors": [
+      {"login": "contributor1", "commits": 15},
+      {"login": "contributor2", "commits": 8}
+    ],
+    "code_areas": ["pkg/changed_dir/", "internal/module/"],
+    "suggested_reviewers": ["reviewer1", "contributor1", "pr_author"],
+    "discovery_method": "source_pr"
+  }
+}
+```
+
+Filter out bot accounts (dependabot, renovate, bors, k8s-ci-robot, etc.) from all contributor/reviewer lists.
+
 ### Difficulty Estimation (SDLC)
 
 | Files Changed | Lines Changed | Cross-Package | Difficulty |
@@ -280,9 +324,34 @@ For each identified pattern, propose a task:
     "files_found": ["repo1/pkg/shared.go", "repo2/internal/consumer.go"],
     "cross_repo_refs": 5,
     "confidence": "high"
+  },
+  "reviewers": {
+    "repos": ["owner/repo1", "owner/repo2"],
+    "top_contributors": [
+      {"login": "maintainer1", "commits": 20},
+      {"login": "maintainer2", "commits": 12}
+    ],
+    "code_areas": ["pkg/shared/", "internal/consumer/"],
+    "suggested_reviewers": ["maintainer1", "maintainer2"],
+    "discovery_method": "git_log_frequency"
   }
 }
 ```
+
+### Step 4c-extra: Extract Reviewer Information for Org Tasks
+
+For each org-scale proposal, identify code owners and top contributors using git log frequency analysis:
+
+```bash
+# For each repo and code area, find top committers
+for repo in owner/repo1 owner/repo2; do
+  for area in pkg/shared/ internal/consumer/; do
+    gh api "repos/$repo/commits?path=$area&per_page=30" --jq '.[].author.login' | sort | uniq -c | sort -rn | head -5
+  done
+done
+```
+
+Aggregate contributors across all repos in the task. The `suggested_reviewers` list should contain the top 3-5 contributors (excluding bots like dependabot, renovate, bors, k8s-ci-robot).
 
 ### Step 4d: Customer Prompt Generation
 
@@ -424,11 +493,12 @@ Scaffolded tasks:
 
 Next steps:
   1. Review instruction.md for each task — fill in TODOs
-  2. Customize test.sh / oracle_checks.py with task-specific verification
-  3. For SDLC tasks: verify the ground_truth_rev produces a passing test
-  4. For org-scale tasks: populate task_spec.json with oracle checks
-  5. Run /validate-tasks on each scaffolded task
-  6. Optionally run curator: python3 scripts/context_retrieval_agent.py --task-dir <path>
+  2. Review reviewers.json — verify suggested reviewers are accurate
+  3. Customize test.sh / oracle_checks.py with task-specific verification
+  4. For SDLC tasks: verify the ground_truth_rev produces a passing test
+  5. For org-scale tasks: populate task_spec.json with oracle checks
+  6. Run /validate-tasks on each scaffolded task
+  7. Optionally run curator: python3 scripts/context_retrieval_agent.py --task-dir <path>
 ```
 
 ---

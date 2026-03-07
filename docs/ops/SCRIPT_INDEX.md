@@ -242,6 +242,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/run_judge.py` - Utility script for run judge.
 - `scripts/run_missing_oracles.sh` - Utility script for run missing oracles.
 - `scripts/run_scaling_gap_oracles.sh` - Utility script for run scaling gap oracles.
+- `scripts/run_sg_local.sh` - Utility script for run sg local.
 - `scripts/run_sg_validation.py` - Utility script for run sg validation.
 - `scripts/scaffold_contextbench_tasks.py` - Utility script for scaffold contextbench tasks.
 - `scripts/scaffold_feature_tasks.py` - Utility script for scaffold feature tasks.
