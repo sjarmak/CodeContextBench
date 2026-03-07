@@ -1062,6 +1062,88 @@ def check_ob_negated_solutions(tasks: list[Path]) -> CriterionResult:
         details={"issue_count": len(issues), "issues": issues[:20]},
     )
 
+def check_og_determinism(tasks: list[Path]) -> CriterionResult:
+    """O.g: Verifiers are deterministic (no uncontrolled randomness)."""
+    issues = []
+    for task_dir in tasks:
+        verifier = _get_primary_verifier(task_dir)
+        if not verifier:
+            continue
+
+        content = verifier.read_text(errors="replace")
+        task_name = task_dir.name
+        task_issues = []
+
+        if verifier.suffix == ".sh":
+            # Flag $RANDOM usage
+            if re.search(r'\$RANDOM\b', content):
+                task_issues.append("uses $RANDOM")
+
+            # Flag uuidgen
+            if re.search(r'\buuidgen\b', content):
+                task_issues.append("uses uuidgen")
+
+            # Flag shuf (shuffles input randomly)
+            if re.search(r'\bshuf\b', content):
+                task_issues.append("uses shuf")
+
+            # Flag date used in comparisons (not just logging/echo)
+            # Look for date in variable assignments or comparisons, not in echo/printf
+            date_uses = list(re.finditer(r'\$\(date\b[^)]*\)', content))
+            for m in date_uses:
+                start = content.rfind('\n', 0, m.start()) + 1
+                end = content.find('\n', m.end())
+                if end == -1:
+                    end = len(content)
+                line = content[start:end]
+                # Skip if it's just logging (echo, printf, >>/log)
+                if not re.search(r'^\s*(?:echo|printf|log)', line) and \
+                   not re.search(r'>>\s*/(?:logs|tmp)', line):
+                    # Check if used in comparison or assignment fed to comparison
+                    if re.search(r'(?:==|!=|=\s*\$\(date|-eq|-ne|-gt|-lt|if\s)', line):
+                        task_issues.append("date used in comparison (non-deterministic)")
+                        break
+
+            # Flag mktemp when the temp path is used in assertions/comparisons
+            mktemp_vars = re.findall(r'(\w+)=\$\(mktemp\b', content)
+            for var in mktemp_vars:
+                # Check if this variable appears in a diff/cmp/assert/comparison
+                if re.search(rf'(?:diff|cmp|assertEqual|assert|==|!=)\s.*\${var}\b', content) or \
+                   re.search(rf'\${var}\b.*(?:diff|cmp|assertEqual|assert|==|!=)', content):
+                    task_issues.append(f"mktemp result ${var} used in comparison")
+                    break
+
+        elif verifier.suffix == ".py":
+            # Flag unseeded random usage
+            if re.search(r'\brandom\.\w+\(', content):
+                if not re.search(r'random\.seed\(', content):
+                    task_issues.append("random module used without seed()")
+
+            # Flag uuid generation
+            if re.search(r'\buuid\.\w+\(', content):
+                task_issues.append("uuid module used (non-deterministic)")
+
+            # Flag time-based comparisons
+            if re.search(r'time\.time\(\)', content):
+                if re.search(r'(?:assert|==|!=|>|<).*time\.time|time\.time.*(?:assert|==|!=|>|<)', content):
+                    task_issues.append("time.time() used in comparison")
+
+        if task_issues:
+            issues.append(f"{task_name}: {'; '.join(task_issues[:2])}")
+
+    if not issues:
+        return CriterionResult(
+            criterion_id="O.g", status=Status.PASS,
+            evidence=f"No non-deterministic patterns found across {len(tasks)} verifiers",
+        )
+    return CriterionResult(
+        criterion_id="O.g", status=Status.FAIL,
+        evidence="\n".join(issues[:10]),
+        remediation="Remove non-deterministic elements ($RANDOM, unseeded random, date comparisons) from verifiers",
+        details={"issue_count": len(issues), "issues": issues[:20]},
+    )
+
+
 def check_of_edge_cases(tasks: list[Path]) -> CriterionResult:
     """O.f: Verifiers handle edge cases (missing files, empty output, malformed JSON)."""
     issues = []
@@ -1158,6 +1240,7 @@ TASK_CHECKS = {
     "O.a": check_oa_equivalent_solutions,
     "O.b": check_ob_negated_solutions,
     "O.f": check_of_edge_cases,
+    "O.g": check_og_determinism,
     "O.c": check_oc_empty_solution_rejected,
     "O.d": check_od_error_handling,
     "O.e": check_oe_multiple_assertions,
@@ -1187,7 +1270,7 @@ PROJECT_CHECKS = {
 }
 
 # Semi-automated / manual checks (skip with note)
-SKIP_CHECKS = {"T.2", "T.9", "T.10", "O.g"}
+SKIP_CHECKS = {"T.2", "T.9", "T.10"}
 
 
 def audit_suite(suite: str, dimension: Optional[Dimension] = None) -> AuditReport:
