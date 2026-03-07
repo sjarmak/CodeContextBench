@@ -149,6 +149,58 @@ def check_t1_pinned_versions(tasks: list[Path]) -> CriterionResult:
     )
 
 
+def check_t2_url_reachability(tasks: list[Path], online: bool = False) -> CriterionResult:
+    """T.2: URLs in instruction.md are reachable."""
+    if not online:
+        return CriterionResult(
+            criterion_id="T.2", status=Status.PASS,
+            evidence="URL check skipped (use --online)",
+        )
+
+    import urllib.request
+    import ssl
+
+    url_pattern = re.compile(r"https?://[^\s\)\]>\"'`]+")
+    private_pattern = re.compile(r"https?://(?:localhost|127\.\d|10\.\d|172\.(?:1[6-9]|2\d|3[01])\.\d|192\.168\.)")
+
+    issues = []
+    checked = 0
+    for task_dir in tasks:
+        instruction = task_dir / "instruction.md"
+        if not instruction.is_file():
+            continue
+        content = instruction.read_text(errors="replace")
+        urls = url_pattern.findall(content)
+        for url in urls:
+            url = url.rstrip(".,;:!?)")
+            if private_pattern.match(url):
+                continue
+            checked += 1
+            try:
+                ctx = ssl.create_default_context()
+                req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "ABC-Audit/1.0"})
+                urllib.request.urlopen(req, timeout=5, context=ctx)
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    issues.append(f"{task_dir.name}: 404 {url}")
+            except Exception:
+                issues.append(f"{task_dir.name}: timeout/unreachable {url}")
+
+    if not issues:
+        return CriterionResult(
+            criterion_id="T.2", status=Status.PASS,
+            evidence=f"All {checked} URLs reachable",
+        )
+    fails = [i for i in issues if "404" in i]
+    status = Status.FAIL if fails else Status.WARN
+    return CriterionResult(
+        criterion_id="T.2", status=status,
+        evidence="\n".join(issues[:10]),
+        remediation="Fix or remove broken URLs in instruction.md",
+        details={"issue_count": len(issues), "issues": issues[:20]},
+    )
+
+
 def check_t3_no_api_keys(tasks: list[Path]) -> CriterionResult:
     """T.3: No shared API keys in task.toml/Dockerfile."""
     key_patterns = [
@@ -316,6 +368,107 @@ def check_t8_oracle_exists(tasks: list[Path]) -> CriterionResult:
         evidence=f"{len(missing)}/{len(tasks)} tasks lack oracle: {', '.join(missing[:10])}",
         remediation="Add solve.sh or expected.diff for validation",
         details={"missing": missing},
+    )
+
+
+def check_t9_false_positives(tasks: list[Path]) -> CriterionResult:
+    """T.9: Detect systematic verifier false positives."""
+    issues = []
+    for task_dir in tasks:
+        verifier = _get_primary_verifier(task_dir)
+        if not verifier or verifier.suffix != ".sh":
+            continue
+
+        content = verifier.read_text(errors="replace")
+        task_name = task_dir.name
+
+        if verifier.name == "test.sh" and _uses_shared_verifier_delegate(content):
+            continue
+
+        # 1. Unconditional reward=1.0 (cross-reference with O.c logic)
+        just_echoes_reward = bool(re.search(r'echo\s+["\']?1\.0["\']?\s*>\s*.*reward', content))
+        no_conditionals = not bool(re.search(r'\bif\b|\belse\b|\bthen\b|\bcase\b|\bwhile\b|\bfor\b', content))
+        if just_echoes_reward and no_conditionals:
+            issues.append(f"{task_name}: unconditionally writes reward=1.0 without conditions")
+            continue
+
+        # 2. Only checks file existence without validating content
+        existence_checks = re.findall(r'(?:test\s+-[fedsrw]|\[\s+-[fedsrw]\s+)', content)
+        content_checks = re.findall(
+            r'\bgrep\b|\bdiff\b|\bcmp\b|\bpython.*(?:assert|json\.load|open)'
+            r'|\bjq\b|\bwc\s+-[lw]|\bcat\b.*\|\s*\bgrep\b'
+            r'|\bpytest\b|\bassert\b|\btest\s+.*=',
+            content,
+        )
+        if existence_checks and not content_checks:
+            issues.append(f"{task_name}: verifier only checks file existence, not content")
+
+    if not issues:
+        return CriterionResult(
+            criterion_id="T.9", status=Status.PASS,
+            evidence="No systematic false-positive patterns detected",
+        )
+    return CriterionResult(
+        criterion_id="T.9", status=Status.WARN,
+        evidence="\n".join(issues[:10]),
+        remediation="Add content validation assertions to verifiers flagged as existence-only",
+        details={"issue_count": len(issues), "issues": issues[:20]},
+    )
+
+
+def check_t10_shared_state(tasks: list[Path]) -> CriterionResult:
+    """T.10: Tasks don't share mutable state (no hardcoded ports, shared /tmp, named volumes)."""
+    issues = []
+    for task_dir in tasks:
+        task_name = task_dir.name
+        task_issues = []
+
+        # Scan Dockerfiles
+        env_dir = task_dir / "environment"
+        if env_dir.is_dir():
+            for df in env_dir.iterdir():
+                if df.name.startswith("Dockerfile") and df.is_file():
+                    content = df.read_text(errors="replace")
+                    exposed = re.findall(r"^\s*EXPOSE\s+(\d+)", content, re.MULTILINE)
+                    if exposed:
+                        task_issues.append(f"{df.name}: EXPOSE {', '.join(exposed)}")
+
+        # Scan test.sh / eval.sh for shared state
+        for rel in ("tests/test.sh", "tests/eval.sh"):
+            script = task_dir / rel
+            if not script.is_file():
+                continue
+            content = script.read_text(errors="replace")
+
+            # Host port bindings
+            port_binds = re.findall(r"-p\s+(\d+:\d+)", content)
+            if port_binds:
+                task_issues.append(f"{rel}: host port binding {', '.join(port_binds)}")
+
+            # Fixed /tmp paths — skip dynamic like /tmp/$$ or mktemp
+            fixed_tmp = re.findall(r"/tmp/([a-zA-Z][a-zA-Z0-9_.-]+)", content)
+            fixed_tmp = [t for t in fixed_tmp if not re.match(r"tmp\.", t)]
+            if fixed_tmp:
+                task_issues.append(f"{rel}: fixed /tmp paths: /tmp/{', /tmp/'.join(fixed_tmp[:3])}")
+
+            # Named Docker volumes
+            named_vols = re.findall(r"docker\s+.*-v\s+([a-zA-Z]\w+):/", content)
+            if named_vols:
+                task_issues.append(f"{rel}: named Docker volumes: {', '.join(named_vols)}")
+
+        if task_issues:
+            issues.append(f"{task_name}: {'; '.join(task_issues)}")
+
+    if not issues:
+        return CriterionResult(
+            criterion_id="T.10", status=Status.PASS,
+            evidence=f"No shared-state concerns found across {len(tasks)} tasks",
+        )
+    return CriterionResult(
+        criterion_id="T.10", status=Status.FAIL,
+        evidence="\n".join(issues[:10]),
+        remediation="Remove hardcoded ports, use mktemp for temp paths, avoid named Docker volumes",
+        details={"issue_count": len(issues), "issues": issues[:20]},
     )
 
 
@@ -1314,11 +1467,14 @@ def check_t7_metadata_sync(tasks: list[Path]) -> CriterionResult:
 # Functions that take tasks: list[Path]
 TASK_CHECKS = {
     "T.1": check_t1_pinned_versions,
+    "T.2": check_t2_url_reachability,
     "T.3": check_t3_no_api_keys,
     "T.4": check_t4_git_sha,
     "T.5": check_t5_no_solution_leak,
     "T.7": check_t7_metadata_sync,
     "T.8": check_t8_oracle_exists,
+    "T.9": check_t9_false_positives,
+    "T.10": check_t10_shared_state,
     "O.a": check_oa_equivalent_solutions,
     "O.b": check_ob_negated_solutions,
     "O.f": check_of_edge_cases,
@@ -1352,10 +1508,10 @@ PROJECT_CHECKS = {
 }
 
 # Semi-automated / manual checks (skip with note)
-SKIP_CHECKS = {"T.2", "T.9", "T.10"}
+SKIP_CHECKS: set[str] = set()
 
 
-def audit_suite(suite: str, dimension: Optional[Dimension] = None) -> AuditReport:
+def audit_suite(suite: str, dimension: Optional[Dimension] = None, *, online: bool = False) -> AuditReport:
     """Run all applicable criteria checks against a benchmark suite."""
     tasks = discover_tasks(suite)
     criteria = get_criteria_for_suite(suite)
@@ -1387,7 +1543,11 @@ def audit_suite(suite: str, dimension: Optional[Dimension] = None) -> AuditRepor
 
         # Run automated check
         if cid in TASK_CHECKS:
-            result = TASK_CHECKS[cid](tasks)
+            fn = TASK_CHECKS[cid]
+            if cid == "T.2":
+                result = fn(tasks, online=online)
+            else:
+                result = fn(tasks)
         elif cid in SUITE_CHECKS:
             result = SUITE_CHECKS[cid](suite)
         elif cid in PROJECT_CHECKS:
@@ -1430,6 +1590,8 @@ def main() -> None:
                         help="Only show critical criteria results")
     parser.add_argument("--format", choices=["json", "table"], default="table",
                         help="Output format (default: table)")
+    parser.add_argument("--online", action="store_true",
+                        help="Enable URL reachability checks (T.2) — requires network access")
 
     args = parser.parse_args()
 
@@ -1442,10 +1604,10 @@ def main() -> None:
         if not suite_dir.is_dir():
             print(f"ERROR: Suite directory not found: {suite_dir}", file=sys.stderr)
             sys.exit(1)
-        reports.append(audit_suite(args.suite, dim))
+        reports.append(audit_suite(args.suite, dim, online=args.online))
     elif args.all:
         for suite in discover_all_suites():
-            reports.append(audit_suite(suite, dim))
+            reports.append(audit_suite(suite, dim, online=args.online))
 
     # Filter to critical-only if requested
     if args.critical_only:
