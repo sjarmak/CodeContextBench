@@ -55,12 +55,65 @@ def _litellm_codex_model(model_name: str) -> str:
 class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
     """OpenHands CLI agent extended with evaluation context and MCP wiring."""
 
+    OPENHANDS_WORKSPACE_PREAMBLE = """## OpenHands Workspace Rules
+
+- The provided working directory is the only submission surface for this evaluation.
+- Do not `git clone`, `git init`, or fetch the target repository into the working directory or any of its subdirectories.
+- Use MCP to inspect remote code, then create or edit only the files you need directly in the working directory using repository-relative paths.
+- The verifier only reads changes from the provided working directory, not from any self-cloned checkout.
+"""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # LiteLLM inside the container needs a provider prefix (e.g. openai/gpt-5.3-codex)
         # or it raises "LLM Provider NOT provided". Normalize Codex models so env LLM_MODEL works.
         if self.model_name:
             self.model_name = _litellm_codex_model(self.model_name)
+
+    # OpenHands spawns persistent background daemons (tmux, jupyter kernel
+    # gateway, action execution server) that outlive the main process.  These
+    # orphans prevent Daytona's session-command from ever reporting an exit
+    # code, which causes Harbor's _poll_response loop to hang indefinitely.
+    # We wrap the upstream command so that once the main pipeline exits we
+    # kill the leftovers, letting the session terminate cleanly.
+    _CLEANUP_SUFFIX = (
+        "; _oh_rc=$?; "
+        # Kill known OpenHands daemons that outlive the main process
+        "pkill -f 'jupyter-kernelgateway' 2>/dev/null; "
+        "pkill -f 'ipykernel_launcher' 2>/dev/null; "
+        "pkill -f 'openhands.runtime.action_execution_server' 2>/dev/null; "
+        "pkill -f 'tmux' 2>/dev/null; "
+        "exit $_oh_rc"
+    )
+
+    def create_run_agent_commands(self, instruction: str):
+        instruction = self._resolve_instruction_text(instruction)
+        instruction = self._prepare_instruction(instruction)
+        mcp_type = os.environ.get("BASELINE_MCP_TYPE", "none").lower()
+        if (
+            mcp_type in ("sourcegraph_full", "sourcegraph_base", "sourcegraph_isolated")
+            and "## OpenHands Workspace Rules" not in instruction
+        ):
+            instruction = f"{self.OPENHANDS_WORKSPACE_PREAMBLE}\n\n{instruction}"
+        self._save_instruction_artifact(instruction)
+        exec_inputs = OpenHands.create_run_agent_commands(self, instruction)
+        # Append daemon cleanup so Daytona session exits cleanly
+        for ei in exec_inputs:
+            ei.command = f"{{ {ei.command} }}{self._CLEANUP_SUFFIX}"
+        return exec_inputs
+
+    def _build_workspace_guidance(self, workdir: str) -> str:
+        repo_list = self._get_repo_list()
+        if not repo_list:
+            repo_list = [self._get_repo_display()]
+        repo_lines = "\n".join(f"- `github.com/{repo}`" for repo in repo_list)
+        return (
+            f"{self.OPENHANDS_WORKSPACE_PREAMBLE}\n\n"
+            "## Sourcegraph MCP\n\n"
+            "- Use the provided MCP tools before local edits.\n"
+            f"- Scope remote discovery to:\n{repo_lines}\n"
+            f"- Write your final file edits directly under `{workdir}` using repository-relative paths.\n"
+        )
 
     # Port for the in-container auth proxy (Sourcegraph needs "token" auth,
     # but OpenHands hardcodes "Bearer").
@@ -157,12 +210,13 @@ class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
         os.environ["OPENHANDS_MCP_SHTTP_SERVERS"] = repr(servers)
         os.environ["OPENHANDS_AGENT_ENABLE_MCP"] = "true"
 
-        # Upload CLAUDE.md for instruction context
-        claude_md = "## Sourcegraph MCP\nUse the provided MCP tools before local edits."
-        claude_md_path = self.logs_dir / "CLAUDE.md"
-        claude_md_path.write_text(claude_md)
+        # Upload guidance through OpenHands' native workspace instruction file.
+        guidance = self._build_workspace_guidance(workdir)
+        guidance_path = self.logs_dir / ".openhands_instructions"
+        guidance_path.write_text(guidance)
         await environment.upload_file(
-            source_path=str(claude_md_path), target_path=f"{workdir}/CLAUDE.md"
+            source_path=str(guidance_path),
+            target_path=f"{workdir}/.openhands_instructions",
         )
 
         # Save debug artifacts
