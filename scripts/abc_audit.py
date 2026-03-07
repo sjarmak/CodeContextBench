@@ -445,16 +445,19 @@ def check_t10_shared_state(tasks: list[Path]) -> CriterionResult:
             if port_binds:
                 task_issues.append(f"{rel}: host port binding {', '.join(port_binds)}")
 
-            # Fixed /tmp paths — skip dynamic like /tmp/$$ or mktemp
-            fixed_tmp = re.findall(r"/tmp/([a-zA-Z][a-zA-Z0-9_.-]+)", content)
-            fixed_tmp = [t for t in fixed_tmp if not re.match(r"tmp\.", t)]
-            if fixed_tmp:
-                task_issues.append(f"{rel}: fixed /tmp paths: /tmp/{', /tmp/'.join(fixed_tmp[:3])}")
-
             # Named Docker volumes
             named_vols = re.findall(r"docker\s+.*-v\s+([a-zA-Z]\w+):/", content)
             if named_vols:
                 task_issues.append(f"{rel}: named Docker volumes: {', '.join(named_vols)}")
+
+            # Fixed /tmp paths — only flag if used with host-mounted volumes
+            # or docker -v binds. In-container /tmp usage is safe since each task
+            # runs in its own isolated container.
+            if port_binds or named_vols:
+                fixed_tmp = re.findall(r"/tmp/([a-zA-Z][a-zA-Z0-9_.-]+)", content)
+                fixed_tmp = [t for t in fixed_tmp if not re.match(r"tmp\.", t)]
+                if fixed_tmp:
+                    task_issues.append(f"{rel}: fixed /tmp paths with host interaction: /tmp/{', /tmp/'.join(fixed_tmp[:3])}")
 
         if task_issues:
             issues.append(f"{task_name}: {'; '.join(task_issues)}")
@@ -1257,13 +1260,16 @@ def check_og_determinism(tasks: list[Path]) -> CriterionResult:
                         task_issues.append("date used in comparison (non-deterministic)")
                         break
 
-            # Flag mktemp when the temp path is used in assertions/comparisons
+            # Flag mktemp when the temp path itself is compared (not its content).
+            # Using mktemp to create a scratch file, write to it, then diff/cmp
+            # the content is deterministic — the random part is only the filename.
             mktemp_vars = re.findall(r'(\w+)=\$\(mktemp\b', content)
             for var in mktemp_vars:
-                # Check if this variable appears in a diff/cmp/assert/comparison
-                if re.search(rf'(?:diff|cmp|assertEqual|assert|==|!=)\s.*\${var}\b', content) or \
-                   re.search(rf'\${var}\b.*(?:diff|cmp|assertEqual|assert|==|!=)', content):
-                    task_issues.append(f"mktemp result ${var} used in comparison")
+                # Only flag if the variable is tested for equality with == or !=
+                # (comparing the filename itself). Diff/cmp compare file *contents*.
+                if re.search(rf'(?:==|!=)\s*["\']?\$\{{{var}\}}', content) or \
+                   re.search(rf'\$\{{{var}\}}["\']?\s*(?:==|!=)', content):
+                    task_issues.append(f"mktemp filename ${var} used in string comparison")
                     break
 
         elif verifier.suffix == ".py":
@@ -1378,6 +1384,90 @@ def check_of_edge_cases(tasks: list[Path]) -> CriterionResult:
     )
 
 
+# Mapping from sg-evals base names / short names to canonical org/repo
+_REPO_ALIASES: dict[str, str] = {
+    "kubernetes": "kubernetes/kubernetes",
+    "k8s": "kubernetes/kubernetes",
+    "kafka": "apache/kafka",
+    "envoy": "envoyproxy/envoy",
+    "grafana": "grafana/grafana",
+    "django": "django/django",
+    "pytorch": "pytorch/pytorch",
+    "terraform": "hashicorp/terraform",
+    "prometheus": "prometheus/prometheus",
+    "rust": "rust-lang/rust",
+    "vscode": "microsoft/vscode",
+    "firefox": "mozilla/gecko-dev",
+    "jdk": "openjdk/jdk",
+    "llvm-project": "llvm/llvm-project",
+    "chromium": "chromium/chromium",
+    "numpy": "numpy/numpy",
+    "pandas": "pandas-dev/pandas",
+    "cilium": "cilium/cilium",
+    "istio": "istio/istio",
+    "node": "nodejs/node",
+    "flask": "pallets/flask",
+    "requests": "psf/requests",
+    "curl": "curl/curl",
+    "flink": "apache/flink",
+    "beam": "apache/beam",
+    "camel": "apache/camel",
+    "bazel": "bazelbuild/bazel",
+    "servo": "servo/servo",
+    "ansible": "ansible/ansible",
+    "ghost": "tryghost/ghost",
+    "typescript": "microsoft/typescript",
+    "tensorflow": "tensorflow/tensorflow",
+    "etcd": "etcd-io/etcd",
+    "etcd-io-etcd": "etcd-io/etcd",
+    "cockroach": "cockroachdb/cockroach",
+    "roslyn": "dotnet/roslyn",
+    "aspnetcore": "dotnet/aspnetcore",
+    "cal.com": "calcom/cal.com",
+    "tidb": "pingcap/tidb",
+    "godot": "godotengine/godot",
+    "ceph": "ceph/ceph",
+    "scikit-learn": "scikit-learn/scikit-learn",
+    "scipy": "scipy/scipy",
+    "tensorrt-llm": "nvidia/tensorrt-llm",
+    "clickhouse": "clickhouse/clickhouse",
+    "elasticsearch": "elastic/elasticsearch",
+    "nodebb": "nodebb/nodebb",
+    "grpc": "grpc/grpc",
+    "grpc-go": "grpc/grpc-go",
+    "openlibrary": "internetarchive/openlibrary",
+    "linux": "torvalds/linux",
+    "gcc": "gcc-mirror/gcc",
+    "navidrome": "navidrome/navidrome",
+    "argo-cd": "argoproj/argo-cd",
+}
+
+
+def _normalize_repo_name(raw: str) -> str:
+    """Normalize repo name to lowercase org/repo form for comparison.
+
+    Handles: sg-evals/kubernetes--v1.32.0, org/repo, kubernetes, pytorch/pytorch
+    """
+    name = raw.strip().lower()
+    if not name or name == "org/repo":
+        return ""  # Placeholder — can't normalize
+    # Strip sg-evals/ prefix
+    if name.startswith("sg-evals/"):
+        name = name[len("sg-evals/"):]
+    # Strip version suffix: kubernetes--v1.32.0 → kubernetes
+    name = re.sub(r"--[a-z0-9._]+$", "", name)
+    # Strip .git suffix
+    name = name.removesuffix(".git")
+    # If it's already org/repo form, return as-is
+    if "/" in name:
+        return name
+    # Look up alias
+    if name in _REPO_ALIASES:
+        return _REPO_ALIASES[name]
+    # Fallback: use name as both org and repo (e.g., "flipt" → "flipt")
+    return name
+
+
 def check_t7_metadata_sync(tasks: list[Path]) -> CriterionResult:
     """T.7: task.toml metadata matches selected_benchmark_tasks.json."""
     if not SELECTED_TASKS_PATH.is_file():
@@ -1425,13 +1515,20 @@ def check_t7_metadata_sync(tasks: list[Path]) -> CriterionResult:
         field_map = [
             ("metadata.language", "language"),
             ("metadata.difficulty", "difficulty"),
-            ("task.repo", "repo"),
         ]
         for toml_key, json_key in field_map:
             toml_val = toml.get(toml_key, "").lower()
             json_val = str(entry.get(json_key, "")).lower()
             if toml_val and json_val and toml_val != json_val:
                 task_mismatches.append(f"{json_key}: toml={toml_val!r} vs json={json_val!r}")
+
+        # Compare repo with normalization (sg-evals/ prefix, short names, etc.)
+        toml_repo = _normalize_repo_name(toml.get("task.repo", ""))
+        json_repo = _normalize_repo_name(str(entry.get("repo", "")))
+        if toml_repo and json_repo and toml_repo != json_repo:
+            task_mismatches.append(
+                f"repo: toml={toml.get('task.repo', '')!r} vs json={entry.get('repo', '')!r}"
+            )
 
         if task_mismatches:
             mismatches.append(f"{task_name}: {'; '.join(task_mismatches)}")
@@ -1532,14 +1629,10 @@ def audit_suite(suite: str, dimension: Optional[Dimension] = None, *, online: bo
             ))
             continue
 
-        # R.2 doesn't apply to MCP-unique suites: instructions intentionally
-        # reference Sourcegraph MCP tools (that's the point of these tasks).
-        if cid == "R.2" and suite.startswith(("csb_org_", "ccb_mcp_")):
-            report.results.append(CriterionResult(
-                criterion_id=cid, status=Status.SKIP,
-                evidence="MCP-unique suite: MCP tool references in instructions are by design",
-            ))
-            continue
+        # Note: R.2 contamination check applies to ALL suites including csb_org_.
+        # Org suites are organizational use cases (cross-repo, compliance, etc.)
+        # but their instruction.md files must be tool-neutral — no MCP references.
+        # Only instruction_mcp.md (the MCP variant) may reference Sourcegraph tools.
 
         # Run automated check
         if cid in TASK_CHECKS:
