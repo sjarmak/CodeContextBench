@@ -1,11 +1,16 @@
 """OpenHands harness agent wired to Harbor's OpenHands CLI with shared baseline tooling."""
 
+import json
+import logging
 import os
 
 from harbor.agents import utils as harbor_utils
+from harbor.environments.base import BaseEnvironment
 from harbor.agents.installed.openhands import OpenHands
 
 from ..base import BaselineHarnessMixin
+
+logger = logging.getLogger(__name__)
 
 # Codex model names (LiteLLM/Harbor don't know these); we map them to OPENAI_API_KEY
 # so Harbor's get_api_key_var_names_from_model_name can resolve the key.
@@ -56,3 +61,111 @@ class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
         # or it raises "LLM Provider NOT provided". Normalize Codex models so env LLM_MODEL works.
         if self.model_name:
             self.model_name = _litellm_codex_model(self.model_name)
+
+    # Port for the in-container auth proxy (Sourcegraph needs "token" auth,
+    # but OpenHands hardcodes "Bearer").
+    _SG_PROXY_PORT = 18973
+
+    async def _configure_mcp(self, environment: BaseEnvironment) -> None:
+        """Configure MCP for OpenHands with Sourcegraph auth proxy.
+
+        OpenHands hardcodes 'Authorization: Bearer <token>' for SHTTP, but
+        Sourcegraph requires 'Authorization: token <token>'. We solve this by:
+        1. Uploading a small HTTP auth proxy (sg_auth_proxy.py) into the container
+        2. Starting it as a background daemon on localhost
+        3. Pointing OpenHands' config.toml at http://localhost:<port>
+        """
+        mcp_type = os.environ.get("BASELINE_MCP_TYPE", "none").lower()
+        if mcp_type == "none":
+            return
+
+        sg_url = (
+            os.environ.get("SOURCEGRAPH_URL")
+            or os.environ.get("SRC_ENDPOINT")
+            or "https://sourcegraph.sourcegraph.com"
+        )
+        sg_token = (
+            os.environ.get("SOURCEGRAPH_ACCESS_TOKEN")
+            or os.environ.get("SRC_ACCESS_TOKEN")
+            or ""
+        )
+        if not sg_token:
+            logger.warning("SOURCEGRAPH_ACCESS_TOKEN not set; skipping OpenHands MCP")
+            return
+        if not sg_url.startswith(("http://", "https://")):
+            sg_url = f"https://{sg_url}"
+        sg_url = sg_url.rstrip("/")
+
+        mcp_endpoint = f"{sg_url}/.api/mcp"
+        workdir = await self._detect_workdir(environment)
+
+        # --- Upload and start the auth proxy ---
+        proxy_src = os.path.join(os.path.dirname(__file__), "sg_auth_proxy.py")
+        await environment.upload_file(
+            source_path=proxy_src,
+            target_path="/tmp/sg_auth_proxy.py",
+        )
+        # Start proxy as background daemon
+        start_cmd = (
+            f"SG_MCP_URL={mcp_endpoint} "
+            f"SG_MCP_TOKEN={sg_token} "
+            f"nohup python3 /tmp/sg_auth_proxy.py --port {self._SG_PROXY_PORT} "
+            f"> /tmp/sg_proxy.log 2>&1 &"
+        )
+        await environment.exec(start_cmd)
+        # Wait briefly for proxy to start
+        await environment.exec("sleep 1")
+        result = await environment.exec(
+            f"curl -s -o /dev/null -w '%{{http_code}}' http://127.0.0.1:{self._SG_PROXY_PORT}/ || echo 'proxy_down'"
+        )
+        proxy_status = (result.stdout or "").strip()
+        if "proxy_down" in proxy_status:
+            logger.error("Auth proxy failed to start. Log: %s",
+                        (await environment.exec("cat /tmp/sg_proxy.log")).stdout)
+            return
+        logger.info("Auth proxy running on port %d (status: %s)", self._SG_PROXY_PORT, proxy_status)
+
+        # --- config.toml pointing at local proxy (no api_key needed) ---
+        local_url = f"http://127.0.0.1:{self._SG_PROXY_PORT}"
+        config_toml = (
+            "[agent]\n"
+            "enable_mcp = true\n"
+            "\n"
+            "[mcp]\n"
+            "shttp_servers = [\n"
+            f'    {{ url = "{local_url}", timeout = 300 }}\n'
+            "]\n"
+        )
+        config_toml_path = self.logs_dir / "config.toml"
+        config_toml_path.write_text(config_toml)
+        await environment.upload_file(
+            source_path=str(config_toml_path),
+            target_path=f"{workdir}/config.toml",
+        )
+
+        # Also set env vars as backup
+        servers = [{"url": local_url, "timeout": 300}]
+        os.environ["OPENHANDS_MCP_SHTTP_SERVERS"] = repr(servers)
+        os.environ["OPENHANDS_AGENT_ENABLE_MCP"] = "true"
+
+        # Upload CLAUDE.md for instruction context
+        claude_md = "## Sourcegraph MCP\nUse the provided MCP tools before local edits."
+        claude_md_path = self.logs_dir / "CLAUDE.md"
+        claude_md_path.write_text(claude_md)
+        await environment.upload_file(
+            source_path=str(claude_md_path), target_path=f"{workdir}/CLAUDE.md"
+        )
+
+        # Save debug artifacts
+        mcp_json = {
+            "mcpServers": {
+                "sourcegraph": {
+                    "type": "http",
+                    "url": f"{sg_url}/.api/mcp/v1",
+                    "headers": {"Authorization": f"token {sg_token}"},
+                }
+            }
+        }
+        artifact_path = self.logs_dir / ".mcp.json"
+        artifact_path.write_text(json.dumps(mcp_json, indent=2))
+        logger.info("OpenHands MCP configured via auth proxy -> %s", mcp_endpoint)
