@@ -191,15 +191,36 @@ def validate_task(data: dict, task_dir: str, config: str) -> List[Flag]:
 
 
 def discover_task_dirs(jobs_dir: str) -> List[str]:
-    """Find task directories via jobs_dir/*/*/ glob (same as extract_all_metrics)."""
+    """Find task directories containing result.json or task_metrics.json.
+
+    Tries the legacy 2-level glob (jobs_dir/*/*/) first, then falls back
+    to recursive discovery for the official directory layout.
+    """
+    # Legacy: jobs_dir/timestamp/task_dir/
     pattern = os.path.join(jobs_dir, "*", "*", "")
     dirs = sorted(glob.glob(pattern))
-    # Only include directories that have at least result.json or task_metrics.json
-    return [
+    found = [
         d for d in dirs
         if os.path.isfile(os.path.join(d, "task_metrics.json"))
         or os.path.isfile(os.path.join(d, "result.json"))
     ]
+    if found:
+        return found
+
+    # Recursive: walk the tree for any dir containing result.json
+    found = []
+    for root, _subdirs, files in os.walk(jobs_dir):
+        if "result.json" in files or "task_metrics.json" in files:
+            rj = os.path.join(root, "result.json")
+            if os.path.isfile(rj):
+                try:
+                    data = json.loads(open(rj).read())
+                    if "n_total_trials" in data:
+                        continue  # run-level metadata, not a task
+                except (OSError, json.JSONDecodeError):
+                    pass
+            found.append(root + os.sep)
+    return sorted(found)
 
 
 def print_summary(all_flags: List[Flag]):

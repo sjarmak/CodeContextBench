@@ -151,12 +151,15 @@ if [ ${#TASK_ROWS[@]} -eq 0 ]; then
 fi
 
 declare -A TASK_PATH_BY_ID
+declare -A TASK_SUITE_BY_ID
 TASK_IDS=()
 for row in "${TASK_ROWS[@]}"; do
     task_id=$(echo "$row" | cut -f1)
     task_path=$(echo "$row" | cut -f2)
+    benchmark=$(echo "$row" | cut -f3)
     TASK_IDS+=("$task_id")
     TASK_PATH_BY_ID["$task_id"]="$task_path"
+    TASK_SUITE_BY_ID["$task_id"]="$benchmark"
 done
 
 if [ -z "${PARALLEL_JOBS:-}" ] || [ "$PARALLEL_JOBS" -lt 1 ] 2>/dev/null; then
@@ -178,6 +181,17 @@ case "$_model_lower" in
     *opus-4-6*|*opus46*) MODEL_SHORT="opus46" ;;
     *haiku-4-5*|*haiku45*) MODEL_SHORT="haiku45" ;;
     *) MODEL_SHORT=$(echo "$_model_lower" | tr -d '-' | tr -d '_' | cut -c1-12) ;;
+esac
+
+# Dotted model version for official directory structure (e.g. sonnet-4.6)
+case "$_model_lower" in
+    *sonnet-4-6*|*sonnet46*) MODEL_DIR="sonnet-4.6" ;;
+    *sonnet-4-5*|*sonnet45*) MODEL_DIR="sonnet-4.5" ;;
+    *opus-4-6*|*opus46*)     MODEL_DIR="opus-4.6" ;;
+    *haiku-4-5*|*haiku45*)   MODEL_DIR="haiku-4.5" ;;
+    *gpt-5*|*gpt5*)          MODEL_DIR="gpt-5" ;;
+    *gpt-4o*|*gpt4o*)        MODEL_DIR="gpt-4o" ;;
+    *)                        MODEL_DIR="$MODEL_SHORT" ;;
 esac
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -208,8 +222,26 @@ _openhands_run_single() {
     local config=${3:-baseline-local-direct}
     local mcp_type=${4:-none}
     local jobs_base=${5:-$JOBS_BASE}
-    local jobs_subdir="${jobs_base}/${config}"
     local task_path="${TASK_PATH_BY_ID[$task_id]}"
+
+    # Map harness config name to official config dir name
+    local official_config
+    case "$config" in
+        baseline-local-direct) official_config="baseline" ;;
+        mcp-remote-direct)     official_config="sourcegraph_full" ;;
+        *)                     official_config="$config" ;;
+    esac
+
+    # Build official-structure jobs dir:
+    #   {jobs_base}/openhands/{csb_sdlc|csb_org}/{model_dir}/{suite}/{official_config}
+    local suite="${TASK_SUITE_BY_ID[$task_id]}"
+    local top_level
+    if [[ "$suite" == csb_sdlc_* ]]; then
+        top_level="csb_sdlc"
+    else
+        top_level="csb_org"
+    fi
+    local jobs_subdir="${jobs_base}/openhands/${top_level}/${MODEL_DIR}/${suite}/${official_config}"
 
     # Extract ANTHROPIC_API_KEY from this account's OAuth credentials.
     # run_tasks_parallel sets HOME=$_task_home for account rotation.
@@ -278,23 +310,20 @@ run_mode() {
     local mode=$1
     local mcp_type=$2
 
-    jobs_subdir="${JOBS_BASE}/${mode}"
-    mkdir -p "$jobs_subdir"
-
     _mode_dispatch() {
         _openhands_run_single "$1" "$2" "$mode" "$mcp_type" "$JOBS_BASE"
     }
 
     run_tasks_parallel TASK_IDS _mode_dispatch || true
-    validate_and_report "$jobs_subdir" "$mode"
+    validate_and_report "$JOBS_BASE" "$mode"
 }
 
 if [ "$PAIRED_MODE" = true ] && [ "$RUN_BASELINE" = true ] && [ "$RUN_FULL" = true ]; then
     # Run baseline + MCP simultaneously per task (interleaved, not sequential)
     export FULL_CONFIG="mcp-remote-direct"
     run_paired_configs TASK_IDS _openhands_run_single "$JOBS_BASE"
-    validate_and_report "${JOBS_BASE}/baseline-local-direct" "baseline-local-direct"
-    validate_and_report "${JOBS_BASE}/mcp-remote-direct" "mcp-remote-direct"
+    validate_and_report "$JOBS_BASE" "baseline"
+    validate_and_report "$JOBS_BASE" "sourcegraph_full"
 else
     # Sequential mode (--baseline-only, --full-only, or --sequential)
     if [ "$RUN_BASELINE" = true ]; then
