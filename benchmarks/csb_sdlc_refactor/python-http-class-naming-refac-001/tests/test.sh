@@ -35,7 +35,7 @@ else
     echo "No patch at $PATCH_FILE — trying fallback diff collection..." >&2
 
     # Fallback: generate diff from git changes in the source repos
-    FALLBACK_PATCH="/tmp/fallback_patch.diff"
+    FALLBACK_PATCH=$(mktemp /tmp/fallback_XXXXXX.diff)
     > "$FALLBACK_PATCH"
 
     for repo_dir in "$CORPUS_ROOT"/src/*/; do
