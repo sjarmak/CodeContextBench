@@ -168,6 +168,17 @@ fi
 REAL_HOME="$HOME"
 setup_multi_accounts
 
+# In Daytona mode, override the session-based parallelism with sandbox-based cap.
+# Daytona Tier 3 allows 125 concurrent sandboxes; paired mode uses 2 per task.
+DAYTONA_PARALLEL_TASK_CAP="${DAYTONA_PARALLEL_TASK_CAP:-60}"
+if [ "${HARBOR_ENV:-}" = "daytona" ] && [ "$PARALLEL_JOBS" -lt "$DAYTONA_PARALLEL_TASK_CAP" ]; then
+    if [ "$DAYTONA_PARALLEL_TASK_CAP" -gt 124 ]; then
+        DAYTONA_PARALLEL_TASK_CAP=124
+    fi
+    PARALLEL_JOBS=$DAYTONA_PARALLEL_TASK_CAP
+    echo "Parallel tasks auto-set to $PARALLEL_JOBS (Daytona mode, capped by DAYTONA_PARALLEL_TASK_CAP=${DAYTONA_PARALLEL_TASK_CAP})"
+fi
+
 _model_lower=$(echo "$MODEL" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')
 case "$_model_lower" in
     *gpt-5.3-codex*|*gpt53codex*) MODEL_SHORT="gpt53codex" ;;
