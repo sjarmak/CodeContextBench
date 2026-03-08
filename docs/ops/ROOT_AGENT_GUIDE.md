@@ -74,6 +74,8 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - Claude Code requires the `--mcp-config` CLI flag to load MCP config -- it does not auto-detect.
 - Inject MCP usage instructions into the task prompt. Agents won't use MCP tools just because they're available.
 - Set `NODE_TLS_REJECT_UNAUTHORIZED=0` for Node.js SSL in Docker containers (curl working does not mean Node.js fetch will work).
+- Sourcegraph MCP uses **stdio transport** (`npx @sourcegraph/cody --stdio`), NOT HTTP endpoints. HTTP 405 from the endpoint means it exists but requires stdio.
+- Sourcegraph skills installed via `npx -y skills add` show empty `"skills": []` in headless/containerized mode. Embed skill prompt content directly in the task's CLAUDE.md instead.
 
 ### Harbor Result Format
 - Timing fields (`started_at`, `finished_at`) live at the **top level** of `result.json`, not nested under `timing`.
@@ -84,11 +86,31 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - `validators.py` is duplicated across `ccb_build` tasks. Changes must be applied to **all copies** (verify with `sha256sum`).
 - Install scripts that print "INSTALL_SUCCESS" regardless of actual outcome are common. Always verify the binary exists and is executable.
 - Agent completing in **<2 seconds** = agent never installed/ran (smoke test heuristic).
+- Trial directory names are truncated with hash suffixes (e.g., `c_api_graphql_expert_079_archite__pm9xcPn`). The real task name lives in `config.json` at `task.path`.
 
 ### Git / Auth
 - `gh auth refresh` without `-s <scope>` is a no-op for adding scopes. Must use `gh auth refresh -h github.com -s write:packages` explicitly.
 - Environment variables must be **explicitly exported** for Harbor subprocesses. Use `set -a` before sourcing `.env.local`.
 - GitHub push protection blocks synthetic/fake API keys in test data. Use `git reset --soft origin/main` to squash intermediate commits that contained fake credentials.
+- Shallow clones (`--depth 1`) fail on push to GitHub with `remote: fatal: did not receive expected object`. Always use full clones for repos that will be pushed.
+- Some repos use `master` as default branch. Detect with `git symbolic-ref refs/remotes/origin/HEAD` and remap to `main` if needed.
+- GitHub secret scanning blocks pushes containing embedded secrets (Slack webhooks, API keys in source). Users must manually unblock via the provided `/security/secret-scanning/unblock-secret/` URL.
+
+### Python / Subprocess
+- `dict.get(key, default)` does **NOT** protect against `None` values. If key exists with value `None`, the default is not used. Use `data.get("key") or default_value` for Harbor result fields that may be `null`.
+- `with open(log) as f: subprocess.Popen(stdout=f)` closes the file handle immediately after `Popen()` returns. Use `open()` without context manager for long-running subprocesses.
+- macOS ships Bash 3.2 which lacks associative arrays (`declare -A`). Use pipe-delimited string arrays with `IFS='|' read -r` for compatibility.
+
+### Dashboard / Streamlit
+- Streamlit widget keys in loops must include an index or unique ID to avoid `DuplicateElementKey` errors (e.g., `key=f"nav_{idx}_{page}"` not `key=f"nav_{page}"`).
+- `st.session_state` cannot be modified after widget instantiation. Use `on_click` callback pattern that sets state before widget rerender.
+- Sidebar config below navigation menu is invisible without scrolling. Put critical UI controls in the main content area using `st.columns()`.
+- Always check actual dataclass field names before writing view code. Common mismatches: `agent_results` vs `agent_metrics`, `anomalies` vs `total_anomalies`, dict access vs object attributes.
+
+### LLM Judge
+- Always include "Respond with valid JSON only (escape all quotes and special characters)" in judge prompts. Unescaped quotes in LLM-generated JSON break parsing.
+- Judge should use task-type-aware evaluation: different rubrics for code implementation, architectural understanding, and bug fix tasks.
+- Tool categorization order matters: check MCP prefix (`mcp__`) before substring checks (e.g., `deep_search`) to avoid miscategorization of `mcp__deep_search`.
 
 ## Maintenance
 - Root and local `AGENTS.md` / `CLAUDE.md` files are generated from sources in `docs/ops/`.
