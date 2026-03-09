@@ -18,8 +18,10 @@ trap 'if [ ! -f /logs/verifier/reward.txt ]; then echo "0.0" > /logs/verifier/re
 # SWE-bench Pro test execution
 echo "=== SWE-bench Pro Evaluation ==="
 
-# SWE-bench Pro images have the repository at /app
-cd "${VERIFY_REPO:-/app}" || cd /testbed || cd /workspace
+# SWE-bench Pro images expose the repository through TASK_REPO_ROOT.
+TASK_WORKDIR="${TASK_WORKDIR:-/workspace}"
+TASK_REPO_ROOT="${TASK_REPO_ROOT:-${VERIFY_REPO:-$TASK_WORKDIR}}"
+cd "$TASK_REPO_ROOT" || cd /testbed || cd "$TASK_REPO_ROOT"
 echo "Working directory: $(pwd)"
 
 # Check if config.json exists in /tests

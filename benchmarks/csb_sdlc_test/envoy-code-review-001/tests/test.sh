@@ -14,15 +14,17 @@ if [ -f /tmp/.artifact_only_mode ] && [ -f /tests/answer_json_verifier_lib.sh ];
     source /tests/answer_json_verifier_lib.sh
 fi
 [ -f /tests/artifact_verifier_lib.sh ] && source /tests/artifact_verifier_lib.sh
-VERIFY_REPO="${VERIFY_REPO:-/workspace}"
+TASK_WORKDIR="${TASK_WORKDIR:-/workspace}"
+TASK_REPO_ROOT="${TASK_REPO_ROOT:-${VERIFY_REPO:-$TASK_WORKDIR}}"
+VERIFY_REPO="${VERIFY_REPO:-$TASK_REPO_ROOT}"
 
-cd "${VERIFY_REPO:-/workspace}"
+cd "$TASK_REPO_ROOT"
 
 # Create log directories
 mkdir -p /logs/verifier
 
 # Fix git safe.directory
-git config --global --add safe.directory "${VERIFY_REPO:-/workspace}" 2>/dev/null || true
+git config --global --add safe.directory "$TASK_REPO_ROOT" 2>/dev/null || true
 git config --global --add safe.directory "${VERIFY_REPO}" 2>/dev/null || true
 
 # Guard: check agent produced output

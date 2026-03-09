@@ -9,10 +9,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
-# Load credentials
-if [ -f .env.local ]; then
-    set -a; source .env.local; set +a
-fi
+source "$SCRIPT_DIR/_common.sh"
+load_credentials
 
 PASSES=${PASSES:-3}
 SUITES="${SUITES:-debug design document feature refactor secure test understand}"

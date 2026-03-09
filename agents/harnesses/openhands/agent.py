@@ -4,7 +4,8 @@ import base64
 import json
 import logging
 import os
-import shlex
+import sys
+from pathlib import Path
 
 from harbor.agents import utils as harbor_utils
 from harbor.agents.installed.base import ExecInput
@@ -38,7 +39,6 @@ def _get_api_key_var_names_from_model_name(model_name: str) -> list[str]:
 # must patch the openhands module's reference too (utils patch alone is not seen there).
 _original_get_api_key_var_names = harbor_utils.get_api_key_var_names_from_model_name
 harbor_utils.get_api_key_var_names_from_model_name = _get_api_key_var_names_from_model_name
-import sys
 _openhands_mod = sys.modules.get("harbor.agents.installed.openhands")
 if _openhands_mod is not None:
     _openhands_mod.get_api_key_var_names_from_model_name = _get_api_key_var_names_from_model_name
@@ -92,6 +92,10 @@ class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
     # Path inside the container where the instruction file is written.
     _TASK_FILE = "/tmp/oh_task_instruction.txt"
 
+    @property
+    def _install_agent_template_path(self):
+        return Path(__file__).with_name("install-openhands.sh.j2")
+
     def create_run_agent_commands(self, instruction: str):
         instruction = self._resolve_instruction_text(instruction)
         instruction = self._prepare_instruction(instruction)
@@ -119,7 +123,21 @@ class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
         #   [0] (optional): MCP config.toml write
         #   [-1]: the actual openhands.core.main command (the broken one)
         # We keep everything except the last command and rebuild it.
-        env = upstream_inputs[-1].env or {}
+        env = dict(upstream_inputs[-1].env or {})
+        pythonpath = env.get("PYTHONPATH", "")
+        if pythonpath:
+            filtered = [
+                entry
+                for entry in pythonpath.split(os.pathsep)
+                if entry and os.path.realpath(entry) != os.path.realpath("/workspace")
+            ]
+            if filtered:
+                env["PYTHONPATH"] = os.pathsep.join(filtered)
+            else:
+                env.pop("PYTHONPATH", None)
+        env["PYTHONSAFEPATH"] = "1"
+        env["AGENT_ENABLE_JUPYTER"] = "false"
+        env["AGENT_ENABLE_BROWSING"] = "false"
 
         exec_inputs = upstream_inputs[:-1]  # keep MCP config setup if present
 
@@ -132,18 +150,90 @@ class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
         # Build a Python launcher script that reads the task from file,
         # runs openhands.core.main, pipes output to a log file, and cleans up
         # orphan daemons. Everything stays in Python — no shell quoting at all.
-        mcp_config = self._build_mcp_config_toml()
-        config_file_path = "~/.openhands/config.toml"
+        runtime_config = self._build_config_toml()
+        config_b64 = base64.b64encode(runtime_config.encode()).decode()
+        wrapper_source = "\n".join([
+            "import importlib.machinery",
+            "import importlib.util",
+            "import os",
+            "import runpy",
+            "import sys",
+            "",
+            "workspace = os.path.realpath('/workspace')",
+            "",
+            "class _PathGuard(list):",
+            "    def _allow(self, value):",
+            "        if value is None:",
+            "            return False",
+            "        candidate = os.getcwd() if value == '' else value",
+            "        real = os.path.realpath(candidate)",
+            "        return not (real == workspace or real.startswith(workspace + os.sep))",
+            "",
+            "    def append(self, value):",
+            "        if self._allow(value):",
+            "            super().append(value)",
+            "",
+            "    def insert(self, index, value):",
+            "        if self._allow(value):",
+            "            super().insert(index, value)",
+            "",
+            "    def extend(self, values):",
+            "        super().extend([value for value in values if self._allow(value)])",
+            "",
+            "_path_guard = _PathGuard()",
+            "sys.path = _PathGuard([value for value in sys.path if _path_guard._allow(value)])",
+            "",
+            "class _WorkspaceSafeFinder(importlib.machinery.PathFinder):",
+            "    @classmethod",
+            "    def find_spec(cls, fullname, path=None, target=None):",
+            "        search = sys.path if path is None else path",
+            "        safe_search = [value for value in search if _path_guard._allow(value)]",
+            "        return importlib.machinery.PathFinder.find_spec(fullname, safe_search, target)",
+            "",
+            "def _preload_site_package(name):",
+            "    safe_search = [value for value in sys.path if _path_guard._allow(value)]",
+            "    spec = importlib.machinery.PathFinder.find_spec(name, safe_search)",
+            "    if spec is None or spec.loader is None:",
+            "        return",
+            "    module = sys.modules.get(name)",
+            "    if module is None or getattr(module, '__file__', '').startswith(workspace):",
+            "        module = importlib.util.module_from_spec(spec)",
+            "        sys.modules[name] = module",
+            "        spec.loader.exec_module(module)",
+            "",
+            "sys.meta_path = [",
+            "    _WorkspaceSafeFinder if finder is importlib.machinery.PathFinder else finder",
+            "    for finder in sys.meta_path",
+            "]",
+            "if _WorkspaceSafeFinder not in sys.meta_path:",
+            "    sys.meta_path.insert(0, _WorkspaceSafeFinder)",
+            "",
+            "_preload_site_package('pandas')",
+            "runpy.run_module('openhands.core.main', run_name='__main__')",
+        ])
 
         launcher_lines = [
-            "import os, signal, subprocess, sys",
-            f"os.environ['SANDBOX_VOLUMES'] = os.getcwd() + ':/workspace:rw'",
+            "import base64, os, subprocess, sys",
+            "host_workdir = os.getcwd()",
+            "os.environ['SANDBOX_VOLUMES'] = host_workdir + ':/workspace:rw'",
             f"task = open('{self._TASK_FILE}').read()",
-            "cmd = [sys.executable, '-m', 'openhands.core.main', '--task=' + task]",
+            "wrapper_path = '/tmp/oh_main_wrapper.py'",
+            "with open(wrapper_path, 'w', encoding='utf-8') as f:",
+            f"    f.write({wrapper_source!r})",
+            "cmd = [sys.executable, '-P', wrapper_path, '--task=' + task]",
         ]
-        if mcp_config:
-            launcher_lines.append(f"cmd.append('--config-file={config_file_path}')")
         launcher_lines.extend([
+            "config_path = os.path.join(host_workdir, '.openhands-config.toml')",
+            f"config_content = base64.b64decode('{config_b64}').decode()",
+            "with open(config_path, 'w', encoding='utf-8') as f:",
+            "    f.write(config_content)",
+            "cmd.append('--config-file=' + config_path)",
+        ])
+        launcher_lines.extend([
+            # Running OpenHands from /workspace lets repo-local top-level packages
+            # (for example a task repo named pandas/) shadow installed deps during
+            # OpenHands startup. Launch from /tmp and rely on SANDBOX_VOLUMES.
+            "os.chdir('/tmp')",
             "log = open('/logs/agent/openhands.txt', 'wb')",
             "proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)",
             "for line in proc.stdout:",
@@ -177,16 +267,67 @@ class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
         return exec_inputs
 
     def _build_workspace_guidance(self, workdir: str) -> str:
-        repo_list = self._get_repo_list()
-        if not repo_list:
-            repo_list = [self._get_repo_display()]
-        repo_lines = "\n".join(f"- `github.com/{repo}`" for repo in repo_list)
-        return (
-            f"{self.OPENHANDS_WORKSPACE_PREAMBLE}\n\n"
-            "## Sourcegraph MCP\n\n"
-            "- Use the provided MCP tools before local edits.\n"
-            f"- Scope remote discovery to:\n{repo_lines}\n"
-            f"- Write your final file edits directly under `{workdir}` using repository-relative paths.\n"
+        guidance = [
+            self.OPENHANDS_WORKSPACE_PREAMBLE,
+            "",
+            "## Working Directory",
+            "",
+            f"- Create and edit submission files directly under `{workdir}`.",
+            "- Keep the final answer artifacts in the provided workspace so the verifier can find them.",
+        ]
+
+        mcp_type = os.environ.get("BASELINE_MCP_TYPE", "none").lower()
+        if mcp_type != "none":
+            repo_list = self._get_repo_list()
+            if not repo_list:
+                repo_list = [self._get_repo_display()]
+            repo_lines = "\n".join(f"- `github.com/{repo}`" for repo in repo_list)
+            guidance.extend([
+                "",
+                "## Sourcegraph MCP",
+                "",
+                "- Use the provided MCP tools before local edits.",
+                f"- Scope remote discovery to:\n{repo_lines}",
+            ])
+
+        return "\n".join(guidance) + "\n"
+
+    def _build_config_toml(self, mcp_url: str | None = None) -> str:
+        lines = [
+            "[agent]",
+            f"enable_mcp = {'true' if mcp_url else 'false'}",
+            "enable_jupyter = false",
+            "enable_browsing = false",
+        ]
+        if mcp_url:
+            lines.extend([
+                "",
+                "[mcp]",
+                "shttp_servers = [",
+                f'    {{ url = "{mcp_url}", timeout = 300 }}',
+                "]",
+            ])
+        return "\n".join(lines) + "\n"
+
+    async def _upload_workspace_artifacts(
+        self,
+        environment: BaseEnvironment,
+        workdir: str,
+        config_toml: str,
+    ) -> None:
+        config_toml_path = self.logs_dir / "config.toml"
+        config_toml_path.write_text(config_toml)
+        await environment.upload_file(
+            source_path=str(config_toml_path),
+            target_path=f"{workdir}/config.toml",
+        )
+
+        guidance = self._build_workspace_guidance(workdir)
+        guidance_path = self.logs_dir / ".openhands_instructions"
+        guidance_path.write_text(guidance)
+        await environment.upload_file(
+            source_path=str(guidance_path),
+            target_path=f"{workdir}/.openhands_instructions",
         )
 
     # Port for the in-container auth proxy (Sourcegraph needs "token" auth,
@@ -203,7 +344,13 @@ class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
         3. Pointing OpenHands' config.toml at http://localhost:<port>
         """
         mcp_type = os.environ.get("BASELINE_MCP_TYPE", "none").lower()
+        workdir = await self._detect_workdir(environment)
         if mcp_type == "none":
+            await self._upload_workspace_artifacts(
+                environment,
+                workdir,
+                self._build_config_toml(),
+            )
             return
 
         sg_url = (
@@ -224,7 +371,6 @@ class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
         sg_url = sg_url.rstrip("/")
 
         mcp_endpoint = f"{sg_url}/.api/mcp"
-        workdir = await self._detect_workdir(environment)
 
         # --- Upload and start the auth proxy ---
         proxy_src = os.path.join(os.path.dirname(__file__), "sg_auth_proxy.py")
@@ -263,35 +409,16 @@ class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
 
         # --- config.toml pointing at local proxy (no api_key needed) ---
         local_url = f"http://127.0.0.1:{self._SG_PROXY_PORT}"
-        config_toml = (
-            "[agent]\n"
-            "enable_mcp = true\n"
-            "\n"
-            "[mcp]\n"
-            "shttp_servers = [\n"
-            f'    {{ url = "{local_url}", timeout = 300 }}\n'
-            "]\n"
-        )
-        config_toml_path = self.logs_dir / "config.toml"
-        config_toml_path.write_text(config_toml)
-        await environment.upload_file(
-            source_path=str(config_toml_path),
-            target_path=f"{workdir}/config.toml",
+        await self._upload_workspace_artifacts(
+            environment,
+            workdir,
+            self._build_config_toml(mcp_url=local_url),
         )
 
         # Also set env vars as backup
         servers = [{"url": local_url, "timeout": 300}]
         os.environ["OPENHANDS_MCP_SHTTP_SERVERS"] = repr(servers)
         os.environ["OPENHANDS_AGENT_ENABLE_MCP"] = "true"
-
-        # Upload guidance through OpenHands' native workspace instruction file.
-        guidance = self._build_workspace_guidance(workdir)
-        guidance_path = self.logs_dir / ".openhands_instructions"
-        guidance_path.write_text(guidance)
-        await environment.upload_file(
-            source_path=str(guidance_path),
-            target_path=f"{workdir}/.openhands_instructions",
-        )
 
         # Save debug artifacts
         mcp_json = {

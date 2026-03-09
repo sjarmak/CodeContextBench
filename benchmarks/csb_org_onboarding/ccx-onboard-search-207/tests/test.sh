@@ -11,7 +11,10 @@ set -eo pipefail
 # Firefox mirror clone that causes VerifierTimeoutError on MCP runs.
 
 echo "Starting RepoQA verifier..." 1>&2
-cd /app || { echo "ERROR: Cannot cd to /app"; exit 1; }
+TASK_WORKDIR="${TASK_WORKDIR:-/app}"
+TASK_REPO_ROOT="${TASK_REPO_ROOT:-$TASK_WORKDIR}"
+TASK_OUTPUT="${TASK_OUTPUT:-$TASK_WORKDIR/solution.json}"
+cd "$TASK_REPO_ROOT" || { echo "ERROR: Cannot cd to $TASK_REPO_ROOT"; exit 1; }
 mkdir -p /logs/verifier
 
 if [ ! -f /tests/ground_truth.json ]; then
@@ -21,7 +24,7 @@ if [ ! -f /tests/ground_truth.json ]; then
     exit 0
 fi
 
-SOLUTION_FILE="/app/solution.json"
+SOLUTION_FILE="$TASK_OUTPUT"
 if [ ! -f "$SOLUTION_FILE" ]; then
     echo "ERROR: Agent did not create solution.json in /app/"
     echo '{"score": 0.0}' > /logs/verifier/reward.json
@@ -31,14 +34,14 @@ fi
 
 VERIFY_SCRIPT="$(mktemp /logs/verifier/verify_XXXXXX.py)"
 cat > "$VERIFY_SCRIPT" << 'PYEOF'
-import json, sys, re
+import json, os, sys, re
 sys.path.insert(0, "/tests")
 from verifiers import SemanticRetrievalQAVerifier
 
 try:
     with open("/tests/ground_truth.json") as f:
         ground_truth = json.load(f)
-    with open("/app/solution.json") as f:
+    with open(os.environ.get("TASK_OUTPUT", "/app/solution.json")) as f:
         raw = f.read()
     matches = re.findall(r"```(?:json)?\s*\n(.*?)```", raw, re.DOTALL)
     if matches:

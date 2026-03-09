@@ -11,11 +11,15 @@ if [ -f /tmp/.artifact_only_mode ] && [ -f /tests/answer_json_verifier_lib.sh ];
     source /tests/answer_json_verifier_lib.sh
 fi
 
-cd "${VERIFY_REPO:-/workspace}"
+TASK_WORKDIR="${TASK_WORKDIR:-/workspace}"
+TASK_REPO_ROOT="${TASK_REPO_ROOT:-${VERIFY_REPO:-$TASK_WORKDIR}}"
+VERIFY_REPO="${VERIFY_REPO:-$TASK_REPO_ROOT}"
+
+cd "$TASK_REPO_ROOT"
 mkdir -p /logs/verifier
 
 # Fix git safe.directory
-git config --global --add safe.directory /workspace 2>/dev/null || true
+git config --global --add safe.directory "$TASK_REPO_ROOT" 2>/dev/null || true
 
 # ── Source shared verifier library ────────────────────────────────────────
 source /tests/verifier_lib.sh

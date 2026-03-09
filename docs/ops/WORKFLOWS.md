@@ -9,20 +9,22 @@
 
 ## Run Batch Workflow
 1. Run infra checks (`scripts/check_infra.py`).
-2. Validate tasks (`scripts/validate_tasks_preflight.py`).
-3. If using Daytona, inspect current account state with `scripts/daytona_cost_guard.py summary` when needed.
-4. Launch benchmark via `configs/*` runner only (interactive confirmation required).
-5. Do not use raw Daytona `harbor run` for benchmark batches; the wrappers enforce preflight and labeling.
-6. Monitor with `scripts/aggregate_status.py` and classify errors.
-7. Validate outputs (`scripts/validate_task_run.py`).
-8. Triage before reruns.
-9. Regenerate manifest/report after completion.
-10. Run `scripts/repo_health.py` before commit/push.
+2. Inspect account readiness with `scripts/account_health.py status` if there is any chance accounts are rate-limited, near expiry, or already in use.
+3. Validate tasks (`scripts/validate_tasks_preflight.py`).
+4. If using Daytona, inspect current account state with `scripts/daytona_cost_guard.py summary` when needed.
+5. Launch benchmark via `configs/*` runner only (interactive confirmation required).
+6. Do not use raw Daytona `harbor run` for benchmark batches; the wrappers enforce preflight, account gating, and labeling.
+7. Monitor with `scripts/aggregate_status.py` and classify errors.
+8. Validate outputs (`scripts/validate_task_run.py`).
+9. Triage before reruns.
+10. Regenerate manifest/report after completion.
+11. Run `scripts/repo_health.py` before commit/push.
 
 ### Daytona wrapper rules
 
 - All benchmark launchers should source `configs/_common.sh`.
 - Daytona launches should go through `harbor_run_guarded`, not raw `harbor run`.
+- Launchers that use Claude account pools should keep `account_readiness_preflight()` in the path and should not reimplement token/rate-limit checks ad hoc.
 - The launcher should run `scripts/daytona_cost_guard.py preflight` before the first Daytona launch.
 - Wrapper-driven targeted reruns should still be launched from repo root so relative task/config paths and logs resolve cleanly.
 - Only set `HARBOR_ALLOW_UNGUARDED_DAYTONA=1` for deliberate break-glass debugging.

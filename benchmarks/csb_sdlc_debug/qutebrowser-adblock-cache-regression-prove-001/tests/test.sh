@@ -10,6 +10,10 @@ if [ -f /tmp/.artifact_only_mode ] && [ -f /tests/answer_json_verifier_lib.sh ];
     source /tests/answer_json_verifier_lib.sh
 fi
 
+TASK_WORKDIR="${TASK_WORKDIR:-/workspace}"
+TASK_REPO_ROOT="${TASK_REPO_ROOT:-${VERIFY_REPO:-$TASK_WORKDIR}}"
+VERIFY_REPO="${VERIFY_REPO:-$TASK_REPO_ROOT}"
+
 export AGENT_TEST_PATH="/workspace/regression_test.py"
 export TEST_COMMAND="python3 -m pytest -c /dev/null --timeout=60"
 export REFERENCE_PATCH="/tests/reference_fix.patch"

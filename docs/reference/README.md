@@ -21,6 +21,7 @@ Stable specifications and policy/reference documents.
 - `docs/EXTENSIBILITY.md`
 
 ## Task / Suite Inventory
+- `docs/reference/TASK_CONTRACT.md`
 - `docs/TASK_CATALOG.md`
 - `docs/TASK_SELECTION.md`
 - `docs/ORG_TASKS.md`

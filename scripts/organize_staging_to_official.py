@@ -32,6 +32,29 @@ SKIP_PREFIXES = ("__archived_", "__broken_verifier_")
 BASELINE_CONFIGS = {"baseline-local-direct", "baseline-local-artifact"}
 MCP_CONFIGS = {"mcp-remote-direct", "mcp-remote-artifact"}
 
+REJECTED_RATE_LIMIT_PATTERNS = (
+    '"type":"rate_limit_event"',
+    '"status":"rejected"',
+    '"error":"rate_limit"',
+    "You've hit your limit",
+)
+
+
+def has_rejected_rate_limit_marker(result_path: Path) -> bool:
+    """Return True when the adjacent transcript shows a rejected Claude rate limit."""
+    transcript_path = result_path.parent / "agent" / "claude-code.txt"
+    if not transcript_path.exists():
+        return False
+
+    try:
+        transcript = transcript_path.read_text(errors="ignore")
+    except OSError:
+        return False
+
+    return all(pattern in transcript for pattern in REJECTED_RATE_LIMIT_PATTERNS[:2]) or any(
+        pattern in transcript for pattern in REJECTED_RATE_LIMIT_PATTERNS[2:]
+    )
+
 
 def should_exclude(result_path: Path) -> str | None:
     """Return exclusion reason or None if task is valid."""
@@ -40,6 +63,9 @@ def should_exclude(result_path: Path) -> str | None:
             data = json.load(f)
     except (json.JSONDecodeError, FileNotFoundError) as e:
         return f"unreadable result.json: {e}"
+
+    if has_rejected_rate_limit_marker(result_path):
+        return "rate_limited: rejected Claude runtime quota"
 
     exc = data.get("exception_info")
     if not exc:

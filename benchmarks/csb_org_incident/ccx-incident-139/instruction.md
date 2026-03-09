@@ -15,7 +15,13 @@ The local `/workspace/` directory contains: sg-evals/libreoffice-core--9c8b85f3.
 
 ## Output Format
 
-Create a file at `/workspace/answer.json` with your findings in the following structure:
+Use the published task contract:
+
+- `TASK_WORKDIR=/workspace`
+- `TASK_REPO_ROOT=/workspace`
+- `TASK_OUTPUT=/workspace/answer.json`
+
+Create a file at `TASK_OUTPUT` (`/workspace/answer.json`) with your findings in the following structure:
 
 ```json
 {

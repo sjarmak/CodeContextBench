@@ -59,6 +59,23 @@ bash configs/validate_one_per_benchmark.sh --smoke-runtime --smoke-timeout-sec 3
 # Override timeout-heavy suites (format: suite=seconds,suite=seconds)
 bash configs/validate_one_per_benchmark.sh --smoke-runtime --smoke-timeout-sec 300 \
   --smoke-timeout-overrides "csb_sdlc_feature=900,csb_sdlc_refactor=900,csb_sdlc_fix=900,csb_sdlc_design=600"
+
+# Curated registry smoke for CI/local verification (baseline variant)
+bash configs/validate_one_per_benchmark.sh \
+  --selection-file configs/registry_smoke_matrix.json \
+  --smoke-runtime \
+  --max-concurrent 2
+
+# Variant-specific smoke
+bash configs/validate_one_per_benchmark.sh \
+  --selection-file configs/registry_smoke_matrix.json \
+  --sg-only \
+  --max-concurrent 2
+
+bash configs/validate_one_per_benchmark.sh \
+  --selection-file configs/registry_smoke_matrix.json \
+  --artifact-only \
+  --max-concurrent 2
 ```
 
 **Usage:**

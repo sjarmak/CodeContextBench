@@ -9,9 +9,13 @@ if [ -f /tmp/.artifact_only_mode ] && [ -f /tests/answer_json_verifier_lib.sh ];
 fi
 
 set -eo pipefail
+TASK_WORKDIR="${TASK_WORKDIR:-/workspace}"
+TASK_REPO_ROOT="${TASK_REPO_ROOT:-${VERIFY_REPO:-$TASK_WORKDIR}}"
+VERIFY_REPO="${VERIFY_REPO:-$TASK_REPO_ROOT}"
+
 mkdir -p /logs/verifier
-cd "${VERIFY_REPO:-/workspace}"
-git config --global --add safe.directory /workspace 2>/dev/null || true
+cd "$TASK_REPO_ROOT"
+git config --global --add safe.directory "$TASK_REPO_ROOT" 2>/dev/null || true
 # Resolve initial commit — mirrors use orphan commits with different SHAs than upstream
 PRE_FIX_REV=$(git rev-parse HEAD 2>/dev/null || echo "HEAD")
 python3 /tests/verify_diff.py \

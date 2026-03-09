@@ -15,6 +15,7 @@ Use this page first for operational work. Each path is intentionally short to mi
 ### Key Commands
 ```bash
 python3 scripts/check_infra.py
+python3 scripts/account_health.py status
 python3 scripts/validate_tasks_preflight.py --all
 
 # Daytona Cloud (default — up to 125 concurrent sandboxes, no local Docker needed)

@@ -8,8 +8,12 @@
 
 set -euo pipefail
 
+TASK_WORKDIR="${TASK_WORKDIR:-/workspace}"
+TASK_REPO_ROOT="${TASK_REPO_ROOT:-${VERIFY_REPO:-$TASK_WORKDIR}}"
+TASK_OUTPUT="${TASK_OUTPUT:-$TASK_WORKDIR/answer.json}"
+
 TASK_ID="CCX-dep-trace-173"
-ANSWER_PATH="/workspace/answer.json"
+ANSWER_PATH="$TASK_OUTPUT"
 TASK_SPEC_PATH="/tests/task_spec.json"
 ORACLE_CHECKS="/tests/oracle_checks.py"
 REWARD_PATH="/logs/verifier/reward.txt"
@@ -19,6 +23,7 @@ mkdir -p /logs/verifier
 echo "=== CCX-dep-trace-173 evaluator ==="
 echo "Task spec: $TASK_SPEC_PATH"
 echo "Answer:    $ANSWER_PATH"
+echo "Repo root: $TASK_REPO_ROOT"
 echo ""
 
 # sg_only mode guard: restore full repo if verifier wrapper exists

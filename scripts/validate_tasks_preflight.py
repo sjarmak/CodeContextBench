@@ -70,6 +70,32 @@ TEMPLATE_PATTERNS = [
     re.compile(r"TODO:?\s*fill"),
 ]
 
+ABSOLUTE_TASK_ROOTS = ("/app", "/workspace")
+CONTRACT_ENV_VARS = (
+    "TASK_WORKDIR",
+    "TASK_REPO_ROOT",
+    "TASK_OUTPUT",
+    "TASK_OUTPUT_PATH",
+)
+OUTPUT_ARTIFACT_NAMES = (
+    "solution.json",
+    "solution.md",
+    "review.json",
+    "answer.json",
+    "answer.md",
+)
+DAYTONA_DEFAULT_STORAGE_GB = 10
+CONTRACT_CHECKS = {
+    "hardcoded_task_paths",
+    "variant_workdir_mismatch",
+    "artifact_variant_workdir_mismatch",
+    "verifier_workdir_mismatch",
+    "instruction_output_contract_missing",
+    "sg_only_restore_contract_missing",
+    "sg_only_base_mismatch",
+    "daytona_storage_over_10g",
+}
+
 
 def load_selected_tasks() -> dict:
     """Load selected_benchmark_tasks.json and index by (benchmark, task_id)."""
@@ -109,6 +135,50 @@ def parse_task_toml_simple(path: Path) -> dict:
             full_key = f"{section}.{key}" if section else key
             result[full_key] = val
     return result
+
+
+def _read_text(path: Path) -> str:
+    if not path.is_file():
+        return ""
+    return path.read_text(errors="replace")
+
+
+def _extract_last_workdir(dockerfile_path: Path) -> str | None:
+    content = _read_text(dockerfile_path)
+    workdirs = re.findall(r"(?im)^\s*WORKDIR\s+([^\s]+)\s*$", content)
+    if not workdirs:
+        return None
+    return workdirs[-1].strip()
+
+
+def _extract_from_image(dockerfile_path: Path) -> str | None:
+    content = _read_text(dockerfile_path)
+    match = re.search(r"(?im)^\s*FROM\s+([^\s]+)", content)
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def _extract_task_roots(script_content: str) -> set[str]:
+    roots = set()
+    for root in ABSOLUTE_TASK_ROOTS:
+        pattern = rf"(?<![A-Za-z0-9_.-]){re.escape(root)}(?=/|\b|['\"\\s]|$)"
+        if re.search(pattern, script_content):
+            roots.add(root)
+    return roots
+
+
+def _extract_output_artifacts(script_content: str) -> set[str]:
+    return {name for name in OUTPUT_ARTIFACT_NAMES if name in script_content}
+
+
+def _storage_gb(raw_value: str) -> int | None:
+    if not raw_value:
+        return None
+    match = re.fullmatch(r"\s*(\d+)\s*G\s*", raw_value, re.IGNORECASE)
+    if not match:
+        return None
+    return int(match.group(1))
 
 
 def validate_task(task_dir: Path, selected_index: dict) -> list[dict]:
@@ -157,6 +227,16 @@ def validate_task(task_dir: Path, selected_index: dict) -> list[dict]:
     else:
         toml_data = parse_task_toml_simple(toml_path)
 
+    storage_raw = toml_data.get("environment.storage", "") or toml_data.get("task.storage", "")
+    storage_gb = _storage_gb(storage_raw)
+    if storage_gb is not None and storage_gb > DAYTONA_DEFAULT_STORAGE_GB:
+        issue(
+            "WARNING",
+            "daytona_storage_over_10g",
+            f"task.toml requests storage={storage_raw}; exceeds Daytona default "
+            f"{DAYTONA_DEFAULT_STORAGE_GB}G cap and needs justification or alternate routing",
+        )
+
     # --- Check test.sh (or eval.sh for MCP-unique tasks) ---
     test_sh = task_dir / "tests" / "test.sh"
     eval_sh = task_dir / "tests" / "eval.sh"
@@ -182,6 +262,90 @@ def validate_task(task_dir: Path, selected_index: dict) -> list[dict]:
             if "tac" in benchmark.lower():
                 issue("WARNING", "test_sh_bad_flag",
                       "test.sh uses --output_path (should be --result_path for TAC tasks)")
+
+        instruction_has_contract_env = any(token in content for token in CONTRACT_ENV_VARS) if instruction_path.is_file() else False
+        verifier_has_contract_env = any(token in test_content for token in CONTRACT_ENV_VARS)
+        verifier_roots = _extract_task_roots(test_content)
+        referenced_outputs = _extract_output_artifacts(test_content)
+
+        dockerfile = task_dir / "environment" / "Dockerfile"
+        dockerfile_sg_only = task_dir / "environment" / "Dockerfile.sg_only"
+        dockerfile_artifact = task_dir / "environment" / "Dockerfile.artifact_only"
+        base_workdir = _extract_last_workdir(dockerfile)
+        sg_only_workdir = _extract_last_workdir(dockerfile_sg_only)
+        artifact_workdir = _extract_last_workdir(dockerfile_artifact)
+        base_from = _extract_from_image(dockerfile)
+        sg_only_from = _extract_from_image(dockerfile_sg_only)
+
+        if verifier_roots and not (instruction_has_contract_env or verifier_has_contract_env):
+            issue(
+                "WARNING",
+                "hardcoded_task_paths",
+                "Verifier hardcodes task paths "
+                f"{', '.join(sorted(verifier_roots))} without TASK_WORKDIR/TASK_REPO_ROOT/TASK_OUTPUT contract vars",
+            )
+
+        if base_workdir and sg_only_workdir and base_workdir != sg_only_workdir:
+            issue(
+                "WARNING",
+                "variant_workdir_mismatch",
+                f"Dockerfile WORKDIR={base_workdir} but Dockerfile.sg_only WORKDIR={sg_only_workdir}",
+            )
+
+        if base_workdir and artifact_workdir and base_workdir != artifact_workdir:
+            issue(
+                "INFO",
+                "artifact_variant_workdir_mismatch",
+                f"Dockerfile WORKDIR={base_workdir} but Dockerfile.artifact_only WORKDIR={artifact_workdir}",
+            )
+
+        expected_workdirs = {wd for wd in (base_workdir, sg_only_workdir, artifact_workdir) if wd}
+        unexpected_roots = verifier_roots - expected_workdirs
+        if unexpected_roots:
+            issue(
+                "CRITICAL",
+                "verifier_workdir_mismatch",
+                "Verifier references "
+                f"{', '.join(sorted(unexpected_roots))} but task image WORKDIRs are "
+                f"{', '.join(sorted(expected_workdirs)) or 'unset'}",
+            )
+
+        instruction_content = content if instruction_path.is_file() else ""
+        helper_outputs = set()
+        if "answer_json_verifier_lib.sh" in test_content:
+            # answer.json is an artifact-only transport detail, not the canonical
+            # task output the agent is expected to produce in normal harnesses.
+            helper_outputs.add("answer.json")
+        required_outputs = referenced_outputs - helper_outputs
+        missing_output_mentions = [name for name in sorted(required_outputs) if name not in instruction_content]
+        if required_outputs and missing_output_mentions:
+            issue(
+                "INFO",
+                "instruction_output_contract_missing",
+                "instruction.md does not explicitly mention verifier-required artifact(s): "
+                + ", ".join(missing_output_mentions),
+            )
+
+        sg_only_content = _read_text(dockerfile_sg_only)
+        if dockerfile_sg_only.is_file() and "/repo_full" in test_content:
+            has_restore_contract = (
+                "/repo_full" in sg_only_content
+                or ".sg_only_clone_manifest.json" in sg_only_content
+                or "sgonly_verifier_wrapper.sh" in test_content
+            )
+            if not has_restore_contract:
+                issue(
+                    "CRITICAL",
+                    "sg_only_restore_contract_missing",
+                    "Verifier depends on /repo_full, but Dockerfile.sg_only has no visible restore contract",
+                )
+
+        if dockerfile_sg_only.is_file() and "/utils" in test_content and base_from and sg_only_from and base_from != sg_only_from:
+            issue(
+                "WARNING",
+                "sg_only_base_mismatch",
+                f"Verifier references /utils but Dockerfile.sg_only base image changed from {base_from} to {sg_only_from}",
+            )
 
     # --- Cross-check with selected_benchmark_tasks.json ---
     selected_key = (benchmark, task_name)
@@ -1172,6 +1336,21 @@ def format_table(all_issues: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def format_issue_summary(all_issues: list[dict]) -> str:
+    """Format issue counts grouped by check name."""
+    if not all_issues:
+        return "Issue summary: no issues"
+
+    counts: dict[str, int] = {}
+    for issue in all_issues:
+        counts[issue["check"]] = counts.get(issue["check"], 0) + 1
+
+    lines = ["Issue summary by check:"]
+    for check, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
+        lines.append(f"  {check}: {count}")
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Pre-flight validation of benchmark tasks."
@@ -1183,6 +1362,16 @@ def main():
     parser.add_argument("--format", choices=["table", "json"], default="table")
     parser.add_argument("--critical-only", action="store_true",
                         help="Only show CRITICAL issues")
+    parser.add_argument(
+        "--contract-only",
+        action="store_true",
+        help="Only show harness-agnostic task contract issues for migration work",
+    )
+    parser.add_argument(
+        "--summary-by-check",
+        action="store_true",
+        help="Print an issue summary grouped by check name",
+    )
     parser.add_argument(
         "--smoke-runtime",
         action="store_true",
@@ -1284,6 +1473,8 @@ def main():
 
     if args.critical_only:
         all_issues = [i for i in all_issues if i["severity"] == "CRITICAL"]
+    if args.contract_only:
+        all_issues = [i for i in all_issues if i["check"] in CONTRACT_CHECKS]
 
     if args.format == "json":
         # Build fixture results data for JSON output
@@ -1313,6 +1504,11 @@ def main():
             "info": sum(1 for i in all_issues if i["severity"] == "INFO"),
             "issues": all_issues,
         }
+        if args.summary_by_check:
+            summary_by_check = {}
+            for issue in all_issues:
+                summary_by_check[issue["check"]] = summary_by_check.get(issue["check"], 0) + 1
+            output["summary_by_check"] = summary_by_check
         if run_fixtures:
             output["fixture_tests"] = {
                 "passed": fixture_passed,
@@ -1325,6 +1521,9 @@ def main():
     else:
         print(f"Checked {len(task_dirs)} task directories.")
         print(format_table(all_issues))
+        if args.summary_by_check:
+            print("")
+            print(format_issue_summary(all_issues))
 
         # Print fixture test summary if any were run
         if all_fixture_results:

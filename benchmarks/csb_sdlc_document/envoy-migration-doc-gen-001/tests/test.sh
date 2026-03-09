@@ -21,6 +21,10 @@ if [ "${ARTIFACT_ONLY:-false}" = "true" ] && [ -f "${ANALYSIS_TEXT_FILE:-}" ]; t
 fi
 REWARD_FILE="/logs/verifier/reward.txt"
 
+TASK_WORKDIR="${TASK_WORKDIR:-/workspace}"
+TASK_REPO_ROOT="${TASK_REPO_ROOT:-${VERIFY_REPO:-$TASK_WORKDIR}}"
+VERIFY_REPO="${VERIFY_REPO:-$TASK_REPO_ROOT}"
+
 mkdir -p /logs/verifier
 
 if [[ ! -f "$DOCUMENTATION_FILE" ]]; then

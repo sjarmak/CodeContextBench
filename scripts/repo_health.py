@@ -54,28 +54,67 @@ def check_selection_file(repo_root: Path) -> int:
 
 
 def check_launch_policy(repo_root: Path) -> int:
-    """Reject raw harbor run invocations in launcher scripts outside the shared wrapper."""
+    """Reject raw Harbor launches and launcher scripts that bypass configs/_common.sh."""
     configs_dir = repo_root / "configs"
-    offenders: list[str] = []
+    raw_harbor_offenders: list[str] = []
+    common_offenders: list[str] = []
     raw_harbor_pattern = re.compile(r"(^|[^\w])harbor run([^\w]|$)")
+    source_common_pattern = re.compile(r"source\s+.*_common\.sh")
+    helper_markers = (
+        "harbor_run_guarded",
+        "run_tasks_parallel",
+        "run_paired_configs",
+        "setup_multi_accounts",
+        "setup_dual_accounts",
+        "ensure_fresh_token_all",
+        "preflight_rate_limits",
+        "account_readiness_preflight",
+        "confirm_launch",
+        "load_credentials",
+        "enforce_subscription_mode",
+    )
+    delegate_patterns = (
+        re.compile(r"exec\s+.*configs/.*\.sh"),
+        re.compile(r"(bash|sh)\s+.*configs/.*\.sh"),
+        re.compile(r"exec\s+\"\$SCRIPT_DIR/.*\.sh\""),
+        re.compile(r"(bash|sh)\s+\"\$SCRIPT_DIR/.*\.sh\""),
+    )
 
     for script_path in sorted(configs_dir.glob("*.sh")):
         if script_path.name == "_common.sh":
             continue
-        for lineno, raw_line in enumerate(script_path.read_text().splitlines(), start=1):
+        text = script_path.read_text()
+        lines = text.splitlines()
+        sources_common = bool(source_common_pattern.search(text))
+        uses_shared_helper = any(marker in text for marker in helper_markers)
+        delegates_only = any(pattern.search(text) for pattern in delegate_patterns)
+
+        if uses_shared_helper and not sources_common:
+            common_offenders.append(f"{script_path.relative_to(repo_root)}")
+        elif not sources_common and not delegates_only and script_path.name not in {"build_2config.sh"}:
+            if script_path.name.startswith("run_") and "harbor" not in text:
+                # Pure orchestration wrappers that only call other config scripts are allowed.
+                pass
+
+        for lineno, raw_line in enumerate(lines, start=1):
             stripped = raw_line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
             if stripped.startswith("echo ") or stripped.startswith('echo"') or stripped.startswith("printf "):
                 continue
             if raw_harbor_pattern.search(raw_line):
-                offenders.append(f"{script_path.relative_to(repo_root)}:{lineno}")
+                raw_harbor_offenders.append(f"{script_path.relative_to(repo_root)}:{lineno}")
 
-    if offenders:
+    if raw_harbor_offenders or common_offenders:
         print("  launch_policy: FAILED")
-        print("    Raw `harbor run` is not allowed in configs/*.sh outside configs/_common.sh.")
-        for offender in offenders[:15]:
-            print(f"    {offender}")
+        if raw_harbor_offenders:
+            print("    Raw `harbor run` is not allowed in configs/*.sh outside configs/_common.sh.")
+            for offender in raw_harbor_offenders[:15]:
+                print(f"    {offender}")
+        if common_offenders:
+            print("    Launcher scripts that use shared run helpers must source configs/_common.sh.")
+            for offender in common_offenders[:15]:
+                print(f"    {offender}")
         return 1
 
     print("  launch_policy: OK")

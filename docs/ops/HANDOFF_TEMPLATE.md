@@ -1,6 +1,8 @@
 # Handoff Template
 
-Use this template before manual compaction or transferring work to a new session.
+Use this as an inline checklist before manual compaction or transferring work to a new session.
+Prefer using the generic `/handoff` skill to generate the actual copy/paste prompt.
+Do not create a markdown handoff artifact from it unless the user explicitly asks for one.
 
 ## Goal
 - 

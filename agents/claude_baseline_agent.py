@@ -941,6 +941,18 @@ before retrying."""
             if cmd.command and "claude " in cmd.command:
                 # Start with the base command
                 modified_command = cmd.command
+
+                # Harbor's upstream Claude command pipes stream-json output through
+                # `tee` to write /logs/agent/claude-code.txt. In long-running Claude
+                # sessions this can hang after the final answer if descendant
+                # processes inherit the pipeline FDs, leaving Harbor waiting for EOF
+                # long after the agent has logically finished. Redirect directly to
+                # the transcript file instead; Harbor reads the downloaded file for
+                # post-run analysis, so live tee output is unnecessary here.
+                modified_command = modified_command.replace(
+                    "2>&1 </dev/null | stdbuf -oL tee /logs/agent/claude-code.txt",
+                    "</dev/null >/logs/agent/claude-code.txt 2>&1",
+                )
                 
                 # Insert flags after "claude " - build them up incrementally
                 flags_to_insert = []
@@ -1123,8 +1135,9 @@ before retrying."""
 
                 modified_command = (
                     f"{setup_cmds}{file_cmds} && "
-                    f"{run_cmd} ; "
-                    "chmod -R a+rX /logs 2>/dev/null || true"
+                    f"{run_cmd}; _run_status=$?; "
+                    "chmod -R a+rX /logs 2>/dev/null || true; "
+                    "exit $_run_status"
                 )
                 
                 # CRITICAL: Add autonomous environment variables

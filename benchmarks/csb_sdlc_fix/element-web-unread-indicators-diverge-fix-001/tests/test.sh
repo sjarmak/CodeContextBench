@@ -18,9 +18,12 @@ trap 'if [ ! -f /logs/verifier/reward.txt ]; then echo "0.0" > /logs/verifier/re
 # SWE-bench Pro test execution
 echo "=== SWE-bench Pro Evaluation ==="
 
-# SWE-bench Pro images have the repository at /app
-cd "${VERIFY_REPO:-/app}" || cd /testbed || cd /workspace
+# SWE-bench Pro images expose the repository through TASK_REPO_ROOT.
+TASK_WORKDIR="${TASK_WORKDIR:-/workspace}"
+TASK_REPO_ROOT="${TASK_REPO_ROOT:-${VERIFY_REPO:-$TASK_WORKDIR}}"
+cd "$TASK_REPO_ROOT" || cd /testbed || cd "$TASK_REPO_ROOT"
 echo "Working directory: $(pwd)"
+git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
 
 # Check if config.json exists in /tests
 if [ -f "/tests/config.json" ]; then
@@ -44,7 +47,7 @@ echo "Git status:"
 git status 2>&1 | head -5 || echo "Not a git repository"
 
 echo "Applying test patch to set up test environment..."
-cat << 'TEST_PATCH_EOF' | git apply -v --allow-empty 2>&1
+cat << 'TEST_PATCH_EOF' | git apply -v 2>&1
 diff --git a/test/Unread-test.ts b/test/Unread-test.ts
 index 7a271354de1..8ff759b142b 100644
 --- a/test/Unread-test.ts
@@ -476,8 +479,10 @@ else
             fi
         else
             # Go: count "--- PASS" and "--- FAIL" lines
-            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || echo "0")
-            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || echo "0")
+            GO_PASS=$(grep -c '^--- PASS' test_output.log 2>/dev/null || true)
+            GO_FAIL=$(grep -c '^--- FAIL' test_output.log 2>/dev/null || true)
+            GO_PASS=${GO_PASS:-0}
+            GO_FAIL=${GO_FAIL:-0}
             GO_TOTAL=$((GO_PASS + GO_FAIL))
             if [ "$GO_TOTAL" -gt 0 ] 2>/dev/null; then
                 REWARD=$(awk "BEGIN {printf \"%.4f\", $GO_PASS / $GO_TOTAL}")

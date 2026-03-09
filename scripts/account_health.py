@@ -212,8 +212,14 @@ def classify_account(
     status = "ready"
     reasons: list[str] = []
     recommended_action = "proceed"
+    manual_hold = bool(account.get("manual_hold"))
+    manual_hold_reason = account.get("manual_hold_reason")
 
-    if token["token_state"] in {
+    if manual_hold:
+        status = "held"
+        recommended_action = "wait"
+        reasons.append("manual_hold")
+    elif token["token_state"] in {
         "missing_credentials",
         "corrupt_credentials",
         "missing_oauth",
@@ -251,6 +257,8 @@ def classify_account(
         "last_rate_limit_at": account.get("last_rate_limit_at"),
         "last_rate_limit_reason": account.get("last_rate_limit_reason"),
         "last_rate_limit_task_id": account.get("last_rate_limit_task_id"),
+        "manual_hold": manual_hold,
+        "manual_hold_reason": manual_hold_reason,
         "token": token,
         "reasons": reasons,
     }
@@ -335,6 +343,8 @@ def print_table(report: dict[str, Any]) -> None:
         suffix = ""
         if account["last_rate_limit_at"]:
             suffix = f" last rate-limit {account['last_rate_limit_at']}"
+        if account.get("manual_hold_reason"):
+            suffix += f" hold={account['manual_hold_reason']}"
         print(
             f"  [{account['status']:<15}] {account['label']:<12} "
             f"slots={account['available_slots']}/{account['sessions_per_account']} "
@@ -391,6 +401,29 @@ def mark_rate_limit(
     save_state(state_file, state)
 
 
+def set_manual_hold(
+    *,
+    state_file: Path,
+    home: Path,
+    reason: str | None,
+) -> None:
+    state = load_state(state_file)
+    account = normalize_account_state(state, home)
+    account["manual_hold"] = True
+    account["manual_hold_reason"] = reason or "operator hold"
+    account["manual_hold_at"] = iso_now()
+    save_state(state_file, state)
+
+
+def clear_manual_hold(*, state_file: Path, home: Path) -> None:
+    state = load_state(state_file)
+    account = normalize_account_state(state, home)
+    account.pop("manual_hold", None)
+    account.pop("manual_hold_reason", None)
+    account.pop("manual_hold_at", None)
+    save_state(state_file, state)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Account readiness and monitoring")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -427,6 +460,15 @@ def build_parser() -> argparse.ArgumentParser:
     rate_limit.add_argument("--home", required=True)
     rate_limit.add_argument("--task-id")
     rate_limit.add_argument("--reason")
+
+    hold = subparsers.add_parser("hold-account")
+    hold.add_argument("--state-file", default=str(default_state_file()))
+    hold.add_argument("--home", required=True)
+    hold.add_argument("--reason")
+
+    release = subparsers.add_parser("release-account")
+    release.add_argument("--state-file", default=str(default_state_file()))
+    release.add_argument("--home", required=True)
 
     return parser
 
@@ -480,6 +522,21 @@ def main() -> int:
             home=home,
             task_id=args.task_id,
             reason=args.reason,
+        )
+        return 0
+
+    if args.command == "hold-account":
+        set_manual_hold(
+            state_file=state_file,
+            home=home,
+            reason=args.reason,
+        )
+        return 0
+
+    if args.command == "release-account":
+        clear_manual_hold(
+            state_file=state_file,
+            home=home,
         )
         return 0
 

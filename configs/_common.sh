@@ -676,7 +676,7 @@ SKIP_ACCOUNTS="${SKIP_ACCOUNTS:-}"
 RATE_LIMIT_PREFLIGHT="${RATE_LIMIT_PREFLIGHT:-1}"
 RATE_LIMIT_PREFLIGHT_MODE="${RATE_LIMIT_PREFLIGHT_MODE:-skip}"
 RATE_LIMIT_PROBE_TIMEOUT_SEC="${RATE_LIMIT_PROBE_TIMEOUT_SEC:-20}"
-RATE_LIMIT_PROBE_MODEL="${RATE_LIMIT_PROBE_MODEL:-anthropic/claude-haiku-4-5-20251001}"
+RATE_LIMIT_PROBE_MODEL="${RATE_LIMIT_PROBE_MODEL:-}"
 RATE_LIMIT_PROBE_PROMPT="${RATE_LIMIT_PROBE_PROMPT:-Reply with exactly OK.}"
 
 # Check whether an account's OAuth token is valid (or can be refreshed).
@@ -893,15 +893,17 @@ _check_account_rate_limit() {
     local account_home=$1
     local output
     local rc
+    local probe_model="${RATE_LIMIT_PROBE_MODEL:-${MODEL:-anthropic/claude-haiku-4-5-20251001}}"
 
-    # timeout returns 124 on timeout
+    # Run the probe fully detached from stdin. Background launcher shells can
+    # stop on SIGTTIN if the Claude CLI tries to read from the terminal.
     output=$(
-        HOME="$account_home" timeout "$RATE_LIMIT_PROBE_TIMEOUT_SEC" \
+        HOME="$account_home" timeout -k 5 "$RATE_LIMIT_PROBE_TIMEOUT_SEC" \
             claude --print \
             --output-format text \
             --permission-mode bypassPermissions \
-            --model "$RATE_LIMIT_PROBE_MODEL" \
-            "$RATE_LIMIT_PROBE_PROMPT" 2>&1
+            --model "$probe_model" \
+            "$RATE_LIMIT_PROBE_PROMPT" </dev/null 2>&1
     )
     rc=$?
 

@@ -829,7 +829,9 @@ set -euo pipefail
 
 SCORE=0
 TOTAL=6
-WORKSPACE="${{VERIFY_REPO:-/workspace}}"
+TASK_WORKDIR="${{TASK_WORKDIR:-/workspace}}"
+TASK_REPO_ROOT="${{TASK_REPO_ROOT:-${{VERIFY_REPO:-$TASK_WORKDIR}}}}"
+WORKSPACE="$$TASK_REPO_ROOT"
 
 # Check 1: Old symbol removed from primary definition
 OLD_DEF_COUNT=$(grep -r 'class {old}\\|type {old} struct\\|def {old}\\|function {old}' {dirs_str} 2>/dev/null | grep -v 'alias\\|compat\\|deprecated\\|backward\\|#.*{old}\\|//.*{old}' | wc -l)
@@ -924,7 +926,7 @@ description = "Checks refactoring: old symbol removal, new symbol presence, refe
 build_timeout_sec = {task['build_timeout_sec']}.0
 cpus = 4
 memory = "8G"
-storage = "20G"
+storage = "10G"
 
 [environment.setup_scripts]
 mcp_config = \'\'\'
@@ -938,6 +940,8 @@ def generate_dockerfile(task):
     return f'''FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV TASK_WORKDIR=/workspace
+ENV TASK_REPO_ROOT=/workspace
 
 RUN apt-get update && apt-get install -y --no-install-recommends \\
     git ca-certificates python3 curl \\
@@ -963,6 +967,8 @@ def generate_dockerfile_sg_only(task):
 
 ENV SOURCEGRAPH_REPO_NAME={task['mirror']}
 ENV DEBIAN_FRONTEND=noninteractive
+ENV TASK_WORKDIR=/workspace
+ENV TASK_REPO_ROOT=/workspace
 
 RUN apt-get update && apt-get install -y --no-install-recommends \\
     git ca-certificates python3 curl \\

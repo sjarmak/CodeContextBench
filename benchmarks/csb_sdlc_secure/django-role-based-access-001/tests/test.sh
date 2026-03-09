@@ -8,9 +8,13 @@ if [ -f /tmp/.artifact_only_mode ] && [ -f /tests/answer_json_verifier_lib.sh ];
     source /tests/answer_json_verifier_lib.sh
 fi
 
-cd "${VERIFY_REPO:-/workspace}"
+TASK_WORKDIR="${TASK_WORKDIR:-/workspace}"
+TASK_REPO_ROOT="${TASK_REPO_ROOT:-${VERIFY_REPO:-$TASK_WORKDIR}}"
+VERIFY_REPO="${VERIFY_REPO:-$TASK_REPO_ROOT}"
+
+cd "$TASK_REPO_ROOT"
 mkdir -p /logs/verifier
-git config --global --add safe.directory /workspace 2>/dev/null || true
+git config --global --add safe.directory "$TASK_REPO_ROOT" 2>/dev/null || true
 
 UNSTAGED=$(git diff --stat 2>/dev/null | wc -l)
 STAGED=$(git diff --cached --stat 2>/dev/null | wc -l)

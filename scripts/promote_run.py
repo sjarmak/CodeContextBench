@@ -196,14 +196,14 @@ def find_task_dirs(config_path: Path) -> list[Path]:
         if not entry.is_dir() or should_skip(entry.name):
             continue
 
-        if "__" in entry.name:
-            # Layout v1: direct task dir (task_name__hash)
-            task_dirs.append(entry)
-        elif batch_ts_re.match(entry.name):
+        if batch_ts_re.match(entry.name):
             # Layout v2: batch timestamp dir — look inside for task dirs
             for sub in sorted(entry.iterdir()):
                 if sub.is_dir() and "__" in sub.name and not should_skip(sub.name):
                     task_dirs.append(sub)
+        elif "__" in entry.name:
+            # Layout v1: direct task dir (task_name__hash)
+            task_dirs.append(entry)
         else:
             # Layout v3: Harbor batch dir (ccb_suite_task_config) — look inside
             for sub in sorted(entry.iterdir()):
@@ -298,8 +298,76 @@ def suite_from_run_name(run_name: str) -> str | None:
     return None
 
 
+def _benchmark_from_config_json(task_dir: Path) -> str | None:
+    """Infer benchmark from the nearest Harbor config.json metadata."""
+    candidates = [task_dir / "config.json", task_dir.parent / "config.json"]
+    for config_path in candidates:
+        if not config_path.is_file():
+            continue
+        try:
+            data = json.loads(config_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        env_kwargs = ((data.get("environment") or {}).get("kwargs") or {})
+        label_benchmark = env_kwargs.get("label_benchmark")
+        if isinstance(label_benchmark, str) and label_benchmark:
+            return label_benchmark
+
+        tasks = data.get("tasks") or []
+        if tasks:
+            task_path = tasks[0].get("path")
+            if isinstance(task_path, str):
+                match = re.search(r"benchmarks/([^/]+)/", task_path)
+                if match:
+                    return match.group(1)
+
+    return None
+
+
+def _benchmark_from_result_json(task_dir: Path) -> str | None:
+    """Infer benchmark from leaf result.json task metadata."""
+    result_path = task_dir / "result.json"
+    if not result_path.is_file():
+        return None
+    try:
+        data = json.loads(result_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    candidates: list[str] = []
+    task_name = data.get("task_name")
+    if isinstance(task_name, str) and task_name:
+        candidates.append(task_name)
+
+    task_id = data.get("task_id")
+    if isinstance(task_id, dict):
+        task_path = task_id.get("path")
+        if isinstance(task_path, str) and task_path:
+            candidates.append(Path(task_path).name)
+    elif isinstance(task_id, str) and task_id:
+        candidates.append(task_id)
+
+    for candidate in candidates:
+        normalized = re.sub(r"_[A-Za-z0-9]{4,8}$", "", candidate)
+        for prefix in ("mcp_", "sgonly_", "bl_"):
+            if normalized.startswith(prefix):
+                normalized = normalized[len(prefix):]
+        suite = suite_from_task_id(normalized)
+        if suite:
+            return suite
+
+    return None
+
+
 def benchmark_for_task(run_name: str, task_dir: Path) -> str | None:
     suite = suite_from_run_name(run_name)
+    if suite:
+        return suite
+    suite = _benchmark_from_config_json(task_dir)
+    if suite:
+        return suite
+    suite = _benchmark_from_result_json(task_dir)
     if suite:
         return suite
     task_name = task_dir.name.rsplit("__", 1)[0]
@@ -439,6 +507,11 @@ def check_gates(
         if not force:
             passed = False
 
+    if result.total_tasks == 0:
+        reasons.append(f"{RED}[FAIL]{RESET} No task directories found")
+        if not force:
+            passed = False
+
     if result.critical_count > 0:
         reasons.append(
             f"{RED}[FAIL]{RESET} {result.critical_count} critical issue(s) found"
@@ -480,8 +553,13 @@ def discover_staging_runs() -> list[Path]:
         return []
 
     runs = []
+    ignored_names = {"archive", "_quarantine", "launch_logs"}
     for entry in sorted(STAGING_DIR.iterdir()):
-        if entry.is_dir() and not should_skip(entry.name) and entry.name != "archive":
+        if (
+            entry.is_dir()
+            and not should_skip(entry.name)
+            and entry.name not in ignored_names
+        ):
             runs.append(entry)
     return runs
 
@@ -516,7 +594,7 @@ def cmd_list():
         result = validate_run(run_dir)
         age = get_run_age(run_dir)
 
-        if result.error:
+        if result.error or result.total_tasks == 0:
             status = f"{RED}ERROR{RESET}"
         elif result.critical_count > 0:
             status = f"{RED}BLOCKED{RESET}"

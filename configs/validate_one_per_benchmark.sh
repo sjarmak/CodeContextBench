@@ -9,9 +9,12 @@
 #   bash configs/validate_one_per_benchmark.sh [--dry-run]
 #   bash configs/validate_one_per_benchmark.sh --smoke-runtime [--smoke-timeout-sec 300] [--dry-run]
 #   bash configs/validate_one_per_benchmark.sh --sg-only [--smoke-timeout-sec 600] [--dry-run]
+#   bash configs/validate_one_per_benchmark.sh --artifact-only [--smoke-timeout-sec 600] [--dry-run]
 #
 # --sg-only: swaps Dockerfile -> Dockerfile.sg_only before each smoke, then restores.
 #            Implies --smoke-runtime. Tests that sg_only_env images build and verify.
+# --artifact-only: swaps Dockerfile -> Dockerfile.artifact_only before each smoke, then restores.
+#                  Implies --smoke-runtime. Tests Harbor artifact-mode images locally.
 
 set -euo pipefail
 
@@ -31,8 +34,10 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 DRY_RUN=false
 SMOKE_RUNTIME=false
 SG_ONLY=false
+ARTIFACT_ONLY=false
 SMOKE_TIMEOUT_SEC=300
 SMOKE_TIMEOUT_OVERRIDES="${SMOKE_TIMEOUT_OVERRIDES:-}"
+MAX_CONCURRENT=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -49,12 +54,25 @@ while [[ $# -gt 0 ]]; do
             SMOKE_RUNTIME=true
             shift
             ;;
+        --artifact-only)
+            ARTIFACT_ONLY=true
+            SMOKE_RUNTIME=true
+            shift
+            ;;
         --smoke-timeout-sec)
             SMOKE_TIMEOUT_SEC="${2:-}"
             shift 2
             ;;
         --smoke-timeout-overrides)
             SMOKE_TIMEOUT_OVERRIDES="${2:-}"
+            shift 2
+            ;;
+        --selection-file)
+            SELECTION_FILE="${2:-}"
+            shift 2
+            ;;
+        --max-concurrent)
+            MAX_CONCURRENT="${2:-0}"
             shift 2
             ;;
         *)
@@ -64,8 +82,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [ "$SG_ONLY" = true ] && [ "$ARTIFACT_ONLY" = true ]; then
+    echo "ERROR: --sg-only and --artifact-only are mutually exclusive"
+    exit 1
+fi
+
 if [ "$SG_ONLY" = true ]; then
     JOBS_DIR="runs/validation/smoke_sgonly_${TIMESTAMP}"
+elif [ "$ARTIFACT_ONLY" = true ]; then
+    JOBS_DIR="runs/validation/smoke_artifact_${TIMESTAMP}"
 elif [ "$SMOKE_RUNTIME" = true ]; then
     JOBS_DIR="runs/validation/smoke_runtime_${TIMESTAMP}"
 else
@@ -92,11 +117,39 @@ swap_to_sgonly() {
     cp "$sgonly" "$dockerfile"
     return 0
 }
+swap_to_artifact_only() {
+    local task_dir="$1"
+    local dockerfile="${task_dir}/environment/Dockerfile"
+    local artifact="${task_dir}/environment/Dockerfile.artifact_only"
+    local backup="${task_dir}/environment/Dockerfile.original"
+    if [ ! -f "$artifact" ]; then return 1; fi
+    if [ ! -f "$backup" ]; then cp "$dockerfile" "$backup"; fi
+    cp "$artifact" "$dockerfile"
+    return 0
+}
 restore_dockerfile() {
     local task_dir="$1"
     local dockerfile="${task_dir}/environment/Dockerfile"
     local backup="${task_dir}/environment/Dockerfile.original"
     if [ -f "$backup" ]; then mv "$backup" "$dockerfile"; fi
+}
+
+wait_for_slot() {
+    local max="$1"
+    if [ "$max" -le 0 ]; then
+        return 0
+    fi
+    while [ "${#PIDS[@]}" -ge "$max" ]; do
+        local pid="${PIDS[0]}"
+        local bm="${BMS[0]}"
+        local status=0
+        if ! wait "$pid" 2>/dev/null; then
+            status=$?
+        fi
+        EXIT_CODES["$bm"]=$status
+        PIDS=("${PIDS[@]:1}")
+        BMS=("${BMS[@]:1}")
+    done
 }
 
 # Extract first task per benchmark into arrays
@@ -105,7 +158,8 @@ import json
 sel = json.load(open('$SELECTION_FILE'))
 archived = set('$ARCHIVED_SUITES'.split())
 seen = set()
-for t in sel['tasks']:
+tasks = sel['tasks'] if isinstance(sel, dict) and 'tasks' in sel else sel
+for t in tasks:
     bm = t['benchmark']
     if bm in archived:
         continue
@@ -125,11 +179,18 @@ elif [ "$SMOKE_RUNTIME" = true ]; then
     echo "Mode:    runtime smoke (no agent)"
     echo "Timeout: ${SMOKE_TIMEOUT_SEC}s per task"
     echo "Overrides: ${SMOKE_TIMEOUT_OVERRIDES:-<none>}"
+    echo "Variant: $( [ "$SG_ONLY" = true ] && echo sg_only || ([ "$ARTIFACT_ONLY" = true ] && echo artifact_only || echo baseline) )"
 else
     echo "Mode:    baseline harbor run (no MCP)"
     echo "Model:   $MODEL"
 fi
-echo "Tasks:   1 per benchmark (${#TASK_LINES[@]} total, all concurrent)"
+echo "Selection:$SELECTION_FILE"
+if [ "$MAX_CONCURRENT" -gt 0 ]; then
+    echo "Parallel: up to ${MAX_CONCURRENT} tasks at once"
+    echo "Tasks:   1 per benchmark (${#TASK_LINES[@]} total, throttled)"
+else
+    echo "Tasks:   1 per benchmark (${#TASK_LINES[@]} total, all concurrent)"
+fi
 echo "Output:  $JOBS_DIR"
 echo ""
 echo "Tasks:"
@@ -193,7 +254,22 @@ mkdir -p "$JOBS_DIR"
 # Without this, tasks using FROM ccb-repo-* fail with "pull access denied"
 # because Docker tries to pull the local-only image from Docker Hub.
 BASE_BUILD="$REPO_ROOT/base_images/build.sh"
-if [ -x "$BASE_BUILD" ]; then
+NEEDS_BASE_BUILD=false
+for line in "${TASK_LINES[@]}"; do
+    IFS=$'\t' read -r _bm _path <<< "$line"
+    _dockerfile="$REPO_ROOT/${_path}/environment/Dockerfile"
+    if [ "$SG_ONLY" = true ] && [ -f "$REPO_ROOT/${_path}/environment/Dockerfile.sg_only" ]; then
+        _dockerfile="$REPO_ROOT/${_path}/environment/Dockerfile.sg_only"
+    elif [ "$ARTIFACT_ONLY" = true ] && [ -f "$REPO_ROOT/${_path}/environment/Dockerfile.artifact_only" ]; then
+        _dockerfile="$REPO_ROOT/${_path}/environment/Dockerfile.artifact_only"
+    fi
+    if [ -f "$_dockerfile" ] && grep -q '^FROM ccb-repo-' "$_dockerfile"; then
+        NEEDS_BASE_BUILD=true
+        break
+    fi
+done
+
+if [ -x "$BASE_BUILD" ] && [ "$NEEDS_BASE_BUILD" = true ]; then
     echo "=== Ensuring base images ==="
     bash "$BASE_BUILD" --parallel 2>&1 | tail -3 || true
     echo ""
@@ -201,7 +277,9 @@ fi
 
 PIDS=()
 BMS=()
+ALL_BMS=()
 declare -A PATH_BY_BM
+declare -A EXIT_CODES
 
 for line in "${TASK_LINES[@]}"; do
     IFS=$'\t' read -r bm path <<< "$line"
@@ -228,22 +306,31 @@ for line in "${TASK_LINES[@]}"; do
         fi
 
         # --sg-only: swap Dockerfile before smoke
-        __sg_swapped=false
+        __variant_swapped=false
         if [ "$SG_ONLY" = true ]; then
             if swap_to_sgonly "$abs_path"; then
-                __sg_swapped=true
+                __variant_swapped=true
                 echo "Launching sg_only smoke: $bm ($path)"
             else
                 echo "SKIP sg_only: $bm — no Dockerfile.sg_only"
+                continue
+            fi
+        elif [ "$ARTIFACT_ONLY" = true ]; then
+            if swap_to_artifact_only "$abs_path"; then
+                __variant_swapped=true
+                echo "Launching artifact_only smoke: $bm ($path)"
+            else
+                echo "SKIP artifact_only: $bm — no Dockerfile.artifact_only"
                 continue
             fi
         else
             echo "Launching runtime smoke: $bm ($path)"
         fi
 
+        wait_for_slot "$MAX_CONCURRENT"
         # Run smoke in a subshell with trap-based restore (survives timeout kills)
         (
-            if [ "$__sg_swapped" = true ]; then
+            if [ "$__variant_swapped" = true ]; then
                 trap 'restore_dockerfile "'"$abs_path"'"' EXIT
             fi
             python3 scripts/validate_tasks_preflight.py \
@@ -254,6 +341,7 @@ for line in "${TASK_LINES[@]}"; do
                 > "$JOBS_DIR/${bm}.log" 2>&1
         ) &
     else
+        wait_for_slot "$MAX_CONCURRENT"
         echo "Launching harbor smoke: $bm ($path)"
         DAYTONA_LABEL_RUN_ID="$(basename "$JOBS_DIR")" \
         DAYTONA_LABEL_BENCHMARK="$bm" \
@@ -273,16 +361,19 @@ for line in "${TASK_LINES[@]}"; do
 
     PIDS+=($!)
     BMS+=("$bm")
+    ALL_BMS+=("$bm")
 done
 
 echo ""
 echo "All ${#PIDS[@]} tasks launched. Waiting for completion..."
 echo ""
 
-declare -A EXIT_CODES
 for i in "${!PIDS[@]}"; do
-    wait "${PIDS[$i]}" 2>/dev/null || true
-    EXIT_CODES["${BMS[$i]}"]=$?
+    status=0
+    if ! wait "${PIDS[$i]}" 2>/dev/null; then
+        status=$?
+    fi
+    EXIT_CODES["${BMS[$i]}"]=$status
 done
 
 echo ""
@@ -296,7 +387,7 @@ echo ""
 PASS=0
 FAIL=0
 
-for bm in "${BMS[@]}"; do
+for bm in "${ALL_BMS[@]}"; do
     if [ "$SMOKE_RUNTIME" = true ]; then
         log="$JOBS_DIR/${bm}.log"
         if [ ! -f "$log" ]; then
@@ -347,5 +438,5 @@ PYEOF
 done
 
 echo ""
-echo "Summary: $PASS passed, $FAIL failed out of ${#BMS[@]} benchmarks"
+echo "Summary: $PASS passed, $FAIL failed out of ${#ALL_BMS[@]} benchmarks"
 echo "Logs:    $JOBS_DIR/*.log"

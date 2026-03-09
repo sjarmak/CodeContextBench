@@ -20,7 +20,11 @@ if [ -f /tmp/.artifact_only_mode ] && [ -f /tests/answer_json_verifier_lib.sh ];
     source /tests/answer_json_verifier_lib.sh
 fi
 
-cd "${VERIFY_REPO:-/workspace}"
+TASK_WORKDIR="${TASK_WORKDIR:-/workspace}"
+TASK_REPO_ROOT="${TASK_REPO_ROOT:-${VERIFY_REPO:-$TASK_WORKDIR}}"
+VERIFY_REPO="${VERIFY_REPO:-$TASK_REPO_ROOT}"
+
+cd "$TASK_REPO_ROOT"
 
 # Create log directories
 mkdir -p /logs/verifier
@@ -28,7 +32,7 @@ mkdir -p /logs/verifier
 # Fix git safe.directory: the repo was cloned as root during Docker build,
 # but the verifier may run as a different user. Without this, all git
 # commands silently fail due to CVE-2022-24765 ownership checks.
-git config --global --add safe.directory /workspace 2>/dev/null || true
+git config --global --add safe.directory "$TASK_REPO_ROOT" 2>/dev/null || true
 
 # Guard: if no code changes were made, the agent didn't execute successfully
 # Check unstaged changes, staged changes, untracked files, AND new commits

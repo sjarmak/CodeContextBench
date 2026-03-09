@@ -14,7 +14,13 @@ The local `/workspace/` directory contains: sg-evals/grpc--v1.68.0.
 
 ## Output Format
 
-Create a file at `/workspace/answer.json` with your findings in the following structure:
+Use the published task contract:
+
+- `TASK_WORKDIR=/workspace`
+- `TASK_REPO_ROOT=/workspace`
+- `TASK_OUTPUT=/workspace/answer.json`
+
+Create a file at `TASK_OUTPUT` (`/workspace/answer.json`) with your findings in the following structure:
 
 ```json
 {

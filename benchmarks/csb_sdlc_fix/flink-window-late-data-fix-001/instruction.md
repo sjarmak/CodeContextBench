@@ -45,3 +45,10 @@ When using event-time session windows with `allowedLateness(Time.seconds(0))` an
 - OutputTag correctly wired for side output emission
 - Side output late data emission works for merging windows
 - Test case added covering the late data + session window scenario
+
+## Output Contract
+- `TASK_WORKDIR=/workspace`
+- `TASK_REPO_ROOT=/workspace`
+- `TASK_OUTPUT=/logs/agent/solution.md`
+
+Write your implementation summary to `TASK_OUTPUT` so the verifier can score the run consistently across harnesses.

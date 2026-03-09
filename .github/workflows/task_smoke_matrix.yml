@@ -1,0 +1,84 @@
+name: Task smoke matrix
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "benchmarks/**"
+      - "configs/validate_one_per_benchmark.sh"
+      - "configs/registry_smoke_matrix.json"
+      - "scripts/validate_tasks_preflight.py"
+      - "docs/reference/TASK_CONTRACT.md"
+      - ".github/workflows/task_smoke_matrix.yml"
+  push:
+    branches: [main]
+    paths:
+      - "benchmarks/**"
+      - "configs/validate_one_per_benchmark.sh"
+      - "configs/registry_smoke_matrix.json"
+      - "scripts/validate_tasks_preflight.py"
+      - "docs/reference/TASK_CONTRACT.md"
+      - ".github/workflows/task_smoke_matrix.yml"
+
+jobs:
+  contract-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Full contract audit
+        run: |
+          python3 scripts/validate_tasks_preflight.py --all --contract-only --summary-by-check --format json > contract_audit.json
+          python3 - <<'PY'
+          import json
+          with open("contract_audit.json") as f:
+              data = json.load(f)
+          allowed = {"daytona_storage_over_10g"}
+          disallowed = [issue for issue in data["issues"] if issue["check"] not in allowed]
+          if disallowed:
+              for issue in disallowed[:50]:
+                  print(issue)
+              raise SystemExit(f"{len(disallowed)} disallowed contract issues found")
+          print(data["summary_by_check"])
+          PY
+
+  smoke-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - baseline
+          - sg-only
+          - artifact-only
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Smoke curated registry matrix
+        run: |
+          set -euo pipefail
+          extra_args=()
+          case "${{ matrix.variant }}" in
+            baseline) ;;
+            sg-only) extra_args+=(--sg-only) ;;
+            artifact-only) extra_args+=(--artifact-only) ;;
+          esac
+          bash configs/validate_one_per_benchmark.sh \
+            --selection-file configs/registry_smoke_matrix.json \
+            --smoke-runtime \
+            --smoke-timeout-sec 300 \
+            --smoke-timeout-overrides "csb_sdlc_design=450,csb_sdlc_document=450,csb_sdlc_feature=600,csb_sdlc_fix=600,csb_sdlc_refactor=600,csb_sdlc_test=450,csb_sdlc_understand=450" \
+            --max-concurrent 2 \
+            "${extra_args[@]}"

@@ -19,6 +19,27 @@ from typing import Optional
 # First match wins, so order matters (most specific first).
 ERROR_FINGERPRINTS = [
     (
+        "daytona_name_collision",
+        re.compile(r"Sandbox with name .* already exists", re.IGNORECASE),
+        "Daytona sandbox name collision",
+        "infra",
+        "Clean up stale BUILD_FAILED/orphaned sandboxes, then rerun. If repeated, inspect sandbox naming and launcher labels.",
+    ),
+    (
+        "daytona_storage_limit",
+        re.compile(r"Disk request .* exceeds maximum allowed per sandbox", re.IGNORECASE),
+        "Daytona storage request exceeds limit",
+        "infra",
+        "The task requested more storage than Daytona allows. Lower the task request, set DAYTONA_OVERRIDE_STORAGE, or reroute locally.",
+    ),
+    (
+        "daytona_verifier_poll_hang",
+        re.compile(r"_run_verification.*_poll_response|harbor/environments/daytona\.py.*_poll_response.*CancelledError", re.IGNORECASE | re.DOTALL),
+        "Daytona verifier poll hang during finalization",
+        "infra",
+        "Treat as invalid infra. Check whether agent and verifier artifacts already exist before rerun, then stop the stale Harbor process/sandbox.",
+    ),
+    (
         "token_refresh_403",
         re.compile(r"403|Forbidden|token.*refresh|refresh.*token|credentials.*expired", re.IGNORECASE),
         "OAuth token refresh failure",
@@ -66,6 +87,13 @@ ERROR_FINGERPRINTS = [
         "MCP server connection failure",
         "mcp",
         "Check MCP server is running and accessible. Verify MCP config in task setup.",
+    ),
+    (
+        "openhands_repo_shadowing",
+        re.compile(r"pandas\._libs\.pandas_parser|(?:/workspace|/app)/pandas/__init__\.py", re.IGNORECASE),
+        "OpenHands repo package shadowing installed dependency",
+        "setup",
+        "A repo-local top-level package shadowed the installed dependency during OpenHands startup. Run startup smoke tests outside the repo root or isolate sys.path.",
     ),
     (
         "import_error",

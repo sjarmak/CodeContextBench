@@ -55,6 +55,7 @@ if os.path.exists(creds_file):
 fi
 
 SELECTION_FILE="$SCRIPT_DIR/selected_benchmark_tasks.json"
+OPENHANDS_ROUTING_POLICY="${OPENHANDS_ROUTING_POLICY:-$SCRIPT_DIR/openhands_daytona_routing.json}"
 AGENT_PATH="${AGENT_PATH:-agents.harnesses.openhands:OpenHandsHarnessAgent}"
 MODEL="${MODEL:-anthropic/claude-sonnet-4-6}"
 CATEGORY="${CATEGORY:-staging}"
@@ -122,6 +123,11 @@ if [ ! -f "$SELECTION_FILE" ]; then
     exit 1
 fi
 
+if [ ! -f "$OPENHANDS_ROUTING_POLICY" ]; then
+    echo "ERROR: OpenHands routing policy not found at $OPENHANDS_ROUTING_POLICY"
+    exit 1
+fi
+
 readarray -t TASK_ROWS < <(python3 - "$SELECTION_FILE" "$BENCHMARK_FILTER" "$TASK_FILTER" <<'PYEOF'
 import json
 import sys
@@ -171,12 +177,16 @@ setup_multi_accounts
 # In Daytona mode, override the session-based parallelism with sandbox-based cap.
 # Daytona Tier 3 allows 125 concurrent sandboxes; paired mode uses 2 per task.
 DAYTONA_PARALLEL_TASK_CAP="${DAYTONA_PARALLEL_TASK_CAP:-60}"
-if [ "${HARBOR_ENV:-}" = "daytona" ] && [ "$PARALLEL_JOBS" -lt "$DAYTONA_PARALLEL_TASK_CAP" ]; then
+if [ "${HARBOR_ENV:-}" = "daytona" ]; then
     if [ "$DAYTONA_PARALLEL_TASK_CAP" -gt 124 ]; then
         DAYTONA_PARALLEL_TASK_CAP=124
     fi
-    PARALLEL_JOBS=$DAYTONA_PARALLEL_TASK_CAP
-    echo "Parallel tasks auto-set to $PARALLEL_JOBS (Daytona mode, capped by DAYTONA_PARALLEL_TASK_CAP=${DAYTONA_PARALLEL_TASK_CAP})"
+    if [ "$PARALLEL_JOBS" -le 0 ] 2>/dev/null; then
+        PARALLEL_JOBS=$DAYTONA_PARALLEL_TASK_CAP
+    elif [ "$PARALLEL_JOBS" -gt "$DAYTONA_PARALLEL_TASK_CAP" ]; then
+        PARALLEL_JOBS=$DAYTONA_PARALLEL_TASK_CAP
+    fi
+    echo "Parallel tasks set to $PARALLEL_JOBS (Daytona mode, cap=${DAYTONA_PARALLEL_TASK_CAP})"
 fi
 
 _model_lower=$(echo "$MODEL" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')
@@ -196,12 +206,127 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 JOBS_BASE="runs/${CATEGORY}/openhands_${MODEL_SHORT}_${TIMESTAMP}"
 mkdir -p "$JOBS_BASE"
 
+readarray -t DAYTONA_SKIP_FROM_PREFIXES < <(python3 - "$OPENHANDS_ROUTING_POLICY" <<'PYEOF'
+import json
+import sys
+
+policy = json.load(open(sys.argv[1]))
+for prefix in policy.get("skip_daytona_from_prefixes", []):
+    if isinstance(prefix, str) and prefix:
+        print(prefix)
+PYEOF
+)
+
+readarray -t LOCAL_DOCKER_ROUTE_RULES < <(python3 - "$OPENHANDS_ROUTING_POLICY" <<'PYEOF'
+import json
+import sys
+
+policy = json.load(open(sys.argv[1]))
+for config_name, config_rules in (policy.get("local_docker_by_config") or {}).items():
+    if not isinstance(config_rules, dict):
+        continue
+    for repo in config_rules.get("repos", []):
+        if isinstance(repo, str) and repo:
+            print(f"{config_name}\t{repo}")
+PYEOF
+)
+
+_task_uses_daytona_blocked_image() {
+    local task_path="$1"
+    if [ ! -d "$task_path/environment" ]; then
+        return 1
+    fi
+    local prefix
+    local files=(
+        "$task_path/environment/Dockerfile"
+        "$task_path/environment/Dockerfile.sg_only"
+        "$task_path/environment/Dockerfile.artifact_only"
+    )
+    for prefix in "${DAYTONA_SKIP_FROM_PREFIXES[@]}"; do
+        [ -n "$prefix" ] || continue
+        if rg -F -q "$prefix" "${files[@]}" 2>/dev/null; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+_task_repo_id() {
+    python3 - "$1/task.toml" <<'PYEOF'
+import pathlib
+import re
+import sys
+
+try:
+    import tomllib
+except ImportError:  # Python 3.10
+    tomllib = None
+
+task_toml = pathlib.Path(sys.argv[1])
+if not task_toml.is_file():
+    sys.exit(0)
+
+try:
+    content = task_toml.read_text()
+except Exception:
+    sys.exit(0)
+
+if tomllib is not None:
+    try:
+        data = tomllib.loads(content)
+    except Exception:
+        data = {}
+    repo = data.get("repo")
+    if isinstance(repo, str):
+        print(repo)
+        sys.exit(0)
+
+match = re.search(r'(?m)^repo\\s*=\\s*[\"\']([^\"\']+)[\"\']\\s*$', content)
+if match:
+    print(match.group(1))
+PYEOF
+}
+
+_task_requires_local_docker_for_config() {
+    local config_name="$1"
+    local task_path="$2"
+    local repo
+    repo=$(_task_repo_id "$task_path")
+    local rule
+    local rule_config
+    local rule_repo
+    for rule in "${LOCAL_DOCKER_ROUTE_RULES[@]}"; do
+        rule_config=${rule%%$'\t'*}
+        rule_repo=${rule#*$'\t'}
+        if [ "$rule_config" = "$config_name" ] && [ "$rule_repo" = "$repo" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+_make_lowercase_mcp_temp_dir() {
+    python3 - "$1" <<'PYEOF'
+import pathlib
+import re
+import sys
+import uuid
+
+task_id = sys.argv[1].lower()
+safe_task_id = re.sub(r"[^a-z0-9._-]+", "_", task_id).strip("_") or "task"
+temp_dir = pathlib.Path("/tmp") / f"mcp_{safe_task_id}_{uuid.uuid4().hex[:8]}"
+temp_dir.mkdir()
+print(temp_dir)
+PYEOF
+}
+
 echo "=============================================="
 echo "OpenHands 2-Config Runner"
 echo "=============================================="
 echo "Model: $MODEL"
 echo "Agent path: $AGENT_PATH"
 echo "Selection: $SELECTION_FILE"
+echo "Routing policy: $OPENHANDS_ROUTING_POLICY"
 echo "Benchmark filter: ${BENCHMARK_FILTER:-<all selected benchmarks>}"
 echo "Task count: ${#TASK_IDS[@]}"
 echo "Parallel jobs: $PARALLEL_JOBS"
@@ -211,8 +336,35 @@ echo "Run baseline: $RUN_BASELINE"
 echo "Run MCP-Full: $RUN_FULL"
 echo "Paired mode: $PAIRED_MODE"
 echo "ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:+set (${#ANTHROPIC_API_KEY} chars)}"
+echo "Memory override: ${DAYTONA_OVERRIDE_MEMORY:-<none>} MB"
 echo "Storage override: ${DAYTONA_OVERRIDE_STORAGE:-<none>} MB"
 echo ""
+
+if [ "${HARBOR_ENV:-}" = "daytona" ]; then
+    clear_daytona_cost_guard_ready
+    _cost_guard_cmd=(
+        python3 "$REPO_ROOT/scripts/daytona_cost_guard.py" preflight
+        --selection-file "$SELECTION_FILE"
+        --parallel-tasks "$PARALLEL_JOBS"
+        --concurrency "$CONCURRENCY"
+        --policy "$DAYTONA_COST_POLICY"
+        --routing-policy "$OPENHANDS_ROUTING_POLICY"
+    )
+    [ -n "$BENCHMARK_FILTER" ] && _cost_guard_cmd+=(--benchmark "$BENCHMARK_FILTER")
+    [ -n "$TASK_FILTER" ] && _cost_guard_cmd+=(--task-id "$TASK_FILTER")
+    [ "$RUN_BASELINE" = true ] && _cost_guard_cmd+=(--config "baseline-local-direct")
+    [ "$RUN_FULL" = true ] && _cost_guard_cmd+=(--config "mcp-remote-direct")
+    "${_cost_guard_cmd[@]}" || exit 1
+    mark_daytona_cost_guard_ready
+fi
+
+_launch_config_label="baseline-local-direct + mcp-remote-direct"
+if [ "$RUN_BASELINE" = true ] && [ "$RUN_FULL" = false ]; then
+    _launch_config_label="baseline-local-direct"
+elif [ "$RUN_BASELINE" = false ] && [ "$RUN_FULL" = true ]; then
+    _launch_config_label="mcp-remote-direct"
+fi
+confirm_launch "OpenHands 2-config run" "$_launch_config_label" "${#TASK_IDS[@]}"
 
 _openhands_run_single() {
     local task_id=$1
@@ -256,13 +408,25 @@ if os.path.exists(creds_file):
         return 1
     fi
 
+    if [ "${HARBOR_ENV:-}" = "daytona" ] && _task_uses_daytona_blocked_image "$task_path"; then
+        echo "SKIP: $task_id ($config) uses jefzda/sweap-images and is Daytona-incompatible"
+        return 0
+    fi
+
+    local _task_harbor_env="${HARBOR_ENV:-}"
+    if [ "$_task_harbor_env" = "daytona" ] \
+        && _task_requires_local_docker_for_config "$config" "$task_path"; then
+        _task_harbor_env=""
+        echo "  [local-docker] Routing task off Daytona for $config: $task_id"
+    fi
+
     # For MCP configs, swap in Dockerfile.sg_only (truncated source, agent uses MCP)
     local _run_path="$task_path"
     if [ "$mcp_type" = "sourcegraph_full" ]; then
         local _df_sgonly="${task_path}/environment/Dockerfile.sg_only"
         if [ -f "$_df_sgonly" ]; then
             local _mcp_temp_dir
-            _mcp_temp_dir=$(mktemp -d "/tmp/mcp_${task_id}_XXXXXX")
+            _mcp_temp_dir=$(_make_lowercase_mcp_temp_dir "$task_id")
             cp -a "${task_path}/." "${_mcp_temp_dir}/"
             cp "${_mcp_temp_dir}/environment/Dockerfile.sg_only" "${_mcp_temp_dir}/environment/Dockerfile"
             _run_path="$_mcp_temp_dir"
@@ -273,15 +437,28 @@ if os.path.exists(creds_file):
     fi
 
     echo "Running task: $task_id ($config)"
-    BASELINE_MCP_TYPE="$mcp_type" harbor run \
+    local -a _task_override_args=()
+    if [ "$_task_harbor_env" = "daytona" ]; then
+        [ -n "${DAYTONA_OVERRIDE_MEMORY:-}" ] && _task_override_args+=(--override-memory-mb "$DAYTONA_OVERRIDE_MEMORY")
+        [ -n "${DAYTONA_OVERRIDE_STORAGE:-}" ] && _task_override_args+=(--override-storage-mb "$DAYTONA_OVERRIDE_STORAGE")
+    fi
+
+    DAYTONA_LABEL_RUN_ID="$(basename "$JOBS_BASE")" \
+    DAYTONA_LABEL_BENCHMARK="$(basename "$(dirname "$task_path")")" \
+    DAYTONA_LABEL_TASK_ID="$task_id" \
+    DAYTONA_LABEL_CONFIG="$config" \
+    DAYTONA_LABEL_CATEGORY="$CATEGORY" \
+    TASK_SOURCE_DIR="$_run_path" \
+    HARBOR_ENV="$_task_harbor_env" \
+    BASELINE_MCP_TYPE="$mcp_type" harbor_run_guarded \
         --path "$_run_path" \
         --agent-import-path "$AGENT_PATH" \
         --model "$MODEL" \
         --jobs-dir "$jobs_subdir" \
         -n "$CONCURRENCY" \
         --timeout-multiplier "$TIMEOUT_MULTIPLIER" \
-        ${HARBOR_ENV:+--env "$HARBOR_ENV"} \
-        ${DAYTONA_OVERRIDE_STORAGE:+--override-storage-mb "$DAYTONA_OVERRIDE_STORAGE"} \
+        ${_task_harbor_env:+--env "$_task_harbor_env"} \
+        "${_task_override_args[@]}" \
         2>&1 | tee "${jobs_subdir}/${task_id}.log" \
         || echo "WARNING: Task $task_id ($config) failed"
 }

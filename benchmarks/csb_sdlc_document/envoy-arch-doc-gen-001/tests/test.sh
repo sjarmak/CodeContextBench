@@ -28,6 +28,10 @@ fi
 GROUND_TRUTH="/tests/ground_truth.json"
 REWARD_FILE="/logs/verifier/reward.txt"
 
+TASK_WORKDIR="${TASK_WORKDIR:-/workspace}"
+TASK_REPO_ROOT="${TASK_REPO_ROOT:-${VERIFY_REPO:-$TASK_WORKDIR}}"
+VERIFY_REPO="${VERIFY_REPO:-$TASK_REPO_ROOT}"
+
 mkdir -p /logs/verifier
 
 # ── Check prerequisites ────────────────────────────────────────────────

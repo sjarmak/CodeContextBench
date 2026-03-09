@@ -15,6 +15,7 @@ Use this file when working in `scripts/`.
 ## Common Entry Points
 - `scripts/repo_health.py` - pre-commit/push health gate
 - `scripts/check_infra.py` - infra readiness
+- `scripts/account_health.py` - account readiness, recent rate-limit observations, active assignment tracking
 - `scripts/validate_tasks_preflight.py` - task preflight validation
 - `scripts/aggregate_status.py` - run status scan
 - `scripts/validate_task_run.py` - post-run validation
