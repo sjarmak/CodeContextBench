@@ -18,6 +18,83 @@ VERIFY_REPO="${VERIFY_REPO:-$TASK_REPO_ROOT}"
 cd "$TASK_REPO_ROOT"
 mkdir -p /logs/verifier
 
+# ── validation_result sidecar ───────────────────────────────────────────────
+write_validation_result() {
+    local reward="$1"
+    python3 - "$reward" "$TASK_QUALITY" "$IR_RECALL" "$IR_PRECISION" "$DEP_ACCURACY" <<'VR_PYEOF'
+import json, sys
+
+reward_str = sys.argv[1]
+task_quality = sys.argv[2] if len(sys.argv) > 2 else "0"
+ir_recall = sys.argv[3] if len(sys.argv) > 3 else "0"
+ir_precision = sys.argv[4] if len(sys.argv) > 4 else "0"
+dep_accuracy = sys.argv[5] if len(sys.argv) > 5 else "0"
+
+def safe_float(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+reward = safe_float(reward_str)
+
+sub_scores = {
+    "task_quality": safe_float(task_quality),
+    "file_recall": safe_float(ir_recall),
+    "file_precision": safe_float(ir_precision),
+    "dep_accuracy": safe_float(dep_accuracy),
+}
+
+payload = {
+    "schema_version": "validation_result.v1alpha1",
+    "status": "scored",
+    "scorable": True,
+    "scorer_family": "ir_checklist",
+    "reward": reward,
+    "pass_threshold": 0.5,
+    "passed": reward >= 0.5,
+    "output_contract": {
+        "mode": "unspecified",
+        "primary_path": None,
+        "required_artifact": False,
+    },
+    "sub_scores": sub_scores,
+    "failure": None,
+}
+
+with open("/logs/verifier/validation_result.json", "w") as f:
+    json.dump(payload, f, indent=2)
+VR_PYEOF
+}
+
+write_invalid_output_vr() {
+    local code="$1"
+    local message="$2"
+    python3 - "$code" "$message" <<'VR_PYEOF'
+import json, sys
+code, message = sys.argv[1:3]
+payload = {
+    "schema_version": "validation_result.v1alpha1",
+    "status": "invalid_output",
+    "scorable": False,
+    "scorer_family": "ir_checklist",
+    "reward": 0.0,
+    "pass_threshold": 0.5,
+    "passed": False,
+    "output_contract": {
+        "mode": "unspecified",
+        "primary_path": None,
+        "required_artifact": False,
+    },
+    "sub_scores": {},
+    "failure": {"code": code, "message": message, "stage": "output_validation"},
+}
+with open("/logs/verifier/validation_result.json", "w") as f:
+    json.dump(payload, f, indent=2)
+VR_PYEOF
+}
+
+
 git config --global --add safe.directory "$TASK_REPO_ROOT" 2>/dev/null || true
 
 # ── Source shared verifier library ────────────────────────────────────────
@@ -64,8 +141,8 @@ fi
 if [ "$HAS_CHANGES" -eq 0 ] && [ "$HAS_SOLUTION" -eq 0 ]; then
     echo "No code changes and no solution.md — agent did not execute"
     echo "0.0" > /logs/verifier/reward.txt
-    echo "[ ] Tests completed - Score: 0.0 (no output)"
-    exit 0
+write_invalid_output_vr "missing_required_output" "Agent did not produce required output"
+exit 0
 fi
 
 # ── IR metrics ───────────────────────────────────────────────────────────
@@ -156,5 +233,6 @@ echo "Task quality: $TASK_QUALITY ($QUALITY_SCORE / $QUALITY_MAX)"
 SCORE=$(composite_score "$TASK_QUALITY" "$IR_RECALL" "$IR_PRECISION" "$DEP_ACCURACY")
 
 echo "$SCORE" > /logs/verifier/reward.txt
+write_validation_result "$SCORE"
 echo ""
 echo "[x] Tests completed - Score: $SCORE (quality=$TASK_QUALITY recall=$IR_RECALL precision=$IR_PRECISION dep=$DEP_ACCURACY)"

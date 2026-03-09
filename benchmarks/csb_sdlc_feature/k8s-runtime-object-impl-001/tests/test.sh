@@ -60,6 +60,110 @@ VERIFY_REPO="${VERIFY_REPO:-$TASK_REPO_ROOT}"
 
 mkdir -p /logs/verifier
 
+# ── validation_result sidecar ───────────────────────────────────────────────
+write_validation_result_f1() {
+    REWARD_FILE="/logs/verifier/reward.txt" OUTPUT_PATH="$OUTPUT_PATH" GROUND_TRUTH="$GROUND_TRUTH" \
+    python3 <<'VR_PYEOF'
+import json, os, re, sys
+
+reward_path = os.environ.get("REWARD_FILE", "/logs/verifier/reward.txt")
+output_path = os.environ.get("OUTPUT_PATH", "/workspace/implementors.json")
+gt_path = os.environ.get("GROUND_TRUTH", "/tests/ground_truth.json")
+
+try:
+    with open(reward_path) as f:
+        reward = float(f.read().strip())
+except Exception:
+    reward = 0.0
+
+status = "scored"
+sub_scores = {}
+failure = None
+
+# Re-derive precision/recall from the same logic
+try:
+    with open(gt_path) as f:
+        gt = json.load(f)
+    key_fields = gt.get("key_fields", [])
+    expected = gt.get("entries", [])
+
+    def normalize_repo(name):
+        n = name.strip()
+        for prefix in ("github.com/", "https://github.com/"):
+            if n.startswith(prefix):
+                n = n[len(prefix):]
+        if n.startswith("sg-evals/"):
+            n = n[len("sg-evals/"):]
+        n = re.sub(r'--[0-9a-f]{7,}$', '', n)
+        if "/" in n:
+            n = n.rsplit("/", 1)[-1]
+        return n
+
+    def make_key(entry, fields):
+        parts = []
+        for f_name in fields:
+            val = str(entry.get(f_name, "")).strip()
+            if f_name == "repo":
+                val = normalize_repo(val)
+            parts.append(val)
+        return tuple(parts)
+
+    reported = []
+    if os.path.isfile(output_path):
+        try:
+            with open(output_path) as f:
+                raw = f.read()
+            m = re.search(r'```(?:json)?\s*\n(.*?)```', raw, re.DOTALL)
+            raw = m.group(1).strip() if m else raw.strip()
+            reported = json.loads(raw)
+            if not isinstance(reported, list):
+                reported = []
+        except Exception:
+            reported = []
+
+    expected_keys = [make_key(e, key_fields) for e in expected]
+    reported_keys = [make_key(r, key_fields) for r in reported]
+    matched = set()
+    tp = 0
+    for r_key in reported_keys:
+        for e_idx, e_key in enumerate(expected_keys):
+            if e_idx in matched:
+                continue
+            if r_key == e_key:
+                matched.add(e_idx)
+                tp += 1
+                break
+    prec = tp / len(reported) if reported else 0.0
+    rec = tp / len(expected) if expected else 0.0
+    f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
+    sub_scores = {"precision": round(prec, 4), "recall": round(rec, 4), "f1": round(f1, 4)}
+except Exception as exc:
+    status = "verifier_error"
+    failure = {"code": "verifier_exception", "message": str(exc), "stage": "scoring"}
+
+payload = {
+    "schema_version": "validation_result.v1alpha1",
+    "status": status,
+    "scorable": status == "scored",
+    "scorer_family": "f1",
+    "reward": reward,
+    "pass_threshold": 0.5,
+    "passed": status == "scored" and reward >= 0.5,
+    "output_contract": {
+        "mode": "unspecified",
+        "primary_path": output_path,
+        "required_artifact": False,
+    },
+    "sub_scores": sub_scores,
+    "failure": failure,
+}
+
+with open("/logs/verifier/validation_result.json", "w") as f:
+    json.dump(payload, f, indent=2)
+VR_PYEOF
+}
+
+
 # ── Check prerequisites ───────────────────────────────────────────────────
 if [ ! -f "$GROUND_TRUTH" ]; then
     echo "ERROR: ground_truth.json not found at $GROUND_TRUTH"
@@ -242,3 +346,4 @@ except Exception as exc:
         with open(REWARD_PATH, "w") as f:
             f.write("0.00\n")
 PYEOF
+write_validation_result_f1

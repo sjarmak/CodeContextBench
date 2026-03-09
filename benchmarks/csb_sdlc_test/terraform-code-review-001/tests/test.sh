@@ -23,6 +23,71 @@ cd "$TASK_REPO_ROOT"
 # Create log directories
 mkdir -p /logs/verifier
 
+# ── validation_result sidecar ───────────────────────────────────────────────
+write_validation_result_f1_hybrid() {
+    local reward="$1"
+    python3 - "$reward" <<'VR_PYEOF'
+import json, sys
+
+try:
+    reward = float(sys.argv[1])
+except (TypeError, ValueError):
+    reward = 0.0
+
+# The f1_hybrid family blends detection F1 (50%) and fix score (50%).
+# Sub-scores are not re-derived here since they're printed to stderr during scoring.
+# The reward is the authoritative composite.
+
+payload = {
+    "schema_version": "validation_result.v1alpha1",
+    "status": "scored",
+    "scorable": True,
+    "scorer_family": "f1_hybrid",
+    "reward": reward,
+    "pass_threshold": 0.5,
+    "passed": reward >= 0.5,
+    "output_contract": {
+        "mode": "unspecified",
+        "primary_path": None,
+        "required_artifact": False,
+    },
+    "sub_scores": {},
+    "failure": None,
+}
+
+with open("/logs/verifier/validation_result.json", "w") as f:
+    json.dump(payload, f, indent=2)
+VR_PYEOF
+}
+
+write_invalid_output_f1_hybrid() {
+    local code="$1"
+    local message="$2"
+    python3 - "$code" "$message" <<'VR_PYEOF'
+import json, sys
+code, message = sys.argv[1:3]
+payload = {
+    "schema_version": "validation_result.v1alpha1",
+    "status": "invalid_output",
+    "scorable": False,
+    "scorer_family": "f1_hybrid",
+    "reward": 0.0,
+    "pass_threshold": 0.5,
+    "passed": False,
+    "output_contract": {
+        "mode": "unspecified",
+        "primary_path": None,
+        "required_artifact": False,
+    },
+    "sub_scores": {},
+    "failure": {"code": code, "message": message, "stage": "output_validation"},
+}
+with open("/logs/verifier/validation_result.json", "w") as f:
+    json.dump(payload, f, indent=2)
+VR_PYEOF
+}
+
+
 # Fix git safe.directory
 git config --global --add safe.directory "$TASK_REPO_ROOT" 2>/dev/null || true
 git config --global --add safe.directory "${VERIFY_REPO}" 2>/dev/null || true
@@ -33,9 +98,8 @@ if [ "${ARTIFACT_ONLY:-false}" = "true" ]; then
     if [ ! -f /workspace/review.json ]; then
         echo "No review.json found — agent did not produce artifact"
         echo "0.0" > /logs/verifier/reward.txt
-        echo ""
-        echo "Tests completed - Score: 0.0 (no artifact)"
-        exit 0
+write_invalid_output_f1_hybrid "missing_required_output" "Agent did not produce required output"
+exit 0
     fi
     echo "Artifact mode: review.json found, applying patches to ${VERIFY_REPO}"
     apply_patches_from_review_json /workspace/review.json
@@ -66,9 +130,8 @@ else
     if [ "$UNSTAGED_COUNT" -eq 0 ] && [ "$STAGED_COUNT" -eq 0 ] && [ "$UNTRACKED_COUNT" -eq 0 ] && [ "$COMMIT_COUNT" -eq 0 ]; then
         echo "No code changes detected - agent did not execute successfully"
         echo "0.0" > /logs/verifier/reward.txt
-        echo ""
-        echo "Tests completed - Score: 0.0 (no changes)"
-        exit 0
+write_invalid_output_f1_hybrid "missing_required_output" "Agent did not produce required output"
+exit 0
     fi
 fi
 
@@ -369,5 +432,6 @@ PYEOF
 )
 
 echo "$FINAL_SCORE" > /logs/verifier/reward.txt
+write_validation_result_f1_hybrid "$FINAL_SCORE"
 echo ""
 echo "Tests completed - Score: $FINAL_SCORE"

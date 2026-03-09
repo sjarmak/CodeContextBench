@@ -34,6 +34,66 @@ VERIFY_REPO="${VERIFY_REPO:-$TASK_REPO_ROOT}"
 
 mkdir -p /logs/verifier
 
+# ── validation_result sidecar ───────────────────────────────────────────────
+write_validation_result() {
+    local reward="$1"
+    local sub_scores_json="${2:-{\}}"
+    local details_json="${3:-null}"
+    local status="${4:-scored}"
+    local failure_json="${5:-null}"
+    python3 - "$reward" "$sub_scores_json" "$details_json" "$status" "$failure_json" <<'VR_PYEOF'
+import json, sys
+
+reward_str, sub_scores_raw, details_raw, status, failure_raw = sys.argv[1:6]
+try:
+    reward = float(reward_str)
+except (TypeError, ValueError):
+    reward = 0.0
+try:
+    sub_scores = json.loads(sub_scores_raw)
+except Exception:
+    sub_scores = {}
+try:
+    details = json.loads(details_raw) if details_raw != "null" else None
+except Exception:
+    details = None
+try:
+    failure = json.loads(failure_raw) if failure_raw != "null" else None
+except Exception:
+    failure = None
+
+if status != "scored":
+    failure = failure or {
+        "code": "missing_required_output",
+        "message": "Agent did not produce required output",
+        "stage": "output_validation",
+    }
+
+payload = {
+    "schema_version": "validation_result.v1alpha1",
+    "status": status,
+    "scorable": status == "scored",
+    "scorer_family": "checklist",
+    "reward": reward,
+    "pass_threshold": 0.5,
+    "passed": status == "scored" and reward >= 0.5,
+    "output_contract": {
+        "mode": "unspecified",
+        "primary_path": None,
+        "required_artifact": False,
+    },
+    "sub_scores": sub_scores,
+    "failure": failure,
+}
+if details:
+    payload["details"] = details
+
+with open("/logs/verifier/validation_result.json", "w") as f:
+    json.dump(payload, f, indent=2)
+VR_PYEOF
+}
+
+
 # ── Check prerequisites ────────────────────────────────────────────────
 if [ ! -f "$GROUND_TRUTH" ]; then
     echo "ERROR: ground_truth.json not found at $GROUND_TRUTH"

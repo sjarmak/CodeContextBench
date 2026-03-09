@@ -30,6 +30,67 @@ VERIFY_REPO="${VERIFY_REPO:-$TASK_REPO_ROOT}"
 
 mkdir -p /logs/verifier
 
+# ── validation_result sidecar ───────────────────────────────────────────────
+write_validation_result_continuous() {
+    local reward="$1"
+    python3 - "$reward" <<'VR_PYEOF'
+import json, sys
+
+try:
+    reward = float(sys.argv[1])
+except (TypeError, ValueError):
+    reward = 0.0
+
+payload = {
+    "schema_version": "validation_result.v1alpha1",
+    "status": "scored",
+    "scorable": True,
+    "scorer_family": "continuous",
+    "reward": reward,
+    "pass_threshold": 0.5,
+    "passed": reward >= 0.5,
+    "output_contract": {
+        "mode": "unspecified",
+        "primary_path": None,
+        "required_artifact": False,
+    },
+    "sub_scores": {"continuous_score": reward},
+    "failure": None,
+}
+
+with open("/logs/verifier/validation_result.json", "w") as f:
+    json.dump(payload, f, indent=2)
+VR_PYEOF
+}
+
+write_invalid_output_continuous() {
+    local code="$1"
+    local message="$2"
+    python3 - "$code" "$message" <<'VR_PYEOF'
+import json, sys
+code, message = sys.argv[1:3]
+payload = {
+    "schema_version": "validation_result.v1alpha1",
+    "status": "invalid_output",
+    "scorable": False,
+    "scorer_family": "continuous",
+    "reward": 0.0,
+    "pass_threshold": 0.5,
+    "passed": False,
+    "output_contract": {
+        "mode": "unspecified",
+        "primary_path": None,
+        "required_artifact": False,
+    },
+    "sub_scores": {},
+    "failure": {"code": code, "message": message, "stage": "output_validation"},
+}
+with open("/logs/verifier/validation_result.json", "w") as f:
+    json.dump(payload, f, indent=2)
+VR_PYEOF
+}
+
+
 # ── Check prerequisites ────────────────────────────────────────────────
 if [ ! -f "$GROUND_TRUTH" ]; then
     echo "ERROR: ground_truth.json not found at $GROUND_TRUTH"

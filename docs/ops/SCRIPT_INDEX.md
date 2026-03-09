@@ -173,6 +173,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/migrate_dockerfiles_to_mirrors.py` - Migration script for migrate dockerfiles to mirrors.
 - `scripts/migrate_to_sg_evals.sh` - Migration script for migrate to sg evals.
 - `scripts/migrate_to_sg_evals_batch2.sh` - Migration script for migrate to sg evals batch2.
+- `scripts/migrate_validation_result_sidecar.py` - Migration script for migrate validation result sidecar.
 
 ## Misc
 
