@@ -9,6 +9,7 @@ Stable specifications and policy/reference documents.
 - `docs/WORKFLOW_METRICS.md`
 
 ## Evaluation / Scoring
+- `docs/reference/CANONICAL_EVALUATION_POLICY.md`
 - `docs/SCORING_SEMANTICS.md`
 - `docs/EVALUATION_PIPELINE.md`
 - `docs/reference/VALIDATION_RESULT_SCHEMA.md`

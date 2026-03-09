@@ -11,6 +11,10 @@ retrieval/IR evaluation pipeline (normalized retrieval events, file/chunk IR
 metrics, utilization probes, taxonomy, and emitted artifacts), see
 [RETRIEVAL_EVAL_SPEC.md](RETRIEVAL_EVAL_SPEC.md).
 
+For canonical-task policy, read
+[docs/reference/CANONICAL_EVALUATION_POLICY.md](reference/CANONICAL_EVALUATION_POLICY.md)
+alongside this pipeline document.
+
 ---
 
 ## Pipeline Layers
@@ -55,6 +59,11 @@ tasks should also emit `/logs/verifier/validation_result.json` using the schema
 in [docs/reference/VALIDATION_RESULT_SCHEMA.md](reference/VALIDATION_RESULT_SCHEMA.md)
 so downstream reporting can preserve scorer family, pass semantics, and failure
 context.
+
+This is the core hybrid-policy rule: deterministic verifier reward is
+universal, but the agent-facing output contract is family-specific. Some tasks
+score repo state directly, some natively score `answer.json`, and some use
+artifact-oriented bridge variants that still feed the same verifier semantics.
 
 Verifier types are documented in [SCORING_SEMANTICS.md](SCORING_SEMANTICS.md).
 
@@ -241,6 +250,11 @@ my-fix-task-002  |            1.00 |        0.75 |  -0.25 | medium [DIVERGENT]
 
 Tasks where `abs(verifier_reward - judge_score) > 0.3` are flagged `[DIVERGENT]`
 for manual review.
+
+For canonical deterministic reporting, treat continuous reward and pass/fail as
+distinct dimensions. Report generators should use verifier `passed` /
+`pass_threshold` metadata when available and surface `scorer_family` plus
+`output_contract` so mixed-family reward aggregates are explicitly caveated.
 
 ---
 

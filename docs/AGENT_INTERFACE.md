@@ -40,6 +40,12 @@ Each task has a `time_limit_sec` field in `task.toml` (typically 300-1800 second
 
 The agent modifies files in the workspace to solve the task. After the agent finishes (or times out), the verifier runs `tests/test.sh` to evaluate the result.
 
+The required agent output is task-specific. Some tasks are scored from repo
+state alone, some require a structured artifact such as
+`/workspace/answer.json`, and some use other published output paths. Agents
+should follow the task's declared contract rather than assuming one universal
+artifact format.
+
 ### Verification
 
 The test script (`tests/test.sh`) is uploaded by Harbor to `/tests/` in the container at runtime. It is **not** present in the workspace directory. The script:
@@ -50,6 +56,11 @@ The test script (`tests/test.sh`) is uploaded by Harbor to `/tests/` in the cont
    following `docs/reference/VALIDATION_RESULT_SCHEMA.md`
 4. May use non-zero exit codes to distinguish scored failure from verifier/runtime failure;
    Harbor still reads the scalar reward artifact
+
+For canonical tasks, `reward.txt` remains the compatibility artifact, while
+`validation_result.json` carries the semantic outcome: scorer family,
+authoritative `passed`, `pass_threshold`, output contract, and invalid-output
+context.
 
 ### Result Format
 

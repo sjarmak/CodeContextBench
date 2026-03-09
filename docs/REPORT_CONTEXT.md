@@ -124,9 +124,12 @@ grep/glob/read. MCP-Full agents have truncated source and must use
 Sourcegraph MCP tools (keyword search, semantic search, go-to-definition,
 find-references, deep search, etc.).
 
-For Org tasks, an artifact evaluation variant is also used:
-- `baseline-local-artifact`: full local code, structured `answer.json` output
-- `mcp-remote-artifact`: truncated source, MCP tools, structured `answer.json` output
+Canonical tasks may also have artifact-oriented variants, but those variants
+follow a hybrid policy rather than one universal output format. Some tasks use
+native `answer.json`, some use bridge-mode structured artifacts, and some are
+still fundamentally repo-state verifiers. The maintained audit snapshot in
+`configs/canonical_evaluation_audit.json` is the source of truth for current
+family-level coverage and migration status.
 
 ### 3.2 Verification Pipeline
 
@@ -138,6 +141,9 @@ The evaluation uses a multi-layer pipeline:
    Canonical tasks are converging on a paired
    `/logs/verifier/validation_result.json` sidecar so scorer family,
    pass/fail semantics, sub-scores, and invalid-output context are preserved.
+
+   Deterministic verifier reward is the universal policy. Artifact support is
+   family-specific input to that verifier layer, not a replacement for it.
 
 2. **Optional LLM judge**: Post-hoc qualitative scoring across five
    dimensions (correctness 0.30, completeness 0.25, code quality 0.20,

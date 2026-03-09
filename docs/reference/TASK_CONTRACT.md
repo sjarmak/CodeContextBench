@@ -26,6 +26,11 @@ The task image, instruction, and verifier must still agree on:
 - which files the verifier is allowed to depend on
 - what counts as a valid task outcome versus an infrastructure invalid
 
+For canonical tasks, this task-level execution contract sits inside the hybrid
+evaluation policy documented in
+`docs/reference/CANONICAL_EVALUATION_POLICY.md`: deterministic verifier reward
+is universal, while required artifacts remain family-specific.
+
 ## Required Task Contract
 
 Every task should expose one canonical contract:
@@ -40,6 +45,10 @@ Recommended defaults:
 - `TASK_REPO_ROOT=$TASK_WORKDIR`
 - `TASK_OUTPUT=/logs/agent/solution.md` for narrative answers
 - `TASK_OUTPUT=/workspace/solution.json`, `/workspace/review.json`, or `/workspace/answer.json` for structured-output tasks
+
+Not every canonical task requires `answer.json`. `TASK_OUTPUT` should describe
+the actual verifier-facing contract for that family, including repo-state tasks
+that do not require a structured artifact.
 
 If a task uses `/app` instead of `/workspace`, that is valid, but the task must
 use it consistently across:
@@ -74,6 +83,12 @@ Canonical tasks should treat `reward.txt` as the scalar compatibility artifact
 and `validation_result.json` as the semantic verifier contract. The JSON
 sidecar is where verifiers should record scorer family, pass semantics,
 sub-scores, and failure context.
+
+Artifact-oriented variants should preserve this separation. A wrapper that asks
+the agent for `answer.json` may feed or bridge into an existing deterministic
+verifier, but it does not change the underlying requirement that reward and
+pass/fail semantics come from the verifier contract rather than from the mere
+presence of an artifact.
 
 At minimum, verifiers should:
 

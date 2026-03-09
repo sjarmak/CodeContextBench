@@ -19,6 +19,11 @@ Canonical tasks should normalize these families into
 `docs/reference/VALIDATION_RESULT_SCHEMA.md`. The reward type determines the
 meaning of `reward` and `sub_scores`, but not the top-level contract.
 
+See `docs/reference/CANONICAL_EVALUATION_POLICY.md` for the stable policy that
+ties these families together: deterministic verifier reward is universal,
+artifact support is hybrid and family-specific, and reporting must keep reward
+separate from pass semantics.
+
 ## Per-Verifier Scoring (Active Suites)
 
 Tasks are organized into 8 SDLC-phase suites (`csb_sdlc_understand` through `csb_sdlc_debug`)
@@ -209,6 +214,10 @@ only when non-empty.
 Org tasks use a unified oracle check library for deterministic scoring,
 with optional rubric judge for Deep Search synthesis tasks.
 
+This section is Org-specific. The `/workspace/answer.json` format below is not
+the universal canonical benchmark contract; other families may use bridge-mode
+artifacts or repo-state verification instead.
+
 ### Oracle Checks (scripts/csb_metrics/oracle_checks.py)
 
 All Org tasks are scored by `oracle_checks.py`, a stdlib-only Python
@@ -238,7 +247,8 @@ composite == 0 (total failure). Harbor reads the score from `/logs/verifier/rewa
 
 ### Agent Answer Format
 
-Agents write `/workspace/answer.json`:
+Agents write `/workspace/answer.json` for Org tasks using the native
+answer-artifact contract:
 
 ```json
 {

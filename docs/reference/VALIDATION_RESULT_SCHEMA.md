@@ -8,6 +8,11 @@ This schema standardizes verifier semantics across scalar-only shell verifiers,
 answer.json artifact verifiers, repo-state verifiers, and oracle-based promoted
 tasks. It is intentionally simple enough to emit from shell or Python.
 
+This schema is the canonical semantic contract for hybrid evaluation. It
+applies whether the task is scored from repo state, native `answer.json`,
+bridge-mode structured output, or another family-specific artifact contract.
+It does not imply that every canonical task uses the same output artifact.
+
 ## Required Top-Level Fields
 
 Every canonical `validation_result.json` should emit these keys, even when the
@@ -30,6 +35,10 @@ Downstream consumers should treat `passed` as authoritative. `pass_threshold`
 is included so reporting can preserve task policy, but parsers should not
 recompute `passed` from `reward` alone.
 
+Likewise, consumers should not infer artifact policy from `reward` or from the
+presence of `validation_result.json`; the authoritative artifact semantics live
+under `output_contract`.
+
 ## Required `output_contract` Fields
 
 `output_contract` should always contain:
@@ -39,6 +48,10 @@ recompute `passed` from `reward` alone.
 | `mode` | string | One of `answer_json_native`, `answer_json_bridge`, `repo_state`, `solution_json`, `report_markdown`, `unspecified` |
 | `primary_path` | string or `null` | Primary artifact path the verifier expected, if any |
 | `required_artifact` | boolean | Whether a missing primary artifact makes the run unscorable |
+
+`output_contract` is the bridge between the universal verifier contract and
+family-specific task IO. Reporting and validation should use it instead of
+assuming that every canonical task expects `/workspace/answer.json`.
 
 ## Failure Object
 
