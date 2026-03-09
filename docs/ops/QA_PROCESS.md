@@ -35,6 +35,7 @@ Runs before any benchmark execution to catch task definition errors that would w
 - **Language/difficulty mismatch** -- Cross-references `task.toml` fields against `selected_benchmark_tasks.json`
 - **Missing test scripts** -- Verifies `tests/test.sh` is present and executable
 - **Missing tasks** -- Detects tasks in the selection registry that have no corresponding benchmark directory
+- **Prompt hygiene on modified prompts** -- `instruction.md` and `instruction_mcp.md` files changed in the current worktree must not leak code locations, solution strategies, or verifier details
 
 ### Runtime Smoke (No Agent)
 
@@ -91,6 +92,9 @@ python3 scripts/validate_tasks_preflight.py --suite csb_sdlc_feature
 
 # Validate a single task
 python3 scripts/validate_tasks_preflight.py --task benchmarks/csb_sdlc_feature/envoy-grpc-server-impl-001
+
+# Audit modified prompt files for hygiene issues
+python3 scripts/prompt_hygiene.py --git-modified --include-mcp --fail-on-findings
 
 # Runtime smoke for a single task (no agent)
 python3 scripts/validate_tasks_preflight.py --task benchmarks/csb_sdlc_understand/terraform-plan-pipeline-qa-001 --smoke-runtime
@@ -235,6 +239,16 @@ Periodic full audits use a 6-dimension framework to ensure benchmark integrity:
 ### Dimension 1: Instruction Contamination
 
 Checks whether `instruction.md` files contain references to MCP tools or Sourcegraph that would leak context into baseline (no-tool) runs. Any MCP-specific instructions should be injected at runtime via the agent harness, not baked into the task definition.
+
+Prompt-hygiene review is broader than MCP contamination. For both `instruction.md` and `instruction_mcp.md`, also investigate:
+- code-location hints such as exact source paths, directories to inspect, or named files/classes to open first
+- solution leakage such as prescribed helper names, replacement APIs, or step-by-step implementation plans
+- verifier leakage such as ground-truth diff counts, scoring formulas, or closed-world oracle wording
+
+Recommended investigation command:
+```bash
+python3 scripts/prompt_hygiene.py --scan-root benchmarks/<suite_or_task_dir> --include-mcp
+```
 
 ### Dimension 2: Reproducibility
 

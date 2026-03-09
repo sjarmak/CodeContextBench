@@ -25,6 +25,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from prompt_hygiene import sanitize_instruction_text
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 BENCHMARKS_DIR = REPO_ROOT / "calibration" / "curator_calibration"
@@ -249,7 +251,7 @@ def scaffold_task(task: dict, dry_run: bool = False) -> bool:
 
     # Write generated files
     (task_dir / "task.toml").write_text(_task_toml(task))
-    (task_dir / "instruction.md").write_text(_instruction_md(task))
+    (task_dir / "instruction.md").write_text(sanitize_instruction_text(_instruction_md(task)))
     (env_dir / "Dockerfile").write_text(_dockerfile_baseline(task))
     (env_dir / "Dockerfile.sg_only").write_text(_dockerfile_sg_only(task))
     (tests_dir / "test.sh").write_text(_test_sh())

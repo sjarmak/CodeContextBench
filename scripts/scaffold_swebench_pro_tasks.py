@@ -16,6 +16,8 @@ import re
 import sys
 from pathlib import Path
 
+from prompt_hygiene import sanitize_instruction_text
+
 ROOT = Path(__file__).resolve().parent.parent
 BENCHMARKS_DIR = ROOT / "benchmarks" / "csb_sdlc_fix"
 TASKS_FILE = ROOT / "configs" / "selected_benchmark_tasks.json"
@@ -315,7 +317,7 @@ exit 0
 
 def create_instruction(problem_statement: str, repo: str, requirements: str) -> str:
     """Create instruction.md from problem statement."""
-    return f"""# Bug Fix Task
+    return sanitize_instruction_text(f"""# Bug Fix Task
 
 **Repository:** {repo}
 
@@ -328,12 +330,12 @@ def create_instruction(problem_statement: str, repo: str, requirements: str) -> 
 {requirements if requirements else "Fix the issue described above."}
 
 **YOU MUST IMPLEMENT CODE CHANGES.** Do not just describe what should be done — write the actual code fix.
-"""
+""")
 
 
 def create_instruction_mcp(problem_statement: str, repo: str, requirements: str) -> str:
     """Create instruction_mcp.md with MCP preamble."""
-    return f"""{MCP_PREAMBLE}
+    return sanitize_instruction_text(f"""{MCP_PREAMBLE}
 
 # Bug Fix Task
 
@@ -348,7 +350,7 @@ def create_instruction_mcp(problem_statement: str, repo: str, requirements: str)
 {requirements if requirements else "Fix the issue described above."}
 
 **YOU MUST IMPLEMENT CODE CHANGES.** Do not just describe what should be done — write the actual code fix.
-"""
+""")
 
 
 def scaffold_task(task_data: dict, dry_run: bool = False) -> str:

@@ -35,6 +35,7 @@ from abc_criteria import (
     Status,
     get_criteria_for_suite,
 )
+from prompt_hygiene import audit_paths
 
 
 # ---------------------------------------------------------------------------
@@ -290,53 +291,36 @@ def check_t4_git_sha(tasks: list[Path]) -> CriterionResult:
 
 
 def check_t5_no_solution_leak(tasks: list[Path]) -> CriterionResult:
-    """T.5: instruction.md doesn't leak solution content."""
-    issues = []
+    """T.5: instructions do not leak code locations, solution strategies, or verifier details."""
+    prompt_paths: list[Path] = []
     for task_dir in tasks:
-        instruction = task_dir / "instruction.md"
-        if not instruction.is_file():
-            continue
+        for name in ("instruction.md", "instruction_mcp.md"):
+            path = task_dir / name
+            if path.is_file():
+                prompt_paths.append(path)
 
-        inst_text = instruction.read_text(errors="replace").lower()
-
-        # Check against solve.sh
-        solve_sh = task_dir / "solve.sh"
-        if solve_sh.is_file():
-            solve_text = solve_sh.read_text(errors="replace")
-            # Extract meaningful code lines (not comments/blank)
-            solve_lines = [
-                l.strip() for l in solve_text.splitlines()
-                if l.strip() and not l.strip().startswith("#") and len(l.strip()) > 15
-            ]
-            for line in solve_lines:
-                if line.lower() in inst_text:
-                    issues.append(f"{task_dir.name}: instruction contains solve.sh line: {line[:60]}")
-                    break
-
-        # Check against expected.diff
-        for diff_path in [task_dir / "expected.diff", task_dir / "tests" / "expected.diff"]:
-            if diff_path.is_file():
-                diff_text = diff_path.read_text(errors="replace")
-                # Extract added lines from diff
-                added_lines = [
-                    l[1:].strip() for l in diff_text.splitlines()
-                    if l.startswith("+") and not l.startswith("+++") and len(l.strip()) > 20
-                ]
-                for line in added_lines[:20]:  # Sample first 20
-                    if line.lower() in inst_text:
-                        issues.append(f"{task_dir.name}: instruction contains diff content: {line[:60]}")
-                        break
-
-    if not issues:
+    report = audit_paths(prompt_paths)
+    files = report["files"]
+    if not files:
         return CriterionResult(
             criterion_id="T.5", status=Status.PASS,
-            evidence="No solution content found in instructions",
+            evidence="No prompt-hygiene findings across instruction.md or instruction_mcp.md",
         )
+    issue_labels = {
+        "code_location_hint": "code-location hints",
+        "solution_leakage": "solution leakage",
+        "scoring_leakage": "verifier leakage",
+    }
+    issues = []
+    for file_entry in files[:10]:
+        rel_path = Path(file_entry["file"]).relative_to(PROJECT_ROOT)
+        kinds = sorted({issue["type"] for issue in file_entry["issues"]})
+        issues.append(f"{rel_path}: {', '.join(issue_labels.get(kind, kind) for kind in kinds)}")
     return CriterionResult(
         criterion_id="T.5", status=Status.WARN,
         evidence="\n".join(issues[:10]),
-        remediation="Review instructions to ensure they don't contain solution code",
-        details={"issues": issues},
+        remediation="Remove code-location guidance, prescribed fix steps, and verifier/scoring details from prompts.",
+        details=report,
     )
 
 
@@ -747,12 +731,12 @@ def check_r2_no_contamination(tasks: list[Path]) -> CriterionResult:
     if not issues:
         return CriterionResult(
             criterion_id="R.2", status=Status.PASS,
-            evidence="No MCP/Sourcegraph tool guidance in baseline instructions",
+            evidence="No MCP/Sourcegraph tool guidance in baseline instruction.md files",
         )
     return CriterionResult(
         criterion_id="R.2", status=Status.FAIL,
         evidence="\n".join(issues[:10]),
-        remediation="Remove MCP/Sourcegraph tool guidance from baseline instructions",
+        remediation="Remove MCP/Sourcegraph tool guidance from baseline instruction.md files and keep MCP-specific instructions in runtime injection or instruction_mcp.md only.",
         details={"issue_count": len(issues), "issues": issues[:20]},
     )
 

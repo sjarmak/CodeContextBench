@@ -32,8 +32,9 @@
 ## Triage Workflow
 1. Confirm error class via `docs/ERROR_CATALOG.md` and status fingerprints.
 2. Check run outputs and trajectories.
-3. Isolate task-level fix or rerun scope.
-4. Avoid blind reruns; document root cause or limitation.
+3. Inspect prompt hygiene when the failure may be caused by prompt leakage or prompt wiring drift (`scripts/prompt_hygiene.py --scan-root benchmarks/<suite_or_task_dir> --include-mcp`).
+4. Isolate task-level fix or rerun scope.
+5. Avoid blind reruns; document root cause or limitation.
 
 ## ContextBench Calibration Workflow
 1. Ensure `claude` CLI is installed, authenticated, and `SOURCEGRAPH_ACCESS_TOKEN` is set.

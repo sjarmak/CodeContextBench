@@ -53,6 +53,7 @@ python3 scripts/mcp_audit.py --run <run_dir>
 ### Key Commands
 ```bash
 python3 scripts/validate_task_run.py --run <run_dir>
+python3 scripts/prompt_hygiene.py --scan-root benchmarks/<suite_or_task_dir> --include-mcp
 python3 scripts/rerun_failed.py --help
 ```
 
@@ -101,5 +102,6 @@ python3 scripts/package_submission.py --help
 ### Key Commands
 ```bash
 python3 scripts/validate_tasks_preflight.py --task <task_dir> --smoke-runtime
+python3 scripts/prompt_hygiene.py --scan-root <task_dir> --include-mcp
 python3 scripts/sync_task_metadata.py --help
 ```

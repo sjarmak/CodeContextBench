@@ -252,8 +252,8 @@ ALL_CRITERIA: list[ABCCriterion] = [
     ABCCriterion(
         id="T.5",
         dimension=Dimension.TASK_VALIDITY,
-        title="instruction.md doesn't leak solution content",
-        description="Instructions must not contain solution code or test answers.",
+        title="Instructions do not leak code locations, solution strategy, or verifier details",
+        description="instruction.md and instruction_mcp.md must stay discovery-oriented and must not reveal where to look, how to fix it, or how the verifier scores.",
         severity=Severity.CRITICAL,
         automation=Automation.AUTOMATED,
     ),
@@ -388,8 +388,8 @@ ALL_CRITERIA: list[ABCCriterion] = [
     ABCCriterion(
         id="R.2",
         dimension=Dimension.REPORTING,
-        title="No MCP/Sourcegraph contamination in instruction.md",
-        description="Baseline instructions must not reference MCP, Sourcegraph, or Deep Search.",
+        title="Baseline instruction.md has no MCP/Sourcegraph contamination",
+        description="Baseline instructions must not reference MCP, Sourcegraph, or Deep Search. Prompt-hygiene review should also confirm the prompt stays tool-neutral and avoids code-location guidance.",
         severity=Severity.CRITICAL,
         automation=Automation.AUTOMATED,
     ),

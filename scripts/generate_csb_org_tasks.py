@@ -23,6 +23,8 @@ from pathlib import Path
 from string import Template
 from typing import Dict, List, Optional
 
+from prompt_hygiene import sanitize_instruction_text
+
 
 # ---------------------------------------------------------------------------
 # Constants and mappings
@@ -381,6 +383,8 @@ def generate_task(
 
     def write_rendered(fname: str, out_path: Path) -> None:
         content = render_template(templates_dir, fname, variables)
+        if out_path.name in {"instruction.md", "instruction_mcp.md"}:
+            content = sanitize_instruction_text(content)
         out_path.write_text(content)
         if verbose:
             logging.debug("  Wrote %s", out_path)

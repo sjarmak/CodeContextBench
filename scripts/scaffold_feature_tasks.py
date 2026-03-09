@@ -5,6 +5,8 @@ import json
 import os
 import shutil
 
+from prompt_hygiene import sanitize_instruction_text
+
 BENCHMARK_DIR = os.path.join(os.path.dirname(__file__), '..', 'benchmarks', 'csb_sdlc_feature')
 SGONLY_WRAPPER = os.path.join(os.path.dirname(__file__), 'sgonly_verifier_wrapper.sh')
 
@@ -965,7 +967,7 @@ def main():
 
         # instruction.md
         with open(os.path.join(task_dir, 'instruction.md'), 'w') as f:
-            f.write(task['instruction'].strip() + '\n')
+            f.write(sanitize_instruction_text(task['instruction'].strip() + '\n'))
 
         # CLAUDE.md
         with open(os.path.join(task_dir, 'CLAUDE.md'), 'w') as f:
