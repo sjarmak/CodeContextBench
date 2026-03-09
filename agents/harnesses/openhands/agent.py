@@ -136,9 +136,9 @@ class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
             else:
                 env.pop("PYTHONPATH", None)
         env["PYTHONSAFEPATH"] = "1"
-        # Core-level env vars control LocalRuntime plugin loading.
-        # AGENT_ENABLE_JUPYTER only sets the agent config — the runtime
-        # reads the core-level config to decide whether to start jupyter.
+        # Disable jupyter at every config level to prevent LocalRuntime
+        # from starting jupyter-kernelgateway (crashes in Daytona).
+        env["SANDBOX_PLUGINS"] = "agent_skills"  # excludes jupyter plugin
         env["ENABLE_JUPYTER"] = "false"
         env["ENABLE_BROWSING"] = "false"
         env["AGENT_ENABLE_JUPYTER"] = "false"
@@ -299,13 +299,17 @@ class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
 
     def _build_config_toml(self, mcp_url: str | None = None) -> str:
         lines = [
-            # Core-level settings control plugin loading in LocalRuntime.
-            # Without [core], enable_jupyter under [agent] is ignored and
-            # the jupyter-kernelgateway plugin starts, fails to bind, and
-            # crashes with tenacity.RetryError in _wait_until_alive.
             "[core]",
             "enable_jupyter = false",
             "enable_browsing = false",
+            "",
+            # The sandbox plugins list controls what LocalRuntime passes to
+            # --plugins on the action_execution_server command line.  The
+            # default is ["agent_skills", "jupyter"].  Excluding "jupyter"
+            # prevents the jupyter-kernelgateway from starting — it cannot
+            # bind inside Daytona sandboxes and crashes with RetryError.
+            "[sandbox]",
+            'plugins = ["agent_skills"]',
             "",
             "[agent]",
             f"enable_mcp = {'true' if mcp_url else 'false'}",
