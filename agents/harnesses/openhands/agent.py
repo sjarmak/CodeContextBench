@@ -258,8 +258,12 @@ class OpenHandsHarnessAgent(BaselineHarnessMixin, OpenHands):
             "log.close()",
             "rc = proc.wait()",
             # Kill known OpenHands daemons that outlive the main process
-            "for pat in ['jupyter-kernelgateway', 'ipykernel_launcher', 'openhands.runtime.action_execution_server', 'tmux']:",
-            "    subprocess.run(['pkill', '-f', pat], capture_output=True)",
+            "import shutil",
+            "if shutil.which('pkill'):",
+            "    for pat in ['jupyter-kernelgateway', 'ipykernel_launcher', 'openhands.runtime.action_execution_server', 'tmux']:",
+            "        subprocess.run(['pkill', '-f', pat], capture_output=True)",
+            "else:",
+            "    os.system(\"kill $(ps aux | grep -E 'jupyter-kernelgateway|ipykernel_launcher|action_execution_server|tmux' | grep -v grep | awk '{print $2}') 2>/dev/null\")",
             "sys.exit(rc)",
         ])
 
