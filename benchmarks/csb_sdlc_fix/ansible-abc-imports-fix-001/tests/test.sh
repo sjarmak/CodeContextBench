@@ -182,7 +182,7 @@ echo "Test modules: test_recursive_finder.py (TestRecursiveFinder) + test_collec
 # Individual test IDs are NOT used because parametrized tests contain Czech and
 # Ukrainian characters whose escape sequences are not interpreted by bash,
 # causing pytest to find zero matching tests and score 0.0.
-python -m pytest \
+timeout 600 python -m pytest \
     "test/units/executor/module_common/test_recursive_finder.py::TestRecursiveFinder" \
     "test/units/module_utils/common/test_collections.py" \
     -v 2>&1 | tee test_output.log

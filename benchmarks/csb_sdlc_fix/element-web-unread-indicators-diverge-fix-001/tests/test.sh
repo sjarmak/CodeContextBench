@@ -506,7 +506,7 @@ else
 fi
 
 echo "Running tests..."
-npx jest --no-cache "test/test-utils/threads.ts" "test/editor/position-test.ts" "test/components/views/typography/Caption-test.ts" "test/components/structures/UserMenu-test.ts" "test/components/views/settings/devices/SelectableDeviceTile-test.ts" 2>&1 | tee test_output.log
+timeout 600 npx jest --no-cache --forceExit "test/test-utils/threads.ts" "test/editor/position-test.ts" "test/components/views/typography/Caption-test.ts" "test/components/structures/UserMenu-test.ts" "test/components/views/settings/devices/SelectableDeviceTile-test.ts" 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
 # Write reward for Harbor with partial credit

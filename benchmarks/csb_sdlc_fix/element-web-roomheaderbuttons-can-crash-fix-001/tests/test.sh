@@ -147,7 +147,7 @@ else
 fi
 
 echo "Running tests..."
-npx jest --no-cache "test/components/views/dialogs/InteractiveAuthDialog-test.ts" "test/components/views/right_panel/RoomHeaderButtons-test.tsx" "test/components/views/rooms/RoomHeader-test.ts" "test/components/structures/ThreadView-test.ts" "test/components/views/settings/shared/SettingsSubsection-test.ts" 2>&1 | tee test_output.log
+timeout 600 npx jest --no-cache --forceExit "test/components/views/dialogs/InteractiveAuthDialog-test.ts" "test/components/views/right_panel/RoomHeaderButtons-test.tsx" "test/components/views/rooms/RoomHeader-test.ts" "test/components/structures/ThreadView-test.ts" "test/components/views/settings/shared/SettingsSubsection-test.ts" 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
 # Write reward for Harbor with partial credit

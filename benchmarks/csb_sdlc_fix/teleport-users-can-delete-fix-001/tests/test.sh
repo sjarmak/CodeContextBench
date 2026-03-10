@@ -220,7 +220,7 @@ else
 fi
 
 echo "Running tests..."
-go test  -v 2>&1 | tee test_output.log
+timeout 600 go test -v 2>&1 | tee test_output.log
 TEST_EXIT_CODE=$?
 
 # Write reward for Harbor with partial credit
