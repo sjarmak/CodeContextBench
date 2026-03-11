@@ -1,7 +1,7 @@
 # Navprove Task Environment
 # Source: gravitational/teleport (0415e422)
 
-FROM jefzda/sweap-images:gravitational.teleport-gravitational__teleport-0415e422f12454db0c22316cf3eaa5088d6b6322
+FROM ghcr.io/sg-evals/sweap-images:gravitational.teleport-gravitational__teleport-0415e422f12454db0c22316cf3eaa5088d6b6322
 ENV TASK_WORKDIR=/workspace
 ENV TASK_REPO_ROOT=/workspace
 

@@ -2,7 +2,7 @@
 # Instance: instance_ansible__ansible-379058e10f3dbc0fdcaf80394bd09b18927e7d33-v1055803c3a812189a1133297f7f5468579283f86
 # Repo: ansible/ansible
 
-FROM jefzda/sweap-images:ansible.ansible-ansible__ansible-379058e10f3dbc0fdcaf80394bd09b18927e7d33-v1055803c3a812189a1133297f7f5468579283f86
+FROM ghcr.io/sg-evals/sweap-images:ansible.ansible-ansible__ansible-379058e10f3dbc0fdcaf80394bd09b18927e7d33-v1055803c3a812189a1133297f7f5468579283f86
 ENV TASK_WORKDIR=/workspace
 ENV TASK_REPO_ROOT=/workspace
 

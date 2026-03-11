@@ -2,7 +2,7 @@
 # Instance: instance_NodeBB__NodeBB-eb49a64974ca844bca061744fb3383f5d13b02ad-vnan
 # Repo: NodeBB/NodeBB
 
-FROM jefzda/sweap-images:nodebb.nodebb-NodeBB__NodeBB-eb49a64974ca844bca061744fb3383f5d13b02ad
+FROM ghcr.io/sg-evals/sweap-images:nodebb.nodebb-NodeBB__NodeBB-eb49a64974ca844bca061744fb3383f5d13b02ad
 ENV TASK_WORKDIR=/workspace
 ENV TASK_REPO_ROOT=/workspace
 
