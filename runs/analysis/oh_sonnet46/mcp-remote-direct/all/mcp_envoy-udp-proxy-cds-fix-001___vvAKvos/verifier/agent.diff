@@ -1,0 +1,106 @@
+diff --git a/changelogs/current.yaml b/changelogs/current.yaml
+index 76d47bf..0bcbab3 100644
+--- a/changelogs/current.yaml
++++ b/changelogs/current.yaml
+@@ -50,6 +50,12 @@ bug_fixes:
+   change: |
+     Handle ``append_action`` from :ref:`external authorization service <envoy_v3_api_msg_service.auth.v3.CheckResponse>`
+     that was ignored.
++- area: udp_proxy
++  change: |
++    Fixed a crash in the UDP proxy filter when a cluster is updated via CDS/EDS. The
++    ``onClusterAddOrUpdate()`` method was using ``emplace()`` which silently fails when the cluster
++    already exists in the map, leaving a stale ``ClusterInfo`` with a dangling pointer to the old
++    cluster. Changed to use ``insert_or_assign()`` to correctly replace the entry on cluster updates.
+ 
+ removed_config_or_runtime:
+ # *Normally occurs at the end of the* :ref:`deprecation period <deprecated>`
+diff --git a/source/extensions/filters/udp/udp_proxy/udp_proxy_filter.cc b/source/extensions/filters/udp/udp_proxy/udp_proxy_filter.cc
+index 8d90ff4..a12aba6 100644
+--- a/source/extensions/filters/udp/udp_proxy/udp_proxy_filter.cc
++++ b/source/extensions/filters/udp/udp_proxy/udp_proxy_filter.cc
+@@ -49,11 +49,11 @@ void UdpProxyFilter::onClusterAddOrUpdate(absl::string_view cluster_name,
+          &cluster_infos_[cluster_name]->cluster_ != &cluster);
+ 
+   if (config_->usingPerPacketLoadBalancing()) {
+-    cluster_infos_.emplace(cluster_name,
+-                           std::make_unique<PerPacketLoadBalancingClusterInfo>(*this, cluster));
++    cluster_infos_.insert_or_assign(cluster_name,
++                                    std::make_unique<PerPacketLoadBalancingClusterInfo>(*this, cluster));
+   } else {
+-    cluster_infos_.emplace(cluster_name,
+-                           std::make_unique<StickySessionClusterInfo>(*this, cluster));
++    cluster_infos_.insert_or_assign(cluster_name,
++                                    std::make_unique<StickySessionClusterInfo>(*this, cluster));
+   }
+ }
+ 
+@@ -1088,3 +1088,4 @@ void UdpProxyFilter::TunnelingActiveSession::onIdleTimer() {
+ } // namespace UdpFilters
+ } // namespace Extensions
+ } // namespace Envoy
++
+diff --git a/test/extensions/filters/udp/udp_proxy/udp_proxy_filter_test.cc b/test/extensions/filters/udp/udp_proxy/udp_proxy_filter_test.cc
+index 5cff9ce..fdd751e 100644
+--- a/test/extensions/filters/udp/udp_proxy/udp_proxy_filter_test.cc
++++ b/test/extensions/filters/udp/udp_proxy/udp_proxy_filter_test.cc
+@@ -826,6 +826,54 @@ matcher:
+   EXPECT_EQ(0, config_->stats().downstream_sess_active_.value());
+ }
+ 
++// Verify that cluster_infos_ map is correctly updated when a cluster is updated via CDS/EDS.
++TEST_F(UdpProxyFilterTest, ClusterDynamicInfoMapUpdate) {
++  InSequence s;
++
++  setup(readConfig(R"EOF(
++stat_prefix: foo
++matcher:
++  on_no_match:
++    action:
++      name: route
++      typed_config:
++        '@type': type.googleapis.com/envoy.extensions.filters.udp.udp_proxy.v3.Route
++        cluster: fake_cluster
++  )EOF"));
++
++  expectSessionCreate(upstream_address_);
++  test_sessions_[0].expectWriteToUpstream("hello", 0, nullptr, true);
++  recvDataFromDownstream("10.0.0.1:1000", "10.0.0.2:80", "hello");
++  EXPECT_EQ(1, config_->stats().downstream_sess_total_.value());
++  EXPECT_EQ(1, config_->stats().downstream_sess_active_.value());
++
++  // Simulate a CDS update: call onClusterAddOrUpdate() with the same cluster name
++  // but a new cluster object. With the bug (emplace), this would silently fail and
++  // leave a stale ClusterInfo. With the fix (insert_or_assign), the map is updated.
++  NiceMock<Upstream::MockThreadLocalCluster> new_thread_local_cluster;
++  new_thread_local_cluster.cluster_.info_->name_ = "fake_cluster";
++  ON_CALL(*new_thread_local_cluster.lb_.host_, address()).WillByDefault(Return(upstream_address_));
++  ON_CALL(*new_thread_local_cluster.lb_.host_, coarseHealth())
++      .WillByDefault(Return(Upstream::Host::Health::Healthy));
++  {
++    Upstream::ThreadLocalClusterCommand command =
++        [&new_thread_local_cluster]() -> Upstream::ThreadLocalCluster& {
++      return new_thread_local_cluster;
++    };
++    cluster_update_callbacks_->onClusterAddOrUpdate(new_thread_local_cluster.info()->name(),
++                                                    command);
++  }
++  // The old ClusterInfo is replaced, so all old sessions are cleaned up.
++  EXPECT_EQ(0, config_->stats().downstream_sess_active_.value());
++
++  // Verify the filter works with the new cluster.
++  expectSessionCreate(upstream_address_);
++  test_sessions_[1].expectWriteToUpstream("hello", 0, nullptr, true);
++  recvDataFromDownstream("10.0.0.2:1000", "10.0.0.2:80", "hello");
++  EXPECT_EQ(2, config_->stats().downstream_sess_total_.value());
++  EXPECT_EQ(1, config_->stats().downstream_sess_active_.value());
++}
++
+ // Hitting the maximum per-cluster connection/session circuit breaker.
+ TEST_F(UdpProxyFilterTest, MaxSessionsCircuitBreaker) {
+   InSequence s;
+@@ -2152,3 +2200,4 @@ TEST(TunnelingConfigImplTest, BufferingState) {
+ } // namespace UdpFilters
+ } // namespace Extensions
+ } // namespace Envoy
++

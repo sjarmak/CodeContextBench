@@ -1,0 +1,401 @@
+diff --git a/source/common/upstream/upstream_impl.cc b/source/common/upstream/upstream_impl.cc
+index 5c781c9..dbdeb21 100644
+--- a/source/common/upstream/upstream_impl.cc
++++ b/source/common/upstream/upstream_impl.cc
+@@ -842,10 +842,14 @@ void MainPrioritySetImpl::updateCrossPriorityHostMap(const HostVector& hosts_add
+   }
+ 
+   for (const auto& host : hosts_removed) {
++    ENVOY_LOG(debug, "removing host {} from cross-priority host map",
++              addressToString(host->address()));
+     mutable_cross_priority_host_map_->erase(addressToString(host->address()));
+   }
+ 
+   for (const auto& host : hosts_added) {
++    ENVOY_LOG(debug, "adding host {} to cross-priority host map",
++              addressToString(host->address()));
+     mutable_cross_priority_host_map_->insert({addressToString(host->address()), host});
+   }
+ }
+@@ -874,78 +878,19 @@ ClusterInfoImpl::generateTimeoutBudgetStats(Stats::Scope& scope,
+   return {stat_names, scope};
+ }
+ 
+-std::shared_ptr<const ClusterInfoImpl::HttpProtocolOptionsConfigImpl>
+-createOptions(const envoy::config::cluster::v3::Cluster& config,
+-              std::shared_ptr<const ClusterInfoImpl::HttpProtocolOptionsConfigImpl>&& options,
+-              ProtobufMessage::ValidationVisitor& validation_visitor) {
+-  if (options) {
+-    return std::move(options);
+-  }
+-
+-  if (config.protocol_selection() == envoy::config::cluster::v3::Cluster::USE_CONFIGURED_PROTOCOL) {
+-    // Make sure multiple protocol configurations are not present
+-    if (config.has_http_protocol_options() && config.has_http2_protocol_options()) {
+-      throwEnvoyExceptionOrPanic(
+-          fmt::format("cluster: Both HTTP1 and HTTP2 options may only be "
+-                      "configured with non-default 'protocol_selection' values"));
+-    }
+-  }
+-
+-  return std::make_shared<ClusterInfoImpl::HttpProtocolOptionsConfigImpl>(
+-      config.http_protocol_options(), config.http2_protocol_options(),
+-      config.common_http_protocol_options(),
+-      (config.has_upstream_http_protocol_options()
+-           ? absl::make_optional<envoy::config::core::v3::UpstreamHttpProtocolOptions>(
+-                 config.upstream_http_protocol_options())
+-           : absl::nullopt),
+-      config.protocol_selection() == envoy::config::cluster::v3::Cluster::USE_DOWNSTREAM_PROTOCOL,
+-      config.has_http2_protocol_options(), validation_visitor);
+-}
+-
+ absl::StatusOr<LegacyLbPolicyConfigHelper::Result>
+ LegacyLbPolicyConfigHelper::getTypedLbConfigFromLegacyProtoWithoutSubset(
+     const ClusterProto& cluster, ProtobufMessage::ValidationVisitor& visitor) {
+ 
+-  LoadBalancerConfigPtr lb_config;
+-  TypedLoadBalancerFactory* lb_factory = nullptr;
+-
+-  switch (cluster.lb_policy()) {
+-    PANIC_ON_PROTO_ENUM_SENTINEL_VALUES;
+-  case ClusterProto::ROUND_ROBIN:
+-    lb_factory = Config::Utility::getFactoryByName<TypedLoadBalancerFactory>(
+-        "envoy.load_balancing_policies.round_robin");
+-    break;
+-  case ClusterProto::LEAST_REQUEST:
+-    lb_factory = Config::Utility::getFactoryByName<TypedLoadBalancerFactory>(
+-        "envoy.load_balancing_policies.least_request");
+-    break;
+-  case ClusterProto::RANDOM:
+-    lb_factory = Config::Utility::getFactoryByName<TypedLoadBalancerFactory>(
+-        "envoy.load_balancing_policies.random");
+-    break;
+-  case ClusterProto::RING_HASH:
+-    lb_factory = Config::Utility::getFactoryByName<TypedLoadBalancerFactory>(
+-        "envoy.load_balancing_policies.ring_hash");
+-    break;
+-  case ClusterProto::MAGLEV:
+-    lb_factory = Config::Utility::getFactoryByName<TypedLoadBalancerFactory>(
+-        "envoy.load_balancing_policies.maglev");
+-    break;
+-  case ClusterProto::CLUSTER_PROVIDED:
+-    lb_factory = Config::Utility::getFactoryByName<TypedLoadBalancerFactory>(
+-        "envoy.load_balancing_policies.cluster_provided");
+-    break;
+-  case ClusterProto::LOAD_BALANCING_POLICY_CONFIG:
+-    // 'LOAD_BALANCING_POLICY_CONFIG' should be handled by the 'configureLbPolicies'
+-    // function and should not reach here.
+-    PANIC("getTypedLbConfigFromLegacyProtoWithoutSubset: should not reach here");
+-    break;
+-  }
++  auto* lb_factory = Config::Utility::getFactoryByName<TypedLoadBalancerFactory>(
++      absl::StrCat("envoy.load_balancing_policies.",
++                   absl::AsciiStrToLower(envoy::config::cluster::v3::Cluster::LbPolicy_Name(
++                       cluster.lb_policy()))));
+ 
+   if (lb_factory == nullptr) {
+     return absl::InvalidArgumentError(
+-        fmt::format("No load balancer factory found for LB type: {}",
+-                    ClusterProto::LbPolicy_Name(cluster.lb_policy())));
++        fmt::format("No load balancer factory found for LB policy '{}'",
++                    envoy::config::cluster::v3::Cluster::LbPolicy_Name(cluster.lb_policy())));
+   }
+ 
+   ASSERT(lb_factory != nullptr);
+diff --git a/source/extensions/clusters/dynamic_forward_proxy/cluster.cc b/source/extensions/clusters/dynamic_forward_proxy/cluster.cc
+index 1200a49..30cffc3 100644
+--- a/source/extensions/clusters/dynamic_forward_proxy/cluster.cc
++++ b/source/extensions/clusters/dynamic_forward_proxy/cluster.cc
+@@ -98,14 +98,10 @@ Cluster::~Cluster() {
+ 
+ void Cluster::startPreInit() {
+   // If we are attaching to a pre-populated cache we need to initialize our hosts.
+-  std::unique_ptr<Upstream::HostVector> hosts_added;
+   dns_cache_->iterateHostMap(
+       [&](absl::string_view host, const Common::DynamicForwardProxy::DnsHostInfoSharedPtr& info) {
+-        addOrUpdateHost(host, info, hosts_added);
++        addOrUpdateHost(host, info);
+       });
+-  if (hosts_added) {
+-    updatePriorityState(*hosts_added, {});
+-  }
+   onPreInitComplete();
+ }
+ 
+@@ -237,9 +233,9 @@ bool Cluster::ClusterInfo::checkIdle() {
+ 
+ void Cluster::addOrUpdateHost(
+     absl::string_view host,
+-    const Extensions::Common::DynamicForwardProxy::DnsHostInfoSharedPtr& host_info,
+-    std::unique_ptr<Upstream::HostVector>& hosts_added) {
+-  Upstream::LogicalHostSharedPtr emplaced_host;
++    const Extensions::Common::DynamicForwardProxy::DnsHostInfoSharedPtr& host_info) {
++  Upstream::HostVector hosts_added;
++  Upstream::HostVector hosts_removed;
+   {
+     absl::WriterMutexLock lock{&host_map_lock_};
+ 
+@@ -251,15 +247,9 @@ void Cluster::addOrUpdateHost(
+     // future.
+     const auto host_map_it = host_map_.find(host);
+     if (host_map_it != host_map_.end()) {
+-      // If we only have an address change, we can do that swap inline without any other updates.
+-      // The appropriate R/W locking is in place to allow this. The details of this locking are:
+-      //  - Hosts are not thread local, they are global.
+-      //  - We take a read lock when reading the address and a write lock when changing it.
+-      //  - Address updates are very rare.
+-      //  - Address reads are only done when a connection is being made and a "real" host
+-      //    description is created or the host is queried via the admin endpoint. Both of
+-      //    these operations are relatively rare and the read lock is held for a short period
+-      //    of time.
++      // If the address has changed, remove the old host and add a new one so that the
++      // cross-priority host map is updated correctly. The old address would otherwise leak
++      // from the cross-priority host map when the host's TTL expires.
+       //
+       // TODO(mattklein123): Right now the dynamic forward proxy / DNS cache works similar to how
+       //                     logical DNS works, meaning that we only store a single address per
+@@ -271,27 +261,20 @@ void Cluster::addOrUpdateHost(
+       ASSERT(host_map_it->second.shared_host_info_->address() !=
+              host_map_it->second.logical_host_->address());
+       ENVOY_LOG(debug, "updating dfproxy cluster host address '{}'", host);
+-      host_map_it->second.logical_host_->setNewAddresses(
+-          host_info->address(), host_info->addressList(), dummy_lb_endpoint_);
+-      return;
++      hosts_removed.emplace_back(host_map_it->second.logical_host_);
++      host_map_.erase(host_map_it);
+     }
+ 
+     ENVOY_LOG(debug, "adding new dfproxy cluster host '{}'", host);
+ 
+-    emplaced_host = host_map_
+-                        .try_emplace(host, host_info,
+-                                     std::make_shared<Upstream::LogicalHost>(
+-                                         info(), std::string{host}, host_info->address(),
+-                                         host_info->addressList(), dummy_locality_lb_endpoint_,
+-                                         dummy_lb_endpoint_, nullptr, time_source_))
+-                        .first->second.logical_host_;
++    auto new_host = std::make_shared<Upstream::LogicalHost>(
++        info(), std::string{host}, host_info->address(), host_info->addressList(),
++        dummy_locality_lb_endpoint_, dummy_lb_endpoint_, nullptr, time_source_);
++    host_map_.try_emplace(host, host_info, new_host);
++    hosts_added.emplace_back(new_host);
+   }
+ 
+-  ASSERT(emplaced_host);
+-  if (hosts_added == nullptr) {
+-    hosts_added = std::make_unique<Upstream::HostVector>();
+-  }
+-  hosts_added->emplace_back(emplaced_host);
++  updatePriorityState(hosts_added, hosts_removed);
+ }
+ 
+ void Cluster::onDnsHostAddOrUpdate(
+@@ -299,12 +282,7 @@ void Cluster::onDnsHostAddOrUpdate(
+     const Extensions::Common::DynamicForwardProxy::DnsHostInfoSharedPtr& host_info) {
+   ENVOY_LOG(debug, "Adding host info for {}", host);
+ 
+-  std::unique_ptr<Upstream::HostVector> hosts_added;
+-  addOrUpdateHost(host, host_info, hosts_added);
+-  if (hosts_added != nullptr) {
+-    ASSERT(!hosts_added->empty());
+-    updatePriorityState(*hosts_added, {});
+-  }
++  addOrUpdateHost(host, host_info);
+ }
+ 
+ void Cluster::updatePriorityState(const Upstream::HostVector& hosts_added,
+diff --git a/source/extensions/clusters/dynamic_forward_proxy/cluster.h b/source/extensions/clusters/dynamic_forward_proxy/cluster.h
+index f974474..82e62c0 100644
+--- a/source/extensions/clusters/dynamic_forward_proxy/cluster.h
++++ b/source/extensions/clusters/dynamic_forward_proxy/cluster.h
+@@ -161,8 +161,7 @@ private:
+ 
+   void
+   addOrUpdateHost(absl::string_view host,
+-                  const Extensions::Common::DynamicForwardProxy::DnsHostInfoSharedPtr& host_info,
+-                  std::unique_ptr<Upstream::HostVector>& hosts_added)
++                  const Extensions::Common::DynamicForwardProxy::DnsHostInfoSharedPtr& host_info)
+       ABSL_LOCKS_EXCLUDED(host_map_lock_);
+ 
+   void updatePriorityState(const Upstream::HostVector& hosts_added,
+diff --git a/test/extensions/clusters/dynamic_forward_proxy/cluster_test.cc b/test/extensions/clusters/dynamic_forward_proxy/cluster_test.cc
+index 75f48aa..05f48d5 100644
+--- a/test/extensions/clusters/dynamic_forward_proxy/cluster_test.cc
++++ b/test/extensions/clusters/dynamic_forward_proxy/cluster_test.cc
+@@ -86,7 +86,7 @@ public:
+       }
+     }));
+     if (!existing_hosts.empty()) {
+-      EXPECT_CALL(*this, onMemberUpdateCb(SizeIs(existing_hosts.size()), SizeIs(0)));
++      EXPECT_CALL(*this, onMemberUpdateCb(SizeIs(1), SizeIs(0))).Times(existing_hosts.size());
+     }
+     cluster_->initialize([] {});
+   }
+@@ -257,6 +257,7 @@ TEST_F(ClusterTest, BasicFlow) {
+ 
+   // After changing the address, LB will immediately resolve the new address with a refresh.
+   updateTestHostAddress("host1:0", "2.3.4.5");
++  EXPECT_CALL(*this, onMemberUpdateCb(SizeIs(1), SizeIs(1)));
+   update_callbacks_->onDnsHostAddOrUpdate("host1:0", host_map_["host1:0"]);
+   EXPECT_EQ(1UL, cluster_->prioritySet().hostSetsPerPriority()[0]->hosts().size());
+   EXPECT_EQ("2.3.4.5:0",
+@@ -291,82 +292,54 @@ TEST_F(ClusterTest, OutlierDetection) {
+   EXPECT_EQ("5.6.7.8:0",
+             lb_->chooseHost(setHostAndReturnContext("host2:0"))->address()->asString());
+ 
+-  // Fail outlier check for host1
+   setOutlierFailed("host1:0");
+   EXPECT_EQ(nullptr, lb_->chooseHost(setHostAndReturnContext("host1:0")));
+-  // "host2:0" should not be affected
+-  EXPECT_CALL(*host_map_["host2:0"], touch());
+-  EXPECT_EQ("5.6.7.8:0",
+-            lb_->chooseHost(setHostAndReturnContext("host2:0"))->address()->asString());
+ 
+-  // Clear outlier check failure for host1, it should be available again
+   clearOutlierFailed("host1:0");
+   EXPECT_CALL(*host_map_["host1:0"], touch());
+   EXPECT_EQ("1.2.3.4:0",
+             lb_->chooseHost(setHostAndReturnContext("host1:0"))->address()->asString());
+ }
+ 
+-// Various invalid LB context permutations in case the cluster is used outside of HTTP.
+-TEST_F(ClusterTest, InvalidLbContext) {
++TEST_F(ClusterTest, LoadBalancerContextHostFromFilterState) {
+   initialize(default_yaml_config_, false);
+-  ON_CALL(lb_context_, downstreamHeaders()).WillByDefault(Return(nullptr));
+-  EXPECT_EQ(nullptr, lb_->chooseHost(&lb_context_));
+-  EXPECT_EQ(nullptr, lb_->chooseHost(nullptr));
+-}
+-
+-TEST_F(ClusterTest, FilterStateHostOverride) {
+-  initialize(default_yaml_config_, false);
+-  makeTestHost("host1:0", "1.2.3.4");
++  makeTestHost("host1:80", "1.2.3.4");
++  InSequence s;
+ 
+   EXPECT_CALL(*this, onMemberUpdateCb(SizeIs(1), SizeIs(0)));
+-  update_callbacks_->onDnsHostAddOrUpdate("host1:0", host_map_["host1:0"]);
+-  EXPECT_CALL(*host_map_["host1:0"], touch());
++  update_callbacks_->onDnsHostAddOrUpdate("host1:80", host_map_["host1:80"]);
++  EXPECT_CALL(*host_map_["host1:80"], touch());
+   EXPECT_EQ("1.2.3.4:0",
+-            lb_->chooseHost(setFilterStateHostAndReturnContext("host1:0"))->address()->asString());
+-}
+-
+-// Verify cluster attaches to a populated cache.
+-TEST_F(ClusterTest, PopulatedCache) {
+-  makeTestHost("host1:0", "1.2.3.4");
+-  makeTestHost("host2:0", "1.2.3.5");
+-  initialize(default_yaml_config_, false);
+-  EXPECT_EQ(2UL, cluster_->prioritySet().hostSetsPerPriority()[0]->hosts().size());
++            lb_->chooseHost(setFilterStateHostAndReturnContext("host1:80"))->address()->asString());
+ }
+ 
+-TEST_F(ClusterTest, LoadBalancer_LifetimeCallbacksWithoutCoalescing) {
++TEST_F(ClusterTest, LoadBalancerContextHostFromHeader) {
+   initialize(default_yaml_config_, false);
++  makeTestHost("host1:80", "1.2.3.4");
++  InSequence s;
+ 
+-  OptRef<Envoy::Http::ConnectionPool::ConnectionLifetimeCallbacks> lifetime_callbacks =
+-      lb_->lifetimeCallbacks();
+-  ASSERT_FALSE(lifetime_callbacks.has_value());
+-}
+-
+-TEST_F(ClusterTest, LoadBalancer_LifetimeCallbacksWithCoalescing) {
+-  initialize(coalesce_connection_config_, false);
+-
+-  OptRef<Envoy::Http::ConnectionPool::ConnectionLifetimeCallbacks> lifetime_callbacks =
+-      lb_->lifetimeCallbacks();
+-  ASSERT_TRUE(lifetime_callbacks.has_value());
++  EXPECT_CALL(*this, onMemberUpdateCb(SizeIs(1), SizeIs(0)));
++  update_callbacks_->onDnsHostAddOrUpdate("host1:80", host_map_["host1:80"]);
++  EXPECT_CALL(*host_map_["host1:80"], touch());
++  EXPECT_EQ("1.2.3.4:0",
++            lb_->chooseHost(setHostAndReturnContext("host1:80"))->address()->asString());
+ }
+ 
+-TEST_F(ClusterTest, LoadBalancer_SelectPoolNoConnections) {
+-  initialize(coalesce_connection_config_, false);
+-
+-  const std::string hostname = "mail.example.org";
+-  Upstream::MockHost host;
+-  EXPECT_CALL(host, hostname()).WillRepeatedly(testing::ReturnRef(hostname));
+-  Network::Address::InstanceConstSharedPtr address =
+-      Network::Utility::resolveUrl("tcp://10.0.0.3:50000");
+-  EXPECT_CALL(host, address()).WillRepeatedly(testing::Return(address));
+-  std::vector<uint8_t> hash_key = {1, 2, 3};
++TEST_F(ClusterTest, LoadBalancerContextHostFromSni) {
++  initialize(default_yaml_config_, false);
++  makeTestHost("host1:80", "1.2.3.4");
++  InSequence s;
+ 
+-  absl::optional<Upstream::SelectedPoolAndConnection> selection =
+-      lb_->selectExistingConnection(&lb_context_, host, hash_key);
++  EXPECT_CALL(*this, onMemberUpdateCb(SizeIs(1), SizeIs(0)));
++  update_callbacks_->onDnsHostAddOrUpdate("host1:80", host_map_["host1:80"]);
+ 
+-  EXPECT_FALSE(selection.has_value());
++  downstream_headers_.remove(":authority");
++  EXPECT_CALL(connection_, requestedServerName()).WillRepeatedly(Return("host1"));
++  EXPECT_CALL(*host_map_["host1:80"], touch());
++  EXPECT_EQ("1.2.3.4:0", lb_->chooseHost(&lb_context_)->address()->asString());
+ }
+ 
+-TEST_F(ClusterTest, LoadBalancer_SelectPoolMatchingConnection) {
++TEST_F(ClusterTest, LoadBalancer_SelectPool) {
+   initialize(coalesce_connection_config_, false);
+ 
+   const std::string hostname = "mail.example.org";
+@@ -388,41 +361,9 @@ TEST_F(ClusterTest, LoadBalancer_SelectPoolMatchingConnection) {
+   auto ssl_info = std::make_shared<Ssl::MockConnectionInfo>();
+   EXPECT_CALL(connection, ssl()).WillRepeatedly(Return(ssl_info));
+   lifetime_callbacks->onConnectionOpen(pool, hash_key, connection);
+-  std::vector<std::string> dns_sans = {"www.example.org", "mail.example.org"};
+-  EXPECT_CALL(*ssl_info, dnsSansPeerCertificate()).WillOnce(Return(dns_sans));
+-
+-  absl::optional<Upstream::SelectedPoolAndConnection> selection =
+-      lb_->selectExistingConnection(&lb_context_, host, hash_key);
+-
+-  ASSERT_TRUE(selection.has_value());
+-  EXPECT_EQ(&pool, &selection->pool_);
+-  EXPECT_EQ(&connection, &selection->connection_);
+-}
+-
+-TEST_F(ClusterTest, LoadBalancer_SelectPoolMatchingConnectionHttp3) {
+-  initialize(coalesce_connection_config_, false);
+-
+-  const std::string hostname = "mail.example.org";
+-  Upstream::MockHost host;
+-  EXPECT_CALL(host, hostname()).WillRepeatedly(testing::ReturnRef(hostname));
+-  Network::Address::InstanceConstSharedPtr address =
+-      Network::Utility::resolveUrl("tcp://10.0.0.3:50000");
+-  EXPECT_CALL(host, address()).WillRepeatedly(testing::Return(address));
+-  std::vector<uint8_t> hash_key = {1, 2, 3};
+-
+-  Envoy::Http::ConnectionPool::MockInstance pool;
+-  Envoy::Network::MockConnection connection;
+-  OptRef<Envoy::Http::ConnectionPool::ConnectionLifetimeCallbacks> lifetime_callbacks =
+-      lb_->lifetimeCallbacks();
+-  ASSERT_TRUE(lifetime_callbacks.has_value());
+ 
+-  EXPECT_CALL(connection, connectionInfoProvider()).Times(testing::AnyNumber());
+-  EXPECT_CALL(connection, nextProtocol()).WillRepeatedly(Return("h3"));
+-  auto ssl_info = std::make_shared<Ssl::MockConnectionInfo>();
+-  EXPECT_CALL(connection, ssl()).WillRepeatedly(Return(ssl_info));
+-  lifetime_callbacks->onConnectionOpen(pool, hash_key, connection);
+   std::vector<std::string> dns_sans = {"www.example.org", "mail.example.org"};
+-  EXPECT_CALL(*ssl_info, dnsSansPeerCertificate()).WillOnce(Return(dns_sans));
++  EXPECT_CALL(*ssl_info, dnsSansPeerCertificate()).WillRepeatedly(Return(dns_sans));
+ 
+   absl::optional<Upstream::SelectedPoolAndConnection> selection =
+       lb_->selectExistingConnection(&lb_context_, host, hash_key);
+@@ -432,7 +373,7 @@ TEST_F(ClusterTest, LoadBalancer_SelectPoolMatchingConnectionHttp3) {
+   EXPECT_EQ(&connection, &selection->connection_);
+ }
+ 
+-TEST_F(ClusterTest, LoadBalancer_SelectPoolNoMatchingConnectionAfterDraining) {
++TEST_F(ClusterTest, LoadBalancer_SelectPoolDrained) {
+   initialize(coalesce_connection_config_, false);
+ 
+   const std::string hostname = "mail.example.org";
