@@ -20,10 +20,11 @@ ENV TASK_REPO_ROOT=/workspace
 
 WORKDIR /workspace
 
-# Configure Go to skip checksum DB and allow direct fetch for private modules
+# Use Go module proxy for all deps. GONOSUMCHECK skips checksum verification
+# for pseudo-version modules. Do NOT set GOPRIVATE — it bypasses the proxy and
+# forces direct git access, which fails at test time without .netrc auth.
 ENV GONOSUMCHECK=github.com/sourcegraph/*
 ENV GOFLAGS=-mod=mod
-ENV GOPRIVATE=github.com/sourcegraph/*
 
 # Configure git auth for Go private module fetching (e.g. sourcegraph/sourceflow)
 RUN echo "machine github.com login x-access-token password ${GITHUB_TOKEN}" > /root/.netrc && chmod 600 /root/.netrc

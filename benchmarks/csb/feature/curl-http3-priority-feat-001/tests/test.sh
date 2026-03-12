@@ -8,7 +8,7 @@ if [ -f /tmp/.artifact_only_mode ] && [ -f /tests/answer_json_verifier_lib.sh ];
 fi
 
 SCORE=0
-TOTAL=6
+TOTAL=7
 WORKSPACE="${VERIFY_REPO:-/workspace}"
 
 TASK_OUTPUT="${TASK_OUTPUT:-/workspace/answer.json}"
@@ -217,6 +217,27 @@ else
 fi
 
 echo ""
+
+# Check 7: C syntax validation
+if command -v gcc >/dev/null 2>&1; then
+    C_SYNTAX_OK=true
+    for cf in $(git diff --name-only HEAD 2>/dev/null | grep '\.[ch]$' | head -10); do
+        if [ -f "$WORKSPACE/$cf" ]; then
+            if ! gcc -fsyntax-only -I "$WORKSPACE/include" "$WORKSPACE/$cf" 2>/dev/null; then
+                C_SYNTAX_OK=false
+                break
+            fi
+        fi
+    done
+    if [ "$C_SYNTAX_OK" = true ]; then
+        SCORE=$((SCORE + 1))
+        echo "PASS: C syntax validation"
+    else
+        echo "FAIL: C syntax validation (gcc -fsyntax-only error)"
+    fi
+else
+    echo "SKIP: gcc not available"
+fi
 echo "Score: $SCORE / $TOTAL"
 
 FINAL_SCORE=$(python3 -c "print($SCORE / $TOTAL)")

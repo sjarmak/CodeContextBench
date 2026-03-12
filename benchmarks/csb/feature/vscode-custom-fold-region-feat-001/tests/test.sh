@@ -8,7 +8,7 @@ if [ -f /tmp/.artifact_only_mode ] && [ -f /tests/answer_json_verifier_lib.sh ];
 fi
 
 SCORE=0
-TOTAL=6
+TOTAL=7
 WORKSPACE="${VERIFY_REPO:-/workspace}"
 
 TASK_OUTPUT="${TASK_OUTPUT:-/workspace/answer.json}"
@@ -228,6 +228,20 @@ else
 fi
 
 echo ""
+
+# Check 7: TypeScript compilation
+if command -v npx >/dev/null 2>&1; then
+    cd "$WORKSPACE"
+    if npx tsc --noEmit 2>/dev/null; then
+        SCORE=$((SCORE + 1))
+        echo "PASS: TypeScript compilation"
+    else
+        echo "FAIL: TypeScript compilation fails"
+    fi
+    cd - >/dev/null
+else
+    echo "SKIP: npx/tsc not available"
+fi
 echo "Score: $SCORE / $TOTAL"
 
 FINAL_SCORE=$(python3 -c "print($SCORE / $TOTAL)")

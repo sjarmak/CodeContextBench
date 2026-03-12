@@ -7,7 +7,7 @@ if [ -f /tmp/.artifact_only_mode ] && [ -f /tests/answer_json_verifier_lib.sh ];
     source /tests/answer_json_verifier_lib.sh
 fi
 SCORE=0
-TOTAL=6
+TOTAL=7
 WORKSPACE="${VERIFY_REPO:-/workspace}"
 
 TASK_OUTPUT="${TASK_OUTPUT:-/workspace/answer.json}"
@@ -235,6 +235,25 @@ else
 fi
 
 echo ""
+
+# Check 7: Python syntax validation
+PYFILES_OK=true
+for pyf in $(git diff --name-only HEAD 2>/dev/null | grep '\.py$' || find "$WORKSPACE" -name '*.py' -newer "$WORKSPACE/.git" -maxdepth 4 2>/dev/null | head -20); do
+    if [ -f "$WORKSPACE/$pyf" ] 2>/dev/null || [ -f "$pyf" ]; then
+        target="$pyf"
+        [ ! -f "$target" ] && target="$WORKSPACE/$pyf"
+        if ! python3 -m py_compile "$target" 2>/dev/null; then
+            PYFILES_OK=false
+            break
+        fi
+    fi
+done
+if [ "$PYFILES_OK" = true ]; then
+    SCORE=$((SCORE + 1))
+    echo "PASS: Python syntax validation"
+else
+    echo "FAIL: Python syntax validation (py_compile error)"
+fi
 echo "Score: $SCORE / $TOTAL"
 
 FINAL_SCORE=$(python3 -c "print($SCORE / $TOTAL)")

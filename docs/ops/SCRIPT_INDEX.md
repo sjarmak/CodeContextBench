@@ -181,6 +181,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 ## Misc
 
 - `scripts/account_health.py` - Utility script for account health.
+- `scripts/add_compile_gates.py` - Utility script for add compile gates.
 - `scripts/add_verification_metadata.py` - Utility script for add verification metadata.
 - `scripts/apply_verifier_fixes.py` - Utility script for apply verifier fixes.
 - `scripts/audit_canonical_evaluation_contract.py` - Utility script for audit canonical evaluation contract.
@@ -193,6 +194,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/backfill_size_metadata.py` [one_off] - Historical one-off script: backfill size metadata.
 - `scripts/backfill_triage_from_manifest.py` [one_off] - Historical one-off script: backfill triage from manifest.
 - `scripts/browse_results.py` - Utility script for browse results.
+- `scripts/canary_empty_submission.py` - Utility script for canary empty submission.
 - `scripts/check_harness_readiness.py` - Utility script for check harness readiness.
 - `scripts/collect_repo_cloc.py` - Utility script for collect repo cloc.
 - `scripts/compare_contextbench_results.py` - Utility script for compare contextbench results.

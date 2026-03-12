@@ -36,6 +36,7 @@ from csb_metrics.statistics import (
     mcnemar_test,
     bootstrap_ci_dict as bootstrap_ci,
 )
+from suite_power_analysis import achieved_power, required_n
 
 # ---------------------------------------------------------------------------
 # Config
@@ -873,6 +874,124 @@ def section_discussion(stats: dict, canonical: dict) -> str:
     return "\n".join(lines)
 
 
+def section_statistical_power(canonical: dict) -> str:
+    """Statistical power analysis per suite (arXiv 2507.02825 Reporting Validity).
+
+    Computes per-suite power to detect delta=0.05 and flags underpowered suites.
+    """
+    lines = [
+        "## Statistical Power Analysis",
+        "",
+        "Per arXiv 2507.02825 (Reporting Validity), we report statistical power for each "
+        "benchmark suite. Power is computed for a paired t-test to detect a delta of 0.05 "
+        "at alpha=0.05.",
+        "",
+    ]
+
+    # Group tasks by suite and compute deltas
+    suite_deltas: dict[str, list[float]] = defaultdict(list)
+    for tid, d in canonical.items():
+        bl = d.get("baseline")
+        sf = d.get("sourcegraph_full")
+        if bl is not None and sf is not None:
+            suite = d.get("_suite", "unknown")
+            suite_deltas[suite].append(sf - bl)
+
+    if not suite_deltas:
+        lines.append("*No paired data available for power analysis.*")
+        return "\n".join(lines)
+
+    # Compute power stats per suite
+    headers = ["Suite", "N", "Mean Delta", "Std Dev", "Power (80%)", "N Needed", "Status"]
+    rows = []
+    underpowered = []
+
+    for suite_id in sorted(suite_deltas.keys()):
+        deltas = suite_deltas[suite_id]
+        n = len(deltas)
+        if n < 2:
+            rows.append([suite_id, str(n), "—", "—", "—", "—", "insufficient data"])
+            continue
+
+        mean_d = sum(deltas) / len(deltas)
+        sigma = stdev(deltas)
+        power = achieved_power(n, sigma) if sigma > 0 else 1.0
+        n_needed = required_n(sigma) if sigma > 0 else n
+
+        status = "adequate" if power >= 0.80 else "underpowered"
+        if power < 0.80:
+            underpowered.append((suite_id, n, n_needed, power))
+
+        rows.append([
+            suite_id,
+            str(n),
+            f"{mean_d:+.4f}",
+            f"{sigma:.4f}",
+            f"{power:.2%}",
+            str(n_needed),
+            status,
+        ])
+
+    lines.append(_md_table(headers, rows))
+    lines.append("")
+
+    if underpowered:
+        lines.append(f"**{len(underpowered)} suites below 80% power** — results for these suites "
+                     "should be interpreted with caution:")
+        lines.append("")
+        for suite_id, n, n_needed, power in underpowered:
+            lines.append(f"- **{suite_id}**: n={n}, power={power:.1%}, needs {n_needed} tasks for 80% power")
+        lines.append("")
+    else:
+        lines.append("All suites have adequate statistical power (>=80%) to detect a delta of 0.05.")
+        lines.append("")
+
+    # Effect sizes with 95% CIs
+    lines.append("### Effect Sizes (Cohen's d) with 95% Confidence Intervals")
+    lines.append("")
+
+    es_headers = ["Suite", "Cohen's d", "95% CI", "Interpretation"]
+    es_rows = []
+    for suite_id in sorted(suite_deltas.keys()):
+        deltas = suite_deltas[suite_id]
+        if len(deltas) < 2:
+            continue
+        mean_d = sum(deltas) / len(deltas)
+        sigma = stdev(deltas)
+        if sigma == 0:
+            es_rows.append([suite_id, "—", "—", "zero variance"])
+            continue
+
+        d_val = mean_d / sigma
+        # Approximate CI for Cohen's d: d ± 1.96 * sqrt(1/n + d²/(2n))
+        import math
+        n = len(deltas)
+        se_d = math.sqrt(1 / n + d_val ** 2 / (2 * n))
+        ci_lo = d_val - 1.96 * se_d
+        ci_hi = d_val + 1.96 * se_d
+
+        if abs(d_val) < 0.2:
+            interp = "negligible"
+        elif abs(d_val) < 0.5:
+            interp = "small"
+        elif abs(d_val) < 0.8:
+            interp = "medium"
+        else:
+            interp = "large"
+
+        es_rows.append([
+            suite_id,
+            f"{d_val:.3f}",
+            f"[{ci_lo:.3f}, {ci_hi:.3f}]",
+            interp,
+        ])
+
+    lines.append(_md_table(es_headers, es_rows))
+    lines.append("")
+
+    return "\n".join(lines)
+
+
 def section_appendix_tasks(canonical: dict, detailed: dict) -> str:
     """Appendix: per-task results."""
     lines = [
@@ -974,6 +1093,7 @@ def main():
         section_mcp_usage(detailed, canonical),
         section_efficiency(detailed, canonical),
         section_discussion(stats, canonical),
+        section_statistical_power(canonical),
         section_appendix_tasks(canonical, detailed),
     ]
 

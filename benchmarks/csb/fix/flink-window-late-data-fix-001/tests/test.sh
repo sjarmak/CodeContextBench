@@ -8,7 +8,7 @@ if [ -f /tmp/.artifact_only_mode ] && [ -f /tests/answer_json_verifier_lib.sh ];
 fi
 
 SCORE=0
-TOTAL=6
+TOTAL=7
 WORKSPACE="${VERIFY_REPO:-/workspace}"
 
 TASK_OUTPUT="${TASK_OUTPUT:-/workspace/answer.json}"
@@ -256,6 +256,29 @@ else
 fi
 
 echo ""
+
+# Check 7: Java compilation
+if [ -f "$WORKSPACE/gradlew" ]; then
+    cd "$WORKSPACE"
+    if timeout 120 ./gradlew compileJava -q 2>/dev/null; then
+        SCORE=$((SCORE + 1))
+        echo "PASS: Java compilation (Gradle)"
+    else
+        echo "FAIL: Java compilation fails"
+    fi
+    cd - >/dev/null
+elif command -v mvn >/dev/null 2>&1; then
+    cd "$WORKSPACE"
+    if timeout 120 mvn compile -q 2>/dev/null; then
+        SCORE=$((SCORE + 1))
+        echo "PASS: Java compilation (Maven)"
+    else
+        echo "FAIL: Java compilation fails"
+    fi
+    cd - >/dev/null
+else
+    echo "SKIP: Java build tools not available"
+fi
 echo "Score: $SCORE / $TOTAL"
 
 FINAL_SCORE=$(python3 -c "print($SCORE / $TOTAL)")

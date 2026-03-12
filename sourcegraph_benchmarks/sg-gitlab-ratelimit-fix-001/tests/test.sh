@@ -16,9 +16,9 @@ echo "Git status:"
 git config --global --add safe.directory "${TASK_REPO_ROOT:-/workspace}" 2>/dev/null || true
 git status 2>&1 | head -5 || echo "Not a git repository"
 
-# Allow private module resolution to fail gracefully
+# Use Go module proxy for all deps; skip checksum for pseudo-version modules.
+# Do NOT set GOPRIVATE — it bypasses the proxy and forces direct git access.
 export GONOSUMCHECK=github.com/sourcegraph/*
-export GOPRIVATE=github.com/sourcegraph/*
 export GOFLAGS=-mod=mod
 
 # Run targeted Go tests for the changed packages

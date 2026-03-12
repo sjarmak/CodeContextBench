@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ABC Framework data model: 32 criteria, report structures, grading.
+"""ABC Framework data model: 35 criteria, report structures, grading.
 
 Based on "Establishing Best Practices for Building Rigorous Agentic Benchmarks"
 (arxiv 2507.02825). Criteria organized across Task Validity, Outcome Validity,
@@ -299,6 +299,30 @@ ALL_CRITERIA: list[ABCCriterion] = [
         description="Tasks must be independently runnable without shared state.",
         severity=Severity.IMPORTANT,
         automation=Automation.MANUAL,
+    ),
+    ABCCriterion(
+        id="T.11",
+        dimension=Dimension.TASK_VALIDITY,
+        title="No ceiling/floor effects in score distributions",
+        description="Tasks should not have 100% or 0% pass rate across all runs, indicating they are too easy or misconfigured.",
+        severity=Severity.IMPORTANT,
+        automation=Automation.AUTOMATED,
+    ),
+    ABCCriterion(
+        id="T.12",
+        dimension=Dimension.TASK_VALIDITY,
+        title="Verifiers check functional correctness for implementation tasks",
+        description="Implementation tasks (feature, fix, refactor) should verify via compilation or test execution, not just structural grep.",
+        severity=Severity.IMPORTANT,
+        automation=Automation.AUTOMATED,
+    ),
+    ABCCriterion(
+        id="T.13",
+        dimension=Dimension.TASK_VALIDITY,
+        title="Oracle/ground truth has sufficient breadth",
+        description="Oracle should not rely on a single file/symbol or only short generic keywords.",
+        severity=Severity.RECOMMENDED,
+        automation=Automation.AUTOMATED,
     ),
 
     # ── Outcome Validity ──────────────────────────────────────────────

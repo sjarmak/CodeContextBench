@@ -267,9 +267,26 @@ def check_symbol_resolution(
     Each symbol item has at least {"repo", "path", "symbol"}.
     Matching uses two-pass repo normalization (see _match_items).
 
+    Accept-any-of groups: oracle symbols with the same "group" field are
+    alternatives — matching ANY one symbol in a group counts as matching the
+    entire group. This prevents penalising agents that find a valid alternative
+    path (e.g. canonical vs vendored location). Symbols without a "group" field
+    are treated as independent (backward-compatible).
+
+    Recall is computed as: matched_groups / total_groups, where each group of
+    N alternatives counts as 1 required item. Precision remains standard.
+
     >>> result = check_symbol_resolution(
     ...     [{"repo": "a/b", "path": "x.go", "symbol": "Foo"}],
     ...     [{"repo": "a/b", "path": "x.go", "symbol": "Foo"}],
+    ... )
+    >>> result["recall"]
+    1.0
+
+    >>> result = check_symbol_resolution(
+    ...     [{"repo": "a/b", "path": "x.go", "symbol": "Foo"}],
+    ...     [{"repo": "a/b", "path": "x.go", "symbol": "Foo", "group": "g1"},
+    ...      {"repo": "c/d", "path": "y.go", "symbol": "Foo", "group": "g1"}],
     ... )
     >>> result["recall"]
     1.0
@@ -278,19 +295,75 @@ def check_symbol_resolution(
         answer_symbols, oracle_symbols, ["repo", "path", "symbol"]
     )
 
-    n_oracle = len({(s.get("repo", ""), s.get("path", ""), s.get("symbol", "")) for s in oracle_symbols})
-    n_answer = len({(s.get("repo", ""), s.get("path", ""), s.get("symbol", "")) for s in answer_symbols})
+    # Group-aware recall: symbols sharing a "group" are alternatives
+    has_groups = any("group" in s for s in oracle_symbols)
+    if has_groups:
+        # Build group membership: group_id -> set of oracle keys
+        groups: Dict[str, set] = {}
+        ungrouped_keys: set = set()
+        for s in oracle_symbols:
+            key = (s.get("repo", ""), s.get("path", ""), s.get("symbol", ""))
+            grp = s.get("group")
+            if grp:
+                groups.setdefault(grp, set()).add(key)
+            else:
+                ungrouped_keys.add(key)
 
-    recall = len(matched) / n_oracle if n_oracle else 1.0
+        # A group is satisfied if ANY member was matched (using normalized matching)
+        # We need to check matched keys against group members via normalization
+        matched_norm = {(_normalize_repo(r), p, sym) for r, p, sym in matched}
+
+        groups_satisfied = 0
+        for grp_keys in groups.values():
+            grp_norm = {(_normalize_repo(r), p, sym) for r, p, sym in grp_keys}
+            if grp_norm & matched_norm:
+                groups_satisfied += 1
+
+        ungrouped_matched = 0
+        for uk in ungrouped_keys:
+            uk_norm = (_normalize_repo(uk[0]), uk[1], uk[2])
+            if uk_norm in matched_norm:
+                ungrouped_matched += 1
+
+        total_groups = len(groups) + len(ungrouped_keys)
+        matched_count = groups_satisfied + ungrouped_matched
+        recall = matched_count / total_groups if total_groups else 1.0
+
+        # Filter missing: only report items from unsatisfied groups
+        unsatisfied_missing = []
+        for r, p, sym in sorted(missing):
+            key = (r, p, sym)
+            in_satisfied_group = False
+            for grp_keys in groups.values():
+                if key in grp_keys:
+                    grp_norm = {(_normalize_repo(rr), pp, ss) for rr, pp, ss in grp_keys}
+                    if grp_norm & matched_norm:
+                        in_satisfied_group = True
+                    break
+            if not in_satisfied_group:
+                unsatisfied_missing.append({"repo": r, "path": p, "symbol": sym})
+    else:
+        # Standard recall — no groups
+        n_oracle = len({(s.get("repo", ""), s.get("path", ""), s.get("symbol", "")) for s in oracle_symbols})
+        recall = len(matched) / n_oracle if n_oracle else 1.0
+        unsatisfied_missing = [{"repo": r, "path": p, "symbol": s} for r, p, s in sorted(missing)]
+
+    n_answer = len({(s.get("repo", ""), s.get("path", ""), s.get("symbol", "")) for s in answer_symbols})
     precision = len(matched) / n_answer if n_answer else 0.0
 
-    return {
+    result: Dict[str, Any] = {
         "matched": [{"repo": r, "path": p, "symbol": s} for r, p, s in sorted(matched)],
-        "missing": [{"repo": r, "path": p, "symbol": s} for r, p, s in sorted(missing)],
+        "missing": unsatisfied_missing,
         "extra": [{"repo": r, "path": p, "symbol": s} for r, p, s in sorted(extra)],
         "recall": round(recall, 4),
         "precision": round(precision, 4),
     }
+    if has_groups:
+        result["group_aware"] = True
+        result["groups_total"] = len(groups)
+        result["groups_satisfied"] = groups_satisfied
+
+    return result
 
 
 def check_dependency_chain(

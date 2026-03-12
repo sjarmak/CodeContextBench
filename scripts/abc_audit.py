@@ -1545,230 +1545,223 @@ def check_t7_metadata_sync(tasks: list[Path]) -> CriterionResult:
     )
 
 
-def check_t10_shared_state(tasks: list[Path]) -> CriterionResult:
-    """T.10: Tasks don't share mutable state (no hardcoded ports, shared /tmp, named volumes)."""
+# ---------------------------------------------------------------------------
+# New criteria checks (arXiv 2507.02825 alignment)
+# ---------------------------------------------------------------------------
+
+
+def check_t11_ceiling_floor(tasks: list[Path]) -> CriterionResult:
+    """T.11: No ceiling/floor effects — tasks should not have 100% or 0% pass rate across all runs."""
+    if not RUNS_DIR.is_dir():
+        return CriterionResult(
+            criterion_id="T.11", status=Status.SKIP,
+            evidence="runs/official/ not found",
+        )
+
+    # Build set of task names from this suite
+    task_names = {t.name for t in tasks}
+    if not task_names:
+        return CriterionResult(
+            criterion_id="T.11", status=Status.SKIP,
+            evidence="No tasks to check",
+        )
+
+    # Collect scores per task across all runs
+    task_scores: dict[str, list[float]] = {name: [] for name in task_names}
+
+    def _extract_reward(result_path: Path) -> Optional[float]:
+        try:
+            data = json.loads(result_path.read_text())
+            vr = data.get("verifier_result", {})
+            rewards = vr.get("rewards", {})
+            r = rewards.get("reward")
+            if r is not None:
+                return float(r)
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            pass
+        return None
+
+    # Strip prefixes and Harbor suffixes to normalize task dir names
+    _PREFIX_RE = re.compile(r"^(?:mcp_|bl_|sgonly_)")
+    _SUFFIX_RE = re.compile(r"_[a-z0-9]{4,8}$")
+
+    def _normalize_task_name(dirname: str) -> str:
+        name = _PREFIX_RE.sub("", dirname)
+        name = _SUFFIX_RE.sub("", name)
+        return name
+
+    for run_dir in RUNS_DIR.rglob("result.json"):
+        task_dir_name = run_dir.parent.name
+        normalized = _normalize_task_name(task_dir_name)
+        if normalized in task_scores:
+            reward = _extract_reward(run_dir)
+            if reward is not None:
+                task_scores[normalized].append(reward)
+
+    ceiling_tasks = []
+    floor_tasks = []
+    min_runs = 3  # Need at least 3 runs to flag
+
+    for name, scores in task_scores.items():
+        if len(scores) < min_runs:
+            continue
+        if all(s >= 0.99 for s in scores):
+            ceiling_tasks.append(f"{name} ({len(scores)} runs, all >=0.99)")
+        elif all(s <= 0.01 for s in scores):
+            floor_tasks.append(f"{name} ({len(scores)} runs, all <=0.01)")
+
     issues = []
-    for task_dir in tasks:
-        task_name = task_dir.name
-        task_issues = []
-
-        # Scan Dockerfiles
-        env_dir = task_dir / "environment"
-        if env_dir.is_dir():
-            for df in env_dir.iterdir():
-                if df.name.startswith("Dockerfile") and df.is_file():
-                    content = df.read_text(errors="replace")
-                    # Check for EXPOSE (binds to host ports)
-                    exposed = re.findall(r"^\s*EXPOSE\s+(\d+)", content, re.MULTILINE)
-                    if exposed:
-                        task_issues.append(f"{df.name}: EXPOSE {', '.join(exposed)}")
-
-        # Scan test.sh / eval.sh for shared state
-        for rel in ("tests/test.sh", "tests/eval.sh"):
-            script = task_dir / rel
-            if not script.is_file():
-                continue
-            content = script.read_text(errors="replace")
-
-            # Hardcoded ports (e.g., localhost:8080, 0.0.0.0:3000, -p 8080:8080)
-            port_binds = re.findall(r"-p\s+(\d+:\d+)", content)
-            if port_binds:
-                task_issues.append(f"{rel}: host port binding {', '.join(port_binds)}")
-
-            # Fixed /tmp paths (e.g., /tmp/mytest, /tmp/results) — skip dynamic like /tmp/$$ or mktemp
-            fixed_tmp = re.findall(r"/tmp/([a-zA-Z][a-zA-Z0-9_.-]+)", content)
-            # Filter out common safe patterns (mktemp results, variable expansions)
-            fixed_tmp = [t for t in fixed_tmp if not re.match(r"tmp\.", t)]
-            if fixed_tmp:
-                task_issues.append(f"{rel}: fixed /tmp paths: /tmp/{', /tmp/'.join(fixed_tmp[:3])}")
-
-            # Named Docker volumes
-            named_vols = re.findall(r"docker\s+.*-v\s+([a-zA-Z]\w+):/", content)
-            if named_vols:
-                task_issues.append(f"{rel}: named Docker volumes: {', '.join(named_vols)}")
-
-        if task_issues:
-            issues.append(f"{task_name}: {'; '.join(task_issues)}")
+    if ceiling_tasks:
+        issues.append(f"Ceiling effect ({len(ceiling_tasks)} tasks always pass): {', '.join(ceiling_tasks[:5])}")
+    if floor_tasks:
+        issues.append(f"Floor effect ({len(floor_tasks)} tasks always fail): {', '.join(floor_tasks[:5])}")
 
     if not issues:
         return CriterionResult(
-            criterion_id="T.10", status=Status.PASS,
-            evidence=f"No shared-state concerns found across {len(tasks)} tasks",
+            criterion_id="T.11", status=Status.PASS,
+            evidence=f"No ceiling/floor effects across {len(task_names)} tasks",
         )
     return CriterionResult(
-        criterion_id="T.10", status=Status.FAIL,
-        evidence="\n".join(issues[:10]),
-        remediation="Remove hardcoded ports, use mktemp for temp paths, avoid named Docker volumes",
-        details={"issue_count": len(issues), "issues": issues[:20]},
+        criterion_id="T.11", status=Status.WARN,
+        evidence="\n".join(issues),
+        remediation="Ceiling tasks may be too easy; floor tasks may be misconfigured or too hard. "
+                     "Review difficulty calibration per arXiv 2507.02825 Section 'Difficulty Calibration'.",
+        details={"ceiling": ceiling_tasks, "floor": floor_tasks},
     )
 
 
-def check_oa_equivalent_solutions(tasks: list[Path]) -> CriterionResult:
-    """O.a: Verifiers accept functionally equivalent solutions (no overly-strict matching)."""
+def check_t12_functional_verification(tasks: list[Path]) -> CriterionResult:
+    """T.12: Verifiers check functional correctness (compile, run tests), not just structural patterns."""
     issues = []
+    functional_patterns = [
+        r"\bgo\s+build\b", r"\bgo\s+vet\b", r"\bgo\s+test\b",
+        r"\bnpm\s+test\b", r"\bnpx\s+jest\b", r"\byarn\s+test\b",
+        r"\bpytest\b", r"\bpython.*-m\s+pytest\b", r"\bunittest\b",
+        r"\bmake\s+test\b", r"\bmake\s+check\b", r"\bcargo\s+test\b",
+        r"\bmvn\s+test\b", r"\bgradle\s+test\b",
+        r"\bgcc\b.*-o\b", r"\bg\+\+\b.*-o\b", r"\bcmake\b",
+        r"\btsc\b", r"\bjavac\b",
+        r"\bpython3?\s+.*\.py\b",  # running a Python verifier script
+        r"\bcheck_test_ratio\b",  # oracle_checks.py test ratio
+        r"\bpromoted_verifier\b",  # delegates to oracle composite scoring
+    ]
+    structural_only_patterns = [
+        r"\bgrep\s+-q\b",
+        r"\btest\s+-f\b",
+        r"\[\s+-f\s+",
+    ]
+
     for task_dir in tasks:
+        toml = parse_task_toml_simple(task_dir / "task.toml")
+        task_type = toml.get("metadata.category", "").lower()
+
+        # Only flag for implementation tasks (feature, fix, refactor, test, debug)
+        # Skip understanding/tracing tasks where structural checks are appropriate
+        if task_type and task_type in ("symbol_resolution", "cross_repo_trace",
+                                       "understanding", "design", "comprehension",
+                                       "cross-repo-config-trace"):
+            continue
+
         verifier = _get_primary_verifier(task_dir)
         if not verifier:
             continue
 
         content = verifier.read_text(errors="replace")
         task_name = task_dir.name
+
+        if verifier.name == "test.sh" and _uses_shared_verifier_delegate(content):
+            continue
+
+        has_functional = any(re.search(p, content) for p in functional_patterns)
+        has_structural = any(re.search(p, content) for p in structural_only_patterns)
+
+        if has_structural and not has_functional:
+            issues.append(f"{task_name}: verifier uses only structural checks (grep/file-exists), no compilation or test execution")
+
+    if not issues:
+        return CriterionResult(
+            criterion_id="T.12", status=Status.PASS,
+            evidence=f"All implementation-task verifiers include functional checks",
+        )
+    return CriterionResult(
+        criterion_id="T.12", status=Status.WARN,
+        evidence="\n".join(issues[:10]),
+        remediation="Add compilation (go build, tsc, gcc) or test execution (pytest, go test) to verifiers for implementation tasks",
+        details={"issue_count": len(issues), "issues": issues[:20]},
+    )
+
+
+def check_t13_oracle_breadth(tasks: list[Path]) -> CriterionResult:
+    """T.13: Oracle/ground truth has sufficient breadth (not single-file/single-keyword)."""
+    issues = []
+    for task_dir in tasks:
+        task_name = task_dir.name
+
+        # Check task_spec.json oracle
+        spec_path = task_dir / "tests" / "task_spec.json"
+        if not spec_path.is_file():
+            continue
+
+        try:
+            spec = json.loads(spec_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        oracle = spec.get("artifacts", {}).get("oracle", {})
+        checks = spec.get("evaluation", {}).get("checks", [])
         task_issues = []
 
-        if verifier.suffix == ".sh":
-            # Flag grep -Fx (exact fixed-string line match)
-            if re.search(r"\bgrep\s+.*-[A-Za-z]*F[A-Za-z]*x|grep\s+.*-[A-Za-z]*x[A-Za-z]*F", content):
-                task_issues.append("grep -Fx (exact fixed-string match)")
+        # Count oracle items
+        n_files = len(oracle.get("required_files", []))
+        n_symbols = len(oracle.get("required_symbols", []))
+        n_chains = len(oracle.get("dependency_chains", []))
+        total_oracle_items = n_files + n_symbols + n_chains
 
-            # Flag direct string equality tests: [ "$var" = "hardcoded" ] or == "hardcoded"
-            strict_eq = re.findall(r'\[\s*"\$\w+"\s*==?\s*"([^"]+)"\s*\]', content)
-            if strict_eq:
-                task_issues.append(f"exact string comparison against: {', '.join(strict_eq[:3])}")
+        if total_oracle_items <= 1:
+            task_issues.append(f"oracle has only {total_oracle_items} item(s) (files={n_files}, symbols={n_symbols}, chains={n_chains})")
 
-            # Flag diff without any tolerance flags (allow diff -w, diff -b, diff --ignore)
-            diff_calls = re.finditer(r"\bdiff\s+([^\n|;&]+)", content)
-            for m in diff_calls:
-                args = m.group(1)
-                if re.search(r"-[A-Za-z]*[wbBi]|--ignore|--strip", args):
+        # Keyword check guidelines:
+        # 1. At least 2 keywords per task
+        # 2. At least one must be a path fragment, multi-word, or domain-specific identifier
+        #    (not a single common word like "Config", "error", "test")
+        for check in checks:
+            if check.get("type") == "keyword_presence":
+                keywords = check.get("params", {}).get("required_keywords", [])
+                if not keywords:
+                    task_issues.append("keyword_presence check has empty keyword list")
                     continue
-                if "<(" in args:
-                    continue
-                task_issues.append("diff without tolerance flags (-w/-b/--ignore)")
-                break
+                if len(keywords) < 2:
+                    task_issues.append(f"only {len(keywords)} keyword(s) — minimum 2 recommended")
+
+                # Check if ALL keywords are short single-word generic terms
+                def _is_specific(kw: str) -> bool:
+                    """A keyword is 'specific' if it contains a path separator, dot,
+                    underscore, multiple words, or is domain-specific (>8 chars)."""
+                    return (
+                        "/" in kw or "." in kw or "_" in kw or "::" in kw
+                        or " " in kw or len(kw) > 12
+                        or not kw.isalpha()
+                    )
+
+                specific = [k for k in keywords if _is_specific(k)]
+                if not specific:
+                    task_issues.append(
+                        f"all {len(keywords)} keyword(s) are short generic terms: "
+                        f"{', '.join(keywords[:5])}; add path fragments or domain identifiers"
+                    )
 
         if task_issues:
             issues.append(f"{task_name}: {'; '.join(task_issues)}")
 
     if not issues:
         return CriterionResult(
-            criterion_id="O.a", status=Status.PASS,
-            evidence=f"No overly-strict matching found across {len(tasks)} verifiers",
+            criterion_id="T.13", status=Status.PASS,
+            evidence=f"All oracle definitions have sufficient breadth",
         )
     return CriterionResult(
-        criterion_id="O.a", status=Status.WARN,
+        criterion_id="T.13", status=Status.WARN,
         evidence="\n".join(issues[:10]),
-        remediation="Consider using flexible matching (regex, -i flag, tolerance) in verifiers",
-        details={"issue_count": len(issues), "issues": issues[:20]},
-    )
-
-
-def check_ob_negated_solutions(tasks: list[Path]) -> CriterionResult:
-    """O.b: Verifiers reject negated/inverted solutions (no keyword-only matching)."""
-    issues = []
-    for task_dir in tasks:
-        verifier = _get_primary_verifier(task_dir)
-        if not verifier or verifier.suffix != ".sh":
-            continue
-
-        content = verifier.read_text(errors="replace")
-        task_name = task_dir.name
-        task_issues = []
-
-        # Find bare grep for a single short keyword without robust flags.
-        # These could match "NOT keyword" or "the answer is definitely not keyword".
-        # Exclude greps with flags: -E (regex), -P (perl), -w (word boundary),
-        # -c (count), -r/-R (recursive code search), -l (file list), -q (boolean),
-        # -n (line numbers).
-        bare_greps = re.finditer(
-            r"""grep\s+(?:-[A-Za-z]*\s+)*['"]([^'"]{1,20})['"]\s+(\S+)""",
-            content,
-        )
-        for m in bare_greps:
-            keyword = m.group(1).strip()
-            target = m.group(2)
-            prefix = m.group(0).split(keyword)[0]
-
-            # Skip multi-word or regex patterns (inherently more specific)
-            if re.search(r"[.*+?^${}()|\\[\]]", keyword) or " " in keyword:
-                continue
-
-            # Skip if grep has flags that make matching more robust
-            if re.search(r"-[A-Za-z]*[cEPrlRwqn]", prefix):
-                continue
-
-            # Skip if grepping source code files (not agent output)
-            if re.search(r"\.(py|js|ts|go|java|rs|c|cpp|sh|rb|yaml|yml|toml|json|md)$", target):
-                continue
-
-            # Skip if target is log/reward/result paths (structured output)
-            if re.search(r"/logs/|reward\.|result\.|\.log", target):
-                continue
-
-            task_issues.append(f"bare grep for '{keyword}' could match negated answer")
-
-        if task_issues:
-            issues.append(f"{task_name}: {'; '.join(task_issues[:3])}")
-
-    if not issues:
-        return CriterionResult(
-            criterion_id="O.b", status=Status.PASS,
-            evidence=f"No keyword-only matching vulnerable to negation across {len(tasks)} verifiers",
-        )
-    return CriterionResult(
-        criterion_id="O.b", status=Status.WARN,
-        evidence="\n".join(issues[:10]),
-        remediation="Use multi-word patterns, regex with context, or structured JSON validation instead of bare keyword grep",
-        details={"issue_count": len(issues), "issues": issues[:20]},
-    )
-
-
-def check_og_determinism(tasks: list[Path]) -> CriterionResult:
-    """O.g: Verifiers produce deterministic results (no unseeded randomness)."""
-    issues = []
-    # Non-deterministic commands that affect scoring when used in comparisons
-    NONDETERMINISTIC_CMDS = re.compile(
-        r'\$RANDOM|\buuidgen\b|\bshuf\b'
-    )
-    # date command substitution used in comparisons/assertions (not just logging)
-    DATE_IN_COMPARISON = re.compile(
-        r'(?:\[\s*.*\$\(date\b|==\s*.*\$\(date\b|!=\s*.*\$\(date\b)'
-    )
-    # mktemp used in assertions/comparisons (not just for scratch files)
-    MKTEMP_IN_ASSERT = re.compile(
-        r'(?:diff|cmp|==|!=|grep|assert).*\$\(mktemp|mktemp.*(?:diff|cmp|==|!=|grep|assert)'
-    )
-    for task_dir in tasks:
-        verifier = _get_primary_verifier(task_dir)
-        if not verifier:
-            continue
-
-        content = verifier.read_text(errors="replace")
-        task_name = task_dir.name
-        task_issues = []
-
-        if verifier.suffix == ".sh":
-            if NONDETERMINISTIC_CMDS.search(content):
-                matches = NONDETERMINISTIC_CMDS.findall(content)
-                task_issues.append(f"non-deterministic command: {matches[0]}")
-
-            if DATE_IN_COMPARISON.search(content):
-                task_issues.append("date output used in comparison/assertion")
-
-            if MKTEMP_IN_ASSERT.search(content):
-                task_issues.append("mktemp path used in assertion/comparison")
-
-        elif verifier.suffix == ".py":
-            # Flag unseeded random usage
-            if re.search(r'\brandom\.\w+\(', content):
-                # Check if random is seeded
-                if not re.search(r'random\.seed\(', content):
-                    task_issues.append("unseeded random module usage")
-            # Flag uuid usage in assertions
-            if re.search(r'\buuid\.\w+\(', content):
-                task_issues.append("uuid generation in verifier")
-
-        if task_issues:
-            issues.append(f"{task_name}: {'; '.join(task_issues)}")
-
-    if not issues:
-        return CriterionResult(
-            criterion_id="O.g", status=Status.PASS,
-            evidence=f"No non-deterministic patterns found across {len(tasks)} verifiers",
-        )
-    return CriterionResult(
-        criterion_id="O.g", status=Status.WARN,
-        evidence="\n".join(issues[:10]),
-        remediation="Remove non-deterministic commands from verifier scoring logic, or seed random generators",
+        remediation="Expand oracle to include more files/symbols, and use multi-word or path-specific keywords",
         details={"issue_count": len(issues), "issues": issues[:20]},
     )
 
@@ -1800,6 +1793,9 @@ TASK_CHECKS = {
     "O.i": check_oi_partial_credit,
     "R.1": check_r1_files_exist,
     "R.2": check_r2_no_contamination,
+    "T.11": check_t11_ceiling_floor,
+    "T.12": check_t12_functional_verification,
+    "T.13": check_t13_oracle_breadth,
 }
 
 # Functions that take suite: str

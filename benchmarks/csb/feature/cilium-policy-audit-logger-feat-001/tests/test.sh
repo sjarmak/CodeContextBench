@@ -8,7 +8,7 @@ if [ -f /tmp/.artifact_only_mode ] && [ -f /tests/answer_json_verifier_lib.sh ];
 fi
 
 SCORE=0
-TOTAL=6
+TOTAL=8
 WORKSPACE="${VERIFY_REPO:-/workspace}"
 
 TASK_OUTPUT="${TASK_OUTPUT:-/workspace/answer.json}"
@@ -214,6 +214,34 @@ if grep -q 'func Test' "$WORKSPACE/pkg/policy/audit_logger_test.go" 2>/dev/null;
     echo "PASS: Test functions present"
 else
     echo "FAIL: Test functions present"
+fi
+
+# Check 7: Go syntax validity (go vet on the new file)
+if [ -f "$WORKSPACE/pkg/policy/audit_logger.go" ]; then
+    cd "$WORKSPACE"
+    if go vet ./pkg/policy/audit_logger.go 2>/dev/null; then
+        SCORE=$((SCORE + 1))
+        echo "PASS: Go vet passes on audit_logger.go"
+    else
+        echo "FAIL: Go vet fails on audit_logger.go"
+    fi
+    cd - >/dev/null
+else
+    echo "FAIL: Go vet — file does not exist"
+fi
+
+# Check 8: Negative test — struct has real fields (not just a placeholder comment/empty struct)
+if [ -f "$WORKSPACE/pkg/policy/audit_logger.go" ]; then
+    # Must have at least one field or method receiver — reject empty struct or comment-only
+    if grep -qP 'type\s+PolicyAuditLogger\s+struct\s*\{' "$WORKSPACE/pkg/policy/audit_logger.go" 2>/dev/null && \
+       ! grep -qP 'type\s+PolicyAuditLogger\s+struct\s*\{\s*\}' "$WORKSPACE/pkg/policy/audit_logger.go" 2>/dev/null; then
+        SCORE=$((SCORE + 1))
+        echo "PASS: PolicyAuditLogger has real struct fields"
+    else
+        echo "FAIL: PolicyAuditLogger is empty or placeholder"
+    fi
+else
+    echo "FAIL: Negative test — file does not exist"
 fi
 
 echo ""
