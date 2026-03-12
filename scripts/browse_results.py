@@ -9,7 +9,9 @@ Output goes to browse/<run_name>/ (gitignored), not inside runs/.
 """
 
 import argparse
+import functools
 import html as html_lib
+import http.server
 import json
 import os
 import re
@@ -74,20 +76,53 @@ def normalize_task_name(raw: str) -> str:
     return re.sub(r"__[A-Za-z0-9]{5,8}$", "", name)
 
 
+def slugify_fragment(text: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", text).strip("-") or "trial"
+
+
+def _looks_like_trial_result(data: object) -> bool:
+    if not isinstance(data, dict):
+        return False
+    has_task_identity = any(data.get(key) for key in ("task_name", "task_id", "trial_name"))
+    has_trial_payload = any(key in data for key in ("agent_result", "verifier_result", "config"))
+    return has_task_identity and has_trial_payload
+
+
+def _infer_config_name(run_dir: Path, trial_dir: Path) -> str:
+    rel_parts = trial_dir.relative_to(run_dir).parts
+    if len(rel_parts) >= 3:
+        return rel_parts[-3]
+    if len(rel_parts) == 2:
+        return rel_parts[0]
+    if len(rel_parts) == 1:
+        return run_dir.parent.name or "unknown"
+    return "unknown"
+
+
+def _infer_scope_name(run_dir: Path, trial_dir: Path) -> str:
+    rel_parts = trial_dir.relative_to(run_dir).parts
+    return rel_parts[0] if len(rel_parts) >= 4 else ""
+
+
 def find_trial_dirs(run_dir: str) -> list[dict]:
     tasks = []
-    for config_dir in sorted(Path(run_dir).iterdir()):
-        if not config_dir.is_dir():
+    root = Path(run_dir)
+    for result_file in sorted(root.rglob("result.json")):
+        trial_dir = result_file.parent
+        try:
+            result = json.loads(result_file.read_text())
+        except Exception:
             continue
-        for task_group in sorted(config_dir.iterdir()):
-            if not task_group.is_dir():
-                continue
-            for trial_dir in sorted(task_group.iterdir()):
-                if not trial_dir.is_dir() or not (trial_dir / "result.json").exists():
-                    continue
-                td = extract_task_data(trial_dir, config_dir.name)
-                if td:
-                    tasks.append(td)
+        if not _looks_like_trial_result(result):
+            continue
+        td = extract_task_data(
+            trial_dir,
+            _infer_config_name(root, trial_dir),
+            _infer_scope_name(root, trial_dir),
+            str(trial_dir.relative_to(root)),
+        )
+        if td:
+            tasks.append(td)
     return tasks
 
 
@@ -110,13 +145,14 @@ def _find_raw_trajectory(trial_dir_name: str) -> Path | None:
     return _RAW_TRAJECTORY_CACHE.get(trial_dir_name)
 
 
-def extract_task_data(trial_dir: Path, config_name: str) -> dict | None:
+def extract_task_data(trial_dir: Path, config_name: str, scope_name: str, trial_relpath: str) -> dict | None:
     try:
         result = json.loads((trial_dir / "result.json").read_text())
     except Exception:
         return None
 
     raw_name = result.get("task_name", trial_dir.name)
+    trial_name = result.get("trial_name", trial_dir.name)
     vr = (result.get("verifier_result") or {}).get("rewards") or {}
     reward = vr.get("reward")
     ar = result.get("agent_result") or {}
@@ -171,6 +207,7 @@ def extract_task_data(trial_dir: Path, config_name: str) -> dict | None:
 
     return dict(
         task_name=normalize_task_name(raw_name), raw_name=raw_name, config=config_name,
+        scope=scope_name, trial_name=trial_name, trial_relpath=trial_relpath,
         reward=reward, status="passed" if reward and reward > 0 else "failed",
         trial_dir=str(trial_dir),
         wall_clock_sec=phase_sec("agent_execution") or metrics.get("agent_execution_seconds"),
@@ -474,7 +511,7 @@ select,input { background:var(--panel); color:var(--text); border:1px solid var(
 
 
 def task_slug(t):
-    return f"{t['config']}--{t['task_name']}".replace("/", "-")
+    return slugify_fragment(t.get("trial_relpath") or t.get("trial_name") or f"{t['config']}--{t['task_name']}")
 
 
 def generate_index(run_name, tasks):
@@ -482,7 +519,8 @@ def generate_index(run_name, tasks):
         dict(task_name=t["task_name"], config=t["config"], reward=t["reward"],
              status=t["status"], wall_clock_sec=t["wall_clock_sec"],
              tool_calls_total=t["tool_calls_total"], mcp_ratio=t["mcp_ratio"],
-             cost_usd=t["cost_usd"], slug=task_slug(t))
+             cost_usd=t["cost_usd"], slug=task_slug(t), trial_name=t["trial_name"],
+             trial_relpath=t["trial_relpath"], scope=t["scope"])
         for t in tasks
     ])
     configs = sorted(set(t["config"] for t in tasks))
@@ -509,10 +547,11 @@ def generate_index(run_name, tasks):
         "function fm(v,d){return(v===null||v===undefined)?'-':Number(v).toFixed(d||3)}"
         "[...new Set(T.map(function(t){return t.config}))].sort().forEach(function(c){cf.add(new Option(c,c))});"
         "function render(){var c=cf.value,s=sf.value,k=q.value.trim().toLowerCase();"
-        "var f=T.filter(function(t){return(!c||t.config===c)&&(!s||t.status===s)&&(!k||t.task_name.toLowerCase().indexOf(k)>=0)});"
+        "var f=T.filter(function(t){var hay=[t.task_name,t.trial_name,t.trial_relpath,t.scope].join(' ').toLowerCase();"
+        "return(!c||t.config===c)&&(!s||t.status===s)&&(!k||hay.indexOf(k)>=0)});"
         "r.innerHTML=f.map(function(t){return '<tr>'"
         "+'<td class=\"mono\">'+t.config+'</td>'"
-        "+'<td><a href=\"'+t.slug+'.html\">'+t.task_name+'</a></td>'"
+        "+'<td><a href=\"'+t.slug+'.html\">'+t.task_name+'</a><div class=\"meta mono\">'+(t.scope?t.scope+'/':'')+t.trial_name+'</div></td>'"
         "+'<td><span class=\"pill '+t.status+'\">'+t.status+'</span></td>'"
         "+'<td class=\"num\">'+fm(t.reward)+'</td>'"
         "+'<td class=\"num\">'+fm(t.mcp_ratio)+'</td>'"
@@ -601,6 +640,7 @@ def generate_detail_page(run_name, t):
         f"<p><a href='index.html'>&larr; Back to results</a></p>"
         f"<h1>{esc(t['task_name'])}</h1>"
         f"<p class='meta'><span class='pill {cp}'>{esc(t['config'])}</span>"
+        f" | Trial: <code>{esc(t['trial_name'])}</code>"
         f" | Score: <strong>{fmt_float(t['reward'], 4)}</strong> | {esc(run_name)}</p>"
         f"<div class='panel'><h2>Task Information</h2>"
         f"<details open><summary>Task instruction sent to agent</summary>"
@@ -624,7 +664,7 @@ def generate_detail_page(run_name, t):
             )
         )
         + "</div>"
-        f"<div class='panel'><h2>File Paths</h2><pre>Trial: {esc(t['trial_dir'])}</pre></div>"
+        f"<div class='panel'><h2>File Paths</h2><pre>Trial: {esc(t['trial_dir'])}\nRelative: {esc(t['trial_relpath'])}</pre></div>"
         "</div></body></html>"
     )
 
@@ -661,7 +701,6 @@ def main():
     print(f"  {len(tasks) + 1} pages in {browse_dir}/")
 
     if args.serve:
-        import http.server, functools
         h = functools.partial(http.server.SimpleHTTPRequestHandler, directory=browse_dir)
         s = http.server.HTTPServer(("0.0.0.0", args.port), h)
         print(f"Serving at http://localhost:{args.port}/index.html")
