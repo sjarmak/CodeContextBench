@@ -91,6 +91,25 @@ def find_trial_dirs(run_dir: str) -> list[dict]:
     return tasks
 
 
+# Cache: trial_dir_name -> Path to trajectory.json in _raw dirs
+_RAW_TRAJECTORY_CACHE: dict[str, Path | None] | None = None
+
+
+def _find_raw_trajectory(trial_dir_name: str) -> Path | None:
+    """Search runs/official/_raw/ for a trajectory.json matching this trial dir."""
+    global _RAW_TRAJECTORY_CACHE
+    if _RAW_TRAJECTORY_CACHE is None:
+        _RAW_TRAJECTORY_CACHE = {}
+        repo_root = Path(__file__).resolve().parent.parent
+        raw_base = repo_root / "runs" / "official" / "_raw"
+        if raw_base.is_dir():
+            for traj in raw_base.rglob("trajectory.json"):
+                # The trial dir name is the grandparent of agent/trajectory.json
+                td_name = traj.parent.parent.name
+                _RAW_TRAJECTORY_CACHE[td_name] = traj
+    return _RAW_TRAJECTORY_CACHE.get(trial_dir_name)
+
+
 def extract_task_data(trial_dir: Path, config_name: str) -> dict | None:
     try:
         result = json.loads((trial_dir / "result.json").read_text())
@@ -129,20 +148,26 @@ def extract_task_data(trial_dir: Path, config_name: str) -> dict | None:
         except OSError:
             pass
 
-    # Auto-detect transcript file: Claude Code (JSONL) or OpenHands (plain log)
+    # Auto-detect transcript: Claude Code JSONL, OH trajectory, or OH plain log
     cc_transcript = trial_dir / "agent" / "claude-code.txt"
+    oh_trajectory = trial_dir / "agent" / "trajectory.json"
     oh_transcript = trial_dir / "agent" / "openhands.txt"
     raw_transcript = ""
     if cc_transcript.is_file():
         trace = parse_transcript(cc_transcript)
-    elif oh_transcript.is_file():
-        trace = {"events": [], "tool_calls": [], "code_changes": [], "bash_commands": []}
-        try:
-            raw_transcript = oh_transcript.read_text(errors="replace")
-        except OSError:
-            pass
+    elif oh_trajectory.is_file():
+        trace = parse_oh_trajectory(oh_trajectory)
     else:
+        # Search _raw dirs for trajectory.json by trial dir name
         trace = {"events": [], "tool_calls": [], "code_changes": [], "bash_commands": []}
+        raw_traj = _find_raw_trajectory(trial_dir.name)
+        if raw_traj:
+            trace = parse_oh_trajectory(raw_traj)
+        elif oh_transcript.is_file():
+            try:
+                raw_transcript = oh_transcript.read_text(errors="replace")
+            except OSError:
+                pass
 
     return dict(
         task_name=normalize_task_name(raw_name), raw_name=raw_name, config=config_name,
@@ -308,6 +333,106 @@ def parse_transcript(path: Path) -> dict:
 
         elif mt == "system":
             add("system", str(p.get("subtype") or "init"), ts=ts)
+
+    return {"events": events, "tool_calls": tool_calls, "code_changes": code_changes, "bash_commands": bash_commands}
+
+
+def parse_oh_trajectory(path: Path) -> dict:
+    """Parse OpenHands ATIF trajectory.json into the same trace format."""
+    events, tool_calls, code_changes, bash_commands = [], [], [], []
+    if not path.is_file():
+        return {"events": [], "tool_calls": [], "code_changes": [], "bash_commands": []}
+    try:
+        data = json.loads(path.read_text(errors="replace"))
+    except (json.JSONDecodeError, OSError):
+        return {"events": [], "tool_calls": [], "code_changes": [], "bash_commands": []}
+
+    steps = data.get("steps") or data.get("history") or []
+    if isinstance(data, list):
+        steps = data
+
+    seq = 0
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        source = str(step.get("source") or "")
+        ts = step.get("timestamp")
+        msg = str(step.get("message") or "")
+
+        # Map source to event type
+        if source == "agent":
+            etype, subtype = "assistant", "text"
+        elif source == "user":
+            etype, subtype = "user", "text"
+        elif source == "system":
+            etype, subtype = "system", "init"
+        else:
+            etype, subtype = source or "unknown", ""
+
+        # Add the main message event (skip empty system init messages)
+        if msg.strip() or source == "agent":
+            if len(events) < EVENT_LIMIT:
+                events.append(dict(sequence=seq, timestamp=ts, type=etype, subtype=subtype,
+                                   tool=None, text=msg, payload={}))
+            seq += 1
+
+        # Process tool calls
+        for tc in (step.get("tool_calls") or []):
+            if not isinstance(tc, dict):
+                continue
+            fn = tc.get("function_name") or tc.get("function", {}).get("name") or "unknown"
+            args = tc.get("arguments") or tc.get("function", {}).get("arguments") or {}
+            tcid = tc.get("tool_call_id") or ""
+
+            if len(events) < EVENT_LIMIT:
+                events.append(dict(sequence=seq, timestamp=ts, type="assistant", subtype="tool_use",
+                                   tool=fn, text="", payload=args))
+            seq += 1
+
+            # Build tool call record
+            tc_record = dict(sequence=seq - 1, timestamp=ts, tool=fn, tool_use_id=tcid,
+                             input=args, output=None, output_text="")
+
+            # Extract observation/result for this tool call
+            obs = step.get("observation") or {}
+            if isinstance(obs, dict):
+                results = obs.get("results") or []
+                for r in results:
+                    if isinstance(r, dict) and r.get("source_call_id") == tcid:
+                        content = str(r.get("content") or "")
+                        tc_record["output_text"] = content
+                        tc_record["output"] = content
+                        if len(events) < EVENT_LIMIT:
+                            events.append(dict(sequence=seq, timestamp=ts, type="user",
+                                               subtype="tool_result", tool=fn,
+                                               text=content[:4000], payload={}))
+                        seq += 1
+                        break
+
+            if len(tool_calls) < EVENT_LIMIT:
+                tool_calls.append(tc_record)
+
+            # Track bash commands
+            if fn == "execute_bash":
+                cmd = args.get("command") or ""
+                if cmd and len(bash_commands) < EVENT_LIMIT:
+                    bash_commands.append(dict(sequence=seq - 1, command=cmd))
+
+            # Track code changes
+            if fn == "str_replace_editor":
+                edit_cmd = args.get("command") or ""
+                fpath = args.get("path") or ""
+                if edit_cmd == "str_replace":
+                    if len(code_changes) < EVENT_LIMIT:
+                        code_changes.append(dict(sequence=seq - 1, type="edit",
+                                                 file_path=fpath,
+                                                 old_string=str(args.get("old_str") or ""),
+                                                 new_string=str(args.get("new_str") or "")))
+                elif edit_cmd == "create":
+                    if len(code_changes) < EVENT_LIMIT:
+                        code_changes.append(dict(sequence=seq - 1, type="write",
+                                                 file_path=fpath,
+                                                 content=str(args.get("file_text") or "")))
 
     return {"events": events, "tool_calls": tool_calls, "code_changes": code_changes, "bash_commands": bash_commands}
 
