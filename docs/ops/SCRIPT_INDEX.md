@@ -271,6 +271,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/run_scaling_gap_oracles.sh` - Utility script for run scaling gap oracles.
 - `scripts/run_sg_local.sh` - Utility script for run sg local.
 - `scripts/run_sg_validation.py` - Utility script for run sg validation.
+- `scripts/sanitize_secrets.py` - Utility script for sanitize secrets.
 - `scripts/scaffold_contextbench_tasks.py` - Utility script for scaffold contextbench tasks.
 - `scripts/scaffold_csb_unified.py` - Utility script for scaffold csb unified.
 - `scripts/scaffold_feature_tasks.py` - Utility script for scaffold feature tasks.

@@ -28,6 +28,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+from sanitize_secrets import redact_secrets
 from pathlib import Path
 from typing import Any
 
@@ -1949,6 +1951,7 @@ def _write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     for source, replacement in EXPORT_TEXT_REWRITES.items():
         content = content.replace(source, replacement)
+    content = redact_secrets(content)
     path.write_text(content)
 
 

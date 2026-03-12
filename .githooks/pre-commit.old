@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook: block real API tokens/secrets from being committed.
+# Install: git config core.hooksPath .githooks
+#
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Secret patterns (extended set)
+# ---------------------------------------------------------------------------
+SECRET_PATTERNS=(
+    'sk-ant-[a-zA-Z0-9_-]{20,}'        # Anthropic API keys
+    'sk-proj-[a-zA-Z0-9_-]{20,}'       # OpenAI project keys
+    'sgp_[a-f0-9]{10,}_[a-f0-9]{20,}'  # Sourcegraph tokens
+    'sgo_cs_[a-f0-9]{40,}'             # Sourcegraph OAuth client secrets
+    'gh[pousr]_[a-zA-Z0-9]{30,}'       # GitHub PATs
+    'github_pat_[a-zA-Z0-9_]{30,}'     # GitHub fine-grained PATs
+    'dtn_[a-f0-9]{40,}'                # Daytona API keys
+    'AIzaSy[a-zA-Z0-9_-]{30,}'         # Google API keys
+    'glsa_[a-zA-Z0-9]{20,}_[a-f0-9]{8}' # Grafana service account tokens
+)
+
+# ---------------------------------------------------------------------------
+# Allowlisted fake/test credential substrings (benchmark task fixtures).
+# If ANY of these substrings appear in a matched secret, it's considered
+# intentionally fake and will not block the commit.
+# ---------------------------------------------------------------------------
+FAKE_INDICATORS=(
+    "XXXX"
+    "aBcDeF"
+    "a1b2c3d4"
+    "example"
+    "test_key"
+    "dummy"
+    "sk_test_"
+    "sk_live_aBcDeF"
+    "REDACTED"
+)
+
+# Build combined regex
+COMBINED=""
+for pattern in "${SECRET_PATTERNS[@]}"; do
+    if [ -z "$COMBINED" ]; then
+        COMBINED="$pattern"
+    else
+        COMBINED="$COMBINED|$pattern"
+    fi
+done
+
+# Check staged files only (not the entire repo)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+is_fake() {
+    local secret="$1"
+    for indicator in "${FAKE_INDICATORS[@]}"; do
+        if [[ "$secret" == *"$indicator"* ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+FOUND=0
+while IFS= read -r file; do
+    # Skip binary files
+    if file "$file" 2>/dev/null | grep -q "binary"; then
+        continue
+    fi
+
+    # Search for secrets in staged content (added lines only)
+    MATCHES=$(git diff --cached -p -- "$file" | grep -E '^\+' | grep -oE "$COMBINED" 2>/dev/null || true)
+
+    if [ -n "$MATCHES" ]; then
+        while IFS= read -r match; do
+            # Skip known fake/test credentials
+            if is_fake "$match"; then
+                continue
+            fi
+
+            if [ "$FOUND" -eq 0 ]; then
+                echo "ERROR: Potential secrets detected in staged files!"
+                echo ""
+            fi
+            FOUND=1
+            echo "  $file:"
+            echo "    ${match:0:16}...REDACTED (${#match} chars)"
+            echo ""
+        done <<< "$MATCHES"
+    fi
+done <<< "$STAGED_FILES"
+
+if [ "$FOUND" -ne 0 ]; then
+    echo "Commit blocked. Remove or redact secrets before committing."
+    echo ""
+    echo "Options:"
+    echo "  1. Run: python3 scripts/sanitize_secrets.py <file>   (redact in place)"
+    echo "  2. If this is a false positive, bypass with: git commit --no-verify"
+    exit 1
+fi
+
+exit 0
