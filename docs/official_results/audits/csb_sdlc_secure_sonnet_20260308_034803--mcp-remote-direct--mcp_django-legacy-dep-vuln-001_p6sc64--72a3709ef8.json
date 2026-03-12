@@ -1,0 +1,1093 @@
+{
+  "metrics": {
+    "agent_execution_seconds": 175.433082,
+    "cache_tokens": 894516,
+    "context_metrics": {
+      "context_window_peak_pct": 0.235,
+      "environment_setup_seconds": 14.341429,
+      "files_modified": 1,
+      "lines_added": 555,
+      "lines_removed": 0,
+      "task_context_length": 71056128,
+      "verifier_seconds": 2.043499
+    },
+    "flags": [],
+    "input_tokens": 894570,
+    "ir_metrics": {},
+    "mcp_ratio": 0.35,
+    "output_tokens": 9968,
+    "repositories": [
+      "django/django"
+    ],
+    "repository_details": [
+      {
+        "approx_loc": 200000,
+        "language": "python",
+        "name": "django/django"
+      }
+    ],
+    "search_calls_deepsearch": 0,
+    "search_calls_keyword": 2,
+    "search_calls_nls": 0,
+    "tool_calls_by_name": {
+      "Bash": 9,
+      "ToolSearch": 3,
+      "Write": 1,
+      "mcp__sourcegraph__sg_keyword_search": 2,
+      "mcp__sourcegraph__sg_list_files": 2,
+      "mcp__sourcegraph__sg_read_file": 3
+    },
+    "tool_calls_local": 13,
+    "tool_calls_mcp": 7,
+    "tool_calls_total": 20,
+    "wall_clock_seconds": 217.584599
+  },
+  "parsed_trace": {
+    "trajectory": {
+      "bash_commands": [
+        {
+          "command": "find /workspace -name \"*.py\" -path \"*/tests/*html*\" 2>/dev/null | head -20",
+          "sequence": 13
+        },
+        {
+          "command": "ls /workspace/",
+          "sequence": 15
+        },
+        {
+          "command": "ls /workspace/ && ls /workspace/django/ 2>/dev/null || echo \"no django dir\"",
+          "sequence": 16
+        },
+        {
+          "command": "ls -la /workspace/",
+          "sequence": 17
+        },
+        {
+          "command": "python -c \"import django; print(django.__file__)\" 2>&1",
+          "sequence": 25
+        },
+        {
+          "command": "git -C /workspace remote -v && git -C /workspace log --oneline -5 2>&1",
+          "sequence": 26
+        },
+        {
+          "command": "mkdir -p /workspace/django/utils",
+          "sequence": 29
+        },
+        {
+          "command": "python -c \"\nimport ast\nwith open('/workspace/django/utils/html.py') as f:\n    source = f.read()\nast.parse(source)\nprint('Syntax OK')\n\"",
+          "sequence": 32
+        },
+        {
+          "command": "grep -n \"escape_with_encoding\\|force_str\\|is_protected_type\\|conditional_escape\" /workspace/django/utils/html.py | tail -20",
+          "sequence": 34
+        }
+      ],
+      "code_changes": [
+        {
+          "content": "\"\"\"HTML utilities suitable for global use.\"\"\"\n\nimport html\nimport json\nimport re\nimport warnings\nfrom collections import deque\nfrom collections.abc import Mapping\nfrom html.parser import HTMLParser\nfrom itertools import chain\nfrom urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit\n\nfrom django.conf import settings\nfrom django.core.exceptions import SuspiciousOperation, ValidationError\nfrom django.core.validators import DomainNameValidator, EmailValidator\nfrom django.utils.deprecation import RemovedInDjango70Warning\nfrom django.utils.functional import Promise, cached_property, keep_lazy, keep_lazy_text\nfrom django.utils.http import MAX_URL_LENGTH, RFC3986_GENDELIMS, RFC3986_SUBDELIMS\nfrom django.utils.regex_helper import _lazy_re_compile\nfrom django.utils.safestring import SafeData, SafeString, mark_safe\nfrom django.utils.text import normalize_newlines\n\n# https://html.spec.whatwg.org/#void-elements\nVOID_ELEMENTS = frozenset(\n    (\n        \"area\",\n        \"base\",\n        \"br\",\n        \"col\",\n        \"embed\",\n        \"hr\",\n        \"img\",\n        \"input\",\n        \"link\",\n        \"meta\",\n        \"param\",\n        \"source\",\n        \"track\",\n        \"wbr\",\n        # Deprecated tags.\n        \"frame\",\n        \"spacer\",\n    )\n)\n\nMAX_STRIP_TAGS_DEPTH = 50\n\n# HTML tag that opens but has no closing \">\" after 1k+ chars.\nlong_open_tag_without_closing_re = _lazy_re_compile(r\"<[a-zA-Z][^>]{1000,}\")\n\n\n@keep_lazy(SafeString)\ndef escape(text):\n    \"\"\"\n    Return the given text with ampersands, quotes and angle brackets encoded\n    for use in HTML.\n\n    Always escape input, even if it's already escaped and marked as such.\n    This may result in double-escaping. If this is a concern, use\n    conditional_escape() instead.\n    \"\"\"\n    return SafeString(html.escape(str(text)))\n\n\n_js_escapes = {\n    ord(\"\\\\\"): \"\\\\u005C\",\n    ord(\"'\"): \"\\\\u0027\",\n    ord('\"'): \"\\\\u0022\",\n    ord(\">\"): \"\\\\u003E\",\n    ord(\"<\"): \"\\\\u003C\",\n    ord(\"&\"): \"\\\\u0026\",\n    ord(\"=\"): \"\\\\u003D\",\n    ord(\"-\"): \"\\\\u002D\",\n    ord(\";\"): \"\\\\u003B\",\n    ord(\"`\"): \"\\\\u0060\",\n    ord(\"\\u2028\"): \"\\\\u2028\",\n    ord(\"\\u2029\"): \"\\\\u2029\",\n}\n\n# Escape every ASCII character with a value less than 32 (C0), 127(C0),\n# or 128-159(C1).\n_js_escapes.update(\n    (ord(\"%c\" % z), \"\\\\u%04X\" % z) for z in chain(range(32), range(0x7F, 0xA0))\n)\n\n\n@keep_lazy(SafeString)\ndef escapejs(value):\n    \"\"\"Hex encode characters for use in JavaScript strings.\"\"\"\n    return mark_safe(str(value).translate(_js_escapes))\n\n\n_json_script_escapes = {\n    ord(\">\"): \"\\\\u003E\",\n    ord(\"<\"): \"\\\\u003C\",\n    ord(\"&\"): \"\\\\u0026\",\n}\n\n\ndef json_script(value, element_id=None, encoder=None):\n    \"\"\"\n    Escape all the HTML/XML special characters with their unicode escapes, so\n    value is safe to be output anywhere except for inside a tag attribute. Wrap\n    the escaped JSON in a script tag.\n    \"\"\"\n    from django.core.serializers.json import DjangoJSONEncoder\n\n    json_str = json.dumps(value, cls=encoder or DjangoJSONEncoder).translate(\n        _json_script_escapes\n    )\n    if element_id:\n        template = '<script id=\"{}\" type=\"application/json\">{}</script>'\n        args = (element_id, mark_safe(json_str))\n    else:\n        template = '<script type=\"application/json\">{}</script>'\n        args = (mark_safe(json_str),)\n    return format_html(template, *args)\n\n\ndef conditional_escape(text):\n    \"\"\"\n    Similar to escape(), except that it doesn't operate on pre-escaped strings.\n\n    This function relies on the __html__ convention used both by Django's\n    SafeData class and by third-party libraries like markupsafe.\n    \"\"\"\n    if isinstance(text, Promise):\n        text = str(text)\n    if hasattr(text, \"__html__\"):\n        return text.__html__()\n    else:\n        return escape(text)\n\n\ndef format_html(format_string, *args, **kwargs):\n    \"\"\"\n    Similar to str.format, but pass all arguments through conditional_escape(),\n    and call mark_safe() on the result. This function should be used instead\n    of str.format or % interpolation to build up small HTML fragments.\n    \"\"\"\n    if not (args or kwargs):\n        raise TypeError(\"args or kwargs must be provided.\")\n    args_safe = map(conditional_escape, args)\n    kwargs_safe = {k: conditional_escape(v) for (k, v) in kwargs.items()}\n    return mark_safe(format_string.format(*args_safe, **kwargs_safe))\n\n\ndef format_html_join(sep, format_string, args_generator):\n    \"\"\"\n    A wrapper of format_html, for the common case of a group of arguments that\n    need to be formatted using the same format string, and then joined using\n    'sep'. 'sep' is also passed through conditional_escape.\n\n    'args_generator' should be an iterator that returns the sequence of 'args'\n    that will be passed to format_html.\n\n    Example:\n\n      format_html_join('\\n', \"<li>{} {}</li>\", ((u.first_name, u.last_name)\n                                                  for u in users))\n    \"\"\"\n    return mark_safe(\n        conditional_escape(sep).join(\n            (\n                format_html(format_string, **args)\n                if isinstance(args, Mapping)\n                else format_html(format_string, *args)\n            )\n            for args in args_generator\n        )\n    )\n\n\n@keep_lazy_text\ndef linebreaks(value, autoescape=False):\n    \"\"\"Convert newlines into <p> and <br>s.\"\"\"\n    value = normalize_newlines(value)\n    paras = re.split(\"\\n{2,}\", str(value))\n    if autoescape:\n        paras = [\"<p>%s</p>\" % escape(p).replace(\"\\n\", \"<br>\") for p in paras]\n    else:\n        paras = [\"<p>%s</p>\" % p.replace(\"\\n\", \"<br>\") for p in paras]\n    return \"\\n\\n\".join(paras)\n\n\nclass MLStripper(HTMLParser):\n    def __init__(self):\n        super().__init__(convert_charrefs=False)\n        self.reset()\n        self.fed = []\n\n    def handle_data(self, d):\n        self.fed.append(d)\n\n    def handle_entityref(self, name):\n        self.fed.append(\"&%s;\" % name)\n\n    def handle_charref(self, name):\n        self.fed.append(\"&#%s;\" % name)\n\n    def get_data(self):\n        return \"\".join(self.fed)\n\n\ndef _strip_once(value):\n    \"\"\"\n    Internal tag stripping utility used by strip_tags.\n    \"\"\"\n    s = MLStripper()\n    s.feed(value)\n    s.close()\n    return s.get_data()\n\n\n@keep_lazy_text\ndef strip_tags(value):\n    \"\"\"Return the given HTML with all tags stripped.\"\"\"\n    value = str(value)\n    for long_open_tag in long_open_tag_without_closing_re.finditer(value):\n        if long_open_tag.group().count(\"<\") >= MAX_STRIP_TAGS_DEPTH:\n            raise SuspiciousOperation\n    # Note: in typical case this loop executes _strip_once twice (the second\n    # execution does not remove any more tags).\n    strip_tags_depth = 0\n    while \"<\" in value and \">\" in value:\n        if strip_tags_depth >= MAX_STRIP_TAGS_DEPTH:\n            raise SuspiciousOperation\n        new_value = _strip_once(value)\n        if value.count(\"<\") == new_value.count(\"<\"):\n            # _strip_once wasn't able to detect more tags.\n            break\n        value = new_value\n        strip_tags_depth += 1\n    return value\n\n\n@keep_lazy_text\ndef strip_spaces_between_tags(value):\n    \"\"\"Return the given HTML with spaces between tags removed.\"\"\"\n    return re.sub(r\">\\s+<\", \"><\", str(value))\n\n\ndef smart_urlquote(url):\n    \"\"\"Quote a URL if it isn't already quoted.\"\"\"\n\n    def unquote_quote(segment):\n        segment = unquote(segment)\n        # Tilde is part of RFC 3986 Section 2.3 Unreserved Characters,\n        # see also https://bugs.python.org/issue16285\n        return quote(segment, safe=RFC3986_SUBDELIMS + RFC3986_GENDELIMS + \"~\")\n\n    try:\n        scheme, netloc, path, query, fragment = urlsplit(url)\n    except ValueError:\n        # invalid IPv6 URL (normally square brackets in hostname part).\n        return unquote_quote(url)\n\n    # Handle IDN as percent-encoded UTF-8 octets, per WHATWG URL Specification\n    # section 3.5 and RFC 3986 section 3.2.2. Defer any IDNA to the user agent.\n    # See #36013.\n    netloc = unquote_quote(netloc)\n\n    if query:\n        # Separately unquoting key/value, so as to not mix querystring\n        # separators included in query values. See #22267.\n        query_parts = [\n            (unquote(q[0]), unquote(q[1]))\n            for q in parse_qsl(query, keep_blank_values=True)\n        ]\n        # urlencode will take care of quoting\n        query = urlencode(query_parts)\n\n    path = unquote_quote(path)\n    fragment = unquote_quote(fragment)\n\n    return urlunsplit((scheme, netloc, path, query, fragment))\n\n\nclass CountsDict(dict):\n    def __init__(self, *args, word, **kwargs):\n        super().__init__(*args, *kwargs)\n        self.word = word\n\n    def __missing__(self, key):\n        self[key] = self.word.count(key)\n        return self[key]\n\n\nclass Urlizer:\n    \"\"\"\n    Convert any URLs in text into clickable links.\n\n    Work on http://, https://, www. links, and also on links ending in one of\n    the original seven gTLDs (.com, .edu, .gov, .int, .mil, .net, and .org).\n    Links can have trailing punctuation (periods, commas, close-parens) and\n    leading punctuation (opening parens) and it'll still do the right thing.\n    \"\"\"\n\n    trailing_punctuation_chars = \".,:;!\"\n    wrapping_punctuation = [(\"(\", \")\"), (\"[\", \"]\")]\n\n    simple_url_re = _lazy_re_compile(r\"^https?://\\[?\\w\", re.IGNORECASE)\n    simple_url_2_re = _lazy_re_compile(\n        rf\"^www\\.|^(?!http)(?:{DomainNameValidator.hostname_re})\"\n        rf\"(?:{DomainNameValidator.domain_re})\"\n        r\"\\.(com|edu|gov|int|mil|net|org)($|/.*)$\",\n        re.IGNORECASE,\n    )\n    word_split_re = _lazy_re_compile(r\"\"\"([\\s<>\"']+)\"\"\")\n\n    mailto_template = \"mailto:{local}@{domain}\"\n    url_template = '<a href=\"{href}\"{attrs}>{url}</a>'\n\n    def __call__(self, text, trim_url_limit=None, nofollow=False, autoescape=False):\n        \"\"\"\n        If trim_url_limit is not None, truncate the URLs in the link text\n        longer than this limit to trim_url_limit - 1 characters and append an\n        ellipsis.\n\n        If nofollow is True, give the links a rel=\"nofollow\" attribute.\n\n        If autoescape is True, autoescape the link text and URLs.\n        \"\"\"\n        safe_input = isinstance(text, SafeData)\n\n        words = self.word_split_re.split(str(text))\n        local_cache = {}\n        urlized_words = []\n        for word in words:\n            if (urlized_word := local_cache.get(word)) is None:\n                urlized_word = self.handle_word(\n                    word,\n                    safe_input=safe_input,\n                    trim_url_limit=trim_url_limit,\n                    nofollow=nofollow,\n                    autoescape=autoescape,\n                )\n                local_cache[word] = urlized_word\n            urlized_words.append(urlized_word)\n        return \"\".join(urlized_words)\n\n    def handle_word(\n        self,\n        word,\n        *,\n        safe_input,\n        trim_url_limit=None,\n        nofollow=False,\n        autoescape=False,\n    ):\n        if \".\" in word or \"@\" in word or \":\" in word:\n            # lead: Punctuation trimmed from the beginning of the word.\n            # middle: State of the word.\n            # trail: Punctuation trimmed from the end of the word.\n            lead, middle, trail = self.trim_punctuation(word)\n            # Make URL we want to point to.\n            url = None\n            nofollow_attr = ' rel=\"nofollow\"' if nofollow else \"\"\n            if len(middle) <= MAX_URL_LENGTH and self.simple_url_re.match(middle):\n                url = smart_urlquote(html.unescape(middle))\n            elif len(middle) <= MAX_URL_LENGTH and self.simple_url_2_re.match(middle):\n                unescaped_middle = html.unescape(middle)\n                # RemovedInDjango70Warning: When the deprecation ends, replace\n                # with:\n                # url = smart_urlquote(f\"https://{unescaped_middle}\")\n                protocol = (\n                    \"https\"\n                    if getattr(settings, \"URLIZE_ASSUME_HTTPS\", False)\n                    else \"http\"\n                )\n                if not settings.URLIZE_ASSUME_HTTPS:\n                    warnings.warn(\n                        \"The default protocol will be changed from HTTP to \"\n                        \"HTTPS in Django 7.0. Set the URLIZE_ASSUME_HTTPS \"\n                        \"transitional setting to True to opt into using HTTPS as the \"\n                        \"new default protocol.\",\n                        RemovedInDjango70Warning,\n                        stacklevel=2,\n                    )\n                url = smart_urlquote(f\"{protocol}://{unescaped_middle}\")\n            elif \":\" not in middle and self.is_email_simple(middle):\n                local, domain = middle.rsplit(\"@\", 1)\n                # Encode per RFC 6068 Section 2 (items 1, 4, 5). Defer any IDNA\n                # to the user agent. See #36013.\n                local = quote(local, safe=\"\")\n                domain = quote(domain, safe=\"\")\n                url = self.mailto_template.format(local=local, domain=domain)\n                nofollow_attr = \"\"\n            # Make link.\n            if url:\n                trimmed = self.trim_url(middle, limit=trim_url_limit)\n                if autoescape and not safe_input:\n                    lead, trail = escape(lead), escape(trail)\n                    trimmed = escape(trimmed)\n                middle = self.url_template.format(\n                    href=escape(url),\n                    attrs=nofollow_attr,\n                    url=trimmed,\n                )\n                return SafeString(f\"{lead}{middle}{trail}\")\n            else:\n                if safe_input:\n                    return mark_safe(word)\n                elif autoescape:\n                    return escape(word)\n        elif safe_input:\n            return mark_safe(word)\n        elif autoescape:\n            return escape(word)\n        return word\n\n    def trim_url(self, x, *, limit):\n        if limit is None or len(x) <= limit:\n            return x\n        return \"%s\u2026\" % x[: max(0, limit - 1)]\n\n    @cached_property\n    def wrapping_punctuation_openings(self):\n        return \"\".join(dict(self.wrapping_punctuation).keys())\n\n    @cached_property\n    def trailing_punctuation_chars_no_semicolon(self):\n        return self.trailing_punctuation_chars.replace(\";\", \"\")\n\n    @cached_property\n    def trailing_punctuation_chars_has_semicolon(self):\n        return \";\" in self.trailing_punctuation_chars\n\n    def trim_punctuation(self, word):\n        \"\"\"\n        Trim trailing and wrapping punctuation from `word`. Return the items of\n        the new state.\n        \"\"\"\n        # Strip all opening wrapping punctuation.\n        middle = word.lstrip(self.wrapping_punctuation_openings)\n        lead = word[: len(word) - len(middle)]\n        trail = deque()\n\n        # Continue trimming until middle remains unchanged.\n        trimmed_something = True\n        counts = CountsDict(word=middle)\n        while trimmed_something and middle:\n            trimmed_something = False\n            # Trim wrapping punctuation.\n            for opening, closing in self.wrapping_punctuation:\n                if counts[opening] < counts[closing]:\n                    rstripped = middle.rstrip(closing)\n                    if rstripped != middle:\n                        strip = counts[closing] - counts[opening]\n                        trail.appendleft(middle[-strip:])\n                        middle = middle[:-strip]\n                        trimmed_something = True\n                        counts[closing] -= strip\n\n            amp = middle.rfind(\"&\")\n            if amp == -1:\n                rstripped = middle.rstrip(self.trailing_punctuation_chars)\n            else:\n                rstripped = middle.rstrip(self.trailing_punctuation_chars_no_semicolon)\n            if rstripped != middle:\n                trail.appendleft(middle[len(rstripped) :])\n                middle = rstripped\n                trimmed_something = True\n\n            if self.trailing_punctuation_chars_has_semicolon and middle.endswith(\";\"):\n                # Only strip if not part of an HTML entity.\n                potential_entity = middle[amp:]\n                escaped = html.unescape(potential_entity)\n                if escaped == potential_entity or escaped.endswith(\";\"):\n                    rstripped = middle.rstrip(self.trailing_punctuation_chars)\n                    trail_start = len(rstripped)\n                    amount_trailing_semicolons = len(middle) - len(middle.rstrip(\";\"))\n                    if amp > -1 and amount_trailing_semicolons > 1:\n                        # Leave up to most recent semicolon as might be an\n                        # entity.\n                        recent_semicolon = middle[trail_start:].index(\";\")\n                        middle_semicolon_index = recent_semicolon + trail_start + 1\n                        trail.appendleft(middle[middle_semicolon_index:])\n                        middle = rstripped + middle[trail_start:middle_semicolon_index]\n                    else:\n                        trail.appendleft(middle[trail_start:])\n                        middle = rstripped\n                    trimmed_something = True\n\n        trail = \"\".join(trail)\n        return lead, middle, trail\n\n    @staticmethod\n    def is_email_simple(value):\n        \"\"\"Return True if value looks like an email address.\"\"\"\n        try:\n            EmailValidator(allowlist=[])(value)\n        except ValidationError:\n            return False\n        return True\n\n\nurlizer = Urlizer()\n\n\n@keep_lazy_text\ndef urlize(text, trim_url_limit=None, nofollow=False, autoescape=False):\n    return urlizer(\n        text, trim_url_limit=trim_url_limit, nofollow=nofollow, autoescape=autoescape\n    )\n\n\ndef avoid_wrapping(value):\n    \"\"\"\n    Avoid text wrapping in the middle of a phrase by adding non-breaking\n    spaces where there previously were normal spaces.\n    \"\"\"\n    return value.replace(\" \", \"\\xa0\")\n\n\ndef html_safe(klass):\n    \"\"\"\n    A decorator that defines the __html__ method. This helps non-Django\n    templates to detect classes whose __str__ methods return SafeString.\n    \"\"\"\n    if \"__html__\" in klass.__dict__:\n        raise ValueError(\n            \"can't apply @html_safe to %s because it defines \"\n            \"__html__().\" % klass.__name__\n        )\n    if \"__str__\" not in klass.__dict__:\n        raise ValueError(\n            \"can't apply @html_safe to %s because it doesn't \"\n            \"define __str__().\" % klass.__name__\n        )\n    klass_str = klass.__str__\n    klass.__str__ = lambda self: mark_safe(klass_str(self))\n    klass.__html__ = lambda self: str(self)\n    return klass\n\n\ndef escape_with_encoding(text, encoding=\"utf-8\", strings_only=False, errors=\"strict\"):\n    \"\"\"\n    Convert text from the given encoding to a Python string, then apply\n    conditional HTML escaping.\n\n    If strings_only is True and text is a protected type (int, float, Decimal,\n    datetime, etc.), returns the value as-is without conversion or escaping.\n\n    For all other inputs, converts to a Python string using the specified\n    encoding, then applies Django's standard conditional HTML escaping.\n    Lazy translation objects are resolved to strings before escaping.\n    \"\"\"\n    from django.utils.encoding import force_str, is_protected_type\n\n    if strings_only and is_protected_type(text):\n        return text\n    text = force_str(text, encoding=encoding, strings_only=False, errors=errors)\n    return conditional_escape(text)\n",
+          "file_path": "/workspace/django/utils/html.py",
+          "sequence": 30,
+          "type": "write"
+        }
+      ],
+      "conversation_events": [
+        {
+          "payload": {},
+          "sequence": 1,
+          "subtype": "message",
+          "text": "# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repositories (version-pinned mirrors):**\n\n- `github.com/sg-evals/django--674eda1c` \u2014 use `repo:^github.com/sg-evals/django--674eda1c$` filter\n\nScope ALL keyword_search/nls_search queries to these repos.\nUse the repo name as the `repo` parameter for read_file/go_to_definition/find_references.\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n# IMPORTANT: Source Code Access\n\n**Local source files are not present.** Your workspace does not contain source code. You **MUST** use Sourcegraph MCP tools to discover, read, and understand code before making any changes.\n\n**Target Repository:** `github.com/sg-evals/django--674eda1c`\n- Use `repo:^github.com/sg-evals/django--674eda1c$` filter in keyword_search\n- Use `github.com/sg-evals/django--674eda1c` as the `repo` parameter for go_to_definition/find_references/read_file\n\n\n## Required Workflow\n\n1. **Search first** \u2014 Use MCP tools to find relevant files and understand existing patterns\n2. **Read remotely** \u2014 Use `sg_read_file` to read full file contents from Sourcegraph\n3. **Edit locally** \u2014 Use Edit, Write, and Bash to create or modify files in your working directory\n4. **Verify locally** \u2014 Run tests with Bash to check your changes\n\n## Tool Selection\n\n| Goal | Tool |\n|------|------|\n| Exact symbol/string | `sg_keyword_search` |\n| Concepts/semantic search | `sg_nls_search` |\n| Trace usage/callers | `sg_find_references` |\n| See implementation | `sg_go_to_definition` |\n| Read full file | `sg_read_file` |\n| Browse structure | `sg_list_files` |\n| Find repos | `sg_list_repos` |\n| Search commits | `sg_commit_search` |\n| Track changes | `sg_diff_search` |\n| Compare versions | `sg_compare_revisions` |\n\n**Decision logic:**\n1. Know the exact symbol? \u2192 `sg_keyword_search`\n2. Know the concept, not the name? \u2192 `sg_nls_search`\n3. Need definition of a symbol? \u2192 `sg_go_to_definition`\n4. Need all callers/references? \u2192 `sg_find_references`\n5. Need full file content? \u2192 `sg_read_file`\n\n## Scoping (Always Do This)\n\n```\nrepo:^github.com/ORG/REPO$           # Exact repo (preferred)\nrepo:github.com/ORG/                 # All repos in org\nfile:.*\\.ts$                         # TypeScript only\nfile:src/api/                        # Specific directory\n```\n\nStart narrow. Expand only if results are empty.\n\n## Efficiency Rules\n\n- Chain searches logically: search \u2192 read \u2192 references \u2192 definition\n- Don't re-search for the same pattern; use results from prior calls\n- Prefer `sg_keyword_search` over `sg_nls_search` when you have exact terms\n- Read 2-3 related files before synthesising, rather than one at a time\n- Don't read 20+ remote files without writing code \u2014 once you understand the pattern, start implementing\n\n## If Stuck\n\nIf MCP search returns no results:\n1. Broaden the search query (synonyms, partial identifiers)\n2. Try `sg_nls_search` for semantic matching\n3. Use `sg_list_files` to browse the directory structure\n4. Use `sg_list_repos` to verify the repository name\n\n---\n\n# Add Encoding-Aware HTML Escaping for GIS Data Pipeline\n\n**Repository:** github.com/sg-evals/django--674eda1c (mirror of django/django)\n**Access Scope:** You may modify `django/utils/html.py`. You may read any file to understand existing patterns and utilities.\n\n## Context\n\nDjango's GIS module processes geospatial data from external C libraries (like GDAL) that may return byte strings in non-UTF-8 encodings (Latin-1, Shift-JIS, etc.). When this data needs to be rendered in HTML templates, it must first be converted from its source encoding to a Python string, and then HTML-escaped to prevent XSS.\n\nCurrently, developers must manually orchestrate two separate operations \u2014 encoding conversion and HTML escaping \u2014 in the correct order. Django has existing utility functions for both operations, but they aren't combined. The encoding conversion utilities date back to the Python 2 era and have legacy API conventions (no type hints, non-obvious parameter names, special handling for numeric types) that make them easy to misuse.\n\n## Feature Request\n\n**From:** GIS Team Lead\n**Priority:** P2\n\nWe need a single utility function that combines encoding conversion and HTML escaping in one atomic operation. This prevents bugs where developers forget a step, apply them in the wrong order, or mishandle the legacy encoding API's special behaviors.\n\n### Deliverables\n\nAdd an `escape_with_encoding()` function to `django/utils/html.py` that:\n\n1. Accepts text in any encoding and produces a safe, HTML-escaped string\n2. Supports the same parameters as Django's existing string-coercion utilities: encoding name, error handling mode, and the option to skip conversion for certain types\n3. When the \"skip non-string types\" option is enabled and the input is a numeric type (int, float, Decimal, datetime, etc.), returns the value as-is without conversion or escaping \u2014 this matches the existing encoding utilities' behavior for \"protected types\"\n4. For all other inputs, converts to a Python string using the specified encoding, then applies Django's standard conditional HTML escaping\n5. Handles lazy translation objects correctly (forces evaluation before escaping)\n\n**YOU MUST IMPLEMENT CODE CHANGES.**\n\n### Requirements\n\n1. Function named `escape_with_encoding` in `django/utils/html.py`\n2. Must reuse Django's existing encoding conversion and HTML escaping utilities internally \u2014 read their source code to understand the legacy API conventions, as these functions predate type hints and have non-obvious parameter semantics\n3. Must correctly handle the \"protected types\" concept from Django's encoding system\n4. Must integrate with Django's existing HTML escaping pipeline (including support for objects that declare themselves as already-safe HTML)\n5. Valid Python syntax\n6. Changes limited to `django/utils/html.py`\n\n## Success Criteria\n\n- `escape_with_encoding()` function exists in `django/utils/html.py`\n- Correctly uses Django's existing encoding conversion with all its legacy parameters\n- Handles protected types (returns without escaping when configured)\n- Integrates with Django's existing conditional HTML escaping\n- Valid Python syntax\n- Changes limited to `django/utils/html.py`",
+          "timestamp": "2026-03-08T04:24:14.744Z",
+          "tool": null,
+          "type": "user"
+        },
+        {
+          "payload": {},
+          "sequence": 3,
+          "subtype": "message",
+          "text": "Executed ToolSearch toolu_019Gz4RyyYsviQu5ayYnjtu8",
+          "timestamp": "2026-03-08T04:24:18.432Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 5,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01NuzhDhZd3qvfG5xCfHhsLJ",
+          "timestamp": "2026-03-08T04:24:21.496Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 6,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_01W9CsX8cyzFMGG2ozdxQ2oQ",
+          "timestamp": "2026-03-08T04:24:21.932Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 8,
+          "subtype": "message",
+          "text": "Now let me check the tests to understand the exact interface expected:",
+          "timestamp": "2026-03-08T04:24:24.954Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 9,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_0152JNaxaRDmmJeBqnsPhQkD",
+          "timestamp": "2026-03-08T04:24:25.426Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 10,
+          "subtype": "message",
+          "text": "Executed ToolSearch toolu_017GhRAkodSoMAW7VzFAV5ZS",
+          "timestamp": "2026-03-08T04:24:27.207Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 12,
+          "subtype": "message",
+          "text": "Let me run the existing tests and look for test files:",
+          "timestamp": "2026-03-08T04:24:29.865Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 13,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01V3JRqUMVoD3k96bHovmgkQ",
+          "timestamp": "2026-03-08T04:24:31.057Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 14,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_keyword_search toolu_01AMwLnTKcdcZx3pE4sJgbi2",
+          "timestamp": "2026-03-08T04:24:32.411Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 15,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01HNP8fxATPSwwadVtSMgzTv",
+          "timestamp": "2026-03-08T04:24:34.966Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 16,
+          "subtype": "message",
+          "text": "Executed Bash toolu_016CLkSYVMHxDNV2kExvhsML",
+          "timestamp": "2026-03-08T04:24:36.865Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 17,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01MKqjz2DezFRxmFSUXeVXjD",
+          "timestamp": "2026-03-08T04:24:38.202Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 19,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_014azY3f6yoCgt3NBavbNmb6",
+          "timestamp": "2026-03-08T04:24:41.598Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 20,
+          "subtype": "message",
+          "text": "Executed ToolSearch toolu_01WxE3fzjqoxDUFwSkpKYSJM",
+          "timestamp": "2026-03-08T04:24:43.501Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 22,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_list_files toolu_01JsWqX2pueTHVCcWDZjRLLm",
+          "timestamp": "2026-03-08T04:24:45.703Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 23,
+          "subtype": "message",
+          "text": "Executed mcp__sourcegraph__sg_read_file toolu_012aMMj5dfjdWzzkdD3B634J",
+          "timestamp": "2026-03-08T04:24:47.529Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 25,
+          "subtype": "message",
+          "text": "Executed Bash toolu_0111LmmSGoSJS7vsENnji4Sq",
+          "timestamp": "2026-03-08T04:24:58.688Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 26,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01WuDZKGjvqKW442XG7gQiQV",
+          "timestamp": "2026-03-08T04:25:00.586Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 28,
+          "subtype": "message",
+          "text": "Now I understand the codebase. I need to create the local file structure and add the `escape_with_encoding` function. Let me create the necessary directories and the modified html.py:",
+          "timestamp": "2026-03-08T04:25:24.821Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 29,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01AFY8x7ZivMwn2XW9JubLUj",
+          "timestamp": "2026-03-08T04:25:25.166Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 30,
+          "subtype": "message",
+          "text": "Executed Write toolu_011M6od5w9B6kh2LEPE6CboV",
+          "timestamp": "2026-03-08T04:26:54.288Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 31,
+          "subtype": "message",
+          "text": "Now let me verify the syntax is valid:",
+          "timestamp": "2026-03-08T04:26:56.914Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 32,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01Nr3ryYw9BnoAuwAt7L7jWf",
+          "timestamp": "2026-03-08T04:26:57.671Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 33,
+          "subtype": "message",
+          "text": "The syntax is valid. Let me verify the implementation looks correct by reviewing the key parts:",
+          "timestamp": "2026-03-08T04:26:59.559Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 34,
+          "subtype": "message",
+          "text": "Executed Bash toolu_01KM85XHNbTwbgyvcuYQWJXo",
+          "timestamp": "2026-03-08T04:27:00.367Z",
+          "tool": null,
+          "type": "agent"
+        },
+        {
+          "payload": {},
+          "sequence": 35,
+          "subtype": "message",
+          "text": "The implementation is complete. Here's a summary of what was added:\n\n**`escape_with_encoding(text, encoding=\"utf-8\", strings_only=False, errors=\"strict\")`** in `django/utils/html.py`:\n\n1. **Protected types**: When `strings_only=True` and `text` is a protected type (int, float, Decimal, datetime, etc. as defined in `encoding.py`), returns the value as-is \u2014 matching the existing `force_str` behavior.\n\n2. **String conversion**: Uses `force_str()` with the specified `encoding` and `errors` to convert byte strings (or any other input) to a Python string. The `strings_only=False` is passed to `force_str` here because the protected type check was already done above.\n\n3. **HTML escaping**: Calls `conditional_escape()` which:\n   - Forces lazy translation objects (`Promise`) to evaluate\n   - Returns pre-escaped safe strings unchanged (via `__html__()`)\n   - HTML-escapes all other strings\n\n4. **Lazy imports**: Uses a local import of `force_str` and `is_protected_type` from `django.utils.encoding` to avoid any potential circular import issues (consistent with other deferred imports in the file like `DjangoJSONEncoder`).",
+          "timestamp": "2026-03-08T04:27:06.941Z",
+          "tool": null,
+          "type": "agent"
+        }
+      ],
+      "step_count": 35,
+      "tool_counts_by_name": {
+        "Bash": 9,
+        "ToolSearch": 3,
+        "Write": 1,
+        "mcp__sourcegraph__sg_keyword_search": 2,
+        "mcp__sourcegraph__sg_list_files": 2,
+        "mcp__sourcegraph__sg_read_file": 3
+      },
+      "tool_event_count": 20,
+      "tool_events": [
+        {
+          "arguments": {
+            "max_results": 2,
+            "query": "select:mcp__sourcegraph__sg_read_file,mcp__sourcegraph__sg_keyword_search"
+          },
+          "input": {
+            "max_results": 2,
+            "query": "select:mcp__sourcegraph__sg_read_file,mcp__sourcegraph__sg_keyword_search"
+          },
+          "output": "{\"type\": \"tool_reference\", \"tool_name\": \"mcp__sourcegraph__sg_read_file\"}\n\n{\"type\": \"tool_reference\", \"tool_name\": \"mcp__sourcegraph__sg_keyword_search\"}\n\n[metadata] {\"matches\": [\"mcp__sourcegraph__sg_read_file\", \"mcp__sourcegraph__sg_keyword_search\"], \"query\": \"select:mcp__sourcegraph__sg_read_file,mcp__sourcegraph__sg_keyword_search\", \"total_deferred_tools\": 33}",
+          "step_id": 3,
+          "timestamp": "2026-03-08T04:24:18.432Z",
+          "tool": "ToolSearch",
+          "tool_use_id": "toolu_019Gz4RyyYsviQu5ayYnjtu8"
+        },
+        {
+          "arguments": {
+            "path": "django/utils/html.py",
+            "repo": "github.com/sg-evals/django--674eda1c"
+          },
+          "input": {
+            "path": "django/utils/html.py",
+            "repo": "github.com/sg-evals/django--674eda1c"
+          },
+          "output": "{\"content\":\"1: \\\"\\\"\\\"HTML utilities suitable for global use.\\\"\\\"\\\"\\n2: \\n3: import html\\n4: import json\\n5: import re\\n6: import warnings\\n7: from collections import deque\\n8: from collections.abc import Mapping\\n9: from html.parser import HTMLParser\\n10: from itertools import chain\\n11: from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit\\n12: \\n13: from django.conf import settings\\n14: from django.core.exceptions import SuspiciousOperation, ValidationError\\n15: from django.core.validators import DomainNameValidator, EmailValidator\\n16: from django.utils.deprecation import RemovedInDjango70Warning\\n17: from django.utils.functional import Promise, cached_property, keep_lazy, keep_lazy_text\\n18: from django.utils.http import MAX_URL_LENGTH, RFC3986_GENDELIMS, RFC3986_SUBDELIMS\\n19: from django.utils.regex_helper import _lazy_re_compile\\n20: from django.utils.safestring import SafeData, SafeString, mark_safe\\n21: from django.utils.text import normalize_newlines\\n22: \\n23: # https://html.spec.whatwg.org/#void-elements\\n24: VOID_ELEMENTS = frozenset(\\n25:     (\\n26:         \\\"area\\\",\\n27:         \\\"base\\\",\\n28:         \\\"br\\\",\\n29:         \\\"col\\\",\\n30:         \\\"embed\\\",\\n31:         \\\"hr\\\",\\n32:         \\\"img\\\",\\n33:         \\\"input\\\",\\n34:         \\\"link\\\",\\n35:         \\\"meta\\\",\\n36:         \\\"param\\\",\\n37:         \\\"source\\\",\\n38:         \\\"track\\\",\\n39:         \\\"wbr\\\",\\n40:         # Deprecated tags.\\n41:         \\\"frame\\\",\\n42:         \\\"spacer\\\",\\n43:     )\\n44: )\\n45: \\n46: MAX_STRIP_TAGS_DEPTH = 50\\n47: \\n48: # HTML tag that opens but has no closing \\\">\\\" after 1k+ chars.\\n49: long_open_tag_without_closing_re = _lazy_re_compile(r\\\"<[a-zA-Z][^>]{1000,}\\\")\\n50: \\n51: \\n52: @keep_lazy(SafeString)\\n53: def escape(text):\\n54:     \\\"\\\"\\\"\\n55:     Return the given text with ampersands, quotes and angle brackets encoded\\n56:     for use in HTML.\\n57: \\n58:     Always escape input, even if it's already escaped and marked as such.\\n59:     This may result in double-escaping. If this is a concern, use\\n60:     conditional_escape() instead.\\n61:     \\\"\\\"\\\"\\n62:     return SafeString(html.escape(str(text)))\\n63: \\n64: \\n65: _js_escapes = {\\n66:     ord(\\\"\\\\\\\\\\\"): \\\"\\\\\\\\u005C\\\",\\n67:     ord(\\\"'\\\"): \\\"\\\\\\\\u0027\\\",\\n68:     ord('\\\"'): \\\"\\\\\\\\u0022\\\",\\n69:     ord(\\\">\\\"): \\\"\\\\\\\\u003E\\\",\\n70:     ord(\\\"<\\\"): \\\"\\\\\\\\u003C\\\",\\n71:     ord(\\\"&\\\"): \\\"\\\\\\\\u0026\\\",\\n72:     ord(\\\"=\\\"): \\\"\\\\\\\\u003D\\\",\\n73:     ord(\\\"-\\\"): \\\"\\\\\\\\u002D\\\",\\n74:     ord(\\\";\\\"): \\\"\\\\\\\\u003B\\\",\\n75:     ord(\\\"`\\\"): \\\"\\\\\\\\u0060\\\",\\n76:     ord(\\\"\\\\u2028\\\"): \\\"\\\\\\\\u2028\\\",\\n77:     ord(\\\"\\\\u2029\\\"): \\\"\\\\\\\\u2029\\\",\\n78: }\\n79: \\n80: # Escape every ASCII character with a value less than 32 (C0), 127(C0),\\n81: # or 128-159(C1).\\n82: _js_escapes.update(\\n83:     (ord(\\\"%c\\\" % z), \\\"\\\\\\\\u%04X\\\" % z) for z in chain(range(32), range(0x7F, 0xA0))\\n84: )\\n85: \\n86: \\n87: @keep_lazy(SafeString)\\n88: def escapejs(value):\\n89:     \\\"\\\"\\\"Hex encode characters for use in JavaScript strings.\\\"\\\"\\\"\\n90:     return mark_safe(str(value).translate(_js_escapes))\\n91: \\n92: \\n93: _json_script_escapes = {\\n94:     ord(\\\">\\\"): \\\"\\\\\\\\u003E\\\",\\n95:     ord(\\\"<\\\"): \\\"\\\\\\\\u003C\\\",\\n96:     ord(\\\"&\\\"): \\\"\\\\\\\\u0026\\\",\\n97: }\\n98: \\n99: \\n100: def json_script(value, element_id=None, encoder=None):\\n101:     \\\"\\\"\\\"\\n102:     Escape all the HTML/XML special characters with their unicode escapes, so\\n103:     value is safe to be output anywhere except for inside a tag attribute. Wrap\\n104:     the escaped JSON in a script tag.\\n105:     \\\"\\\"\\\"\\n106:     from django.core.serializers.json import DjangoJSONEncoder\\n107: \\n108:     json_str = json.dumps(value, cls=encoder or DjangoJSONEncoder).translate(\\n109:         _json_script_escapes\\n110:     )\\n111:     if element_id:\\n112:         template = '<script id=\\\"{}\\\" type=\\\"application/json\\\">{}</script>'\\n113:         args = (element_id, mark_safe(json_str))\\n114:     else:\\n115:         template = '<script type=\\\"application/json\\\">{}</script>'\\n116:         args = (mark_safe(json_str),)\\n117:     return format_html(template, *args)\\n118: \\n119: \\n120: def conditional_escape(text):\\n121:     \\\"\\\"\\\"\\n122:     Similar to escape(), except that it doesn't operate on pre-escaped strings.\\n123: \\n124:     This function relies on the __html__ convention used both by Django's\\n125:     SafeData class and by third-party libraries like markupsafe.\\n126:     \\\"\\\"\\\"\\n127:     if isinstance(text, Promise):\\n128:         text = str(text)\\n129:     if hasattr(text, \\\"__html__\\\"):\\n130:         return text.__html__()\\n131:     else:\\n132:         return escape(text)\\n133: \\n134: \\n135: def format_html(format_string, *args, **kwargs):\\n136:     \\\"\\\"\\\"\\n137:     Similar to str.format, but pass all arguments through conditional_escape(),\\n138:     and call mark_safe() on the result. This function should be used instead\\n139:     of str.format or % interpolation to build up small HTML fragments.\\n140:     \\\"\\\"\\\"\\n141:     if not (args or kwargs):\\n142:         raise TypeError(\\\"args or kwargs must be provided.\\\")\\n143:     args_safe = map(conditional_escape, args)\\n144:     kwargs_safe = {k: conditional_escape(v) for (k, v) in kwargs.items()}\\n145:     return mark_safe(format_string.format(*args_safe, **kwargs_safe))\\n146: \\n147: \\n148: def format_html_join(sep, format_string, args_generator):\\n149:     \\\"\\\"\\\"\\n150:     A wrapper of format_html, for the common case of a group of arguments that\\n151:     need to be formatted using the same format string, and then joined using\\n152:     'sep'. 'sep' is also passed through conditional_escape.\\n153: \\n154:     'args_generator' should be an iterator that returns the sequence of 'args'\\n155:     that will be passed to format_html.\\n156: \\n157:     Example:\\n158: \\n159:       format_html_join('\\\\n', \\\"<li>{} {}</li>\\\", ((u.first_name, u.last_name)\\n160:                                                   for u in users))\\n161:     \\\"\\\"\\\"\\n162:     return mark_safe(\\n163:         conditional_escape(sep).join(\\n164:             (\\n165:                 format_html(format_string, **args)\\n166:                 if isinstance(args, Mapping)\\n167:                 else format_html(format_string, *args)\\n168:             )\\n169:             for args in args_generator\\n170:         )\\n171:     )\\n172: \\n173: \\n174: @keep_lazy_text\\n175: def linebreaks(value, autoescape=False):\\n176:     \\\"\\\"\\\"Convert newlines into <p> and <br>s.\\\"\\\"\\\"\\n177:     value = normalize_newlines(value)\\n178:     paras = re.split(\\\"\\\\n{2,}\\\", str(value))\\n179:     if autoescape:\\n180:         paras = [\\\"<p>%s</p>\\\" % escape(p).replace(\\\"\\\\n\\\", \\\"<br>\\\") for p in paras]\\n181:     else:\\n182:         paras = [\\\"<p>%s</p>\\\" % p.replace(\\\"\\\\n\\\", \\\"<br>\\\") for p in paras]\\n183:     return \\\"\\\\n\\\\n\\\".join(paras)\\n184: \\n185: \\n186: class MLStripper(HTMLParser):\\n187:     def __init__(self):\\n188:         super().__init__(convert_charrefs=False)\\n189:         self.reset()\\n190:         self.fed = []\\n191: \\n192:     def handle_data(self, d):\\n193:         self.fed.append(d)\\n194: \\n195:     def handle_entityref(self, name):\\n196:         self.fed.append(\\\"&%s;\\\" % name)\\n197: \\n198:     def handle_charref(self, name):\\n199:         self.fed.append(\\\"&#%s;\\\" % name)\\n200: \\n201:     def get_data(self):\\n202:         return \\\"\\\".join(self.fed)\\n203: \\n204: \\n205: def _strip_once(value):\\n206:     \\\"\\\"\\\"\\n207:     Internal tag stripping utility used by strip_tags.\\n208:     \\\"\\\"\\\"\\n209:     s = MLStripper()\\n210:     s.feed(value)\\n211:     s.close()\\n212:     return s.get_data()\\n213: \\n214: \\n215: @keep_lazy_text\\n216: def strip_tags(value):\\n217:     \\\"\\\"\\\"Return the given HTML with all tags stripped.\\\"\\\"\\\"\\n218:     value = str(value)\\n219:     for long_open_tag in long_open_tag_without_closing_re.finditer(value):\\n220:         if long_open_tag.group().count(\\\"<\\\") >= MAX_STRIP_TAGS_DEPTH:\\n221:             raise SuspiciousOperation\\n222:     # Note: in typical case this loop executes _strip_once twice (the second\\n223:     # execution does not remove any more tags).\\n224:     strip_tags_depth = 0\\n225:     while \\\"<\\\" in value and \\\">\\\" in value:\\n226:         if strip_tags_depth >= MAX_STRIP_TAGS_DEPTH:\\n227:             raise SuspiciousOperation\\n228:         new_value = _strip_once(value)\\n229:         if value.count(\\\"<\\\") == new_value.count(\\\"<\\\"):\\n230:             # _strip_once wasn't able to detect more tags.\\n231:             break\\n232:         value = new_value\\n233:         strip_tags_depth += 1\\n234:     return value\\n235: \\n236: \\n237: @keep_lazy_text\\n238: def strip_spaces_between_tags(value):\\n239:     \\\"\\\"\\\"Return the given HTML with spaces between tags removed.\\\"\\\"\\\"\\n240:     return re.sub(r\\\">\\\\s+<\\\", \\\"><\\\", str(value))\\n241: \\n242: \\n243: def smart_urlquote(url):\\n244:     \\\"\\\"\\\"Quote a URL if it isn't already quoted.\\\"\\\"\\\"\\n245: \\n246:     def unquote_quote(segment):\\n247:         segment = unquote(segment)\\n248:         # Tilde is part of RFC 3986 Section 2.3 Unreserved Characters,\\n249:         # see also https://bugs.python.org/issue16285\\n250:         return quote(segment, safe=RFC3986_SUBDELIMS + RFC3986_GENDELIMS + \\\"~\\\")\\n251: \\n252:     try:\\n253:         scheme, netloc, path, query, fragment = urlsplit(url)\\n254:     except ValueError:\\n255:         # invalid IPv6 URL (normally square brackets in hostname part).\\n256:         return unquote_quote(url)\\n257: \\n258:     # Handle IDN as percent-encoded UTF-8 octets, per WHATWG URL Specification\\n259:     # section 3.5 and RFC 3986 section 3.2.2. Defer any IDNA to the user agent.\\n260:     # See #36013.\\n261:     netloc = unquote_quote(netloc)\\n262: \\n263:     if query:\\n264:         # Separately unquoting key/value, so as to not mix querystring\\n265:         # separators included in query values. See #22267.\\n266:         query_parts = [\\n267:             (unquote(q[0]), unquote(q[1]))\\n268:             for q in parse_qsl(query, keep_blank_values=True)\\n269:         ]\\n270:         # urlencode will take care of quoting\\n271:         query = urlencode(query_parts)\\n272: \\n273:     path = unquote_quote(path)\\n274:     fragment = unquote_quote(fragment)\\n275: \\n276:     return urlunsplit((scheme, netloc, path, query, fragment))\\n277: \\n278: \\n279: class CountsDict(dict):\\n280:     def __init__(self, *args, word, **kwargs):\\n281:         super().__init__(*args, *kwargs)\\n282:         self.word = word\\n283: \\n284:     def __missing__(self, key):\\n285:         self[key] = self.word.count(key)\\n286:         return self[key]\\n287: \\n288: \\n289: class Urlizer:\\n290:     \\\"\\\"\\\"\\n291:     Convert any URLs in text into clickable links.\\n292: \\n293:     Work on http://, https://, www. links, and also on links ending in one of\\n294:     the original seven gTLDs (.com, .edu, .gov, .int, .mil, .net, and .org).\\n295:     Links can have trailing punctuation (periods, commas, close-parens) and\\n296:     leading punctuation (opening parens) and it'll still do the right thing.\\n297:     \\\"\\\"\\\"\\n298: \\n299:     trailing_punctuation_chars = \\\".,:;!\\\"\\n300:     wrapping_punctuation = [(\\\"(\\\", \\\")\\\"), (\\\"[\\\", \\\"]\\\")]\\n301: \\n302:     simple_url_re = _lazy_re_compile(r\\\"^https?://\\\\[?\\\\w\\\", re.IGNORECASE)\\n303:     simple_url_2_re = _lazy_re_compile(\\n304:         rf\\\"^www\\\\.|^(?!http)(?:{DomainNameValidator.hostname_re})\\\"\\n305:         rf\\\"(?:{DomainNameValidator.domain_re})\\\"\\n306:         r\\\"\\\\.(com|edu|gov|int|mil|net|org)($|/.*)$\\\",\\n307:         re.IGNORECASE,\\n308:     )\\n309:     word_split_re = _lazy_re_compile(r\\\"\\\"\\\"([\\\\s<>\\\"']+)\\\"\\\"\\\")\\n310: \\n311:     mailto_template = \\\"mailto:{local}@{domain}\\\"\\n312:     url_template = '<a href=\\\"{href}\\\"{attrs}>{url}</a>'\\n313: \\n314:     def __call__(self, text, trim_url_limit=None, nofollow=False, autoescape=False):\\n315:         \\\"\\\"\\\"\\n316:         If trim_url_limit is not None, truncate the URLs in the link text\\n317:         longer than this limit to trim_url_limit - 1 characters and append an\\n318:         ellipsis.\\n319: \\n320:         If nofollow is True, give the links a rel=\\\"nofollow\\\" attribute.\\n321: \\n322:         If autoescape is True, autoescape the link text and URLs.\\n323:         \\\"\\\"\\\"\\n324:         safe_input = isinstance(text, SafeData)\\n325: \\n326:         words = self.word_split_re.split(str(text))\\n327:         local_cache = {}\\n328:         urlized_words = []\\n329:         for word in words:\\n330:             if (urlized_word := local_cache.get(word)) is None:\\n331:                 urlized_word = self.handle_word(\\n332:                     word,\\n333:                     safe_input=safe_input,\\n334:                     trim_url_limit=trim_url_limit,\\n335:                     nofollow=nofollow,\\n336:                     autoescape=autoescape,\\n337:                 )\\n338:                 local_cache[word] = urlized_word\\n339:             urlized_words.append(urlized_word)\\n340:         return \\\"\\\".join(urlized_words)\\n341: \\n342:     def handle_word(\\n343:         self,\\n344:         word,\\n345:         *,\\n346:         safe_input,\\n347:         trim_url_limit=None,\\n348:         nofollow=False,\\n349:         autoescape=False,\\n350:     ):\\n351:         if \\\".\\\" in word or \\\"@\\\" in word or \\\":\\\" in word:\\n352:             # lead: Punctuation trimmed from the beginning of the word.\\n353:             # middle: State of the word.\\n354:             # trail: Punctuation trimmed from the end of the word.\\n355:             lead, middle, trail = self.trim_punctuation(word)\\n356:             # Make URL we want to point to.\\n357:             url = None\\n358:             nofollow_attr = ' rel=\\\"nofollow\\\"' if nofollow else \\\"\\\"\\n359:             if len(middle) <= MAX_URL_LENGTH and self.simple_url_re.match(middle):\\n360:                 url = smart_urlquote(html.unescape(middle))\\n361:             elif len(middle) <= MAX_URL_LENGTH and self.simple_url_2_re.match(middle):\\n362:                 unescaped_middle = html.unescape(middle)\\n363:                 # RemovedInDjango70Warning: When the deprecation ends, replace\\n364:                 # with:\\n365:                 # url = smart_urlquote(f\\\"https://{unescaped_middle}\\\")\\n366:                 protocol = (\\n367:                     \\\"https\\\"\\n368:                     if getattr(settings, \\\"URLIZE_ASSUME_HTTPS\\\", False)\\n369:                     else \\\"http\\\"\\n370:                 )\\n371:                 if not settings.URLIZE_ASSUME_HTTPS:\\n372:                     warnings.warn(\\n373:                         \\\"The default protocol will be changed from HTTP to \\\"\\n374:                         \\\"HTTPS in Django 7.0. Set the URLIZE_ASSUME_HTTPS \\\"\\n375:                         \\\"transitional setting to True to opt into using HTTPS as the \\\"\\n376:                         \\\"new default protocol.\\\",\\n377:                         RemovedInDjango70Warning,\\n378:                         stacklevel=2,\\n379:                     )\\n380:                 url = smart_urlquote(f\\\"{protocol}://{unescaped_middle}\\\")\\n381:             elif \\\":\\\" not in middle and self.is_email_simple(middle):\\n382:                 local, domain = middle.rsplit(\\\"@\\\", 1)\\n383:                 # Encode per RFC 6068 Section 2 (items 1, 4, 5). Defer any IDNA\\n384:                 # to the user agent. See #36013.\\n385:                 local = quote(local, safe=\\\"\\\")\\n386:                 domain = quote(domain, safe=\\\"\\\")\\n387:                 url = self.mailto_template.format(local=local, domain=domain)\\n388:                 nofollow_attr = \\\"\\\"\\n389:             # Make link.\\n390:             if url:\\n391:                 trimmed = self.trim_url(middle, limit=trim_url_limit)\\n392:                 if autoescape and not safe_input:\\n393:                     lead, trail = escape(lead), escape(trail)\\n394:                     trimmed = escape(trimmed)\\n395:                 middle = self.url_template.format(\\n396:                     href=escape(url),\\n397:                     attrs=nofollow_attr,\\n398:                     url=trimmed,\\n399:                 )\\n400:                 return SafeString(f\\\"{lead}{middle}{trail}\\\")\\n401:             else:\\n402:                 if safe_input:\\n403:                     return mark_safe(word)\\n404:                 elif autoescape:\\n405:                     return escape(word)\\n406:         elif safe_input:\\n407:             return mark_safe(word)\\n408:         elif autoescape:\\n409:             return escape(word)\\n410:         return word\\n411: \\n412:     def trim_url(self, x, *, limit):\\n413:         if limit is None or len(x) <= limit:\\n414:             return x\\n415:         return \\\"%s\u2026\\\" % x[: max(0, limit - 1)]\\n416: \\n417:     @cached_property\\n418:     def wrapping_punctuation_openings(self):\\n419:         return \\\"\\\".join(dict(self.wrapping_punctuation).keys())\\n420: \\n421:     @cached_property\\n422:     def trailing_punctuation_chars_no_semicolon(self):\\n423:         return self.trailing_punctuation_chars.replace(\\\";\\\", \\\"\\\")\\n424: \\n425:     @cached_property\\n426:     def trailing_punctuation_chars_has_semicolon(self):\\n427:         return \\\";\\\" in self.trailing_punctuation_chars\\n428: \\n429:     def trim_punctuation(self, word):\\n430:         \\\"\\\"\\\"\\n431:         Trim trailing and wrapping punctuation from `word`. Return the items of\\n432:         the new state.\\n433:         \\\"\\\"\\\"\\n434:         # Strip all opening wrapping punctuation.\\n435:         middle = word.lstrip(self.wrapping_punctuation_openings)\\n436:         lead = word[: len(word) - len(middle)]\\n437:         trail = deque()\\n438: \\n439:         # Continue trimming until middle remains unchanged.\\n440:         trimmed_something = True\\n441:         counts = CountsDict(word=middle)\\n442:         while trimmed_something and middle:\\n443:             trimmed_something = False\\n444:             # Trim wrapping punctuation.\\n445:             for opening, closing in self.wrapping_punctuation:\\n446:                 if counts[opening] < counts[closing]:\\n447:                     rstripped = middle.rstrip(closing)\\n448:                     if rstripped != middle:\\n449:                         strip = counts[closing] - counts[opening]\\n450:                         trail.appendleft(middle[-strip:])\\n451:                         middle = middle[:-strip]\\n452:                         trimmed_something = True\\n453:                         counts[closing] -= strip\\n454: \\n455:             amp = middle.rfind(\\\"&\\\")\\n456:             if amp == -1:\\n457:                 rstripped = middle.rstrip(self.trailing_punctuation_chars)\\n458:             else:\\n459:                 rstripped = middle.rstrip(self.trailing_punctuation_chars_no_semicolon)\\n460:             if rstripped != middle:\\n461:                 trail.appendleft(middle[len(rstripped) :])\\n462:                 middle = rstripped\\n463:                 trimmed_something = True\\n464: \\n465:             if self.trailing_punctuation_chars_has_semicolon and middle.endswith(\\\";\\\"):\\n466:                 # Only strip if not part of an HTML entity.\\n467:                 potential_entity = middle[amp:]\\n468:                 escaped = html.unescape(potential_entity)\\n469:                 if escaped == potential_entity or escaped.endswith(\\\";\\\"):\\n470:                     rstripped = middle.rstrip(self.trailing_punctuation_chars)\\n471:                     trail_start = len(rstripped)\\n472:                     amount_trailing_semicolons = len(middle) - len(middle.rstrip(\\\";\\\"))\\n473:                     if amp > -1 and amount_trailing_semicolons > 1:\\n474:                         # Leave up to most recent semicolon as might be an\\n475:                         # entity.\\n476:                         recent_semicolon = middle[trail_start:].index(\\\";\\\")\\n477:                         middle_semicolon_index = recent_semicolon + trail_start + 1\\n478:                         trail.appendleft(middle[middle_semicolon_index:])\\n479:                         middle = rstripped + middle[trail_start:middle_semicolon_index]\\n480:                     else:\\n481:                         trail.appendleft(middle[trail_start:])\\n482:                         middle = rstripped\\n483:                     trimmed_something = True\\n484: \\n485:         trail = \\\"\\\".join(trail)\\n486:         return lead, middle, trail\\n487: \\n488:     @staticmethod\\n489:     def is_email_simple(value):\\n490:         \\\"\\\"\\\"Return True if value looks like an email address.\\\"\\\"\\\"\\n491:         try:\\n492:             EmailValidator(allowlist=[])(value)\\n493:         except ValidationError:\\n494:             return False\\n495:         return True\\n496: \\n497: \\n498: urlizer = Urlizer()\\n499: \\n500: \\n501: @keep_lazy_text\\n502: def urlize(text, trim_url_limit=None, nofollow=False, autoescape=False):\\n503:     return urlizer(\\n504:         text, trim_url_limit=trim_url_limit, nofollow=nofollow, autoescape=autoescape\\n505:     )\\n506: \\n507: \\n508: def avoid_wrapping(value):\\n509:     \\\"\\\"\\\"\\n510:     Avoid text wrapping in the middle of a phrase by adding non-breaking\\n511:     spaces where there previously were normal spaces.\\n512:     \\\"\\\"\\\"\\n513:     return value.replace(\\\" \\\", \\\"\\\\xa0\\\")\\n514: \\n515: \\n516: def html_safe(klass):\\n517:     \\\"\\\"\\\"\\n518:     A decorator that defines the __html__ method. This helps non-Django\\n519:     templates to detect classes whose __str__ methods return SafeString.\\n520:     \\\"\\\"\\\"\\n521:     if \\\"__html__\\\" in klass.__dict__:\\n522:         raise ValueError(\\n523:             \\\"can't apply @html_safe to %s because it defines \\\"\\n524:             \\\"__html__().\\\" % klass.__name__\\n525:         )\\n526:     if \\\"__str__\\\" not in klass.__dict__:\\n527:         raise ValueError(\\n528:             \\\"can't apply @html_safe to %s because it doesn't \\\"\\n529:             \\\"define __str__().\\\" % klass.__name__\\n530:         )\\n531:     klass_str = klass.__str__\\n532:     klass.__str__ = lambda self: mark_safe(klass_str(self))\\n533:     klass.__html__ = lambda self: str(self)\\n534:     return klass\\n535: \",\"url\":\"https://sourcegraph.sourcegraph.com/github.com/sg-evals/django--674eda1c@674eda1c03a3187905f48afee0f15226aa62fdf3/-/blob/django/utils/html.py\"}",
+          "step_id": 5,
+          "timestamp": "2026-03-08T04:24:21.496Z",
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "tool_use_id": "toolu_01NuzhDhZd3qvfG5xCfHhsLJ"
+        },
+        {
+          "arguments": {
+            "path": "django/utils/encoding.py",
+            "repo": "github.com/sg-evals/django--674eda1c"
+          },
+          "input": {
+            "path": "django/utils/encoding.py",
+            "repo": "github.com/sg-evals/django--674eda1c"
+          },
+          "output": "{\"content\":\"1: import codecs\\n2: import datetime\\n3: import locale\\n4: from decimal import Decimal\\n5: from types import NoneType\\n6: from urllib.parse import quote\\n7: \\n8: from django.utils.functional import Promise\\n9: \\n10: \\n11: class DjangoUnicodeDecodeError(UnicodeDecodeError):\\n12:     def __str__(self):\\n13:         return \\\"%s. You passed in %r (%s)\\\" % (\\n14:             super().__str__(),\\n15:             self.object,\\n16:             type(self.object),\\n17:         )\\n18: \\n19: \\n20: def smart_str(s, encoding=\\\"utf-8\\\", strings_only=False, errors=\\\"strict\\\"):\\n21:     \\\"\\\"\\\"\\n22:     Return a string representing 's'. Treat bytestrings using the 'encoding'\\n23:     codec.\\n24: \\n25:     If strings_only is True, don't convert (some) non-string-like objects.\\n26:     \\\"\\\"\\\"\\n27:     if isinstance(s, Promise):\\n28:         # The input is the result of a gettext_lazy() call.\\n29:         return s\\n30:     return force_str(s, encoding, strings_only, errors)\\n31: \\n32: \\n33: _PROTECTED_TYPES = (\\n34:     NoneType,\\n35:     int,\\n36:     float,\\n37:     Decimal,\\n38:     datetime.datetime,\\n39:     datetime.date,\\n40:     datetime.time,\\n41: )\\n42: \\n43: \\n44: def is_protected_type(obj):\\n45:     \\\"\\\"\\\"Determine if the object instance is of a protected type.\\n46: \\n47:     Objects of protected types are preserved as-is when passed to\\n48:     force_str(strings_only=True).\\n49:     \\\"\\\"\\\"\\n50:     return isinstance(obj, _PROTECTED_TYPES)\\n51: \\n52: \\n53: def force_str(s, encoding=\\\"utf-8\\\", strings_only=False, errors=\\\"strict\\\"):\\n54:     \\\"\\\"\\\"\\n55:     Similar to smart_str(), except that lazy instances are resolved to\\n56:     strings, rather than kept as lazy objects.\\n57: \\n58:     If strings_only is True, don't convert (some) non-string-like objects.\\n59:     \\\"\\\"\\\"\\n60:     # Handle the common case first for performance reasons.\\n61:     if issubclass(type(s), str):\\n62:         return s\\n63:     if strings_only and is_protected_type(s):\\n64:         return s\\n65:     try:\\n66:         if isinstance(s, bytes):\\n67:             s = str(s, encoding, errors)\\n68:         else:\\n69:             s = str(s)\\n70:     except UnicodeDecodeError as e:\\n71:         raise DjangoUnicodeDecodeError(*e.args) from None\\n72:     return s\\n73: \\n74: \\n75: def smart_bytes(s, encoding=\\\"utf-8\\\", strings_only=False, errors=\\\"strict\\\"):\\n76:     \\\"\\\"\\\"\\n77:     Return a bytestring version of 's', encoded as specified in 'encoding'.\\n78: \\n79:     If strings_only is True, don't convert (some) non-string-like objects.\\n80:     \\\"\\\"\\\"\\n81:     if isinstance(s, Promise):\\n82:         # The input is the result of a gettext_lazy() call.\\n83:         return s\\n84:     return force_bytes(s, encoding, strings_only, errors)\\n85: \\n86: \\n87: def force_bytes(s, encoding=\\\"utf-8\\\", strings_only=False, errors=\\\"strict\\\"):\\n88:     \\\"\\\"\\\"\\n89:     Similar to smart_bytes, except that lazy instances are resolved to\\n90:     strings, rather than kept as lazy objects.\\n91: \\n92:     If strings_only is True, don't convert (some) non-string-like objects.\\n93:     \\\"\\\"\\\"\\n94:     # Handle the common case first for performance reasons.\\n95:     if isinstance(s, bytes):\\n96:         if encoding == \\\"utf-8\\\":\\n97:             return s\\n98:         else:\\n99:             return s.decode(\\\"utf-8\\\", errors).encode(encoding, errors)\\n100:     if strings_only and is_protected_type(s):\\n101:         return s\\n102:     if isinstance(s, memoryview):\\n103:         return bytes(s)\\n104:     return str(s).encode(encoding, errors)\\n105: \\n106: \\n107: def iri_to_uri(iri):\\n108:     \\\"\\\"\\\"\\n109:     Convert an Internationalized Resource Identifier (IRI) portion to a URI\\n110:     portion that is suitable for inclusion in a URL.\\n111: \\n112:     This is the algorithm from RFC 3987 Section 3.1, slightly simplified since\\n113:     the input is assumed to be a string rather than an arbitrary byte stream.\\n114: \\n115:     Take an IRI (string or UTF-8 bytes, e.g. '/I \u2665 Django/' or\\n116:     b'/I \\\\xe2\\\\x99\\\\xa5 Django/') and return a string containing the encoded\\n117:     result with ASCII chars only (e.g. '/I%20%E2%99%A5%20Django/').\\n118:     \\\"\\\"\\\"\\n119:     # The list of safe characters here is constructed from the \\\"reserved\\\" and\\n120:     # \\\"unreserved\\\" characters specified in RFC 3986 Sections 2.2 and 2.3:\\n121:     #     reserved    = gen-delims / sub-delims\\n122:     #     gen-delims  = \\\":\\\" / \\\"/\\\" / \\\"?\\\" / \\\"#\\\" / \\\"[\\\" / \\\"]\\\" / \\\"@\\\"\\n123:     #     sub-delims  = \\\"!\\\" / \\\"$\\\" / \\\"&\\\" / \\\"'\\\" / \\\"(\\\" / \\\")\\\"\\n124:     #                   / \\\"*\\\" / \\\"+\\\" / \\\",\\\" / \\\";\\\" / \\\"=\\\"\\n125:     #     unreserved  = ALPHA / DIGIT / \\\"-\\\" / \\\".\\\" / \\\"_\\\" / \\\"~\\\"\\n126:     # Of the unreserved characters, urllib.parse.quote() already considers all\\n127:     # but the ~ safe.\\n128:     # The % character is also added to the list of safe characters here, as the\\n129:     # end of RFC 3987 Section 3.1 specifically mentions that % must not be\\n130:     # converted.\\n131:     if iri is None:\\n132:         return iri\\n133:     elif isinstance(iri, Promise):\\n134:         iri = str(iri)\\n135:     return quote(iri, safe=\\\"/#%[]=:;$&()+,!?*@'~\\\")\\n136: \\n137: \\n138: # List of byte values that uri_to_iri() decodes from percent encoding.\\n139: # First, the unreserved characters from RFC 3986:\\n140: _ascii_ranges = [[45, 46, 95, 126], range(65, 91), range(97, 123)]\\n141: _hextobyte = {\\n142:     (fmt % char).encode(): bytes((char,))\\n143:     for ascii_range in _ascii_ranges\\n144:     for char in ascii_range\\n145:     for fmt in [\\\"%02x\\\", \\\"%02X\\\"]\\n146: }\\n147: # And then everything above 128, because bytes \u2265 128 are part of multibyte\\n148: # Unicode characters.\\n149: _hexdig = \\\"0123456789ABCDEFabcdef\\\"\\n150: _hextobyte.update(\\n151:     {(a + b).encode(): bytes.fromhex(a + b) for a in _hexdig[8:] for b in _hexdig}\\n152: )\\n153: \\n154: \\n155: def uri_to_iri(uri):\\n156:     \\\"\\\"\\\"\\n157:     Convert a Uniform Resource Identifier(URI) into an Internationalized\\n158:     Resource Identifier(IRI).\\n159: \\n160:     This is the algorithm from RFC 3987 Section 3.2, excluding step 4.\\n161: \\n162:     Take an URI in ASCII bytes (e.g. '/I%20%E2%99%A5%20Django/') and return\\n163:     a string containing the encoded result (e.g. '/I%20\u2665%20Django/').\\n164:     \\\"\\\"\\\"\\n165:     if uri is None:\\n166:         return uri\\n167:     uri = force_bytes(uri)\\n168:     # Fast selective unquote: First, split on '%' and then starting with the\\n169:     # second block, decode the first 2 bytes if they represent a hex code to\\n170:     # decode. The rest of the block is the part after '%AB', not containing\\n171:     # any '%'. Add that to the output without further processing.\\n172:     bits = uri.split(b\\\"%\\\")\\n173:     if len(bits) == 1:\\n174:         iri = uri\\n175:     else:\\n176:         parts = [bits[0]]\\n177:         append = parts.append\\n178:         hextobyte = _hextobyte\\n179:         for item in bits[1:]:\\n180:             hex = item[:2]\\n181:             if hex in hextobyte:\\n182:                 append(hextobyte[item[:2]])\\n183:                 append(item[2:])\\n184:             else:\\n185:                 append(b\\\"%\\\")\\n186:                 append(item)\\n187:         iri = b\\\"\\\".join(parts)\\n188:     return repercent_broken_unicode(iri).decode()\\n189: \\n190: \\n191: def escape_uri_path(path):\\n192:     \\\"\\\"\\\"\\n193:     Escape the unsafe characters from the path portion of a Uniform Resource\\n194:     Identifier (URI).\\n195:     \\\"\\\"\\\"\\n196:     # These are the \\\"reserved\\\" and \\\"unreserved\\\" characters specified in RFC\\n197:     # 3986 Sections 2.2 and 2.3:\\n198:     #   reserved    = \\\";\\\" | \\\"/\\\" | \\\"?\\\" | \\\":\\\" | \\\"@\\\" | \\\"&\\\" | \\\"=\\\" | \\\"+\\\" | \\\"$\\\" | \\\",\\\"\\n199:     #   unreserved  = alphanum | mark\\n200:     #   mark        = \\\"-\\\" | \\\"_\\\" | \\\".\\\" | \\\"!\\\" | \\\"~\\\" | \\\"*\\\" | \\\"'\\\" | \\\"(\\\" | \\\")\\\"\\n201:     # The list of safe characters here is constructed subtracting \\\";\\\", \\\"=\\\",\\n202:     # and \\\"?\\\" according to RFC 3986 Section 3.3.\\n203:     # The reason for not subtracting and escaping \\\"/\\\" is that we are escaping\\n204:     # the entire path, not a path segment.\\n205:     return quote(path, safe=\\\"/:@&+$,-_.!~*'()\\\")\\n206: \\n207: \\n208: def punycode(domain):\\n209:     \\\"\\\"\\\"Return the Punycode of the given domain if it's non-ASCII.\\\"\\\"\\\"\\n210:     return domain.encode(\\\"idna\\\").decode(\\\"ascii\\\")\\n211: \\n212: \\n213: def repercent_broken_unicode(path):\\n214:     \\\"\\\"\\\"\\n215:     As per RFC 3987 Section 3.2, step three of converting a URI into an IRI,\\n216:     repercent-encode any octet produced that is not part of a strictly legal\\n217:     UTF-8 octet sequence.\\n218:     \\\"\\\"\\\"\\n219:     changed_parts = []\\n220:     while True:\\n221:         try:\\n222:             path.decode()\\n223:         except UnicodeDecodeError as e:\\n224:             # CVE-2019-14235: A recursion shouldn't be used since the exception\\n225:             # handling uses massive amounts of memory\\n226:             repercent = quote(path[e.start : e.end], safe=b\\\"/#%[]=:;$&()+,!?*@'~\\\")\\n227:             changed_parts.append(path[: e.start] + repercent.encode())\\n228:             path = path[e.end :]\\n229:         else:\\n230:             return b\\\"\\\".join(changed_parts) + path\\n231: \\n232: \\n233: def filepath_to_uri(path):\\n234:     \\\"\\\"\\\"Convert a file system path to a URI portion that is suitable for\\n235:     inclusion in a URL.\\n236: \\n237:     Encode certain chars that would normally be recognized as special chars\\n238:     for URIs. Do not encode the ' character, as it is a valid character\\n239:     within URIs. See the encodeURIComponent() JavaScript function for details.\\n240:     \\\"\\\"\\\"\\n241:     if path is None:\\n242:         return path\\n243:     # I know about `os.sep` and `os.altsep` but I want to leave\\n244:     # some flexibility for hardcoding separators.\\n245:     return quote(str(path).replace(\\\"\\\\\\\\\\\", \\\"/\\\"), safe=\\\"/~!*()'\\\")\\n246: \\n247: \\n248: def get_system_encoding():\\n249:     \\\"\\\"\\\"\\n250:     The encoding for the character type functions. Fallback to 'ascii' if the\\n251:     #encoding is unsupported by Python or could not be determined. See tickets\\n252:     #10335 and #5846.\\n253:     \\\"\\\"\\\"\\n254:     try:\\n255:         encoding = locale.getlocale()[1] or \\\"ascii\\\"\\n256:         codecs.lookup(encoding)\\n257:     except Exception:\\n258:         encoding = \\\"ascii\\\"\\n259:     return encoding\\n260: \\n261: \\n262: DEFAULT_LOCALE_ENCODING = get_system_encoding()\\n263: \",\"url\":\"https://sourcegraph.sourcegraph.com/github.com/sg-evals/django--674eda1c@674eda1c03a3187905f48afee0f15226aa62fdf3/-/blob/django/utils/encoding.py\"}",
+          "step_id": 6,
+          "timestamp": "2026-03-08T04:24:21.932Z",
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "tool_use_id": "toolu_01W9CsX8cyzFMGG2ozdxQ2oQ"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/django--674eda1c$ escape_with_encoding"
+          },
+          "input": {
+            "query": "repo:^github.com/sg-evals/django--674eda1c$ escape_with_encoding"
+          },
+          "output": "{\"blocks\":[]}",
+          "step_id": 9,
+          "timestamp": "2026-03-08T04:24:25.426Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "tool_use_id": "toolu_0152JNaxaRDmmJeBqnsPhQkD"
+        },
+        {
+          "arguments": {
+            "max_results": 4,
+            "query": "select:Bash,Read,Write,Edit"
+          },
+          "input": {
+            "max_results": 4,
+            "query": "select:Bash,Read,Write,Edit"
+          },
+          "output": "{\"type\": \"tool_reference\", \"tool_name\": \"Bash\"}\n\n{\"type\": \"tool_reference\", \"tool_name\": \"Read\"}\n\n{\"type\": \"tool_reference\", \"tool_name\": \"Write\"}\n\n{\"type\": \"tool_reference\", \"tool_name\": \"Edit\"}\n\n[metadata] {\"matches\": [\"Bash\", \"Read\", \"Write\", \"Edit\"], \"query\": \"select:Bash,Read,Write,Edit\", \"total_deferred_tools\": 33}",
+          "step_id": 10,
+          "timestamp": "2026-03-08T04:24:27.207Z",
+          "tool": "ToolSearch",
+          "tool_use_id": "toolu_017GhRAkodSoMAW7VzFAV5ZS"
+        },
+        {
+          "arguments": {
+            "command": "find /workspace -name \"*.py\" -path \"*/tests/*html*\" 2>/dev/null | head -20",
+            "description": "Find HTML-related test files"
+          },
+          "input": {
+            "command": "find /workspace -name \"*.py\" -path \"*/tests/*html*\" 2>/dev/null | head -20",
+            "description": "Find HTML-related test files"
+          },
+          "output": "[metadata] {\"noOutputExpected\": false}",
+          "step_id": 13,
+          "timestamp": "2026-03-08T04:24:31.057Z",
+          "tool": "Bash",
+          "tool_use_id": "toolu_01V3JRqUMVoD3k96bHovmgkQ"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/django--674eda1c$ file:tests escape_with_encoding"
+          },
+          "input": {
+            "query": "repo:^github.com/sg-evals/django--674eda1c$ file:tests escape_with_encoding"
+          },
+          "output": "{\"blocks\":[]}",
+          "step_id": 14,
+          "timestamp": "2026-03-08T04:24:32.411Z",
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "tool_use_id": "toolu_01AMwLnTKcdcZx3pE4sJgbi2"
+        },
+        {
+          "arguments": {
+            "command": "ls /workspace/",
+            "description": "List workspace contents"
+          },
+          "input": {
+            "command": "ls /workspace/",
+            "description": "List workspace contents"
+          },
+          "output": "[metadata] {\"noOutputExpected\": false}",
+          "step_id": 15,
+          "timestamp": "2026-03-08T04:24:34.966Z",
+          "tool": "Bash",
+          "tool_use_id": "toolu_01HNP8fxATPSwwadVtSMgzTv"
+        },
+        {
+          "arguments": {
+            "command": "ls /workspace/ && ls /workspace/django/ 2>/dev/null || echo \"no django dir\"",
+            "description": "List workspace and django directory"
+          },
+          "input": {
+            "command": "ls /workspace/ && ls /workspace/django/ 2>/dev/null || echo \"no django dir\"",
+            "description": "List workspace and django directory"
+          },
+          "output": "no django dir\n\n[stdout]\nno django dir\n[metadata] {\"noOutputExpected\": false}",
+          "step_id": 16,
+          "timestamp": "2026-03-08T04:24:36.865Z",
+          "tool": "Bash",
+          "tool_use_id": "toolu_016CLkSYVMHxDNV2kExvhsML"
+        },
+        {
+          "arguments": {
+            "command": "ls -la /workspace/",
+            "description": "List workspace contents with details"
+          },
+          "input": {
+            "command": "ls -la /workspace/",
+            "description": "List workspace contents with details"
+          },
+          "output": "total 0\ndrwxr-xr-x 1 claude claude  18 Mar  8 04:23 .\ndrwxr-xr-x 1 root   root   166 Mar  8 04:24 ..\ndrwxr-xr-x 1 claude claude  10 Mar  8 04:23 .git\n\n[stdout]\ntotal 0\ndrwxr-xr-x 1 claude claude  18 Mar  8 04:23 .\ndrwxr-xr-x 1 root   root   166 Mar  8 04:24 ..\ndrwxr-xr-x 1 claude claude  10 Mar  8 04:23 .git\n[metadata] {\"noOutputExpected\": false}",
+          "step_id": 17,
+          "timestamp": "2026-03-08T04:24:38.202Z",
+          "tool": "Bash",
+          "tool_use_id": "toolu_01MKqjz2DezFRxmFSUXeVXjD"
+        },
+        {
+          "arguments": {
+            "query": "repo:^github.com/sg-evals/django--674eda1c$ tests/utils_tests/"
+          },
+          "input": {
+            "query": "repo:^github.com/sg-evals/django--674eda1c$ tests/utils_tests/"
+          },
+          "output": "MCP error -32602: invalid params: validating \"arguments\": validating root: unexpected additional properties [\"query\"]\n\n[error] tool reported failure",
+          "step_id": 19,
+          "timestamp": "2026-03-08T04:24:41.598Z",
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "tool_use_id": "toolu_014azY3f6yoCgt3NBavbNmb6"
+        },
+        {
+          "arguments": {
+            "max_results": 1,
+            "query": "select:mcp__sourcegraph__sg_list_files"
+          },
+          "input": {
+            "max_results": 1,
+            "query": "select:mcp__sourcegraph__sg_list_files"
+          },
+          "output": "{\"type\": \"tool_reference\", \"tool_name\": \"mcp__sourcegraph__sg_list_files\"}\n\n[metadata] {\"matches\": [\"mcp__sourcegraph__sg_list_files\"], \"query\": \"select:mcp__sourcegraph__sg_list_files\", \"total_deferred_tools\": 33}",
+          "step_id": 20,
+          "timestamp": "2026-03-08T04:24:43.501Z",
+          "tool": "ToolSearch",
+          "tool_use_id": "toolu_01WxE3fzjqoxDUFwSkpKYSJM"
+        },
+        {
+          "arguments": {
+            "path": "tests/utils_tests",
+            "repo": "github.com/sg-evals/django--674eda1c"
+          },
+          "input": {
+            "path": "tests/utils_tests",
+            "repo": "github.com/sg-evals/django--674eda1c"
+          },
+          "output": "{\"files\":[{\"isDirectory\":true,\"path\":\"tests/utils_tests/archives/\"},{\"isDirectory\":true,\"path\":\"tests/utils_tests/eggs/\"},{\"isDirectory\":true,\"path\":\"tests/utils_tests/files/\"},{\"isDirectory\":true,\"path\":\"tests/utils_tests/test_module/\"},{\"isDirectory\":true,\"path\":\"tests/utils_tests/traversal_archives/\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/__init__.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/deconstructible_classes.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/models.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_archive.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_autoreload.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_choices.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_connection.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_crypto.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_csp.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_datastructures.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_dateformat.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_dateparse.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_deconstruct.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_decorators.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_duration.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_encoding.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_feedgenerator.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_functional.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_hashable.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_html.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_http.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_inspect.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_ipv6.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_json.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_lazyobject.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_lorem_ipsum.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_module_loading.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_no_submodule.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_numberformat.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_os_utils.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_regex_helper.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_safestring.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_simplelazyobject.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_termcolors.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_text.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_timesince.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_timezone.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/test_tree.py\"},{\"isDirectory\":false,\"path\":\"tests/utils_tests/utils.py\"}]}",
+          "step_id": 22,
+          "timestamp": "2026-03-08T04:24:45.703Z",
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "tool_use_id": "toolu_01JsWqX2pueTHVCcWDZjRLLm"
+        },
+        {
+          "arguments": {
+            "path": "tests/utils_tests/test_html.py",
+            "repo": "github.com/sg-evals/django--674eda1c"
+          },
+          "input": {
+            "path": "tests/utils_tests/test_html.py",
+            "repo": "github.com/sg-evals/django--674eda1c"
+          },
+          "output": "{\"content\":\"1: import math\\n2: import os\\n3: import sys\\n4: from datetime import datetime\\n5: \\n6: from django.core.exceptions import SuspiciousOperation\\n7: from django.core.serializers.json import DjangoJSONEncoder\\n8: from django.test import SimpleTestCase\\n9: from django.test.utils import override_settings\\n10: from django.utils.deprecation import RemovedInDjango70Warning\\n11: from django.utils.functional import lazystr\\n12: from django.utils.html import (\\n13:     conditional_escape,\\n14:     escape,\\n15:     escapejs,\\n16:     format_html,\\n17:     format_html_join,\\n18:     html_safe,\\n19:     json_script,\\n20:     linebreaks,\\n21:     smart_urlquote,\\n22:     strip_spaces_between_tags,\\n23:     strip_tags,\\n24:     urlize,\\n25: )\\n26: from django.utils.safestring import mark_safe\\n27: \\n28: \\n29: @override_settings(URLIZE_ASSUME_HTTPS=True)\\n30: class TestUtilsHtml(SimpleTestCase):\\n31:     def check_output(self, function, value, output=None):\\n32:         \\\"\\\"\\\"\\n33:         function(value) equals output. If output is None, function(value)\\n34:         equals value.\\n35:         \\\"\\\"\\\"\\n36:         if output is None:\\n37:             output = value\\n38:         self.assertEqual(function(value), output)\\n39: \\n40:     def test_escape(self):\\n41:         items = (\\n42:             (\\\"&\\\", \\\"&amp;\\\"),\\n43:             (\\\"<\\\", \\\"&lt;\\\"),\\n44:             (\\\">\\\", \\\"&gt;\\\"),\\n45:             ('\\\"', \\\"&quot;\\\"),\\n46:             (\\\"'\\\", \\\"&#x27;\\\"),\\n47:         )\\n48:         # Substitution patterns for testing the above items.\\n49:         patterns = (\\\"%s\\\", \\\"asdf%sfdsa\\\", \\\"%s1\\\", \\\"1%sb\\\")\\n50:         for value, output in items:\\n51:             with self.subTest(value=value, output=output):\\n52:                 for pattern in patterns:\\n53:                     with self.subTest(value=value, output=output, pattern=pattern):\\n54:                         self.check_output(escape, pattern % value, pattern % output)\\n55:                         self.check_output(\\n56:                             escape, lazystr(pattern % value), pattern % output\\n57:                         )\\n58:                 # Check repeated values.\\n59:                 self.check_output(escape, value * 2, output * 2)\\n60:         # Verify it doesn't double replace &.\\n61:         self.check_output(escape, \\\"<&\\\", \\\"&lt;&amp;\\\")\\n62: \\n63:     def test_format_html(self):\\n64:         self.assertEqual(\\n65:             format_html(\\n66:                 \\\"{} {} {third} {fourth}\\\",\\n67:                 \\\"< Dangerous >\\\",\\n68:                 mark_safe(\\\"<b>safe</b>\\\"),\\n69:                 third=\\\"< dangerous again\\\",\\n70:                 fourth=mark_safe(\\\"<i>safe again</i>\\\"),\\n71:             ),\\n72:             \\\"&lt; Dangerous &gt; <b>safe</b> &lt; dangerous again <i>safe again</i>\\\",\\n73:         )\\n74: \\n75:     def test_format_html_no_params(self):\\n76:         msg = \\\"args or kwargs must be provided.\\\"\\n77:         with self.assertRaisesMessage(TypeError, msg):\\n78:             name = \\\"Adam\\\"\\n79:             self.assertEqual(format_html(f\\\"<i>{name}</i>\\\"), \\\"<i>Adam</i>\\\")\\n80: \\n81:     def test_format_html_join_with_positional_arguments(self):\\n82:         self.assertEqual(\\n83:             format_html_join(\\n84:                 \\\"\\\\n\\\",\\n85:                 \\\"<li>{}) {}</li>\\\",\\n86:                 [(1, \\\"Emma\\\"), (2, \\\"Matilda\\\")],\\n87:             ),\\n88:             \\\"<li>1) Emma</li>\\\\n<li>2) Matilda</li>\\\",\\n89:         )\\n90: \\n91:     def test_format_html_join_with_keyword_arguments(self):\\n92:         self.assertEqual(\\n93:             format_html_join(\\n94:                 \\\"\\\\n\\\",\\n95:                 \\\"<li>{id}) {text}</li>\\\",\\n96:                 [{\\\"id\\\": 1, \\\"text\\\": \\\"Emma\\\"}, {\\\"id\\\": 2, \\\"text\\\": \\\"Matilda\\\"}],\\n97:             ),\\n98:             \\\"<li>1) Emma</li>\\\\n<li>2) Matilda</li>\\\",\\n99:         )\\n100: \\n101:     def test_linebreaks(self):\\n102:         items = (\\n103:             (\\\"para1\\\\n\\\\npara2\\\\r\\\\rpara3\\\", \\\"<p>para1</p>\\\\n\\\\n<p>para2</p>\\\\n\\\\n<p>para3</p>\\\"),\\n104:             (\\n105:                 \\\"para1\\\\nsub1\\\\rsub2\\\\n\\\\npara2\\\",\\n106:                 \\\"<p>para1<br>sub1<br>sub2</p>\\\\n\\\\n<p>para2</p>\\\",\\n107:             ),\\n108:             (\\n109:                 \\\"para1\\\\r\\\\n\\\\r\\\\npara2\\\\rsub1\\\\r\\\\rpara4\\\",\\n110:                 \\\"<p>para1</p>\\\\n\\\\n<p>para2<br>sub1</p>\\\\n\\\\n<p>para4</p>\\\",\\n111:             ),\\n112:             (\\\"para1\\\\tmore\\\\n\\\\npara2\\\", \\\"<p>para1\\\\tmore</p>\\\\n\\\\n<p>para2</p>\\\"),\\n113:         )\\n114:         for value, output in items:\\n115:             with self.subTest(value=value, output=output):\\n116:                 self.check_output(linebreaks, value, output)\\n117:                 self.check_output(linebreaks, lazystr(value), output)\\n118: \\n119:     def test_strip_tags(self):\\n120:         # Python fixed a quadratic-time issue in HTMLParser in 3.13.6, 3.12.12.\\n121:         # The fix slightly changes HTMLParser's output, so tests for\\n122:         # particularly malformed input must handle both old and new results.\\n123:         # The check below is temporary until all supported Python versions and\\n124:         # CI workers include the fix. See:\\n125:         # https://github.com/python/cpython/commit/6eb6c5db\\n126:         min_fixed_security = {\\n127:             (3, 13): (3, 13, 6),\\n128:             (3, 12): (3, 12, 12),\\n129:         }\\n130:         # Similarly, there was a fix for terminating incomplete entities. See:\\n131:         # https://github.com/python/cpython/commit/95296a9d\\n132:         min_fixed_incomplete_entities = {\\n133:             (3, 14): (3, 14, 1),\\n134:             (3, 13): (3, 13, 10),\\n135:             (3, 12): (3, 12, math.inf),  # not fixed in 3.12.\\n136:         }\\n137:         major_version = sys.version_info[:2]\\n138:         htmlparser_fixed_security = sys.version_info >= min_fixed_security.get(\\n139:             major_version, major_version\\n140:         )\\n141:         htmlparser_fixed_incomplete_entities = (\\n142:             sys.version_info\\n143:             >= min_fixed_incomplete_entities.get(major_version, major_version)\\n144:         )\\n145:         items = (\\n146:             (\\n147:                 \\\"<p>See: &#39;&eacute; is an apostrophe followed by e acute</p>\\\",\\n148:                 \\\"See: &#39;&eacute; is an apostrophe followed by e acute\\\",\\n149:             ),\\n150:             (\\n151:                 \\\"<p>See: &#x27;&eacute; is an apostrophe followed by e acute</p>\\\",\\n152:                 \\\"See: &#x27;&eacute; is an apostrophe followed by e acute\\\",\\n153:             ),\\n154:             (\\\"<adf>a\\\", \\\"a\\\"),\\n155:             (\\\"</adf>a\\\", \\\"a\\\"),\\n156:             (\\\"<asdf><asdf>e\\\", \\\"e\\\"),\\n157:             (\\\"hi, <f x\\\", \\\"hi, <f x\\\"),\\n158:             (\\\"234<235, right?\\\", \\\"234<235, right?\\\"),\\n159:             (\\\"a4<a5 right?\\\", \\\"a4<a5 right?\\\"),\\n160:             (\\\"b7>b2!\\\", \\\"b7>b2!\\\"),\\n161:             (\\\"</fe\\\", \\\"</fe\\\"),\\n162:             (\\\"<x>b<y>\\\", \\\"b\\\"),\\n163:             (\\\"a<p onclick=\\\\\\\"alert('<test>')\\\\\\\">b</p>c\\\", \\\"abc\\\"),\\n164:             (\\\"a<p a >b</p>c\\\", \\\"abc\\\"),\\n165:             (\\\"d<a:b c:d>e</p>f\\\", \\\"def\\\"),\\n166:             ('<strong>foo</strong><a href=\\\"http://example.com\\\">bar</a>', \\\"foobar\\\"),\\n167:             # caused infinite loop on Pythons not patched with\\n168:             # https://bugs.python.org/issue20288\\n169:             (\\\"&gotcha&#;<>\\\", \\\"&gotcha&#;<>\\\"),\\n170:             (\\\"<sc<!-- -->ript>test<<!-- -->/script>\\\", \\\"ript>test\\\"),\\n171:             (\\n172:                 \\\"<script>alert()</script>&h\\\",\\n173:                 \\\"alert()&h;\\\" if htmlparser_fixed_incomplete_entities else \\\"alert()h\\\",\\n174:             ),\\n175:             (\\n176:                 \\\"><!\\\" + (\\\"&\\\" * 16000) + \\\"D\\\",\\n177:                 \\\">\\\" if htmlparser_fixed_security else \\\"><!\\\" + (\\\"&\\\" * 16000) + \\\"D\\\",\\n178:             ),\\n179:             (\\\"X<<<<br>br>br>br>X\\\", \\\"XX\\\"),\\n180:             (\\\"<\\\" * 50 + \\\"a>\\\" * 50, \\\"\\\"),\\n181:             (\\n182:                 \\\">\\\" + \\\"<a\\\" * 500 + \\\"a\\\",\\n183:                 \\\">\\\" if htmlparser_fixed_security else \\\">\\\" + \\\"<a\\\" * 500 + \\\"a\\\",\\n184:             ),\\n185:             (\\\"<a\\\" * 49 + \\\"a\\\" * 951, \\\"<a\\\" * 49 + \\\"a\\\" * 951),\\n186:             (\\\"<\\\" + \\\"a\\\" * 1_002, \\\"<\\\" + \\\"a\\\" * 1_002),\\n187:         )\\n188:         for value, output in items:\\n189:             with self.subTest(value=value, output=output):\\n190:                 self.check_output(strip_tags, value, output)\\n191:                 self.check_output(strip_tags, lazystr(value), output)\\n192: \\n193:     def test_strip_tags_suspicious_operation_max_depth(self):\\n194:         value = \\\"<\\\" * 51 + \\\"a>\\\" * 51, \\\"<a>\\\"\\n195:         with self.assertRaises(SuspiciousOperation):\\n196:             strip_tags(value)\\n197: \\n198:     def test_strip_tags_suspicious_operation_large_open_tags(self):\\n199:         items = [\\n200:             \\\">\\\" + \\\"<a\\\" * 501,\\n201:             \\\"<a\\\" * 50 + \\\"a\\\" * 950,\\n202:         ]\\n203:         for value in items:\\n204:             with self.subTest(value=value):\\n205:                 with self.assertRaises(SuspiciousOperation):\\n206:                     strip_tags(value)\\n207: \\n208:     def test_strip_tags_files(self):\\n209:         # Test with more lengthy content (also catching performance\\n210:         # regressions)\\n211:         for filename in (\\\"strip_tags1.html\\\", \\\"strip_tags2.txt\\\"):\\n212:             with self.subTest(filename=filename):\\n213:                 path = os.path.join(os.path.dirname(__file__), \\\"files\\\", filename)\\n214:                 with open(path) as fp:\\n215:                     content = fp.read()\\n216:                     start = datetime.now()\\n217:                     stripped = strip_tags(content)\\n218:                     elapsed = datetime.now() - start\\n219:                 self.assertEqual(elapsed.seconds, 0)\\n220:                 self.assertIn(\\\"Test string that has not been stripped.\\\", stripped)\\n221:                 self.assertNotIn(\\\"<\\\", stripped)\\n222: \\n223:     def test_strip_spaces_between_tags(self):\\n224:         # Strings that should come out untouched.\\n225:         items = (\\\" <adf>\\\", \\\"<adf> \\\", \\\" </adf> \\\", \\\" <f> x</f>\\\")\\n226:         for value in items:\\n227:             with self.subTest(value=value):\\n228:                 self.check_output(strip_spaces_between_tags, value)\\n229:                 self.check_output(strip_spaces_between_tags, lazystr(value))\\n230: \\n231:         # Strings that have spaces to strip.\\n232:         items = (\\n233:             (\\\"<d> </d>\\\", \\\"<d></d>\\\"),\\n234:             (\\\"<p>hello </p>\\\\n<p> world</p>\\\", \\\"<p>hello </p><p> world</p>\\\"),\\n235:             (\\\"\\\\n<p>\\\\t</p>\\\\n<p> </p>\\\\n\\\", \\\"\\\\n<p></p><p></p>\\\\n\\\"),\\n236:         )\\n237:         for value, output in items:\\n238:             with self.subTest(value=value, output=output):\\n239:                 self.check_output(strip_spaces_between_tags, value, output)\\n240:                 self.check_output(strip_spaces_between_tags, lazystr(value), output)\\n241: \\n242:     def test_escapejs(self):\\n243:         items = (\\n244:             (\\n245:                 \\\"\\\\\\\"double quotes\\\\\\\" and 'single quotes'\\\",\\n246:                 \\\"\\\\\\\\u0022double quotes\\\\\\\\u0022 and \\\\\\\\u0027single quotes\\\\\\\\u0027\\\",\\n247:             ),\\n248:             (r\\\"\\\\ : backslashes, too\\\", \\\"\\\\\\\\u005C : backslashes, too\\\"),\\n249:             (\\n250:                 \\\"and lots of whitespace: \\\\r\\\\n\\\\t\\\\v\\\\f\\\\b\\\",\\n251:                 \\\"and lots of whitespace: \\\\\\\\u000D\\\\\\\\u000A\\\\\\\\u0009\\\\\\\\u000B\\\\\\\\u000C\\\\\\\\u0008\\\",\\n252:             ),\\n253:             (\\n254:                 r\\\"<script>and this</script>\\\",\\n255:                 \\\"\\\\\\\\u003Cscript\\\\\\\\u003Eand this\\\\\\\\u003C/script\\\\\\\\u003E\\\",\\n256:             ),\\n257:             (\\n258:                 \\\"paragraph separator:\\\\u2029and line separator:\\\\u2028\\\",\\n259:                 \\\"paragraph separator:\\\\\\\\u2029and line separator:\\\\\\\\u2028\\\",\\n260:             ),\\n261:             (\\\"`\\\", \\\"\\\\\\\\u0060\\\"),\\n262:             (\\\"\\\\u007f\\\", \\\"\\\\\\\\u007F\\\"),\\n263:             (\\\"\\\\u0080\\\", \\\"\\\\\\\\u0080\\\"),\\n264:             (\\\"\\\\u009f\\\", \\\"\\\\\\\\u009F\\\"),\\n265:         )\\n266:         for value, output in items:\\n267:             with self.subTest(value=value, output=output):\\n268:                 self.check_output(escapejs, value, output)\\n269:                 self.check_output(escapejs, lazystr(value), output)\\n270: \\n271:     def test_json_script(self):\\n272:         tests = (\\n273:             # \\\"<\\\", \\\">\\\" and \\\"&\\\" are quoted inside JSON strings\\n274:             (\\n275:                 (\\n276:                     \\\"&<>\\\",\\n277:                     '<script id=\\\"test_id\\\" type=\\\"application/json\\\">'\\n278:                     '\\\"\\\\\\\\u0026\\\\\\\\u003C\\\\\\\\u003E\\\"</script>',\\n279:                 )\\n280:             ),\\n281:             # \\\"<\\\", \\\">\\\" and \\\"&\\\" are quoted inside JSON objects\\n282:             (\\n283:                 {\\\"a\\\": \\\"<script>test&ing</script>\\\"},\\n284:                 '<script id=\\\"test_id\\\" type=\\\"application/json\\\">'\\n285:                 '{\\\"a\\\": \\\"\\\\\\\\u003Cscript\\\\\\\\u003Etest\\\\\\\\u0026ing\\\\\\\\u003C/script\\\\\\\\u003E\\\"}'\\n286:                 \\\"</script>\\\",\\n287:             ),\\n288:             # Lazy strings are quoted\\n289:             (\\n290:                 lazystr(\\\"&<>\\\"),\\n291:                 '<script id=\\\"test_id\\\" type=\\\"application/json\\\">\\\"\\\\\\\\u0026\\\\\\\\u003C\\\\\\\\u003E\\\"'\\n292:                 \\\"</script>\\\",\\n293:             ),\\n294:             (\\n295:                 {\\\"a\\\": lazystr(\\\"<script>test&ing</script>\\\")},\\n296:                 '<script id=\\\"test_id\\\" type=\\\"application/json\\\">'\\n297:                 '{\\\"a\\\": \\\"\\\\\\\\u003Cscript\\\\\\\\u003Etest\\\\\\\\u0026ing\\\\\\\\u003C/script\\\\\\\\u003E\\\"}'\\n298:                 \\\"</script>\\\",\\n299:             ),\\n300:         )\\n301:         for arg, expected in tests:\\n302:             with self.subTest(arg=arg):\\n303:                 self.assertEqual(json_script(arg, \\\"test_id\\\"), expected)\\n304: \\n305:     def test_json_script_custom_encoder(self):\\n306:         class CustomDjangoJSONEncoder(DjangoJSONEncoder):\\n307:             def encode(self, o):\\n308:                 return '{\\\"hello\\\": \\\"world\\\"}'\\n309: \\n310:         self.assertHTMLEqual(\\n311:             json_script({}, encoder=CustomDjangoJSONEncoder),\\n312:             '<script type=\\\"application/json\\\">{\\\"hello\\\": \\\"world\\\"}</script>',\\n313:         )\\n314: \\n315:     def test_json_script_without_id(self):\\n316:         self.assertHTMLEqual(\\n317:             json_script({\\\"key\\\": \\\"value\\\"}),\\n318:             '<script type=\\\"application/json\\\">{\\\"key\\\": \\\"value\\\"}</script>',\\n319:         )\\n320: \\n321:     def test_smart_urlquote(self):\\n322:         items = (\\n323:             # IDN is encoded as percent-encoded (\\\"quoted\\\") UTF-8 (#36013).\\n324:             (\\\"http://\u00f6\u00e4\u00fc.com/\\\", \\\"http://%C3%B6%C3%A4%C3%BC.com/\\\"),\\n325:             (\\\"https://fa\u00df.example.com\\\", \\\"https://fa%C3%9F.example.com\\\"),\\n326:             (\\n327:                 \\\"http://\u00f6\u00e4\u00fc.com/\u00f6\u00e4\u00fc/\\\",\\n328:                 \\\"http://%C3%B6%C3%A4%C3%BC.com/%C3%B6%C3%A4%C3%BC/\\\",\\n329:             ),\\n330:             (\\n331:                 # Valid under IDNA 2008, but was invalid in IDNA 2003.\\n332:                 \\\"https://\u0789\u07a8\u0780\u07a7\u0783\u07aa.com\\\",\\n333:                 \\\"https://%DE%89%DE%A8%DE%80%DE%A7%DE%83%DE%AA.com\\\",\\n334:             ),\\n335:             (\\n336:                 # Valid under WHATWG URL Specification but not IDNA 2008.\\n337:                 \\\"http://\ud83d\udc53.ws\\\",\\n338:                 \\\"http://%F0%9F%91%93.ws\\\",\\n339:             ),\\n340:             # Pre-encoded IDNA is left unchanged.\\n341:             (\\\"http://xn--iny-zx5a.com/idna2003\\\", \\\"http://xn--iny-zx5a.com/idna2003\\\"),\\n342:             (\\\"http://xn--fa-hia.com/idna2008\\\", \\\"http://xn--fa-hia.com/idna2008\\\"),\\n343:             # Everything unsafe is quoted, !*'();:@&=+$,/?#[]~ is considered\\n344:             # safe as per RFC.\\n345:             (\\n346:                 \\\"http://example.com/path/\u00f6\u00e4\u00fc/\\\",\\n347:                 \\\"http://example.com/path/%C3%B6%C3%A4%C3%BC/\\\",\\n348:             ),\\n349:             (\\\"http://example.com/%C3%B6/\u00e4/\\\", \\\"http://example.com/%C3%B6/%C3%A4/\\\"),\\n350:             (\\\"http://example.com/?x=1&y=2+3&z=\\\", \\\"http://example.com/?x=1&y=2+3&z=\\\"),\\n351:             (\\\"http://example.com/?x=<>\\\\\\\"'\\\", \\\"http://example.com/?x=%3C%3E%22%27\\\"),\\n352:             (\\n353:                 \\\"http://example.com/?q=http://example.com/?x=1%26q=django\\\",\\n354:                 \\\"http://example.com/?q=http%3A%2F%2Fexample.com%2F%3Fx%3D1%26q%3D\\\"\\n355:                 \\\"django\\\",\\n356:             ),\\n357:             (\\n358:                 \\\"http://example.com/?q=http%3A%2F%2Fexample.com%2F%3Fx%3D1%26q%3D\\\"\\n359:                 \\\"django\\\",\\n360:                 \\\"http://example.com/?q=http%3A%2F%2Fexample.com%2F%3Fx%3D1%26q%3D\\\"\\n361:                 \\\"django\\\",\\n362:             ),\\n363:             (\\\"http://.www.f oo.bar/\\\", \\\"http://.www.f%20oo.bar/\\\"),\\n364:             ('http://example.com\\\">', \\\"http://example.com%22%3E\\\"),\\n365:             (\\\"http://10.22.1.1/\\\", \\\"http://10.22.1.1/\\\"),\\n366:             (\\\"http://[fd00::1]/\\\", \\\"http://[fd00::1]/\\\"),\\n367:         )\\n368:         for value, output in items:\\n369:             with self.subTest(value=value, output=output):\\n370:                 self.assertEqual(smart_urlquote(value), output)\\n371: \\n372:     def test_conditional_escape(self):\\n373:         s = \\\"<h1>interop</h1>\\\"\\n374:         self.assertEqual(conditional_escape(s), \\\"&lt;h1&gt;interop&lt;/h1&gt;\\\")\\n375:         self.assertEqual(conditional_escape(mark_safe(s)), s)\\n376:         self.assertEqual(conditional_escape(lazystr(mark_safe(s))), s)\\n377: \\n378:     def test_html_safe(self):\\n379:         @html_safe\\n380:         class HtmlClass:\\n381:             def __str__(self):\\n382:                 return \\\"<h1>I'm a html class!</h1>\\\"\\n383: \\n384:         html_obj = HtmlClass()\\n385:         self.assertTrue(hasattr(HtmlClass, \\\"__html__\\\"))\\n386:         self.assertTrue(hasattr(html_obj, \\\"__html__\\\"))\\n387:         self.assertEqual(str(html_obj), html_obj.__html__())\\n388: \\n389:     def test_html_safe_subclass(self):\\n390:         class BaseClass:\\n391:             def __html__(self):\\n392:                 # defines __html__ on its own\\n393:                 return \\\"some html content\\\"\\n394: \\n395:             def __str__(self):\\n396:                 return \\\"some non html content\\\"\\n397: \\n398:         @html_safe\\n399:         class Subclass(BaseClass):\\n400:             def __str__(self):\\n401:                 # overrides __str__ and is marked as html_safe\\n402:                 return \\\"some html safe content\\\"\\n403: \\n404:         subclass_obj = Subclass()\\n405:         self.assertEqual(str(subclass_obj), subclass_obj.__html__())\\n406: \\n407:     def test_html_safe_defines_html_error(self):\\n408:         msg = \\\"can't apply @html_safe to HtmlClass because it defines __html__().\\\"\\n409:         with self.assertRaisesMessage(ValueError, msg):\\n410: \\n411:             @html_safe\\n412:             class HtmlClass:\\n413:                 def __html__(self):\\n414:                     return \\\"<h1>I'm a html class!</h1>\\\"\\n415: \\n416:     def test_html_safe_doesnt_define_str(self):\\n417:         msg = \\\"can't apply @html_safe to HtmlClass because it doesn't define __str__().\\\"\\n418:         with self.assertRaisesMessage(ValueError, msg):\\n419: \\n420:             @html_safe\\n421:             class HtmlClass:\\n422:                 pass\\n423: \\n424:     def test_urlize(self):\\n425:         tests = (\\n426:             (\\n427:                 \\\"Search for google.com/?q=! and see.\\\",\\n428:                 'Search for <a href=\\\"https://google.com/?q=\\\">google.com/?q=</a>! and '\\n429:                 \\\"see.\\\",\\n430:             ),\\n431:             (\\n432:                 \\\"Search for google.com/?q=1&lt! and see.\\\",\\n433:                 'Search for <a href=\\\"https://google.com/?q=1%3C\\\">google.com/?q=1&lt'\\n434:                 \\\"</a>! and see.\\\",\\n435:             ),\\n436:             (\\n437:                 lazystr(\\\"Search for google.com/?q=!\\\"),\\n438:                 'Search for <a href=\\\"https://google.com/?q=\\\">google.com/?q=</a>!',\\n439:             ),\\n440:             (\\n441:                 \\\"http://www.foo.bar/\\\",\\n442:                 '<a href=\\\"http://www.foo.bar/\\\">http://www.foo.bar/</a>',\\n443:             ),\\n444:             (\\n445:                 \\\"Look on www.\u0646\u0627\u0645\u0647\u200c\u0627\u06cc.com.\\\",\\n446:                 \\\"Look on <a \\\"\\n447:                 'href=\\\"https://www.%D9%86%D8%A7%D9%85%D9%87%E2%80%8C%D8%A7%DB%8C.com\\\"'\\n448:                 \\\">www.\u0646\u0627\u0645\u0647\u200c\u0627\u06cc.com</a>.\\\",\\n449:             ),\\n450:             (\\\"foo@example.com\\\", '<a href=\\\"mailto:foo@example.com\\\">foo@example.com</a>'),\\n451:             (\\n452:                 \\\"test@\\\" + \\\"\ud55c.\uae00.\\\" * 15 + \\\"aaa\\\",\\n453:                 '<a href=\\\"mailto:test@'\\n454:                 + \\\"%ED%95%9C.%EA%B8%80.\\\" * 15\\n455:                 + 'aaa\\\">'\\n456:                 + \\\"test@\\\"\\n457:                 + \\\"\ud55c.\uae00.\\\" * 15\\n458:                 + \\\"aaa</a>\\\",\\n459:             ),\\n460:             (\\n461:                 # RFC 6068 requires a mailto URI to percent-encode a number of\\n462:                 # characters that can appear in <addr-spec>.\\n463:                 \\\"yes+this=is&a%valid!email@example.com\\\",\\n464:                 '<a href=\\\"mailto:yes%2Bthis%3Dis%26a%25valid%21email@example.com\\\"'\\n465:                 \\\">yes+this=is&a%valid!email@example.com</a>\\\",\\n466:             ),\\n467:             (\\n468:                 \\\"foo@fa\u00df.example.com\\\",\\n469:                 '<a href=\\\"mailto:foo@fa%C3%9F.example.com\\\">foo@fa\u00df.example.com</a>',\\n470:             ),\\n471:             (\\n472:                 \\\"idna-2008@\u0789\u07a8\u0780\u07a7\u0783\u07aa.example.mv\\\",\\n473:                 '<a href=\\\"mailto:idna-2008@%DE%89%DE%A8%DE%80%DE%A7%DE%83%DE%AA.ex'\\n474:                 'ample.mv\\\">idna-2008@\u0789\u07a8\u0780\u07a7\u0783\u07aa.example.mv</a>',\\n475:             ),\\n476:             (\\n477:                 \\\"host.djangoproject.com\\\",\\n478:                 '<a href=\\\"https://host.djangoproject.com\\\">host.djangoproject.com</a>',\\n479:             ),\\n480:         )\\n481:         for value, output in tests:\\n482:             with self.subTest(value=value):\\n483:                 self.assertEqual(urlize(value), output)\\n484: \\n485:     @override_settings(URLIZE_ASSUME_HTTPS=False)\\n486:     def test_urlize_http_default_warning(self):\\n487:         msg = (\\n488:             \\\"The default protocol will be changed from HTTP to HTTPS in Django 7.0. \\\"\\n489:             \\\"Set the URLIZE_ASSUME_HTTPS transitional setting to True to opt into \\\"\\n490:             \\\"using HTTPS as the new default protocol.\\\"\\n491:         )\\n492:         with self.assertWarnsMessage(RemovedInDjango70Warning, msg):\\n493:             self.assertEqual(\\n494:                 urlize(\\\"Visit example.com\\\"),\\n495:                 'Visit <a href=\\\"http://example.com\\\">example.com</a>',\\n496:             )\\n497: \\n498:     def test_urlize_unchanged_inputs(self):\\n499:         tests = (\\n500:             (\\\"a\\\" + \\\"@a\\\" * 50000) + \\\"a\\\",  # simple_email_re catastrophic test\\n501:             # Unicode domain catastrophic tests.\\n502:             \\\"a@\\\" + \\\"\ud55c.\uae00.\\\" * 1_000_000 + \\\"a\\\",\\n503:             \\\"http://\\\" + \\\"\ud55c.\uae00.\\\" * 1_000_000 + \\\"com\\\",\\n504:             \\\"www.\\\" + \\\"\ud55c.\uae00.\\\" * 1_000_000 + \\\"com\\\",\\n505:             (\\\"a\\\" + \\\".\\\" * 1000000) + \\\"a\\\",  # trailing_punctuation catastrophic test\\n506:             \\\"foo@\\\",\\n507:             \\\"@foo.com\\\",\\n508:             \\\"foo@.example.com\\\",\\n509:             \\\"foo@localhost\\\",\\n510:             \\\"foo@localhost.\\\",\\n511:             \\\"test@example?;+!.com\\\",\\n512:             \\\"email me@example.com,then I'll respond\\\",\\n513:             \\\"[a link](https://www.djangoproject.com/)\\\",\\n514:             # trim_punctuation catastrophic tests\\n515:             \\\"(\\\" * 100_000 + \\\":\\\" + \\\")\\\" * 100_000,\\n516:             \\\"(\\\" * 100_000 + \\\"&:\\\" + \\\")\\\" * 100_000,\\n517:             \\\"([\\\" * 100_000 + \\\":\\\" + \\\"])\\\" * 100_000,\\n518:             \\\"[(\\\" * 100_000 + \\\":\\\" + \\\")]\\\" * 100_000,\\n519:             \\\"([[\\\" * 100_000 + \\\":\\\" + \\\"]])\\\" * 100_000,\\n520:             \\\"&:\\\" + \\\";\\\" * 100_000,\\n521:             \\\"&.;\\\" * 100_000,\\n522:             \\\".;\\\" * 100_000,\\n523:             \\\"&\\\" + \\\";:\\\" * 100_000,\\n524:         )\\n525:         for value in tests:\\n526:             with self.subTest(value=value):\\n527:                 self.assertEqual(urlize(value), value)\\n528: \",\"url\":\"https://sourcegraph.sourcegraph.com/github.com/sg-evals/django--674eda1c@674eda1c03a3187905f48afee0f15226aa62fdf3/-/blob/tests/utils_tests/test_html.py\"}",
+          "step_id": 23,
+          "timestamp": "2026-03-08T04:24:47.529Z",
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "tool_use_id": "toolu_012aMMj5dfjdWzzkdD3B634J"
+        },
+        {
+          "arguments": {
+            "command": "python -c \"import django; print(django.__file__)\" 2>&1",
+            "description": "Check if Django is installed"
+          },
+          "input": {
+            "command": "python -c \"import django; print(django.__file__)\" 2>&1",
+            "description": "Check if Django is installed"
+          },
+          "output": "Exit code 1\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'django'\n\n[error] tool reported failure",
+          "step_id": 25,
+          "timestamp": "2026-03-08T04:24:58.688Z",
+          "tool": "Bash",
+          "tool_use_id": "toolu_0111LmmSGoSJS7vsENnji4Sq"
+        },
+        {
+          "arguments": {
+            "command": "git -C /workspace remote -v && git -C /workspace log --oneline -5 2>&1",
+            "description": "Check git remote and recent commits"
+          },
+          "input": {
+            "command": "git -C /workspace remote -v && git -C /workspace log --oneline -5 2>&1",
+            "description": "Check git remote and recent commits"
+          },
+          "output": "Exit code 128\nfatal: your current branch 'master' does not have any commits yet\n\n[error] tool reported failure",
+          "step_id": 26,
+          "timestamp": "2026-03-08T04:25:00.586Z",
+          "tool": "Bash",
+          "tool_use_id": "toolu_01WuDZKGjvqKW442XG7gQiQV"
+        },
+        {
+          "arguments": {
+            "command": "mkdir -p /workspace/django/utils",
+            "description": "Create django/utils directory"
+          },
+          "input": {
+            "command": "mkdir -p /workspace/django/utils",
+            "description": "Create django/utils directory"
+          },
+          "output": "[metadata] {\"noOutputExpected\": true}",
+          "step_id": 29,
+          "timestamp": "2026-03-08T04:25:25.166Z",
+          "tool": "Bash",
+          "tool_use_id": "toolu_01AFY8x7ZivMwn2XW9JubLUj"
+        },
+        {
+          "arguments": {
+            "content": "\"\"\"HTML utilities suitable for global use.\"\"\"\n\nimport html\nimport json\nimport re\nimport warnings\nfrom collections import deque\nfrom collections.abc import Mapping\nfrom html.parser import HTMLParser\nfrom itertools import chain\nfrom urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit\n\nfrom django.conf import settings\nfrom django.core.exceptions import SuspiciousOperation, ValidationError\nfrom django.core.validators import DomainNameValidator, EmailValidator\nfrom django.utils.deprecation import RemovedInDjango70Warning\nfrom django.utils.functional import Promise, cached_property, keep_lazy, keep_lazy_text\nfrom django.utils.http import MAX_URL_LENGTH, RFC3986_GENDELIMS, RFC3986_SUBDELIMS\nfrom django.utils.regex_helper import _lazy_re_compile\nfrom django.utils.safestring import SafeData, SafeString, mark_safe\nfrom django.utils.text import normalize_newlines\n\n# https://html.spec.whatwg.org/#void-elements\nVOID_ELEMENTS = frozenset(\n    (\n        \"area\",\n        \"base\",\n        \"br\",\n        \"col\",\n        \"embed\",\n        \"hr\",\n        \"img\",\n        \"input\",\n        \"link\",\n        \"meta\",\n        \"param\",\n        \"source\",\n        \"track\",\n        \"wbr\",\n        # Deprecated tags.\n        \"frame\",\n        \"spacer\",\n    )\n)\n\nMAX_STRIP_TAGS_DEPTH = 50\n\n# HTML tag that opens but has no closing \">\" after 1k+ chars.\nlong_open_tag_without_closing_re = _lazy_re_compile(r\"<[a-zA-Z][^>]{1000,}\")\n\n\n@keep_lazy(SafeString)\ndef escape(text):\n    \"\"\"\n    Return the given text with ampersands, quotes and angle brackets encoded\n    for use in HTML.\n\n    Always escape input, even if it's already escaped and marked as such.\n    This may result in double-escaping. If this is a concern, use\n    conditional_escape() instead.\n    \"\"\"\n    return SafeString(html.escape(str(text)))\n\n\n_js_escapes = {\n    ord(\"\\\\\"): \"\\\\u005C\",\n    ord(\"'\"): \"\\\\u0027\",\n    ord('\"'): \"\\\\u0022\",\n    ord(\">\"): \"\\\\u003E\",\n    ord(\"<\"): \"\\\\u003C\",\n    ord(\"&\"): \"\\\\u0026\",\n    ord(\"=\"): \"\\\\u003D\",\n    ord(\"-\"): \"\\\\u002D\",\n    ord(\";\"): \"\\\\u003B\",\n    ord(\"`\"): \"\\\\u0060\",\n    ord(\"\\u2028\"): \"\\\\u2028\",\n    ord(\"\\u2029\"): \"\\\\u2029\",\n}\n\n# Escape every ASCII character with a value less than 32 (C0), 127(C0),\n# or 128-159(C1).\n_js_escapes.update(\n    (ord(\"%c\" % z), \"\\\\u%04X\" % z) for z in chain(range(32), range(0x7F, 0xA0))\n)\n\n\n@keep_lazy(SafeString)\ndef escapejs(value):\n    \"\"\"Hex encode characters for use in JavaScript strings.\"\"\"\n    return mark_safe(str(value).translate(_js_escapes))\n\n\n_json_script_escapes = {\n    ord(\">\"): \"\\\\u003E\",\n    ord(\"<\"): \"\\\\u003C\",\n    ord(\"&\"): \"\\\\u0026\",\n}\n\n\ndef json_script(value, element_id=None, encoder=None):\n    \"\"\"\n    Escape all the HTML/XML special characters with their unicode escapes, so\n    value is safe to be output anywhere except for inside a tag attribute. Wrap\n    the escaped JSON in a script tag.\n    \"\"\"\n    from django.core.serializers.json import DjangoJSONEncoder\n\n    json_str = json.dumps(value, cls=encoder or DjangoJSONEncoder).translate(\n        _json_script_escapes\n    )\n    if element_id:\n        template = '<script id=\"{}\" type=\"application/json\">{}</script>'\n        args = (element_id, mark_safe(json_str))\n    else:\n        template = '<script type=\"application/json\">{}</script>'\n        args = (mark_safe(json_str),)\n    return format_html(template, *args)\n\n\ndef conditional_escape(text):\n    \"\"\"\n    Similar to escape(), except that it doesn't operate on pre-escaped strings.\n\n    This function relies on the __html__ convention used both by Django's\n    SafeData class and by third-party libraries like markupsafe.\n    \"\"\"\n    if isinstance(text, Promise):\n        text = str(text)\n    if hasattr(text, \"__html__\"):\n        return text.__html__()\n    else:\n        return escape(text)\n\n\ndef format_html(format_string, *args, **kwargs):\n    \"\"\"\n    Similar to str.format, but pass all arguments through conditional_escape(),\n    and call mark_safe() on the result. This function should be used instead\n    of str.format or % interpolation to build up small HTML fragments.\n    \"\"\"\n    if not (args or kwargs):\n        raise TypeError(\"args or kwargs must be provided.\")\n    args_safe = map(conditional_escape, args)\n    kwargs_safe = {k: conditional_escape(v) for (k, v) in kwargs.items()}\n    return mark_safe(format_string.format(*args_safe, **kwargs_safe))\n\n\ndef format_html_join(sep, format_string, args_generator):\n    \"\"\"\n    A wrapper of format_html, for the common case of a group of arguments that\n    need to be formatted using the same format string, and then joined using\n    'sep'. 'sep' is also passed through conditional_escape.\n\n    'args_generator' should be an iterator that returns the sequence of 'args'\n    that will be passed to format_html.\n\n    Example:\n\n      format_html_join('\\n', \"<li>{} {}</li>\", ((u.first_name, u.last_name)\n                                                  for u in users))\n    \"\"\"\n    return mark_safe(\n        conditional_escape(sep).join(\n            (\n                format_html(format_string, **args)\n                if isinstance(args, Mapping)\n                else format_html(format_string, *args)\n            )\n            for args in args_generator\n        )\n    )\n\n\n@keep_lazy_text\ndef linebreaks(value, autoescape=False):\n    \"\"\"Convert newlines into <p> and <br>s.\"\"\"\n    value = normalize_newlines(value)\n    paras = re.split(\"\\n{2,}\", str(value))\n    if autoescape:\n        paras = [\"<p>%s</p>\" % escape(p).replace(\"\\n\", \"<br>\") for p in paras]\n    else:\n        paras = [\"<p>%s</p>\" % p.replace(\"\\n\", \"<br>\") for p in paras]\n    return \"\\n\\n\".join(paras)\n\n\nclass MLStripper(HTMLParser):\n    def __init__(self):\n        super().__init__(convert_charrefs=False)\n        self.reset()\n        self.fed = []\n\n    def handle_data(self, d):\n        self.fed.append(d)\n\n    def handle_entityref(self, name):\n        self.fed.append(\"&%s;\" % name)\n\n    def handle_charref(self, name):\n        self.fed.append(\"&#%s;\" % name)\n\n    def get_data(self):\n        return \"\".join(self.fed)\n\n\ndef _strip_once(value):\n    \"\"\"\n    Internal tag stripping utility used by strip_tags.\n    \"\"\"\n    s = MLStripper()\n    s.feed(value)\n    s.close()\n    return s.get_data()\n\n\n@keep_lazy_text\ndef strip_tags(value):\n    \"\"\"Return the given HTML with all tags stripped.\"\"\"\n    value = str(value)\n    for long_open_tag in long_open_tag_without_closing_re.finditer(value):\n        if long_open_tag.group().count(\"<\") >= MAX_STRIP_TAGS_DEPTH:\n            raise SuspiciousOperation\n    # Note: in typical case this loop executes _strip_once twice (the second\n    # execution does not remove any more tags).\n    strip_tags_depth = 0\n    while \"<\" in value and \">\" in value:\n        if strip_tags_depth >= MAX_STRIP_TAGS_DEPTH:\n            raise SuspiciousOperation\n        new_value = _strip_once(value)\n        if value.count(\"<\") == new_value.count(\"<\"):\n            # _strip_once wasn't able to detect more tags.\n            break\n        value = new_value\n        strip_tags_depth += 1\n    return value\n\n\n@keep_lazy_text\ndef strip_spaces_between_tags(value):\n    \"\"\"Return the given HTML with spaces between tags removed.\"\"\"\n    return re.sub(r\">\\s+<\", \"><\", str(value))\n\n\ndef smart_urlquote(url):\n    \"\"\"Quote a URL if it isn't already quoted.\"\"\"\n\n    def unquote_quote(segment):\n        segment = unquote(segment)\n        # Tilde is part of RFC 3986 Section 2.3 Unreserved Characters,\n        # see also https://bugs.python.org/issue16285\n        return quote(segment, safe=RFC3986_SUBDELIMS + RFC3986_GENDELIMS + \"~\")\n\n    try:\n        scheme, netloc, path, query, fragment = urlsplit(url)\n    except ValueError:\n        # invalid IPv6 URL (normally square brackets in hostname part).\n        return unquote_quote(url)\n\n    # Handle IDN as percent-encoded UTF-8 octets, per WHATWG URL Specification\n    # section 3.5 and RFC 3986 section 3.2.2. Defer any IDNA to the user agent.\n    # See #36013.\n    netloc = unquote_quote(netloc)\n\n    if query:\n        # Separately unquoting key/value, so as to not mix querystring\n        # separators included in query values. See #22267.\n        query_parts = [\n            (unquote(q[0]), unquote(q[1]))\n            for q in parse_qsl(query, keep_blank_values=True)\n        ]\n        # urlencode will take care of quoting\n        query = urlencode(query_parts)\n\n    path = unquote_quote(path)\n    fragment = unquote_quote(fragment)\n\n    return urlunsplit((scheme, netloc, path, query, fragment))\n\n\nclass CountsDict(dict):\n    def __init__(self, *args, word, **kwargs):\n        super().__init__(*args, *kwargs)\n        self.word = word\n\n    def __missing__(self, key):\n        self[key] = self.word.count(key)\n        return self[key]\n\n\nclass Urlizer:\n    \"\"\"\n    Convert any URLs in text into clickable links.\n\n    Work on http://, https://, www. links, and also on links ending in one of\n    the original seven gTLDs (.com, .edu, .gov, .int, .mil, .net, and .org).\n    Links can have trailing punctuation (periods, commas, close-parens) and\n    leading punctuation (opening parens) and it'll still do the right thing.\n    \"\"\"\n\n    trailing_punctuation_chars = \".,:;!\"\n    wrapping_punctuation = [(\"(\", \")\"), (\"[\", \"]\")]\n\n    simple_url_re = _lazy_re_compile(r\"^https?://\\[?\\w\", re.IGNORECASE)\n    simple_url_2_re = _lazy_re_compile(\n        rf\"^www\\.|^(?!http)(?:{DomainNameValidator.hostname_re})\"\n        rf\"(?:{DomainNameValidator.domain_re})\"\n        r\"\\.(com|edu|gov|int|mil|net|org)($|/.*)$\",\n        re.IGNORECASE,\n    )\n    word_split_re = _lazy_re_compile(r\"\"\"([\\s<>\"']+)\"\"\")\n\n    mailto_template = \"mailto:{local}@{domain}\"\n    url_template = '<a href=\"{href}\"{attrs}>{url}</a>'\n\n    def __call__(self, text, trim_url_limit=None, nofollow=False, autoescape=False):\n        \"\"\"\n        If trim_url_limit is not None, truncate the URLs in the link text\n        longer than this limit to trim_url_limit - 1 characters and append an\n        ellipsis.\n\n        If nofollow is True, give the links a rel=\"nofollow\" attribute.\n\n        If autoescape is True, autoescape the link text and URLs.\n        \"\"\"\n        safe_input = isinstance(text, SafeData)\n\n        words = self.word_split_re.split(str(text))\n        local_cache = {}\n        urlized_words = []\n        for word in words:\n            if (urlized_word := local_cache.get(word)) is None:\n                urlized_word = self.handle_word(\n                    word,\n                    safe_input=safe_input,\n                    trim_url_limit=trim_url_limit,\n                    nofollow=nofollow,\n                    autoescape=autoescape,\n                )\n                local_cache[word] = urlized_word\n            urlized_words.append(urlized_word)\n        return \"\".join(urlized_words)\n\n    def handle_word(\n        self,\n        word,\n        *,\n        safe_input,\n        trim_url_limit=None,\n        nofollow=False,\n        autoescape=False,\n    ):\n        if \".\" in word or \"@\" in word or \":\" in word:\n            # lead: Punctuation trimmed from the beginning of the word.\n            # middle: State of the word.\n            # trail: Punctuation trimmed from the end of the word.\n            lead, middle, trail = self.trim_punctuation(word)\n            # Make URL we want to point to.\n            url = None\n            nofollow_attr = ' rel=\"nofollow\"' if nofollow else \"\"\n            if len(middle) <= MAX_URL_LENGTH and self.simple_url_re.match(middle):\n                url = smart_urlquote(html.unescape(middle))\n            elif len(middle) <= MAX_URL_LENGTH and self.simple_url_2_re.match(middle):\n                unescaped_middle = html.unescape(middle)\n                # RemovedInDjango70Warning: When the deprecation ends, replace\n                # with:\n                # url = smart_urlquote(f\"https://{unescaped_middle}\")\n                protocol = (\n                    \"https\"\n                    if getattr(settings, \"URLIZE_ASSUME_HTTPS\", False)\n                    else \"http\"\n                )\n                if not settings.URLIZE_ASSUME_HTTPS:\n                    warnings.warn(\n                        \"The default protocol will be changed from HTTP to \"\n                        \"HTTPS in Django 7.0. Set the URLIZE_ASSUME_HTTPS \"\n                        \"transitional setting to True to opt into using HTTPS as the \"\n                        \"new default protocol.\",\n                        RemovedInDjango70Warning,\n                        stacklevel=2,\n                    )\n                url = smart_urlquote(f\"{protocol}://{unescaped_middle}\")\n            elif \":\" not in middle and self.is_email_simple(middle):\n                local, domain = middle.rsplit(\"@\", 1)\n                # Encode per RFC 6068 Section 2 (items 1, 4, 5). Defer any IDNA\n                # to the user agent. See #36013.\n                local = quote(local, safe=\"\")\n                domain = quote(domain, safe=\"\")\n                url = self.mailto_template.format(local=local, domain=domain)\n                nofollow_attr = \"\"\n            # Make link.\n            if url:\n                trimmed = self.trim_url(middle, limit=trim_url_limit)\n                if autoescape and not safe_input:\n                    lead, trail = escape(lead), escape(trail)\n                    trimmed = escape(trimmed)\n                middle = self.url_template.format(\n                    href=escape(url),\n                    attrs=nofollow_attr,\n                    url=trimmed,\n                )\n                return SafeString(f\"{lead}{middle}{trail}\")\n            else:\n                if safe_input:\n                    return mark_safe(word)\n                elif autoescape:\n                    return escape(word)\n        elif safe_input:\n            return mark_safe(word)\n        elif autoescape:\n            return escape(word)\n        return word\n\n    def trim_url(self, x, *, limit):\n        if limit is None or len(x) <= limit:\n            return x\n        return \"%s\u2026\" % x[: max(0, limit - 1)]\n\n    @cached_property\n    def wrapping_punctuation_openings(self):\n        return \"\".join(dict(self.wrapping_punctuation).keys())\n\n    @cached_property\n    def trailing_punctuation_chars_no_semicolon(self):\n        return self.trailing_punctuation_chars.replace(\";\", \"\")\n\n    @cached_property\n    def trailing_punctuation_chars_has_semicolon(self):\n        return \";\" in self.trailing_punctuation_chars\n\n    def trim_punctuation(self, word):\n        \"\"\"\n        Trim trailing and wrapping punctuation from `word`. Return the items of\n        the new state.\n        \"\"\"\n        # Strip all opening wrapping punctuation.\n        middle = word.lstrip(self.wrapping_punctuation_openings)\n        lead = word[: len(word) - len(middle)]\n        trail = deque()\n\n        # Continue trimming until middle remains unchanged.\n        trimmed_something = True\n        counts = CountsDict(word=middle)\n        while trimmed_something and middle:\n            trimmed_something = False\n            # Trim wrapping punctuation.\n            for opening, closing in self.wrapping_punctuation:\n                if counts[opening] < counts[closing]:\n                    rstripped = middle.rstrip(closing)\n                    if rstripped != middle:\n                        strip = counts[closing] - counts[opening]\n                        trail.appendleft(middle[-strip:])\n                        middle = middle[:-strip]\n                        trimmed_something = True\n                        counts[closing] -= strip\n\n            amp = middle.rfind(\"&\")\n            if amp == -1:\n                rstripped = middle.rstrip(self.trailing_punctuation_chars)\n            else:\n                rstripped = middle.rstrip(self.trailing_punctuation_chars_no_semicolon)\n            if rstripped != middle:\n                trail.appendleft(middle[len(rstripped) :])\n                middle = rstripped\n                trimmed_something = True\n\n            if self.trailing_punctuation_chars_has_semicolon and middle.endswith(\";\"):\n                # Only strip if not part of an HTML entity.\n                potential_entity = middle[amp:]\n                escaped = html.unescape(potential_entity)\n                if escaped == potential_entity or escaped.endswith(\";\"):\n                    rstripped = middle.rstrip(self.trailing_punctuation_chars)\n                    trail_start = len(rstripped)\n                    amount_trailing_semicolons = len(middle) - len(middle.rstrip(\";\"))\n                    if amp > -1 and amount_trailing_semicolons > 1:\n                        # Leave up to most recent semicolon as might be an\n                        # entity.\n                        recent_semicolon = middle[trail_start:].index(\";\")\n                        middle_semicolon_index = recent_semicolon + trail_start + 1\n                        trail.appendleft(middle[middle_semicolon_index:])\n                        middle = rstripped + middle[trail_start:middle_semicolon_index]\n                    else:\n                        trail.appendleft(middle[trail_start:])\n                        middle = rstripped\n                    trimmed_something = True\n\n        trail = \"\".join(trail)\n        return lead, middle, trail\n\n    @staticmethod\n    def is_email_simple(value):\n        \"\"\"Return True if value looks like an email address.\"\"\"\n        try:\n            EmailValidator(allowlist=[])(value)\n        except ValidationError:\n            return False\n        return True\n\n\nurlizer = Urlizer()\n\n\n@keep_lazy_text\ndef urlize(text, trim_url_limit=None, nofollow=False, autoescape=False):\n    return urlizer(\n        text, trim_url_limit=trim_url_limit, nofollow=nofollow, autoescape=autoescape\n    )\n\n\ndef avoid_wrapping(value):\n    \"\"\"\n    Avoid text wrapping in the middle of a phrase by adding non-breaking\n    spaces where there previously were normal spaces.\n    \"\"\"\n    return value.replace(\" \", \"\\xa0\")\n\n\ndef html_safe(klass):\n    \"\"\"\n    A decorator that defines the __html__ method. This helps non-Django\n    templates to detect classes whose __str__ methods return SafeString.\n    \"\"\"\n    if \"__html__\" in klass.__dict__:\n        raise ValueError(\n            \"can't apply @html_safe to %s because it defines \"\n            \"__html__().\" % klass.__name__\n        )\n    if \"__str__\" not in klass.__dict__:\n        raise ValueError(\n            \"can't apply @html_safe to %s because it doesn't \"\n            \"define __str__().\" % klass.__name__\n        )\n    klass_str = klass.__str__\n    klass.__str__ = lambda self: mark_safe(klass_str(self))\n    klass.__html__ = lambda self: str(self)\n    return klass\n\n\ndef escape_with_encoding(text, encoding=\"utf-8\", strings_only=False, errors=\"strict\"):\n    \"\"\"\n    Convert text from the given encoding to a Python string, then apply\n    conditional HTML escaping.\n\n    If strings_only is True and text is a protected type (int, float, Decimal,\n    datetime, etc.), returns the value as-is without conversion or escaping.\n\n    For all other inputs, converts to a Python string using the specified\n    encoding, then applies Django's standard conditional HTML escaping.\n    Lazy translation objects are resolved to strings before escaping.\n    \"\"\"\n    from django.utils.encoding import force_str, is_protected_type\n\n    if strings_only and is_protected_type(text):\n        return text\n    text = force_str(text, encoding=encoding, strings_only=False, errors=errors)\n    return conditional_escape(text)\n",
+            "file_path": "/workspace/django/utils/html.py"
+          },
+          "input": {
+            "content": "\"\"\"HTML utilities suitable for global use.\"\"\"\n\nimport html\nimport json\nimport re\nimport warnings\nfrom collections import deque\nfrom collections.abc import Mapping\nfrom html.parser import HTMLParser\nfrom itertools import chain\nfrom urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit\n\nfrom django.conf import settings\nfrom django.core.exceptions import SuspiciousOperation, ValidationError\nfrom django.core.validators import DomainNameValidator, EmailValidator\nfrom django.utils.deprecation import RemovedInDjango70Warning\nfrom django.utils.functional import Promise, cached_property, keep_lazy, keep_lazy_text\nfrom django.utils.http import MAX_URL_LENGTH, RFC3986_GENDELIMS, RFC3986_SUBDELIMS\nfrom django.utils.regex_helper import _lazy_re_compile\nfrom django.utils.safestring import SafeData, SafeString, mark_safe\nfrom django.utils.text import normalize_newlines\n\n# https://html.spec.whatwg.org/#void-elements\nVOID_ELEMENTS = frozenset(\n    (\n        \"area\",\n        \"base\",\n        \"br\",\n        \"col\",\n        \"embed\",\n        \"hr\",\n        \"img\",\n        \"input\",\n        \"link\",\n        \"meta\",\n        \"param\",\n        \"source\",\n        \"track\",\n        \"wbr\",\n        # Deprecated tags.\n        \"frame\",\n        \"spacer\",\n    )\n)\n\nMAX_STRIP_TAGS_DEPTH = 50\n\n# HTML tag that opens but has no closing \">\" after 1k+ chars.\nlong_open_tag_without_closing_re = _lazy_re_compile(r\"<[a-zA-Z][^>]{1000,}\")\n\n\n@keep_lazy(SafeString)\ndef escape(text):\n    \"\"\"\n    Return the given text with ampersands, quotes and angle brackets encoded\n    for use in HTML.\n\n    Always escape input, even if it's already escaped and marked as such.\n    This may result in double-escaping. If this is a concern, use\n    conditional_escape() instead.\n    \"\"\"\n    return SafeString(html.escape(str(text)))\n\n\n_js_escapes = {\n    ord(\"\\\\\"): \"\\\\u005C\",\n    ord(\"'\"): \"\\\\u0027\",\n    ord('\"'): \"\\\\u0022\",\n    ord(\">\"): \"\\\\u003E\",\n    ord(\"<\"): \"\\\\u003C\",\n    ord(\"&\"): \"\\\\u0026\",\n    ord(\"=\"): \"\\\\u003D\",\n    ord(\"-\"): \"\\\\u002D\",\n    ord(\";\"): \"\\\\u003B\",\n    ord(\"`\"): \"\\\\u0060\",\n    ord(\"\\u2028\"): \"\\\\u2028\",\n    ord(\"\\u2029\"): \"\\\\u2029\",\n}\n\n# Escape every ASCII character with a value less than 32 (C0), 127(C0),\n# or 128-159(C1).\n_js_escapes.update(\n    (ord(\"%c\" % z), \"\\\\u%04X\" % z) for z in chain(range(32), range(0x7F, 0xA0))\n)\n\n\n@keep_lazy(SafeString)\ndef escapejs(value):\n    \"\"\"Hex encode characters for use in JavaScript strings.\"\"\"\n    return mark_safe(str(value).translate(_js_escapes))\n\n\n_json_script_escapes = {\n    ord(\">\"): \"\\\\u003E\",\n    ord(\"<\"): \"\\\\u003C\",\n    ord(\"&\"): \"\\\\u0026\",\n}\n\n\ndef json_script(value, element_id=None, encoder=None):\n    \"\"\"\n    Escape all the HTML/XML special characters with their unicode escapes, so\n    value is safe to be output anywhere except for inside a tag attribute. Wrap\n    the escaped JSON in a script tag.\n    \"\"\"\n    from django.core.serializers.json import DjangoJSONEncoder\n\n    json_str = json.dumps(value, cls=encoder or DjangoJSONEncoder).translate(\n        _json_script_escapes\n    )\n    if element_id:\n        template = '<script id=\"{}\" type=\"application/json\">{}</script>'\n        args = (element_id, mark_safe(json_str))\n    else:\n        template = '<script type=\"application/json\">{}</script>'\n        args = (mark_safe(json_str),)\n    return format_html(template, *args)\n\n\ndef conditional_escape(text):\n    \"\"\"\n    Similar to escape(), except that it doesn't operate on pre-escaped strings.\n\n    This function relies on the __html__ convention used both by Django's\n    SafeData class and by third-party libraries like markupsafe.\n    \"\"\"\n    if isinstance(text, Promise):\n        text = str(text)\n    if hasattr(text, \"__html__\"):\n        return text.__html__()\n    else:\n        return escape(text)\n\n\ndef format_html(format_string, *args, **kwargs):\n    \"\"\"\n    Similar to str.format, but pass all arguments through conditional_escape(),\n    and call mark_safe() on the result. This function should be used instead\n    of str.format or % interpolation to build up small HTML fragments.\n    \"\"\"\n    if not (args or kwargs):\n        raise TypeError(\"args or kwargs must be provided.\")\n    args_safe = map(conditional_escape, args)\n    kwargs_safe = {k: conditional_escape(v) for (k, v) in kwargs.items()}\n    return mark_safe(format_string.format(*args_safe, **kwargs_safe))\n\n\ndef format_html_join(sep, format_string, args_generator):\n    \"\"\"\n    A wrapper of format_html, for the common case of a group of arguments that\n    need to be formatted using the same format string, and then joined using\n    'sep'. 'sep' is also passed through conditional_escape.\n\n    'args_generator' should be an iterator that returns the sequence of 'args'\n    that will be passed to format_html.\n\n    Example:\n\n      format_html_join('\\n', \"<li>{} {}</li>\", ((u.first_name, u.last_name)\n                                                  for u in users))\n    \"\"\"\n    return mark_safe(\n        conditional_escape(sep).join(\n            (\n                format_html(format_string, **args)\n                if isinstance(args, Mapping)\n                else format_html(format_string, *args)\n            )\n            for args in args_generator\n        )\n    )\n\n\n@keep_lazy_text\ndef linebreaks(value, autoescape=False):\n    \"\"\"Convert newlines into <p> and <br>s.\"\"\"\n    value = normalize_newlines(value)\n    paras = re.split(\"\\n{2,}\", str(value))\n    if autoescape:\n        paras = [\"<p>%s</p>\" % escape(p).replace(\"\\n\", \"<br>\") for p in paras]\n    else:\n        paras = [\"<p>%s</p>\" % p.replace(\"\\n\", \"<br>\") for p in paras]\n    return \"\\n\\n\".join(paras)\n\n\nclass MLStripper(HTMLParser):\n    def __init__(self):\n        super().__init__(convert_charrefs=False)\n        self.reset()\n        self.fed = []\n\n    def handle_data(self, d):\n        self.fed.append(d)\n\n    def handle_entityref(self, name):\n        self.fed.append(\"&%s;\" % name)\n\n    def handle_charref(self, name):\n        self.fed.append(\"&#%s;\" % name)\n\n    def get_data(self):\n        return \"\".join(self.fed)\n\n\ndef _strip_once(value):\n    \"\"\"\n    Internal tag stripping utility used by strip_tags.\n    \"\"\"\n    s = MLStripper()\n    s.feed(value)\n    s.close()\n    return s.get_data()\n\n\n@keep_lazy_text\ndef strip_tags(value):\n    \"\"\"Return the given HTML with all tags stripped.\"\"\"\n    value = str(value)\n    for long_open_tag in long_open_tag_without_closing_re.finditer(value):\n        if long_open_tag.group().count(\"<\") >= MAX_STRIP_TAGS_DEPTH:\n            raise SuspiciousOperation\n    # Note: in typical case this loop executes _strip_once twice (the second\n    # execution does not remove any more tags).\n    strip_tags_depth = 0\n    while \"<\" in value and \">\" in value:\n        if strip_tags_depth >= MAX_STRIP_TAGS_DEPTH:\n            raise SuspiciousOperation\n        new_value = _strip_once(value)\n        if value.count(\"<\") == new_value.count(\"<\"):\n            # _strip_once wasn't able to detect more tags.\n            break\n        value = new_value\n        strip_tags_depth += 1\n    return value\n\n\n@keep_lazy_text\ndef strip_spaces_between_tags(value):\n    \"\"\"Return the given HTML with spaces between tags removed.\"\"\"\n    return re.sub(r\">\\s+<\", \"><\", str(value))\n\n\ndef smart_urlquote(url):\n    \"\"\"Quote a URL if it isn't already quoted.\"\"\"\n\n    def unquote_quote(segment):\n        segment = unquote(segment)\n        # Tilde is part of RFC 3986 Section 2.3 Unreserved Characters,\n        # see also https://bugs.python.org/issue16285\n        return quote(segment, safe=RFC3986_SUBDELIMS + RFC3986_GENDELIMS + \"~\")\n\n    try:\n        scheme, netloc, path, query, fragment = urlsplit(url)\n    except ValueError:\n        # invalid IPv6 URL (normally square brackets in hostname part).\n        return unquote_quote(url)\n\n    # Handle IDN as percent-encoded UTF-8 octets, per WHATWG URL Specification\n    # section 3.5 and RFC 3986 section 3.2.2. Defer any IDNA to the user agent.\n    # See #36013.\n    netloc = unquote_quote(netloc)\n\n    if query:\n        # Separately unquoting key/value, so as to not mix querystring\n        # separators included in query values. See #22267.\n        query_parts = [\n            (unquote(q[0]), unquote(q[1]))\n            for q in parse_qsl(query, keep_blank_values=True)\n        ]\n        # urlencode will take care of quoting\n        query = urlencode(query_parts)\n\n    path = unquote_quote(path)\n    fragment = unquote_quote(fragment)\n\n    return urlunsplit((scheme, netloc, path, query, fragment))\n\n\nclass CountsDict(dict):\n    def __init__(self, *args, word, **kwargs):\n        super().__init__(*args, *kwargs)\n        self.word = word\n\n    def __missing__(self, key):\n        self[key] = self.word.count(key)\n        return self[key]\n\n\nclass Urlizer:\n    \"\"\"\n    Convert any URLs in text into clickable links.\n\n    Work on http://, https://, www. links, and also on links ending in one of\n    the original seven gTLDs (.com, .edu, .gov, .int, .mil, .net, and .org).\n    Links can have trailing punctuation (periods, commas, close-parens) and\n    leading punctuation (opening parens) and it'll still do the right thing.\n    \"\"\"\n\n    trailing_punctuation_chars = \".,:;!\"\n    wrapping_punctuation = [(\"(\", \")\"), (\"[\", \"]\")]\n\n    simple_url_re = _lazy_re_compile(r\"^https?://\\[?\\w\", re.IGNORECASE)\n    simple_url_2_re = _lazy_re_compile(\n        rf\"^www\\.|^(?!http)(?:{DomainNameValidator.hostname_re})\"\n        rf\"(?:{DomainNameValidator.domain_re})\"\n        r\"\\.(com|edu|gov|int|mil|net|org)($|/.*)$\",\n        re.IGNORECASE,\n    )\n    word_split_re = _lazy_re_compile(r\"\"\"([\\s<>\"']+)\"\"\")\n\n    mailto_template = \"mailto:{local}@{domain}\"\n    url_template = '<a href=\"{href}\"{attrs}>{url}</a>'\n\n    def __call__(self, text, trim_url_limit=None, nofollow=False, autoescape=False):\n        \"\"\"\n        If trim_url_limit is not None, truncate the URLs in the link text\n        longer than this limit to trim_url_limit - 1 characters and append an\n        ellipsis.\n\n        If nofollow is True, give the links a rel=\"nofollow\" attribute.\n\n        If autoescape is True, autoescape the link text and URLs.\n        \"\"\"\n        safe_input = isinstance(text, SafeData)\n\n        words = self.word_split_re.split(str(text))\n        local_cache = {}\n        urlized_words = []\n        for word in words:\n            if (urlized_word := local_cache.get(word)) is None:\n                urlized_word = self.handle_word(\n                    word,\n                    safe_input=safe_input,\n                    trim_url_limit=trim_url_limit,\n                    nofollow=nofollow,\n                    autoescape=autoescape,\n                )\n                local_cache[word] = urlized_word\n            urlized_words.append(urlized_word)\n        return \"\".join(urlized_words)\n\n    def handle_word(\n        self,\n        word,\n        *,\n        safe_input,\n        trim_url_limit=None,\n        nofollow=False,\n        autoescape=False,\n    ):\n        if \".\" in word or \"@\" in word or \":\" in word:\n            # lead: Punctuation trimmed from the beginning of the word.\n            # middle: State of the word.\n            # trail: Punctuation trimmed from the end of the word.\n            lead, middle, trail = self.trim_punctuation(word)\n            # Make URL we want to point to.\n            url = None\n            nofollow_attr = ' rel=\"nofollow\"' if nofollow else \"\"\n            if len(middle) <= MAX_URL_LENGTH and self.simple_url_re.match(middle):\n                url = smart_urlquote(html.unescape(middle))\n            elif len(middle) <= MAX_URL_LENGTH and self.simple_url_2_re.match(middle):\n                unescaped_middle = html.unescape(middle)\n                # RemovedInDjango70Warning: When the deprecation ends, replace\n                # with:\n                # url = smart_urlquote(f\"https://{unescaped_middle}\")\n                protocol = (\n                    \"https\"\n                    if getattr(settings, \"URLIZE_ASSUME_HTTPS\", False)\n                    else \"http\"\n                )\n                if not settings.URLIZE_ASSUME_HTTPS:\n                    warnings.warn(\n                        \"The default protocol will be changed from HTTP to \"\n                        \"HTTPS in Django 7.0. Set the URLIZE_ASSUME_HTTPS \"\n                        \"transitional setting to True to opt into using HTTPS as the \"\n                        \"new default protocol.\",\n                        RemovedInDjango70Warning,\n                        stacklevel=2,\n                    )\n                url = smart_urlquote(f\"{protocol}://{unescaped_middle}\")\n            elif \":\" not in middle and self.is_email_simple(middle):\n                local, domain = middle.rsplit(\"@\", 1)\n                # Encode per RFC 6068 Section 2 (items 1, 4, 5). Defer any IDNA\n                # to the user agent. See #36013.\n                local = quote(local, safe=\"\")\n                domain = quote(domain, safe=\"\")\n                url = self.mailto_template.format(local=local, domain=domain)\n                nofollow_attr = \"\"\n            # Make link.\n            if url:\n                trimmed = self.trim_url(middle, limit=trim_url_limit)\n                if autoescape and not safe_input:\n                    lead, trail = escape(lead), escape(trail)\n                    trimmed = escape(trimmed)\n                middle = self.url_template.format(\n                    href=escape(url),\n                    attrs=nofollow_attr,\n                    url=trimmed,\n                )\n                return SafeString(f\"{lead}{middle}{trail}\")\n            else:\n                if safe_input:\n                    return mark_safe(word)\n                elif autoescape:\n                    return escape(word)\n        elif safe_input:\n            return mark_safe(word)\n        elif autoescape:\n            return escape(word)\n        return word\n\n    def trim_url(self, x, *, limit):\n        if limit is None or len(x) <= limit:\n            return x\n        return \"%s\u2026\" % x[: max(0, limit - 1)]\n\n    @cached_property\n    def wrapping_punctuation_openings(self):\n        return \"\".join(dict(self.wrapping_punctuation).keys())\n\n    @cached_property\n    def trailing_punctuation_chars_no_semicolon(self):\n        return self.trailing_punctuation_chars.replace(\";\", \"\")\n\n    @cached_property\n    def trailing_punctuation_chars_has_semicolon(self):\n        return \";\" in self.trailing_punctuation_chars\n\n    def trim_punctuation(self, word):\n        \"\"\"\n        Trim trailing and wrapping punctuation from `word`. Return the items of\n        the new state.\n        \"\"\"\n        # Strip all opening wrapping punctuation.\n        middle = word.lstrip(self.wrapping_punctuation_openings)\n        lead = word[: len(word) - len(middle)]\n        trail = deque()\n\n        # Continue trimming until middle remains unchanged.\n        trimmed_something = True\n        counts = CountsDict(word=middle)\n        while trimmed_something and middle:\n            trimmed_something = False\n            # Trim wrapping punctuation.\n            for opening, closing in self.wrapping_punctuation:\n                if counts[opening] < counts[closing]:\n                    rstripped = middle.rstrip(closing)\n                    if rstripped != middle:\n                        strip = counts[closing] - counts[opening]\n                        trail.appendleft(middle[-strip:])\n                        middle = middle[:-strip]\n                        trimmed_something = True\n                        counts[closing] -= strip\n\n            amp = middle.rfind(\"&\")\n            if amp == -1:\n                rstripped = middle.rstrip(self.trailing_punctuation_chars)\n            else:\n                rstripped = middle.rstrip(self.trailing_punctuation_chars_no_semicolon)\n            if rstripped != middle:\n                trail.appendleft(middle[len(rstripped) :])\n                middle = rstripped\n                trimmed_something = True\n\n            if self.trailing_punctuation_chars_has_semicolon and middle.endswith(\";\"):\n                # Only strip if not part of an HTML entity.\n                potential_entity = middle[amp:]\n                escaped = html.unescape(potential_entity)\n                if escaped == potential_entity or escaped.endswith(\";\"):\n                    rstripped = middle.rstrip(self.trailing_punctuation_chars)\n                    trail_start = len(rstripped)\n                    amount_trailing_semicolons = len(middle) - len(middle.rstrip(\";\"))\n                    if amp > -1 and amount_trailing_semicolons > 1:\n                        # Leave up to most recent semicolon as might be an\n                        # entity.\n                        recent_semicolon = middle[trail_start:].index(\";\")\n                        middle_semicolon_index = recent_semicolon + trail_start + 1\n                        trail.appendleft(middle[middle_semicolon_index:])\n                        middle = rstripped + middle[trail_start:middle_semicolon_index]\n                    else:\n                        trail.appendleft(middle[trail_start:])\n                        middle = rstripped\n                    trimmed_something = True\n\n        trail = \"\".join(trail)\n        return lead, middle, trail\n\n    @staticmethod\n    def is_email_simple(value):\n        \"\"\"Return True if value looks like an email address.\"\"\"\n        try:\n            EmailValidator(allowlist=[])(value)\n        except ValidationError:\n            return False\n        return True\n\n\nurlizer = Urlizer()\n\n\n@keep_lazy_text\ndef urlize(text, trim_url_limit=None, nofollow=False, autoescape=False):\n    return urlizer(\n        text, trim_url_limit=trim_url_limit, nofollow=nofollow, autoescape=autoescape\n    )\n\n\ndef avoid_wrapping(value):\n    \"\"\"\n    Avoid text wrapping in the middle of a phrase by adding non-breaking\n    spaces where there previously were normal spaces.\n    \"\"\"\n    return value.replace(\" \", \"\\xa0\")\n\n\ndef html_safe(klass):\n    \"\"\"\n    A decorator that defines the __html__ method. This helps non-Django\n    templates to detect classes whose __str__ methods return SafeString.\n    \"\"\"\n    if \"__html__\" in klass.__dict__:\n        raise ValueError(\n            \"can't apply @html_safe to %s because it defines \"\n            \"__html__().\" % klass.__name__\n        )\n    if \"__str__\" not in klass.__dict__:\n        raise ValueError(\n            \"can't apply @html_safe to %s because it doesn't \"\n            \"define __str__().\" % klass.__name__\n        )\n    klass_str = klass.__str__\n    klass.__str__ = lambda self: mark_safe(klass_str(self))\n    klass.__html__ = lambda self: str(self)\n    return klass\n\n\ndef escape_with_encoding(text, encoding=\"utf-8\", strings_only=False, errors=\"strict\"):\n    \"\"\"\n    Convert text from the given encoding to a Python string, then apply\n    conditional HTML escaping.\n\n    If strings_only is True and text is a protected type (int, float, Decimal,\n    datetime, etc.), returns the value as-is without conversion or escaping.\n\n    For all other inputs, converts to a Python string using the specified\n    encoding, then applies Django's standard conditional HTML escaping.\n    Lazy translation objects are resolved to strings before escaping.\n    \"\"\"\n    from django.utils.encoding import force_str, is_protected_type\n\n    if strings_only and is_protected_type(text):\n        return text\n    text = force_str(text, encoding=encoding, strings_only=False, errors=errors)\n    return conditional_escape(text)\n",
+            "file_path": "/workspace/django/utils/html.py"
+          },
+          "output": "File created successfully at: /workspace/django/utils/html.py\n\n[metadata] {\"type\": \"create\", \"filePath\": \"/workspace/django/utils/html.py\", \"content\": \"\\\"\\\"\\\"HTML utilities suitable for global use.\\\"\\\"\\\"\\n\\nimport html\\nimport json\\nimport re\\nimport warnings\\nfrom collections import deque\\nfrom collections.abc import Mapping\\nfrom html.parser import HTMLParser\\nfrom itertools import chain\\nfrom urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit\\n\\nfrom django.conf import settings\\nfrom django.core.exceptions import SuspiciousOperation, ValidationError\\nfrom django.core.validators import DomainNameValidator, EmailValidator\\nfrom django.utils.deprecation import RemovedInDjango70Warning\\nfrom django.utils.functional import Promise, cached_property, keep_lazy, keep_lazy_text\\nfrom django.utils.http import MAX_URL_LENGTH, RFC3986_GENDELIMS, RFC3986_SUBDELIMS\\nfrom django.utils.regex_helper import _lazy_re_compile\\nfrom django.utils.safestring import SafeData, SafeString, mark_safe\\nfrom django.utils.text import normalize_newlines\\n\\n# https://html.spec.whatwg.org/#void-elements\\nVOID_ELEMENTS = frozenset(\\n    (\\n        \\\"area\\\",\\n        \\\"base\\\",\\n        \\\"br\\\",\\n        \\\"col\\\",\\n        \\\"embed\\\",\\n        \\\"hr\\\",\\n        \\\"img\\\",\\n        \\\"input\\\",\\n        \\\"link\\\",\\n        \\\"meta\\\",\\n        \\\"param\\\",\\n        \\\"source\\\",\\n        \\\"track\\\",\\n        \\\"wbr\\\",\\n        # Deprecated tags.\\n        \\\"frame\\\",\\n        \\\"spacer\\\",\\n    )\\n)\\n\\nMAX_STRIP_TAGS_DEPTH = 50\\n\\n# HTML tag that opens but has no closing \\\">\\\" after 1k+ chars.\\nlong_open_tag_without_closing_re = _lazy_re_compile(r\\\"<[a-zA-Z][^>]{1000,}\\\")\\n\\n\\n@keep_lazy(SafeString)\\ndef escape(text):\\n    \\\"\\\"\\\"\\n    Return the given text with ampersands, quotes and angle brackets encoded\\n    for use in HTML.\\n\\n    Always escape input, even if it's already escaped and marked as such.\\n    This may result in double-escaping. If this is a concern, use\\n    conditional_escape() instead.\\n    \\\"\\\"\\\"\\n    return SafeString(html.escape(str(text)))\\n\\n\\n_js_escapes = {\\n    ord(\\\"\\\\\\\\\\\"): \\\"\\\\\\\\u005C\\\",\\n    ord(\\\"'\\\"): \\\"\\\\\\\\u0027\\\",\\n    ord('\\\"'): \\\"\\\\\\\\u0022\\\",\\n    ord(\\\">\\\"): \\\"\\\\\\\\u003E\\\",\\n    ord(\\\"<\\\"): \\\"\\\\\\\\u003C\\\",\\n    ord(\\\"&\\\"): \\\"\\\\\\\\u0026\\\",\\n    ord(\\\"=\\\"): \\\"\\\\\\\\u003D\\\",\\n    ord(\\\"-\\\"): \\\"\\\\\\\\u002D\\\",\\n    ord(\\\";\\\"): \\\"\\\\\\\\u003B\\\",\\n    ord(\\\"`\\\"): \\\"\\\\\\\\u0060\\\",\\n    ord(\\\"\\\\u2028\\\"): \\\"\\\\\\\\u2028\\\",\\n    ord(\\\"\\\\u2029\\\"): \\\"\\\\\\\\u2029\\\",\\n}\\n\\n# Escape every ASCII character with a value less than 32 (C0), 127(C0),\\n# or 128-159(C1).\\n_js_escapes.update(\\n    (ord(\\\"%c\\\" % z), \\\"\\\\\\\\u%04X\\\" % z) for z in chain(range(32), range(0x7F, 0xA0))\\n)\\n\\n\\n@keep_lazy(SafeString)\\ndef escapejs(value):\\n    \\\"\\\"\\\"Hex encode characters for use in JavaScript strings.\\\"\\\"\\\"\\n    return mark_safe(str(value).translate(_js_escapes))\\n\\n\\n_json_script_escapes = {\\n    ord(\\\">\\\"): \\\"\\\\\\\\u003E\\\",\\n    ord(\\\"<\\\"): \\\"\\\\\\\\u003C\\\",\\n    ord(\\\"&\\\"): \\\"\\\\\\\\u0026\\\",\\n}\\n\\n\\ndef json_script(value, element_id=None, encoder=None):\\n    \\\"\\\"\\\"\\n    Escape all the HTML/XML special characters with their unicode escapes, so\\n    value is safe to be output anywhere except for inside a tag attribute. Wrap\\n    the escaped JSON in a script tag.\\n    \\\"\\\"\\\"\\n    from django.core.serializers.json import DjangoJSONEncoder\\n\\n    json_str = json.dumps(value, cls=encoder or DjangoJSONEncoder).translate(\\n        _json_script_escapes\\n    )\\n    if element_id:\\n        template = '<script id=\\\"{}\\\" type=\\\"application/json\\\">{}</script>'\\n        args = (element_id, mark_safe(json_str))\\n    else:\\n        template = '<script type=\\\"application/json\\\">{}</script>'\\n        args = (mark_safe(json_str),)\\n    return format_html(template, *args)\\n\\n\\ndef conditional_escape(text):\\n    \\\"\\\"\\\"\\n    Similar to escape(), except that it doesn't operate on pre-escaped strings.\\n\\n    This function relies on the __html__ convention used both by Django's\\n    SafeData class and by third-party libraries like markupsafe.\\n    \\\"\\\"\\\"\\n    if isinstance(text, Promise):\\n        text = str(text)\\n    if hasattr(text, \\\"__html__\\\"):\\n        return text.__html__()\\n    else:\\n        return escape(text)\\n\\n\\ndef format_html(format_string, *args, **kwargs):\\n    \\\"\\\"\\\"\\n    Similar to str.format, but pass all arguments through conditional_escape(),\\n    and call mark_safe() on the result. This function should be used instead\\n    of str.format or % interpolation to build up small HTML fragments.\\n    \\\"\\\"\\\"\\n    if not (args or kwargs):\\n        raise TypeError(\\\"args or kwargs must be provided.\\\")\\n    args_safe = map(conditional_escape, args)\\n    kwargs_safe = {k: conditional_escape(v) for (k, v) in kwargs.items()}\\n    return mark_safe(format_string.format(*args_safe, **kwargs_safe))\\n\\n\\ndef format_html_join(sep, format_string, args_generator):\\n    \\\"\\\"\\\"\\n    A wrapper of format_html, for the common case of a group of arguments that\\n    need to be formatted using the same format string, and then joined using\\n    'sep'. 'sep' is also passed through conditional_escape.\\n\\n    'args_generator' should be an iterator that returns the sequence of 'args'\\n    that will be passed to format_html.\\n\\n    Example:\\n\\n      format_html_join('\\\\n', \\\"<li>{} {}</li>\\\", ((u.first_name, u.last_name)\\n                                                  for u in users))\\n    \\\"\\\"\\\"\\n    return mark_safe(\\n        conditional_escape(sep).join(\\n            (\\n                format_html(format_string, **args)\\n                if isinstance(args, Mapping)\\n                else format_html(format_string, *args)\\n            )\\n            for args in args_generator\\n        )\\n    )\\n\\n\\n@keep_lazy_text\\ndef linebreaks(value, autoescape=False):\\n    \\\"\\\"\\\"Convert newlines into <p> and <br>s.\\\"\\\"\\\"\\n    value = normalize_newlines(value)\\n    paras = re.split(\\\"\\\\n{2,}\\\", str(value))\\n    if autoescape:\\n        paras = [\\\"<p>%s</p>\\\" % escape(p).replace(\\\"\\\\n\\\", \\\"<br>\\\") for p in paras]\\n    else:\\n        paras = [\\\"<p>%s</p>\\\" % p.replace(\\\"\\\\n\\\", \\\"<br>\\\") for p in paras]\\n    return \\\"\\\\n\\\\n\\\".join(paras)\\n\\n\\nclass MLStripper(HTMLParser):\\n    def __init__(self):\\n        super().__init__(convert_charrefs=False)\\n        self.reset()\\n        self.fed = []\\n\\n    def handle_data(self, d):\\n        self.fed.append(d)\\n\\n    def handle_entityref(self, name):\\n        self.fed.append(\\\"&%s;\\\" % name)\\n\\n    def handle_charref(self, name):\\n        self.fed.append(\\\"&#%s;\\\" % name)\\n\\n    def get_data(self):\\n        return \\\"\\\".join(self.fed)\\n\\n\\ndef _strip_once(value):\\n    \\\"\\\"\\\"\\n    Internal tag stripping utility used by strip_tags.\\n    \\\"\\\"\\\"\\n    s = MLStripper()\\n    s.feed(value)\\n    s.close()\\n    return s.get_data()\\n\\n\\n@keep_lazy_text\\ndef strip_tags(value):\\n    \\\"\\\"\\\"Return the given HTML with all tags stripped.\\\"\\\"\\\"\\n    value = str(value)\\n    for long_open_tag in long_open_tag_without_closing_re.finditer(value):\\n        if long_open_tag.group().count(\\\"<\\\") >= MAX_STRIP_TAGS_DEPTH:\\n            raise SuspiciousOperation\\n    # Note: in typical case this loop executes _strip_once twice (the second\\n    # execution does not remove any more tags).\\n    strip_tags_depth = 0\\n    while \\\"<\\\" in value and \\\">\\\" in value:\\n        if strip_tags_depth >= MAX_STRIP_TAGS_DEPTH:\\n            raise SuspiciousOperation\\n        new_value = _strip_once(value)\\n        if value.count(\\\"<\\\") == new_value.count(\\\"<\\\"):\\n            # _strip_once wasn't able to detect more tags.\\n            break\\n        value = new_value\\n        strip_tags_depth += 1\\n    return value\\n\\n\\n@keep_lazy_text\\ndef strip_spaces_between_tags(value):\\n    \\\"\\\"\\\"Return the given HTML with spaces between tags removed.\\\"\\\"\\\"\\n    return re.sub(r\\\">\\\\s+<\\\", \\\"><\\\", str(value))\\n\\n\\ndef smart_urlquote(url):\\n    \\\"\\\"\\\"Quote a URL if it isn't already quoted.\\\"\\\"\\\"\\n\\n    def unquote_quote(segment):\\n        segment = unquote(segment)\\n        # Tilde is part of RFC 3986 Section 2.3 Unreserved Characters,\\n        # see also https://bugs.python.org/issue16285\\n        return quote(segment, safe=RFC3986_SUBDELIMS + RFC3986_GENDELIMS + \\\"~\\\")\\n\\n    try:\\n        scheme, netloc, path, query, fragment = urlsplit(url)\\n    except ValueError:\\n        # invalid IPv6 URL (normally square brackets in hostname part).\\n        return unquote_quote(url)\\n\\n    # Handle IDN as percent-encoded UTF-8 octets, per WHATWG URL Specification\\n    # section 3.5 and RFC 3986 section 3.2.2. Defer any IDNA to the user agent.\\n    # See #36013.\\n    netloc = unquote_quote(netloc)\\n\\n    if query:\\n        # Separately unquoting key/value, so as to not mix querystring\\n        # separators included in query values. See #22267.\\n        query_parts = [\\n            (unquote(q[0]), unquote(q[1]))\\n            for q in parse_qsl(query, keep_blank_values=True)\\n        ]\\n        # urlencode will take care of quoting\\n        query = urlencode(query_parts)\\n\\n    path = unquote_quote(path)\\n    fragment = unquote_quote(fragment)\\n\\n    return urlunsplit((scheme, netloc, path, query, fragment))\\n\\n\\nclass CountsDict(dict):\\n    def __init__(self, *args, word, **kwargs):\\n        super().__init__(*args, *kwargs)\\n        self.word = word\\n\\n    def __missing__(self, key):\\n        self[key] = self.word.count(key)\\n        return self[key]\\n\\n\\nclass Urlizer:\\n    \\\"\\\"\\\"\\n    Convert any URLs in text into clickable links.\\n\\n    Work on http://, https://, www. links, and also on links ending in one of\\n    the original seven gTLDs (.com, .edu, .gov, .int, .mil, .net, and .org).\\n    Links can have trailing punctuation (periods, commas, close-parens) and\\n    leading punctuation (opening parens) and it'll still do the right thing.\\n    \\\"\\\"\\\"\\n\\n    trailing_punctuation_chars = \\\".,:;!\\\"\\n    wrapping_punctuation = [(\\\"(\\\", \\\")\\\"), (\\\"[\\\", \\\"]\\\")]\\n\\n    simple_url_re = _lazy_re_compile(r\\\"^https?://\\\\[?\\\\w\\\", re.IGNORECASE)\\n    simple_url_2_re = _lazy_re_compile(\\n        rf\\\"^www\\\\.|^(?!http)(?:{DomainNameValidator.hostname_re})\\\"\\n        rf\\\"(?:{DomainNameValidator.domain_re})\\\"\\n        r\\\"\\\\.(com|edu|gov|int|mil|net|org)($|/.*)$\\\",\\n        re.IGNORECASE,\\n    )\\n    word_split_re = _lazy_re_compile(r\\\"\\\"\\\"([\\\\s<>\\\"']+)\\\"\\\"\\\")\\n\\n    mailto_template = \\\"mailto:{local}@{domain}\\\"\\n    url_template = '<a href=\\\"{href}\\\"{attrs}>{url}</a>'\\n\\n    def __call__(self, text, trim_url_limit=None, nofollow=False, autoescape=False):\\n        \\\"\\\"\\\"\\n        If trim_url_limit is not None, truncate the URLs in the link text\\n        longer than this limit to trim_url_limit - 1 characters and append an\\n        ellipsis.\\n\\n        If nofollow is True, give the links a rel=\\\"nofollow\\\" attribute.\\n\\n        If autoescape is True, autoescape the link text and URLs.\\n        \\\"\\\"\\\"\\n        safe_input = isinstance(text, SafeData)\\n\\n        words = self.word_split_re.split(str(text))\\n        local_cache = {}\\n        urlized_words = []\\n        for word in words:\\n            if (urlized_word := local_cache.get(word)) is None:\\n                urlized_word = self.handle_word(\\n                    word,\\n                    safe_input=safe_input,\\n                    trim_url_limit=trim_url_limit,\\n                    nofollow=nofollow,\\n                    autoescape=autoescape,\\n                )\\n                local_cache[word] = urlized_word\\n            urlized_words.append(urlized_word)\\n        return \\\"\\\".join(urlized_words)\\n\\n    def handle_word(\\n        self,\\n        word,\\n        *,\\n        safe_input,\\n        trim_url_limit=None,\\n        nofollow=False,\\n        autoescape=False,\\n    ):\\n        if \\\".\\\" in word or \\\"@\\\" in word or \\\":\\\" in word:\\n            # lead: Punctuation trimmed from the beginning of the word.\\n            # middle: State of the word.\\n            # trail: Punctuation trimmed from the end of the word.\\n            lead, middle, trail = self.trim_punctuation(word)\\n            # Make URL we want to point to.\\n            url = None\\n            nofollow_attr = ' rel=\\\"nofollow\\\"' if nofollow else \\\"\\\"\\n            if len(middle) <= MAX_URL_LENGTH and self.simple_url_re.match(middle):\\n                url = smart_urlquote(html.unescape(middle))\\n            elif len(middle) <= MAX_URL_LENGTH and self.simple_url_2_re.match(middle):\\n                unescaped_middle = html.unescape(middle)\\n                # RemovedInDjango70Warning: When the deprecation ends, replace\\n                # with:\\n                # url = smart_urlquote(f\\\"https://{unescaped_middle}\\\")\\n                protocol = (\\n                    \\\"https\\\"\\n                    if getattr(settings, \\\"URLIZE_ASSUME_HTTPS\\\", False)\\n                    else \\\"http\\\"\\n                )\\n                if not settings.URLIZE_ASSUME_HTTPS:\\n                    warnings.warn(\\n                        \\\"The default protocol will be changed from HTTP to \\\"\\n                        \\\"HTTPS in Django 7.0. Set the URLIZE_ASSUME_HTTPS \\\"\\n                        \\\"transitional setting to True to opt into using HTTPS as the \\\"\\n                        \\\"new default protocol.\\\",\\n                        RemovedInDjango70Warning,\\n                        stacklevel=2,\\n                    )\\n                url = smart_urlquote(f\\\"{protocol}://{unescaped_middle}\\\")\\n            elif \\\":\\\" not in middle and self.is_email_simple(middle):\\n                local, domain = middle.rsplit(\\\"@\\\", 1)\\n                # Encode per RFC 6068 Section 2 (items 1, 4, 5). Defer any IDNA\\n                # to the user agent. See #36013.\\n                local = quote(local, safe=\\\"\\\")\\n                domain = quote(domain, safe=\\\"\\\")\\n                url = self.mailto_template.format(local=local, domain=domain)\\n                nofollow_attr = \\\"\\\"\\n            # Make link.\\n            if url:\\n                trimmed = self.trim_url(middle, limit=trim_url_limit)\\n                if autoescape and not safe_input:\\n                    lead, trail = escape(lead), escape(trail)\\n                    trimmed = escape(trimmed)\\n                middle = self.url_template.format(\\n                    href=escape(url),\\n                    attrs=nofollow_attr,\\n                    url=trimmed,\\n                )\\n                return SafeString(f\\\"{lead}{middle}{trail}\\\")\\n            else:\\n                if safe_input:\\n                    return mark_safe(word)\\n                elif autoescape:\\n                    return escape(word)\\n        elif safe_input:\\n            return mark_safe(word)\\n        elif autoescape:\\n            return escape(word)\\n        return word\\n\\n    def trim_url(self, x, *, limit):\\n        if limit is None or len(x) <= limit:\\n            return x\\n        return \\\"%s\u2026\\\" % x[: max(0, limit - 1)]\\n\\n    @cached_property\\n    def wrapping_punctuation_openings(self):\\n        return \\\"\\\".join(dict(self.wrapping_punctuation).keys())\\n\\n    @cached_property\\n    def trailing_punctuation_chars_no_semicolon(self):\\n        return self.trailing_punctuation_chars.replace(\\\";\\\", \\\"\\\")\\n\\n    @cached_property\\n    def trailing_punctuation_chars_has_semicolon(self):\\n        return \\\";\\\" in self.trailing_punctuation_chars\\n\\n    def trim_punctuation(self, word):\\n        \\\"\\\"\\\"\\n        Trim trailing and wrapping punctuation from `word`. Return the items of\\n        the new state.\\n        \\\"\\\"\\\"\\n        # Strip all opening wrapping punctuation.\\n        middle = word.lstrip(self.wrapping_punctuation_openings)\\n        lead = word[: len(word) - len(middle)]\\n        trail = deque()\\n\\n        # Continue trimming until middle remains unchanged.\\n        trimmed_something = True\\n        counts = CountsDict(word=middle)\\n        while trimmed_something and middle:\\n            trimmed_something = False\\n            # Trim wrapping punctuation.\\n            for opening, closing in self.wrapping_punctuation:\\n                if counts[opening] < counts[closing]:\\n                    rstripped = middle.rstrip(closing)\\n                    if rstripped != middle:\\n                        strip = counts[closing] - counts[opening]\\n                        trail.appendleft(middle[-strip:])\\n                        middle = middle[:-strip]\\n                        trimmed_something = True\\n                        counts[closing] -= strip\\n\\n            amp = middle.rfind(\\\"&\\\")\\n            if amp == -1:\\n                rstripped = middle.rstrip(self.trailing_punctuation_chars)\\n            else:\\n                rstripped = middle.rstrip(self.trailing_punctuation_chars_no_semicolon)\\n            if rstripped != middle:\\n                trail.appendleft(middle[len(rstripped) :])\\n                middle = rstripped\\n                trimmed_something = True\\n\\n            if self.trailing_punctuation_chars_has_semicolon and middle.endswith(\\\";\\\"):\\n                # Only strip if not part of an HTML entity.\\n                potential_entity = middle[amp:]\\n                escaped = html.unescape(potential_entity)\\n                if escaped == potential_entity or escaped.endswith(\\\";\\\"):\\n                    rstripped = middle.rstrip(self.trailing_punctuation_chars)\\n                    trail_start = len(rstripped)\\n                    amount_trailing_semicolons = len(middle) - len(middle.rstrip(\\\";\\\"))\\n                    if amp > -1 and amount_trailing_semicolons > 1:\\n                        # Leave up to most recent semicolon as might be an\\n                        # entity.\\n                        recent_semicolon = middle[trail_start:].index(\\\";\\\")\\n                        middle_semicolon_index = recent_semicolon + trail_start + 1\\n                        trail.appendleft(middle[middle_semicolon_index:])\\n                        middle = rstripped + middle[trail_start:middle_semicolon_index]\\n                    else:\\n                        trail.appendleft(middle[trail_start:])\\n                        middle = rstripped\\n                    trimmed_something = True\\n\\n        trail = \\\"\\\".join(trail)\\n        return lead, middle, trail\\n\\n    @staticmethod\\n    def is_email_simple(value):\\n        \\\"\\\"\\\"Return True if value looks like an email address.\\\"\\\"\\\"\\n        try:\\n            EmailValidator(allowlist=[])(value)\\n        except ValidationError:\\n            return False\\n        return True\\n\\n\\nurlizer = Urlizer()\\n\\n\\n@keep_lazy_text\\ndef urlize(text, trim_url_limit=None, nofollow=False, autoescape=False):\\n    return urlizer(\\n        text, trim_url_limit=trim_url_limit, nofollow=nofollow, autoescape=autoescape\\n    )\\n\\n\\ndef avoid_wrapping(value):\\n    \\\"\\\"\\\"\\n    Avoid text wrapping in the middle of a phrase by adding non-breaking\\n    spaces where there previously were normal spaces.\\n    \\\"\\\"\\\"\\n    return value.replace(\\\" \\\", \\\"\\\\xa0\\\")\\n\\n\\ndef html_safe(klass):\\n    \\\"\\\"\\\"\\n    A decorator that defines the __html__ method. This helps non-Django\\n    templates to detect classes whose __str__ methods return SafeString.\\n    \\\"\\\"\\\"\\n    if \\\"__html__\\\" in klass.__dict__:\\n        raise ValueError(\\n            \\\"can't apply @html_safe to %s because it defines \\\"\\n            \\\"__html__().\\\" % klass.__name__\\n        )\\n    if \\\"__str__\\\" not in klass.__dict__:\\n        raise ValueError(\\n            \\\"can't apply @html_safe to %s because it doesn't \\\"\\n            \\\"define __str__().\\\" % klass.__name__\\n        )\\n    klass_str = klass.__str__\\n    klass.__str__ = lambda self: mark_safe(klass_str(self))\\n    klass.__html__ = lambda self: str(self)\\n    return klass\\n\\n\\ndef escape_with_encoding(text, encoding=\\\"utf-8\\\", strings_only=False, errors=\\\"strict\\\"):\\n    \\\"\\\"\\\"\\n    Convert text from the given encoding to a Python string, then apply\\n    conditional HTML escaping.\\n\\n    If strings_only is True and text is a protected type (int, float, Decimal,\\n    datetime, etc.), returns the value as-is without conversion or escaping.\\n\\n    For all other inputs, converts to a Python string using the specified\\n    encoding, then applies Django's standard conditional HTML escaping.\\n    Lazy translation objects are resolved to strings before escaping.\\n    \\\"\\\"\\\"\\n    from django.utils.encoding import force_str, is_protected_type\\n\\n    if strings_only and is_protected_type(text):\\n        return text\\n    text = force_str(text, encoding=encoding, strings_only=False, errors=errors)\\n    return conditional_escape(text)\\n\", \"structuredPatch\": [], \"originalFile\": null}",
+          "step_id": 30,
+          "timestamp": "2026-03-08T04:26:54.288Z",
+          "tool": "Write",
+          "tool_use_id": "toolu_011M6od5w9B6kh2LEPE6CboV"
+        },
+        {
+          "arguments": {
+            "command": "python -c \"\nimport ast\nwith open('/workspace/django/utils/html.py') as f:\n    source = f.read()\nast.parse(source)\nprint('Syntax OK')\n\"",
+            "description": "Validate Python syntax of html.py"
+          },
+          "input": {
+            "command": "python -c \"\nimport ast\nwith open('/workspace/django/utils/html.py') as f:\n    source = f.read()\nast.parse(source)\nprint('Syntax OK')\n\"",
+            "description": "Validate Python syntax of html.py"
+          },
+          "output": "Syntax OK\n\n[stdout]\nSyntax OK\n[metadata] {\"noOutputExpected\": false}",
+          "step_id": 32,
+          "timestamp": "2026-03-08T04:26:57.671Z",
+          "tool": "Bash",
+          "tool_use_id": "toolu_01Nr3ryYw9BnoAuwAt7L7jWf"
+        },
+        {
+          "arguments": {
+            "command": "grep -n \"escape_with_encoding\\|force_str\\|is_protected_type\\|conditional_escape\" /workspace/django/utils/html.py | tail -20",
+            "description": "Check the new function and its dependencies"
+          },
+          "input": {
+            "command": "grep -n \"escape_with_encoding\\|force_str\\|is_protected_type\\|conditional_escape\" /workspace/django/utils/html.py | tail -20",
+            "description": "Check the new function and its dependencies"
+          },
+          "output": "60:    conditional_escape() instead.\n120:def conditional_escape(text):\n137:    Similar to str.format, but pass all arguments through conditional_escape(),\n143:    args_safe = map(conditional_escape, args)\n144:    kwargs_safe = {k: conditional_escape(v) for (k, v) in kwargs.items()}\n152:    'sep'. 'sep' is also passed through conditional_escape.\n163:        conditional_escape(sep).join(\n537:def escape_with_encoding(text, encoding=\"utf-8\", strings_only=False, errors=\"strict\"):\n549:    from django.utils.encoding import force_str, is_protected_type\n551:    if strings_only and is_protected_type(text):\n553:    text = force_str(text, encoding=encoding, strings_only=False, errors=errors)\n554:    return conditional_escape(text)\n\n[stdout]\n60:    conditional_escape() instead.\n120:def conditional_escape(text):\n137:    Similar to str.format, but pass all arguments through conditional_escape(),\n143:    args_safe = map(conditional_escape, args)\n144:    kwargs_safe = {k: conditional_escape(v) for (k, v) in kwargs.items()}\n152:    'sep'. 'sep' is also passed through conditional_escape.\n163:        conditional_escape(sep).join(\n537:def escape_with_encoding(text, encoding=\"utf-8\", strings_only=False, errors=\"strict\"):\n549:    from django.utils.encoding import force_str, is_protected_type\n551:    if strings_only and is_protected_type(text):\n553:    text = force_str(text, encoding=encoding, strings_only=False, errors=errors)\n554:    return conditional_escape(text)\n[metadata] {\"noOutputExpected\": false}",
+          "step_id": 34,
+          "timestamp": "2026-03-08T04:27:00.367Z",
+          "tool": "Bash",
+          "tool_use_id": "toolu_01KM85XHNbTwbgyvcuYQWJXo"
+        }
+      ]
+    },
+    "transcript": {
+      "json_line_count": 57,
+      "line_count": 57,
+      "message_event_count": 47,
+      "messages": [
+        {
+          "sequence": 0,
+          "subtype": "init",
+          "text": null,
+          "tool": null,
+          "type": "system"
+        },
+        {
+          "sequence": 1,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "ToolSearch",
+          "type": "assistant"
+        },
+        {
+          "sequence": 2,
+          "subtype": "tool_result",
+          "text": "{\"matches\": [\"mcp__sourcegraph__sg_read_file\", \"mcp__sourcegraph__sg_keyword_search\"], \"query\": \"select:mcp__sourcegraph__sg_read_file,mcp__sourcegraph__sg_keyword_search\", \"total_deferred_tools\": 33}",
+          "tool": "ToolSearch",
+          "type": "user"
+        },
+        {
+          "sequence": 3,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 4,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 5,
+          "subtype": "tool_result",
+          "text": "{\"content\":\"1: \\\"\\\"\\\"HTML utilities suitable for global use.\\\"\\\"\\\"\\n2: \\n3: import html\\n4: import json\\n5: import re\\n6: import warnings\\n7: from collections import deque\\n8: from collections.abc import Mapping\\n9: from...",
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "user"
+        },
+        {
+          "sequence": 6,
+          "subtype": "tool_result",
+          "text": "{\"content\":\"1: import codecs\\n2: import datetime\\n3: import locale\\n4: from decimal import Decimal\\n5: from types import NoneType\\n6: from urllib.parse import quote\\n7: \\n8: from django.utils.functional import Promise\\n9...",
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "user"
+        },
+        {
+          "sequence": 7,
+          "subtype": "text",
+          "text": "Now let me check the tests to understand the exact interface expected:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 8,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 9,
+          "subtype": "tool_result",
+          "text": "{\"blocks\":[]}",
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "user"
+        },
+        {
+          "sequence": 10,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "ToolSearch",
+          "type": "assistant"
+        },
+        {
+          "sequence": 11,
+          "subtype": "tool_result",
+          "text": "{\"matches\": [\"Bash\", \"Read\", \"Write\", \"Edit\"], \"query\": \"select:Bash,Read,Write,Edit\", \"total_deferred_tools\": 33}",
+          "tool": "ToolSearch",
+          "type": "user"
+        },
+        {
+          "sequence": 12,
+          "subtype": "text",
+          "text": "Let me run the existing tests and look for test files:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 13,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 14,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "assistant"
+        },
+        {
+          "sequence": 15,
+          "subtype": "tool_result",
+          "text": "{\"interrupted\": false, \"isImage\": false, \"noOutputExpected\": false, \"stderr\": \"\", \"stdout\": \"\"}",
+          "tool": "Bash",
+          "type": "user"
+        },
+        {
+          "sequence": 16,
+          "subtype": "tool_result",
+          "text": "{\"blocks\":[]}",
+          "tool": "mcp__sourcegraph__sg_keyword_search",
+          "type": "user"
+        },
+        {
+          "sequence": 17,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 18,
+          "subtype": "tool_result",
+          "text": "{\"interrupted\": false, \"isImage\": false, \"noOutputExpected\": false, \"stderr\": \"\", \"stdout\": \"\"}",
+          "tool": "Bash",
+          "type": "user"
+        },
+        {
+          "sequence": 19,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 20,
+          "subtype": "tool_result",
+          "text": "no django dir",
+          "tool": "Bash",
+          "type": "user"
+        },
+        {
+          "sequence": 21,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 22,
+          "subtype": "tool_result",
+          "text": "total 0 drwxr-xr-x 1 claude claude  18 Mar  8 04:23 . drwxr-xr-x 1 root   root   166 Mar  8 04:24 .. drwxr-xr-x 1 claude claude  10 Mar  8 04:23 .git",
+          "tool": "Bash",
+          "type": "user"
+        },
+        {
+          "sequence": 23,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 24,
+          "subtype": "tool_result",
+          "text": "MCP error -32602: invalid params: validating \"arguments\": validating root: unexpected additional properties [\"query\"]",
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "user"
+        },
+        {
+          "sequence": 25,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "ToolSearch",
+          "type": "assistant"
+        },
+        {
+          "sequence": 26,
+          "subtype": "tool_result",
+          "text": "{\"matches\": [\"mcp__sourcegraph__sg_list_files\"], \"query\": \"select:mcp__sourcegraph__sg_list_files\", \"total_deferred_tools\": 33}",
+          "tool": "ToolSearch",
+          "type": "user"
+        },
+        {
+          "sequence": 27,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "assistant"
+        },
+        {
+          "sequence": 28,
+          "subtype": "tool_result",
+          "text": "{\"files\":[{\"isDirectory\":true,\"path\":\"tests/utils_tests/archives/\"},{\"isDirectory\":true,\"path\":\"tests/utils_tests/eggs/\"},{\"isDirectory\":true,\"path\":\"tests/utils_tests/files/\"},{\"isDirectory\":true,\"path\":\"tests/utils_tes...",
+          "tool": "mcp__sourcegraph__sg_list_files",
+          "type": "user"
+        },
+        {
+          "sequence": 29,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "assistant"
+        },
+        {
+          "sequence": 30,
+          "subtype": "tool_result",
+          "text": "{\"content\":\"1: import math\\n2: import os\\n3: import sys\\n4: from datetime import datetime\\n5: \\n6: from django.core.exceptions import SuspiciousOperation\\n7: from django.core.serializers.json import DjangoJSONEncoder\\n8:...",
+          "tool": "mcp__sourcegraph__sg_read_file",
+          "type": "user"
+        },
+        {
+          "sequence": 31,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 32,
+          "subtype": "tool_result",
+          "text": "Exit code 1 Traceback (most recent call last):   File \"<string>\", line 1, in <module> ModuleNotFoundError: No module named 'django'",
+          "tool": "Bash",
+          "type": "user"
+        },
+        {
+          "sequence": 33,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 34,
+          "subtype": "tool_result",
+          "text": "Exit code 128 fatal: your current branch 'master' does not have any commits yet",
+          "tool": "Bash",
+          "type": "user"
+        },
+        {
+          "sequence": 35,
+          "subtype": "text",
+          "text": "Now I understand the codebase. I need to create the local file structure and add the `escape_with_encoding` function. Let me create the necessary directories and the modified html.py:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 36,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 37,
+          "subtype": "tool_result",
+          "text": "{\"interrupted\": false, \"isImage\": false, \"noOutputExpected\": true, \"stderr\": \"\", \"stdout\": \"\"}",
+          "tool": "Bash",
+          "type": "user"
+        },
+        {
+          "sequence": 38,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Write",
+          "type": "assistant"
+        },
+        {
+          "sequence": 39,
+          "subtype": "tool_result",
+          "text": "File created successfully at: /workspace/django/utils/html.py",
+          "tool": "Write",
+          "type": "user"
+        },
+        {
+          "sequence": 40,
+          "subtype": "text",
+          "text": "Now let me verify the syntax is valid:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 41,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 42,
+          "subtype": "tool_result",
+          "text": "Syntax OK",
+          "tool": "Bash",
+          "type": "user"
+        },
+        {
+          "sequence": 43,
+          "subtype": "text",
+          "text": "The syntax is valid. Let me verify the implementation looks correct by reviewing the key parts:",
+          "tool": null,
+          "type": "assistant"
+        },
+        {
+          "sequence": 44,
+          "subtype": "tool_use",
+          "text": null,
+          "tool": "Bash",
+          "type": "assistant"
+        },
+        {
+          "sequence": 45,
+          "subtype": "tool_result",
+          "text": "60:    conditional_escape() instead. 120:def conditional_escape(text): 137:    Similar to str.format, but pass all arguments through conditional_escape(), 143:    args_safe = map(conditional_escape, args) 144:    kwargs_...",
+          "tool": "Bash",
+          "type": "user"
+        },
+        {
+          "sequence": 46,
+          "subtype": "text",
+          "text": "The implementation is complete. Here's a summary of what was added:  **`escape_with_encoding(text, encoding=\"utf-8\", strings_only=False, errors=\"strict\")`** in `django/utils/html.py`:  1. **Protected types**: When `strin...",
+          "tool": null,
+          "type": "assistant"
+        }
+      ],
+      "tool_event_count": 20,
+      "tool_events": [
+        {
+          "timestamp": null,
+          "tool": "ToolSearch"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "ToolSearch"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_keyword_search"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "ToolSearch"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_list_files"
+        },
+        {
+          "timestamp": null,
+          "tool": "mcp__sourcegraph__sg_read_file"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Write"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        },
+        {
+          "timestamp": null,
+          "tool": "Bash"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "checksums": {
+      "result_json_sha256": "22256e90698cc7d43a626d99a0ab39fefa8e03d33d569690220be600c156c714",
+      "trajectory_sha256": "0590f1d89454ebea51128da5fc2b4380d8ae43efc93151038a38fad14da970b0",
+      "transcript_sha256": "8085a48365ce4e025fc0fc2889d875d66096bf99a8aea49a1cf9381677843e30"
+    },
+    "config": "mcp-remote-direct",
+    "result_path": "runs/official/_raw/csb_sdlc_secure_sonnet_20260308_034803/mcp-remote-direct/2026-03-08__04-23-38/mcp_django-legacy-dep-vuln-001_p__jj8ZUUJ/result.json",
+    "run_dir": "csb_sdlc_secure_sonnet_20260308_034803",
+    "suite": "csb_sdlc_secure",
+    "task_category": "enterprise_legacy_dep",
+    "task_dir": "runs/official/_raw/csb_sdlc_secure_sonnet_20260308_034803/mcp-remote-direct/2026-03-08__04-23-38/mcp_django-legacy-dep-vuln-001_p__jj8ZUUJ",
+    "task_name": "mcp_django-legacy-dep-vuln-001_p6sc64",
+    "trace_paths": {
+      "trajectory": "runs/official/_raw/csb_sdlc_secure_sonnet_20260308_034803/mcp-remote-direct/2026-03-08__04-23-38/mcp_django-legacy-dep-vuln-001_p__jj8ZUUJ/agent/trajectory.json",
+      "transcript": "runs/official/_raw/csb_sdlc_secure_sonnet_20260308_034803/mcp-remote-direct/2026-03-08__04-23-38/mcp_django-legacy-dep-vuln-001_p__jj8ZUUJ/agent/claude-code.txt"
+    }
+  },
+  "score": {
+    "output_contract_mode": "answer_json_bridge",
+    "pass_threshold": null,
+    "passed": true,
+    "reward": 0.75,
+    "scorer_family": "repo_state_heuristic",
+    "status": "passed",
+    "timed_out": false,
+    "validation_status": null
+  }
+}

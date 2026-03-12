@@ -2,16 +2,14 @@
 
 ## baseline-local-direct
 
-- Valid tasks: `10`
-- Mean reward: `0.522`
-- Pass rate: `0.700`
-- Scorer families: `checklist (4), continuous (2), repo_state_heuristic (2), semantic_similarity (1), unknown (1)`
-- Output contracts: `answer_json_bridge (6), answer_json_native (2), repo_state (1), unknown (1)`
+- Valid tasks: `8`
+- Mean reward: `0.652`
+- Pass rate: `0.875`
+- Scorer families: `checklist (2), continuous (2), repo_state_heuristic (2), semantic_similarity (1), unknown (1)`
+- Output contracts: `answer_json_bridge (4), answer_json_native (2), repo_state (1), unknown (1)`
 
 | Task | Status | Reward | Passed | Scorer Family | Output Contract | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---|---|---|---:|---:|---|
-| [cilium-project-orient-001](../tasks/csb_sdlc_understand_haiku_20260302_221730--baseline-local-direct--cilium-project-orient-001--19b4c3f1af.html) | `failed` | 0.000 | `None` | `checklist` | `answer_json_bridge` | - | - | traj, tx |
-| [envoy-request-routing-qa-001](../tasks/csb_sdlc_understand_haiku_20260302_221730--baseline-local-direct--envoy-request-routing-qa-001--e31ea2f9e1.html) | `failed` | 0.000 | `None` | `checklist` | `answer_json_bridge` | - | - | traj, tx |
 | [kafka-contributor-workflow-001](../tasks/csb_sdlc_understand_haiku_20260302_221730--baseline-local-direct--kafka-contributor-workflow-001--6183c6ce88.html) | `failed` | 0.000 | `None` | `continuous` | `answer_json_bridge` | - | - | traj, tx |
 | [argocd-arch-orient-001](../tasks/csb_sdlc_understand_haiku_20260302_221730--baseline-local-direct--argocd-arch-orient-001--d0f444989d.html) | `passed` | 0.710 | `None` | `checklist` | `answer_json_bridge` | 0.000 | 58 | traj, tx |
 | [cilium-ebpf-fault-qa-001](../tasks/csb_sdlc_understand_haiku_20260302_221730--baseline-local-direct--cilium-ebpf-fault-qa-001--c48b2238eb.html) | `passed` | 0.870 | `None` | `checklist` | `answer_json_bridge` | 0.000 | 44 | traj, tx |

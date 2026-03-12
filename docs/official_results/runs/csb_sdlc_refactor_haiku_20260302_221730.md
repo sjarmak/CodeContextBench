@@ -2,17 +2,15 @@
 
 ## baseline-local-direct
 
-- Valid tasks: `14`
-- Mean reward: `0.451`
-- Pass rate: `0.714`
-- Scorer families: `repo_state_heuristic (10), ir_checklist (3), semantic_similarity (1)`
-- Output contracts: `answer_json_bridge (14)`
+- Valid tasks: `12`
+- Mean reward: `0.527`
+- Pass rate: `0.833`
+- Scorer families: `repo_state_heuristic (10), ir_checklist (2)`
+- Output contracts: `answer_json_bridge (12)`
 
 | Task | Status | Reward | Passed | Scorer Family | Output Contract | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---|---|---|---:|---:|---|
 | [envoy-listener-manager-refac-001](../tasks/csb_sdlc_refactor_haiku_20260302_221730--baseline-local-direct--envoy-listener-manager-refac-001--a3373f19c7.html) | `failed` | 0.000 | `None` | `repo_state_heuristic` | `answer_json_bridge` | 0.000 | 26 | traj, tx |
-| [python-http-class-naming-refac-001](../tasks/csb_sdlc_refactor_haiku_20260302_221730--baseline-local-direct--python-http-class-naming-refac-001--da0b6a8a8b.html) | `failed` | 0.000 | `None` | `semantic_similarity` | `answer_json_bridge` | - | - | traj, tx |
-| [strata-fx-european-refac-001](../tasks/csb_sdlc_refactor_haiku_20260302_221730--baseline-local-direct--strata-fx-european-refac-001--e3de751883.html) | `failed` | 0.000 | `None` | `ir_checklist` | `answer_json_bridge` | - | - | traj, tx |
 | [terraform-eval-context-refac-001](../tasks/csb_sdlc_refactor_haiku_20260302_221730--baseline-local-direct--terraform-eval-context-refac-001--272f930b98.html) | `failed` | 0.000 | `None` | `repo_state_heuristic` | `answer_json_bridge` | - | - | traj, tx |
 | [cilium-endpoint-manager-refac-001](../tasks/csb_sdlc_refactor_haiku_20260302_221730--baseline-local-direct--cilium-endpoint-manager-refac-001--9f411a9529.html) | `passed` | 0.667 | `None` | `repo_state_heuristic` | `answer_json_bridge` | 0.000 | 115 | traj, tx |
 | [django-request-factory-refac-001](../tasks/csb_sdlc_refactor_haiku_20260302_221730--baseline-local-direct--django-request-factory-refac-001--04f14f7e5e.html) | `passed` | 0.667 | `None` | `repo_state_heuristic` | `answer_json_bridge` | 0.000 | 56 | traj, tx |

@@ -2,18 +2,16 @@
 
 ## baseline-local-direct
 
-- Valid tasks: `17`
-- Mean reward: `0.481`
-- Pass rate: `0.765`
-- Scorer families: `repo_state_heuristic (13), ir_checklist (3), f1 (1)`
-- Output contracts: `answer_json_bridge (17)`
+- Valid tasks: `15`
+- Mean reward: `0.545`
+- Pass rate: `0.867`
+- Scorer families: `repo_state_heuristic (11), ir_checklist (3), f1 (1)`
+- Output contracts: `answer_json_bridge (15)`
 
 | Task | Status | Reward | Passed | Scorer Family | Output Contract | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---|---|---|---:|---:|---|
 | [django-rate-limit-middleware-feat-001](../tasks/csb_sdlc_feature_haiku_20260302_221730--baseline-local-direct--django-rate-limit-middleware-feat-001--842cec29d4.html) | `failed` | 0.000 | `None` | `repo_state_heuristic` | `answer_json_bridge` | - | - | traj, tx |
 | [k8s-noschedule-taint-feat-001](../tasks/csb_sdlc_feature_haiku_20260302_221730--baseline-local-direct--k8s-noschedule-taint-feat-001--ccfb20f341.html) | `failed` | 0.000 | `None` | `repo_state_heuristic` | `answer_json_bridge` | - | - | traj, tx |
-| [terraform-compact-diff-fmt-feat-001](../tasks/csb_sdlc_feature_haiku_20260302_221730--baseline-local-direct--terraform-compact-diff-fmt-feat-001--3c88918cbd.html) | `failed` | 0.000 | `None` | `repo_state_heuristic` | `answer_json_bridge` | - | - | traj, tx |
-| [vscode-stale-diagnostics-feat-001](../tasks/csb_sdlc_feature_haiku_20260302_221730--baseline-local-direct--vscode-stale-diagnostics-feat-001--18927677c6.html) | `failed` | 0.000 | `None` | `repo_state_heuristic` | `answer_json_bridge` | - | - | traj, tx |
 | [camel-fix-protocol-feat-001](../tasks/csb_sdlc_feature_haiku_20260302_221730--baseline-local-direct--camel-fix-protocol-feat-001--a565e26d36.html) | `passed` | 0.320 | `None` | `ir_checklist` | `answer_json_bridge` | 0.000 | 40 | traj, tx |
 | [cilium-policy-audit-logger-feat-001](../tasks/csb_sdlc_feature_haiku_20260302_221730--baseline-local-direct--cilium-policy-audit-logger-feat-001--6711125472.html) | `passed` | 1.000 | `None` | `repo_state_heuristic` | `answer_json_bridge` | 0.000 | 97 | traj, tx |
 | [cilium-policy-quota-feat-001](../tasks/csb_sdlc_feature_haiku_20260302_221730--baseline-local-direct--cilium-policy-quota-feat-001--af1ff6d63c.html) | `passed` | 1.000 | `None` | `repo_state_heuristic` | `answer_json_bridge` | 0.000 | 63 | traj, tx |

@@ -1,17 +1,5 @@
 # csb_sdlc_debug_haiku_20260303_180441
 
-## baseline-local-direct
-
-- Valid tasks: `1`
-- Mean reward: `0.000`
-- Pass rate: `0.000`
-- Scorer families: `checklist (1)`
-- Output contracts: `answer_json_bridge (1)`
-
-| Task | Status | Reward | Passed | Scorer Family | Output Contract | MCP Ratio | Tool Calls | Trace |
-|---|---|---:|---|---|---|---:|---:|---|
-| [linux-hda-intel-suspend-fault-001](../tasks/csb_sdlc_debug_haiku_20260303_180441--baseline-local-direct--linux-hda-intel-suspend-fault-001--8851f5dc2f.html) | `failed` | 0.000 | `False` | `checklist` | `answer_json_bridge` | - | - | traj, tx |
-
 ## mcp-remote-direct
 
 - Valid tasks: `1`

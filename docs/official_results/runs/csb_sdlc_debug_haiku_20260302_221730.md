@@ -2,17 +2,14 @@
 
 ## baseline-local-direct
 
-- Valid tasks: `9`
-- Mean reward: `0.496`
-- Pass rate: `0.667`
-- Scorer families: `unknown (5), checklist (4)`
-- Output contracts: `unknown (5), answer_json_bridge (4)`
+- Valid tasks: `6`
+- Mean reward: `0.743`
+- Pass rate: `1.000`
+- Scorer families: `checklist (3), unknown (3)`
+- Output contracts: `answer_json_bridge (3), unknown (3)`
 
 | Task | Status | Reward | Passed | Scorer Family | Output Contract | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---|---|---|---:|---:|---|
-| [istio-xds-destrul-debug-001](../tasks/csb_sdlc_debug_haiku_20260302_221730--baseline-local-direct--istio-xds-destrul-debug-001--6fec1826ab.html) | `failed` | 0.000 | `None` | `-` | `-` | - | - | traj, tx |
-| [linux-iwlwifi-subdevice-fault-001](../tasks/csb_sdlc_debug_haiku_20260302_221730--baseline-local-direct--linux-iwlwifi-subdevice-fault-001--17083b838e.html) | `failed` | 0.000 | `None` | `checklist` | `answer_json_bridge` | - | - | traj, tx |
-| [terraform-phantom-update-debug-001](../tasks/csb_sdlc_debug_haiku_20260302_221730--baseline-local-direct--terraform-phantom-update-debug-001--9431f9c953.html) | `failed` | 0.000 | `None` | `-` | `-` | - | - | traj, tx |
 | [envoy-duplicate-headers-debug-001](../tasks/csb_sdlc_debug_haiku_20260302_221730--baseline-local-direct--envoy-duplicate-headers-debug-001--11d47a1c24.html) | `passed` | 0.940 | `None` | `-` | `-` | 0.000 | 44 | traj, tx |
 | [grafana-table-panel-regression-001](../tasks/csb_sdlc_debug_haiku_20260302_221730--baseline-local-direct--grafana-table-panel-regression-001--715ef5cecb.html) | `passed` | 1.000 | `None` | `-` | `-` | 0.000 | 73 | traj, tx |
 | [linux-acpi-backlight-fault-001](../tasks/csb_sdlc_debug_haiku_20260302_221730--baseline-local-direct--linux-acpi-backlight-fault-001--cb5df9fcc7.html) | `passed` | 1.000 | `None` | `checklist` | `answer_json_bridge` | 0.000 | 26 | traj, tx |

@@ -2,16 +2,14 @@
 
 ## baseline-local-direct
 
-- Valid tasks: `10`
-- Mean reward: `0.499`
-- Pass rate: `0.800`
-- Scorer families: `repo_state_heuristic (6), unknown (2), checklist (1), ir_checklist (1)`
-- Output contracts: `answer_json_bridge (8), unknown (2)`
+- Valid tasks: `8`
+- Mean reward: `0.624`
+- Pass rate: `1.000`
+- Scorer families: `repo_state_heuristic (6), checklist (1), ir_checklist (1)`
+- Output contracts: `answer_json_bridge (8)`
 
 | Task | Status | Reward | Passed | Scorer Family | Output Contract | MCP Ratio | Tool Calls | Trace |
 |---|---|---:|---|---|---|---:|---:|---|
-| [curl-vuln-reachability-001](../tasks/csb_sdlc_secure_haiku_20260302_221730--baseline-local-direct--curl-vuln-reachability-001--3ae2ea47e4.html) | `failed` | 0.000 | `None` | `-` | `-` | - | - | traj, tx |
-| [grpcurl-transitive-vuln-001](../tasks/csb_sdlc_secure_haiku_20260302_221730--baseline-local-direct--grpcurl-transitive-vuln-001--617f0cedcb.html) | `failed` | 0.000 | `None` | `-` | `-` | - | - | traj, tx |
 | [curl-cve-triage-001](../tasks/csb_sdlc_secure_haiku_20260302_221730--baseline-local-direct--curl-cve-triage-001--4d3f5a9157.html) | `passed` | 0.940 | `None` | `checklist` | `answer_json_bridge` | 0.000 | 9 | traj, tx |
 | [django-audit-trail-implement-001](../tasks/csb_sdlc_secure_haiku_20260302_221730--baseline-local-direct--django-audit-trail-implement-001--1dc603eb57.html) | `passed` | 0.800 | `None` | `repo_state_heuristic` | `answer_json_bridge` | 0.000 | 67 | traj, tx |
 | [django-cross-team-boundary-001](../tasks/csb_sdlc_secure_haiku_20260302_221730--baseline-local-direct--django-cross-team-boundary-001--f8967023a4.html) | `passed` | 0.300 | `None` | `repo_state_heuristic` | `answer_json_bridge` | 0.000 | 52 | traj, tx |
