@@ -1151,19 +1151,12 @@ before retrying."""
                 # These enable headless/autonomous operation mode
                 env = cmd.env or {}
 
-                # SECURITY: Strip auth credentials from container env vars.
-                # Harbor's parent class injects ANTHROPIC_API_KEY and
-                # CLAUDE_CODE_OAUTH_TOKEN as -e flags on docker compose exec,
-                # making them visible to `env` / `printenv` inside the
-                # container.  If the agent runs `env` (e.g. for debugging),
-                # the key ends up in the trajectory and can leak into
-                # committed HTML reports.
-                #
-                # Instead, setup() writes credentials to a file inside the
-                # container that Claude Code reads at startup.  This keeps
-                # the secret out of the process environment entirely.
-                env.pop("ANTHROPIC_API_KEY", None)
-                env.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
+                # NOTE: Auth credentials (ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN)
+                # are kept in the env dict so Claude Code can authenticate.
+                # setup() also writes them to ~/.claude/.credentials.json as a
+                # backup. To prevent trajectory leaks, post-processing should
+                # sanitize secrets from trajectory files rather than stripping
+                # env vars here (which breaks auth on Daytona).
 
                 env_with_autonomous = {
                     **env,
@@ -1457,14 +1450,20 @@ before retrying."""
             })
             logger.info("_write_container_auth_file: Writing API key as credentials file")
 
-        # Write the credentials file with restricted permissions.
-        # The exec runs as root; chown to claude so the non-root agent can read it.
+        # Write the credentials file to multiple locations to cover all
+        # possible HOME values (root default, claude user, /logs/agent).
+        # The exec runs as root; chown so the non-root agent can read.
         escaped_creds = creds_json.replace("'", "'\\''")
         await environment.exec(
-            f"mkdir -p {creds_dir} && "
-            f"printf '%s' '{escaped_creds}' > {creds_dir}/.credentials.json && "
-            f"chmod 600 {creds_dir}/.credentials.json && "
-            f"chown -R claude:claude /home/claude/.claude 2>/dev/null || true"
+            # Primary: claude user home (su claude sets HOME=/home/claude)
+            f"mkdir -p /home/claude/.claude && "
+            f"printf '%s' '{escaped_creds}' > /home/claude/.claude/.credentials.json && "
+            f"chmod 600 /home/claude/.claude/.credentials.json && "
+            f"chown -R claude:claude /home/claude/.claude 2>/dev/null || true && "
+            # Fallback: root home (if HOME is not switched by su)
+            f"mkdir -p /root/.claude && "
+            f"printf '%s' '{escaped_creds}' > /root/.claude/.credentials.json && "
+            f"chmod 644 /root/.claude/.credentials.json"
         )
 
     @staticmethod
