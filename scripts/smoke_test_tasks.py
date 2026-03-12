@@ -162,11 +162,9 @@ def smoke_one(
         dockerfile_text = df_path.read_text()
         env_dir = task_dir / "environment"
 
-        needs_context = "COPY " in dockerfile_text or "ADD " in dockerfile_text
-        if needs_context:
-            image = Image.from_dockerfile(str(df_path), context_path=str(env_dir))
-        else:
-            image = Image.from_dockerfile(str(df_path))
+        # SDK's from_dockerfile() auto-resolves COPY sources relative to the
+        # Dockerfile's parent directory — no context_path arg needed.
+        image = Image.from_dockerfile(str(df_path))
 
         storage_override = int(os.environ.get("DAYTONA_OVERRIDE_STORAGE", "10240"))
         params = CreateSandboxFromImageParams(
@@ -189,10 +187,12 @@ def smoke_one(
         log.info(f"[{task_id}] Build OK ({time.time() - t0:.0f}s)")
 
         result["workspace_checks"] = _workspace_probe(sandbox)
-        critical_checks = ("pwd", "workspace_git", "git", "disk")
+        # Critical checks: pwd, git binary, disk must work.
+        # workspace_git is informational — multi-repo incident tasks may not
+        # have a git repo at /workspace (repos cloned elsewhere).
+        critical_checks = ("pwd", "git", "disk")
         result["workspace_ok"] = all(
             result["workspace_checks"].get(name, {}).get("ok")
-            and "NO_GIT" not in result["workspace_checks"].get(name, {}).get("stdout", "")
             for name in critical_checks
         )
         if not result["workspace_ok"]:
