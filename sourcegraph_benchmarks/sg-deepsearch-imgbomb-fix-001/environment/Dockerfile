@@ -20,10 +20,10 @@ ENV TASK_REPO_ROOT=/workspace
 
 WORKDIR /workspace
 
-# Configure Go for private modules
+# Use Go module proxy; skip checksum for pseudo-version modules.
+# Do NOT set GOPRIVATE — it bypasses the proxy and forces direct git access.
 ENV GONOSUMCHECK=github.com/sourcegraph/*
 ENV GOFLAGS=-mod=mod
-ENV GOPRIVATE=github.com/sourcegraph/*
 
 # Pre-download Go dependencies for the relevant packages
 RUN go mod download -modcacherw 2>/dev/null || true
@@ -31,10 +31,14 @@ RUN go mod download -modcacherw 2>/dev/null || true
 # Verify the test package exists at this commit
 RUN go build ./cmd/frontend/internal/deepsearchapi/images/... 2>/dev/null || true
 
+# Configure git auth for Go private module fetching (e.g. sourcegraph/sourceflow)
+RUN echo "machine github.com login x-access-token password ${GITHUB_TOKEN}" > /root/.netrc && chmod 600 /root/.netrc
+
 RUN mkdir -p /logs/agent /logs/verifier
 
 # Pre-create claude user and set ownership at build time so agent can write files.
 RUN (adduser --disabled-password --gecos '' claude 2>/dev/null || true) && \
+    cp /root/.netrc /home/claude/.netrc && chown claude:claude /home/claude/.netrc && \
     for d in /workspace /app /testbed /logs; do [ -d "$d" ] && chown -R claude:claude "$d"; done || true
 
 # Harness-agnostic: ensure all users (root/claude) can read+write workspace files
