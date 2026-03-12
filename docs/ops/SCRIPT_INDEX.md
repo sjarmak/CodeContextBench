@@ -176,6 +176,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/migrate_sweap_to_ghcr.py` - Migration script for migrate sweap to ghcr.
 - `scripts/migrate_to_sg_evals.sh` - Migration script for migrate to sg evals.
 - `scripts/migrate_to_sg_evals_batch2.sh` - Migration script for migrate to sg evals batch2.
+- `scripts/migrate_to_verifier_lib.py` - Migration script for migrate to verifier lib.
 - `scripts/migrate_validation_result_sidecar.py` - Migration script for migrate validation result sidecar.
 
 ## Misc
@@ -214,6 +215,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/dependeval_eval_dr.py` - Utility script for dependeval eval dr.
 - `scripts/dependeval_eval_me.py` - Utility script for dependeval eval me.
 - `scripts/derive_n_repos.py` - Utility script for derive n repos.
+- `scripts/distribute_shared_libs.py` - Utility script for distribute shared libs.
 - `scripts/docgen_quality_sweep.py` - Utility script for docgen quality sweep.
 - `scripts/doe_power_curves.py` - Utility script for doe power curves.
 - `scripts/doe_select_tasks.py` - Utility script for doe select tasks.
