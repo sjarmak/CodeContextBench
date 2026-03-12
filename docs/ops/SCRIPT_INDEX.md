@@ -290,6 +290,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/select_contextbench_pilot.py` - Utility script for select contextbench pilot.
 - `scripts/smoke_artifact_verifier.py` - Utility script for smoke artifact verifier.
 - `scripts/smoke_test_tasks.py` - Utility script for smoke test tasks.
+- `scripts/split_edit_reference_files.py` - Utility script for split edit reference files.
 - `scripts/verify_oracle_fail2pass.py` - Utility script for verify oracle fail2pass.
 - `scripts/verify_retrieval_eval_smoke.py` - Utility script for verify retrieval eval smoke.
 
