@@ -129,7 +129,20 @@ def extract_task_data(trial_dir: Path, config_name: str) -> dict | None:
         except OSError:
             pass
 
-    trace = parse_transcript(trial_dir / "agent" / "claude-code.txt")
+    # Auto-detect transcript file: Claude Code (JSONL) or OpenHands (plain log)
+    cc_transcript = trial_dir / "agent" / "claude-code.txt"
+    oh_transcript = trial_dir / "agent" / "openhands.txt"
+    raw_transcript = ""
+    if cc_transcript.is_file():
+        trace = parse_transcript(cc_transcript)
+    elif oh_transcript.is_file():
+        trace = {"events": [], "tool_calls": [], "code_changes": [], "bash_commands": []}
+        try:
+            raw_transcript = oh_transcript.read_text(errors="replace")
+        except OSError:
+            pass
+    else:
+        trace = {"events": [], "tool_calls": [], "code_changes": [], "bash_commands": []}
 
     return dict(
         task_name=normalize_task_name(raw_name), raw_name=raw_name, config=config_name,
@@ -155,7 +168,7 @@ def extract_task_data(trial_dir: Path, config_name: str) -> dict | None:
         cache_hit_rate=metrics.get("cache_hit_rate"),
         exception_info=result.get("exception_info"),
         model=result.get("config", {}).get("agent", {}).get("model_name", "unknown"),
-        instruction_text=inst, trace=trace,
+        instruction_text=inst, trace=trace, raw_transcript=raw_transcript,
     )
 
 
@@ -472,12 +485,20 @@ def generate_detail_page(run_name, t):
         f"<table><thead><tr><th>Tool</th><th>Calls</th></tr></thead><tbody>{tr_}</tbody></table></details></div>"
         f"{ex}"
         f"<div class='panel'><h2>Agent Trace</h2>"
-        f"<details open><summary>Conversation History ({len(tevs)})</summary>"
-        f"<table><thead><tr><th>#</th><th>Timestamp</th><th>Type</th><th>Subtype</th><th>Tool</th><th>Text</th></tr></thead>"
-        f"<tbody>{cr}</tbody></table></details>"
-        f"<details><summary>Tool Calls ({len(ttc)})</summary>{tc}</details>"
-        f"<details><summary>Code Changes ({len(tcc)})</summary>{cc}</details>"
-        f"<details><summary>Bash Commands ({len(tbc)})</summary>{bc}</details></div>"
+        + (  # Raw transcript fallback (e.g. OpenHands plain-text logs)
+            f"<details open><summary>Raw Transcript</summary>"
+            f"<pre>{esc(truncate_text(t.get('raw_transcript', ''), 200000))}</pre></details>"
+            if t.get("raw_transcript") and not tevs
+            else (
+                f"<details open><summary>Conversation History ({len(tevs)})</summary>"
+                f"<table><thead><tr><th>#</th><th>Timestamp</th><th>Type</th><th>Subtype</th><th>Tool</th><th>Text</th></tr></thead>"
+                f"<tbody>{cr}</tbody></table></details>"
+                f"<details><summary>Tool Calls ({len(ttc)})</summary>{tc}</details>"
+                f"<details><summary>Code Changes ({len(tcc)})</summary>{cc}</details>"
+                f"<details><summary>Bash Commands ({len(tbc)})</summary>{bc}</details>"
+            )
+        )
+        + "</div>"
         f"<div class='panel'><h2>File Paths</h2><pre>Trial: {esc(t['trial_dir'])}</pre></div>"
         "</div></body></html>"
     )
