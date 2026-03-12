@@ -1416,8 +1416,8 @@ before retrying."""
         """Write Claude Code auth credentials to a file inside the container.
 
         This avoids passing secrets as environment variables (visible to `env`).
-        Claude Code reads $CLAUDE_CONFIG_DIR/../.credentials.json at startup,
-        which for our setup is /logs/agent/.credentials.json.
+        Claude Code reads ~/.claude/.credentials.json at startup.
+        The agent runs as user 'claude' (HOME=/home/claude).
 
         Falls back to ANTHROPIC_API_KEY env var if no OAuth token is available
         (legacy API key auth path — still stripped from Docker exec env vars
@@ -1430,9 +1430,10 @@ before retrying."""
             logger.warning("_write_container_auth_file: No auth credentials available")
             return
 
-        # Claude Code looks for .credentials.json in the parent of CLAUDE_CONFIG_DIR.
-        # CLAUDE_CONFIG_DIR = /logs/agent/sessions, so credentials go to /logs/agent/.
-        creds_dir = "/logs/agent"
+        # Claude Code looks for ~/.claude/.credentials.json at startup.
+        # The agent runs as the 'claude' user (HOME=/home/claude), so the
+        # credentials file must be written to /home/claude/.claude/.
+        creds_dir = "/home/claude/.claude"
 
         if oauth_token:
             # Write OAuth credentials in the format Claude Code expects
@@ -1456,12 +1457,14 @@ before retrying."""
             })
             logger.info("_write_container_auth_file: Writing API key as credentials file")
 
-        # Write the credentials file with restricted permissions
+        # Write the credentials file with restricted permissions.
+        # The exec runs as root; chown to claude so the non-root agent can read it.
         escaped_creds = creds_json.replace("'", "'\\''")
         await environment.exec(
             f"mkdir -p {creds_dir} && "
             f"printf '%s' '{escaped_creds}' > {creds_dir}/.credentials.json && "
-            f"chmod 600 {creds_dir}/.credentials.json"
+            f"chmod 600 {creds_dir}/.credentials.json && "
+            f"chown -R claude:claude /home/claude/.claude 2>/dev/null || true"
         )
 
     @staticmethod
