@@ -16,3 +16,8 @@ WORKDIR /workspace/cilium
 # Create non-root user for agent harness compatibility
 RUN (adduser --disabled-password --gecos '' claude 2>/dev/null || true) && \
     for d in /workspace /app /testbed /logs; do [ -d "$d" ] && chown -R claude:claude "$d"; done || true
+
+# Harness-agnostic: ensure all users (root/claude) can read+write workspace files
+RUN chmod -R a+rwX /workspace
+
+ENTRYPOINT []

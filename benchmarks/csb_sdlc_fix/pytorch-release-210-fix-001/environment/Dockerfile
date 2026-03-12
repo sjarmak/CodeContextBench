@@ -17,3 +17,8 @@ RUN git clone --depth 1 https://github.com/sg-evals/pytorch--863edc78.git /works
 # Pre-create claude user and fix ownership so Harbor agent setup is instant
 RUN (adduser --disabled-password --gecos '' claude 2>/dev/null || adduser -D -s /bin/bash claude 2>/dev/null || true) && \
     chown -R claude:claude /workspace
+
+# Harness-agnostic: ensure all users (root/claude) can read+write workspace files
+RUN chmod -R a+rwX /workspace
+
+ENTRYPOINT []
