@@ -25,15 +25,20 @@
 - ~~**132 Dockerfiles with `USER claude`**~~: Added `chmod -R a+rwX /workspace` before ENTRYPOINT in all 132 Dockerfiles with `USER claude`. Ownership is now harness-agnostic (both root/OH and claude/CC can read/write).
 - ~~**4 Linux kernel sg_only Dockerfiles**~~: Added `SOURCEGRAPH_REPOS="torvalds/linux"`, `safe.directory` config, and clone manifest JSON to all 4 tasks.
 
-### P3 — MEDIUM
+### P3 — MEDIUM ✓ DONE (2026-03-12)
 
-- **14 SWEAP images** still reference `jefzda/sweap-images` (personal Docker Hub) — migrate to `ghcr.io/sg-evals/`.
-- **~30 test runners** missing `timeout` wrapper or `--forceExit` for Jest.
-- **6 task.toml files** under-provisioned at 2GB default (qutebrowser x4, nodebb x2 need 4-8GB).
+- ~~**11 SWEAP images**~~: Migrated from `jefzda/sweap-images` to `ghcr.io/sg-evals/sweap-images`. 33 Dockerfiles updated. Script: `scripts/migrate_sweap_to_ghcr.py`.
+- ~~**Timeout wrappers**~~: Added `timeout 600` to `go test`/`cargo test` in k8s-noschedule-taint-feat-001 and servo-scrollend-event-feat-001.
+- ~~**Memory provisioning**~~: Set `memory_mb = 8192` for 4 Jest/TS tasks (element-web, vscode, calcom, teleport).
+- ~~**Git clone fallbacks**~~: Added `|| (git init)` fallback to 269 Dockerfiles.
+- ~~**8 onboard-search instructions**~~: `/app/solution.json` → `/workspace/answer.json`.
+- ~~**/logs directory**~~: Added `mkdir -p /logs/agent /logs/verifier` + `chown` to 374 Dockerfiles.
+- ~~**4 sg_only Dockerfiles**~~: Added `SOURCEGRAPH_REPOS` + clone manifests (ceph, TypeScript, ClickHouse, k8s).
 
-### Promotion
+### Promotion ✓ DONE (2026-03-12)
 
-- Promote `runs/staging/openhands_sonnet46_20260311_174751` after rerunning `kafka-contributor-workflow-001` baseline (Harbor timestamp collision).
+- ~~Promoted `openhands_sonnet46_20260311_174751`~~: 72/73 valid (636 total runs, 3685 scored tasks).
+- 2 missing baselines (`kafka-contributor-workflow-001` + `typescript-type-narrowing-secure-001`) tracked in `CodeScaleBench-82e`.
 - The 62 OAuth-expired tasks were already removed from `runs/official/_raw/oh_*_sonnet46_merged/`.
 
 ### Key files
