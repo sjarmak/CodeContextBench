@@ -6,7 +6,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__archived"]
+SKIP_PATTERNS = [
+    "__broken_verifier",
+    "validation_test",
+    "archive",
+    "__archived",
+    # Legacy pre-fix MCP experiment runs that had misconfigured environments
+    # (e.g., missing repo mounts). These should never be promoted into
+    # runs/analysis or official results bundles.
+    "__old_pre_fix_ccb_mcp_",
+]
 DEFAULT_PREFIX_MAP_PATH = Path("configs/run_dir_prefix_map.json")
 TRIAGE_FILENAME = "triage.json"
 TRIAGE_DECISIONS = {"include", "exclude", "pending"}

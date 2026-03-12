@@ -78,40 +78,6 @@ overlay_agent_files() {
 }
 
 # ---------------------------------------------------------------------------
-# Helper: post-restore steps (safe.directory + before_repo_set_cmd)
-# ---------------------------------------------------------------------------
-_sg_only_post_restore() {
-    local workdir="$1"
-
-    # Fix git safe.directory for the working directory and common alternates
-    git config --global --add safe.directory "$workdir" 2>/dev/null || true
-    for d in /app /workspace /testbed; do
-        [ "$d" != "$workdir" ] && git config --global --add safe.directory "$d" 2>/dev/null || true
-    done
-
-    # SWE-bench Pro tasks store a before_repo_set_cmd in /tests/config.json
-    # that must run after restore to set up the correct base commit and
-    # checkout specific test files from a different commit.
-    if [ -f /tests/config.json ]; then
-        BEFORE_CMD=$(python3 -c "
-import json, sys
-try:
-    d = json.load(open('/tests/config.json'))
-    cmd = d.get('before_repo_set_cmd', '')
-    print(cmd if cmd else '')
-except Exception:
-    print('')
-" 2>/dev/null)
-        if [ -n "$BEFORE_CMD" ]; then
-            echo "[sg_only_verifier] Running before_repo_set_cmd from config.json"
-            cd "$workdir"
-            eval "$BEFORE_CMD" 2>&1 | head -20
-            echo "[sg_only_verifier] before_repo_set_cmd complete"
-        fi
-    fi
-}
-
-# ---------------------------------------------------------------------------
 # PRIMARY PATH: clone manifest
 # ---------------------------------------------------------------------------
 MANIFEST="/tmp/.sg_only_clone_manifest.json"
@@ -147,9 +113,9 @@ if [ -f "$MANIFEST" ]; then
             # For root workspace: remove everything except .git, then clone into temp and move
             TMPCLONE=$(mktemp -d)
             if git clone --depth 1 "$CLONE_URL" "$TMPCLONE" 2>/dev/null; then
-                # Remove old files (except .git and tests)
+                # Remove old files (except .git, tests, .claude, and node_modules)
                 find "$CLONE_TARGET" -mindepth 1 -maxdepth 1 \
-                    ! -name '.git' ! -name 'tests' ! -name '.claude' \
+                    ! -name '.git' ! -name 'tests' ! -name '.claude' ! -name 'node_modules' \
                     -exec rm -rf {} + 2>/dev/null || true
                 # Copy cloned files (except .git)
                 cd "$TMPCLONE"
@@ -189,12 +155,7 @@ if [ -f "$MANIFEST" ]; then
         echo "[sg_only_verifier] Defect injection complete"
     fi
 
-    # 4. Post-restore: safe.directory + before_repo_set_cmd
-    #    Must run BEFORE agent overlay so git reset/clean from
-    #    before_repo_set_cmd doesn't wipe agent changes.
-    _sg_only_post_restore "$WORKDIR"
-
-    # 5. Overlay agent changes (on top of the correct base commit)
+    # 4. Overlay agent changes
     overlay_agent_files "$WORKDIR"
 
     # Return to working directory
@@ -225,12 +186,7 @@ backup_agent_files "$WORKDIR"
 rsync -a --delete /repo_full/ "$WORKDIR/"
 echo "[sg_only_verifier] Restored full repo from /repo_full/"
 
-# 3. Post-restore: safe.directory + before_repo_set_cmd
-#    Must run BEFORE agent overlay so git reset/clean from
-#    before_repo_set_cmd doesn't wipe agent changes.
-_sg_only_post_restore "$WORKDIR"
-
-# 4. Overlay agent's changes (on top of the correct base commit)
+# 3. Overlay agent's changes
 overlay_agent_files "$WORKDIR"
 
 # Return to working directory
