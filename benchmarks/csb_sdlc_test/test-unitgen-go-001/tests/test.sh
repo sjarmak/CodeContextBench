@@ -109,17 +109,18 @@ else:
     _verify = os.environ.get("VERIFY_REPO") or os.environ.get("TASK_REPO_ROOT") or "/workspace"
     try:
         _has_changes = False
-        _d = _sp.run(["git", "diff", "HEAD", "--stat"], capture_output=True, text=True, cwd=_verify, timeout=5)
+        _git_timeout = 60  # large repos (k8s ~28K files) need more than 5s
+        _d = _sp.run(["git", "diff", "HEAD", "--stat"], capture_output=True, text=True, cwd=_verify, timeout=_git_timeout)
         if _d.stdout.strip():
             _has_changes = True
-        _u = _sp.run(["git", "ls-files", "--others", "--exclude-standard"], capture_output=True, text=True, cwd=_verify, timeout=5)
+        _u = _sp.run(["git", "ls-files", "--others", "--exclude-standard"], capture_output=True, text=True, cwd=_verify, timeout=_git_timeout)
         if _u.stdout.strip():
             _has_changes = True
         if not _has_changes:
             for _ref in ["origin/HEAD", "origin/main", "origin/master"]:
-                _rv = _sp.run(["git", "rev-parse", "--verify", _ref], capture_output=True, text=True, cwd=_verify, timeout=5)
+                _rv = _sp.run(["git", "rev-parse", "--verify", _ref], capture_output=True, text=True, cwd=_verify, timeout=_git_timeout)
                 if _rv.returncode == 0:
-                    _cd = _sp.run(["git", "diff", _ref, "HEAD", "--stat"], capture_output=True, text=True, cwd=_verify, timeout=5)
+                    _cd = _sp.run(["git", "diff", _ref, "HEAD", "--stat"], capture_output=True, text=True, cwd=_verify, timeout=_git_timeout)
                     if _cd.stdout.strip():
                         _has_changes = True
                     break
@@ -127,6 +128,10 @@ else:
             reward = 0.0
             checks["no_changes_guard"] = 0.0
             details["no_changes_guard"] = "git confirmed zero agent changes"
+    except _sp.TimeoutExpired:
+        # Git timed out on large repo — assume changes exist (safe default)
+        checks["change_detected"] = 1.0
+        details["no_changes_guard"] = "git timed out; assuming changes exist"
     except Exception:
         pass
 output_path = os.environ.get("VALIDATION_OUTPUT_PATH")
@@ -161,6 +166,11 @@ PYEOF
 
 mkdir -p /logs/verifier
 
+# Fix git safe.directory for repos cloned as different user (e.g., root clone, claude agent).
+# Agent setup() also sets this system-wide, but we do it here as a belt-and-suspenders
+# safeguard for standalone verifier runs.
+git config --global --add safe.directory /workspace 2>/dev/null || true
+
 if [ "${ARTIFACT_ONLY:-false}" = "true" ] && [ ! -f "${ANSWER_JSON:-$TASK_OUTPUT}" ]; then
     write_invalid_output "missing_required_output" \
         "answer.json not found at ${ANSWER_JSON:-$TASK_OUTPUT}"
@@ -169,13 +179,23 @@ fi
 
 TARGET_FILE="/workspace/staging/src/k8s.io/apiserver/pkg/storage/value/value_test.go"
 
-# Check for any *_test.go file in the package dir
-ALT_FILE=$(find /workspace/staging/src/k8s.io/apiserver/pkg/storage/value/ -name "*_test.go" 2>/dev/null | head -1)
-if [ -z "$ALT_FILE" ] && [ ! -f "$TARGET_FILE" ]; then
-    # Also check /workspace root
-    ALT_FILE=$(find /workspace -maxdepth 3 -name "value_test.go" -o -name "transformer_test.go" 2>/dev/null | head -1)
+# Prefer the exact target file first; only fall back to alternatives if missing
+if [ -f "$TARGET_FILE" ]; then
+    TEST_FILE="$TARGET_FILE"
+else
+    # Check for any agent-created *_test.go directly in the package dir (not subdirs)
+    ALT_FILE=$(find /workspace/staging/src/k8s.io/apiserver/pkg/storage/value/ -maxdepth 1 -name "*_test.go" ! -name "transformer_test.go" 2>/dev/null | head -1)
+    if [ -z "$ALT_FILE" ]; then
+        # Broader search as last resort
+        ALT_FILE=$(find /workspace -maxdepth 3 -name "value_test.go" -o -name "transformer_test.go" 2>/dev/null | head -1)
+    fi
+    TEST_FILE="${ALT_FILE:-$TARGET_FILE}"
 fi
-TEST_FILE="${ALT_FILE:-$TARGET_FILE}"
+
+# Debug: show what the verifier found
+echo "DEBUG: TARGET_FILE=$TARGET_FILE exists=$([ -f "$TARGET_FILE" ] && echo yes || echo no)"
+echo "DEBUG: TEST_FILE=$TEST_FILE exists=$([ -f "$TEST_FILE" ] && echo yes || echo no)"
+ls -la /workspace/staging/src/k8s.io/apiserver/pkg/storage/value/*_test.go 2>/dev/null || echo "DEBUG: no top-level test files in value/"
 
 if [ ! -f "$TEST_FILE" ]; then
     echo "No test file found"

@@ -1277,6 +1277,14 @@ before retrying."""
                 f'[ -d "{workdir}/.git" ] && '
                 f'chown claude:claude "{workdir}/.git" "{workdir}/.git/index" 2>/dev/null || true'
             )
+            # Fix git safe.directory for ALL users so verifier's no_changes_guard
+            # works even when repo was cloned as root but agent/verifier runs as
+            # claude (or vice versa). Without this, git refuses to operate and the
+            # guard silently zeros the score.
+            await environment.exec(
+                "git config --system --add safe.directory '*' 2>/dev/null || "
+                "git config --global --add safe.directory '*' 2>/dev/null || true"
+            )
             # Verify permission state for debugging
             result = await environment.exec(f'stat -c "%U:%G %a" {workdir} 2>/dev/null || echo "stat unavailable"')
             if result.stdout:
