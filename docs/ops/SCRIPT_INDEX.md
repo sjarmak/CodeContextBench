@@ -243,6 +243,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/launch_sonnet46_benchmark.sh` - Utility script for launch sonnet46 benchmark.
 - `scripts/list_gemini_models.py` - Utility script for list gemini models.
 - `scripts/mirror_largerepo_expansion.sh` - Utility script for mirror largerepo expansion.
+- `scripts/oracle_drift_check.py` - Utility script for oracle drift check.
 - `scripts/organize_official_by_model.py` - Utility script for organize official by model.
 - `scripts/plan_variance_runs.py` - Utility script for plan variance runs.
 - `scripts/plot_build_diary.py` - Utility script for plot build diary.
