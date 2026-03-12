@@ -8,9 +8,16 @@ full operations manual.
 - All work happens on `main` by default. If you use feature branches, keep them small, short-lived, and easy to fast-forward back into `main`.
 - Every `harbor run` must be gated by interactive confirmation.
 - Before commit/push, run `python3 scripts/repo_health.py` (or `--quick` for docs/config-only changes).
+- **Never push `main` to `upstream`** (public). See "Git Remotes and Branching".
 - Prefer a **remote execution environment** (e.g., Daytona) for large benchmark runs; use local Docker only when a task’s image or registry is incompatible with your cloud environment. See `docs/DAYTONA.md`.
 - Set **parallelism based on your own account and model limits**. Avoid exceeding documented concurrency or rate caps for your environment or provider.
 - Before launching any benchmark batch, check account readiness with `python3 scripts/check_infra.py` or `python3 scripts/account_health.py status`. Do not assume OAuth accounts are usable just because credentials exist.
+
+## Git Remotes and Branching
+- `origin` = sjarmak/CodeScaleBench (private), `upstream` = sourcegraph/CodeScaleBench (public).
+- `git push` goes to `origin`. **NEVER push `main` to `upstream`** — it has sensitive content.
+- Public releases: `git checkout public && git merge main && git push upstream public && git checkout main`
+- `public` branch `.gitignore` strips dev noise; only `docs/technical_reports/` and `runs/analysis/` survive.
 
 ## Beads Prerequisite and Usage
 - Keep the Beads CLI (`bd`, alias `beads`) up to date before running agent workflows that rely on task graphs.
@@ -52,7 +59,7 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - Track remaining follow-up in issues or beads.
 - Run `python3 scripts/repo_health.py` (or `--quick` for docs/config-only changes).
 - Update issue/task status.
-- `git pull --rebase && git push && git status` and confirm `main` is up to date with `origin/main`.
+- `git pull --rebase && git push && git status` — pushes to `origin` (private). Do NOT push to `upstream` unless doing a public release.
 - Clean up and hand off using `/handoff` plus `docs/ops/HANDOFF_TEMPLATE.md`.
 - Work is not complete until push succeeds.
 
@@ -112,13 +119,12 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - Bare `$VAR` in `instruction.md` gets expanded. Use `<placeholder>` syntax.
 
 ### Git / Auth
-- `gh auth refresh` without `-s <scope>` is a no-op for adding scopes. Must use `gh auth refresh -h github.com -s write:packages` explicitly.
-- Environment variables must be **explicitly exported** for Harbor subprocesses. Use `set -a` before sourcing `.env.local`.
-- Account readiness tracked in `runs/state/account_health.json`. Launchers source `configs/_common.sh` and filter unsafe accounts.
-- GitHub push protection blocks synthetic API keys. Squash with `git reset --soft origin/main`.
-- Shallow clones (`--depth 1`) fail on push. Always use full clones for repos that will be pushed.
-- Some repos use `master` as default branch. Detect with `git symbolic-ref refs/remotes/origin/HEAD`.
-- GitHub secret scanning blocks embedded secrets. Unblock via the `/security/secret-scanning/unblock-secret/` URL.
+- **Dual-remote**: `origin` = private, `upstream` = public. Only push `public` branch to `upstream`. See "Git Remotes and Branching".
+- `gh auth refresh` without `-s <scope>` is a no-op. Use `gh auth refresh -h github.com -s write:packages`.
+- Env vars must be **exported** for Harbor subprocesses. Use `set -a` before sourcing `.env.local`.
+- GitHub push protection blocks API keys. Squash with `git reset --soft origin/main`.
+- Shallow clones (`--depth 1`) fail on push. Always use full clones.
+- Large repo push failures (HTTP 500): push in 100-commit increments.
 
 ### Python / Subprocess
 - `dict.get(key, default)` does NOT protect against `None` values. Use `data.get("key") or default_value`.
