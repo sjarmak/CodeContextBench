@@ -113,9 +113,9 @@ if [ -f "$MANIFEST" ]; then
             # For root workspace: remove everything except .git, then clone into temp and move
             TMPCLONE=$(mktemp -d)
             if git clone --depth 1 "$CLONE_URL" "$TMPCLONE" 2>/dev/null; then
-                # Remove old files (except .git, tests, and node_modules)
+                # Remove old files (except .git and tests)
                 find "$CLONE_TARGET" -mindepth 1 -maxdepth 1 \
-                    ! -name '.git' ! -name 'tests' ! -name '.claude' ! -name 'node_modules' \
+                    ! -name '.git' ! -name 'tests' ! -name '.claude' \
                     -exec rm -rf {} + 2>/dev/null || true
                 # Copy cloned files (except .git)
                 cd "$TMPCLONE"

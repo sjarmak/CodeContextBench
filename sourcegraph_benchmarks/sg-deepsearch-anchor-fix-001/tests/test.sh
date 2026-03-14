@@ -16,11 +16,11 @@ cd "${TASK_REPO_ROOT:-/workspace}" || { echo "0.0" > /logs/verifier/reward.txt; 
 
 echo "Working directory: $(pwd)"
 
-# Reinstall pnpm workspace links after clone-at-verify replaces source files.
-# Root node_modules is preserved but subdirectory symlinks are broken by the clone.
+# Clean install after clone-at-verify wipes node_modules with the source files.
 if [ -f /tmp/.sg_only_mode ] && [ -f package.json ]; then
-    echo "Relinking pnpm workspace dependencies..."
-    pnpm install --no-frozen-lockfile 2>&1 | tail -5
+    echo "Installing JS dependencies from scratch (post-clone)..."
+    pnpm install --no-frozen-lockfile 2>&1 | tail -10
+    echo "Install exit code: $?"
 fi
 
 # Run targeted TypeScript/Vitest tests
@@ -28,12 +28,12 @@ echo "Running TypeScript tests..."
 TEST_FILE="client/web-sveltekit/src/routes/(app)/deepsearch/PromptEditor.plugins.test.ts"
 
 if [ -f "$TEST_FILE" ]; then
-    # Run from the sveltekit subdirectory using pnpm exec.
-    # pnpm install (above) restores workspace symlinks so pnpm exec
-    # can resolve vitest through the hoisted node_modules chain.
     cd "${TASK_REPO_ROOT:-/workspace}"/client/web-sveltekit || { echo "0.0" > /logs/verifier/reward.txt; exit 1; }
     RELATIVE_TEST="src/routes/(app)/deepsearch/PromptEditor.plugins.test.ts"
-    pnpm exec vitest run "$RELATIVE_TEST" --reporter=verbose 2>&1 | tee /tmp/test_output.log
+    # After clean pnpm install, vitest is properly linked in node_modules.
+    ./node_modules/.bin/vitest run "$RELATIVE_TEST" --reporter=verbose 2>&1 | tee /tmp/test_output.log || \
+    pnpm exec vitest run "$RELATIVE_TEST" --reporter=verbose 2>&1 | tee /tmp/test_output.log || \
+    npx vitest run "$RELATIVE_TEST" --reporter=verbose 2>&1 | tee /tmp/test_output.log
     TEST_EXIT_CODE=${PIPESTATUS[0]}
     cd "${TASK_REPO_ROOT:-/workspace}"
 else
