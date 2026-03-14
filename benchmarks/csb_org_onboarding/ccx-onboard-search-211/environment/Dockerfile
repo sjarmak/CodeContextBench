@@ -21,6 +21,6 @@ RUN (git clone --depth 1 https://github.com/sg-evals/scikit-learn--cb7e82dd.git 
     rm -rf /workspace/repo
 USER root
 
-RUN chmod -R a+rwX /workspace
+RUN chmod -R a+rwX /app
 
 ENTRYPOINT []

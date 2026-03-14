@@ -20,6 +20,6 @@ RUN (git clone --depth 1 https://github.com/sg-evals/pandas--41968da5.git /app/r
     rm -rf /app/repo
 USER root
 
-RUN chmod -R a+rwX /workspace
+RUN chmod -R a+rwX /app
 
 ENTRYPOINT []

@@ -21,6 +21,6 @@ RUN (git clone --depth 1 https://github.com/sg-evals/envoy--d7809ba2.git /worksp
     rm -rf /workspace/repo
 USER root
 
-RUN chmod -R a+rwX /workspace
+RUN chmod -R a+rwX /app
 
 ENTRYPOINT []

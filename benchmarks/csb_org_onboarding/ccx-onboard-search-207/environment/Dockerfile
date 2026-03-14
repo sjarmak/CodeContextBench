@@ -21,6 +21,6 @@ RUN (git clone --depth 1 https://github.com/sg-evals/firefox--871325b8.git /work
     rm -rf /workspace/repo
 USER root
 
-RUN chmod -R a+rwX /workspace
+RUN chmod -R a+rwX /app
 
 ENTRYPOINT []

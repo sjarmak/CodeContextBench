@@ -21,6 +21,6 @@ RUN (git clone --depth 1 https://github.com/sg-evals/grafana--26d36ec.git /works
     rm -rf /workspace/repo
 USER root
 
-RUN chmod -R a+rwX /workspace
+RUN chmod -R a+rwX /app
 
 ENTRYPOINT []
