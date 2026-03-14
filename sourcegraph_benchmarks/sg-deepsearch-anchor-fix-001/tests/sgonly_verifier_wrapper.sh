@@ -110,16 +110,25 @@ if [ -f "$MANIFEST" ]; then
         # Remove existing directory contents (truncated files) but preserve .git
         # for target_dir="." we need to be careful with the working directory
         if [ "$TARGET_DIR" = "." ]; then
-            # For root workspace: remove everything except .git, then clone into temp and move
+            # For root workspace: clone into temp, then rsync over preserving node_modules
             TMPCLONE=$(mktemp -d)
             if git clone --depth 1 "$CLONE_URL" "$TMPCLONE" 2>/dev/null; then
-                # Remove old files (except .git and tests)
-                find "$CLONE_TARGET" -mindepth 1 -maxdepth 1 \
-                    ! -name '.git' ! -name 'tests' ! -name '.claude' \
-                    -exec rm -rf {} + 2>/dev/null || true
-                # Copy cloned files (except .git)
-                cd "$TMPCLONE"
-                find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec cp -a {} "$CLONE_TARGET/" \;
+                # Merge cloned source over existing workspace.
+                # Use rsync to overlay files while preserving local-only dirs (node_modules).
+                # --delete removes files not in clone (truncated stubs) but --exclude keeps node_modules.
+                if command -v rsync >/dev/null 2>&1; then
+                    rsync -a --exclude='.git' --exclude='tests' --exclude='.claude' \
+                        --exclude='node_modules' --delete \
+                        "$TMPCLONE/" "$CLONE_TARGET/"
+                else
+                    # Fallback: remove non-protected dirs, copy clone
+                    find "$CLONE_TARGET" -mindepth 1 -maxdepth 1 \
+                        ! -name '.git' ! -name 'tests' ! -name '.claude' ! -name 'node_modules' \
+                        -exec rm -rf {} + 2>/dev/null || true
+                    cd "$TMPCLONE"
+                    find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name 'node_modules' \
+                        -exec cp -a {} "$CLONE_TARGET/" \;
+                fi
                 # If workspace has no HEAD (bare git init), use mirror .git
                 # so that git diff HEAD works for diff-based verifiers.
                 if ! git -C "$CLONE_TARGET" rev-parse HEAD >/dev/null 2>&1; then
