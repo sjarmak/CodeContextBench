@@ -16,24 +16,16 @@ cd "${TASK_REPO_ROOT:-/workspace}" || { echo "0.0" > /logs/verifier/reward.txt; 
 
 echo "Working directory: $(pwd)"
 
-# After clone-at-verify, node_modules may need relinking since source files changed.
-# Only run if vitest is missing (node_modules preserved by verifier wrapper).
-if [ -f /tmp/.sg_only_mode ] && [ ! -f client/web-sveltekit/node_modules/.package-lock.json ] && [ -f package.json ]; then
-    echo "Reinstalling JS dependencies (post-clone)..."
-    pnpm install --no-frozen-lockfile 2>/dev/null || pnpm install 2>/dev/null || true
-fi
-
 # Run targeted TypeScript/Vitest tests
 echo "Running TypeScript tests..."
 TEST_FILE="client/web-sveltekit/src/routes/(app)/deepsearch/PromptEditor.plugins.test.ts"
 
 if [ -f "$TEST_FILE" ]; then
-    # Run vitest from the project directory to use the project-level workspace
-    # config (client/web-sveltekit/vitest.workspace.ts) instead of the root one,
-    # which fails due to missing cross-project references in shallow clones.
+    # Use pnpm exec (not npx) to respect workspace hoisting — vitest is hoisted
+    # to root node_modules, not duplicated in each workspace subdirectory.
     cd "${TASK_REPO_ROOT:-/workspace}"/client/web-sveltekit || { echo "0.0" > /logs/verifier/reward.txt; exit 1; }
     RELATIVE_TEST="src/routes/(app)/deepsearch/PromptEditor.plugins.test.ts"
-    npx vitest run "$RELATIVE_TEST" --reporter=verbose 2>&1 | tee /tmp/test_output.log
+    pnpm exec vitest run "$RELATIVE_TEST" --reporter=verbose 2>&1 | tee /tmp/test_output.log
     TEST_EXIT_CODE=${PIPESTATUS[0]}
     cd "${TASK_REPO_ROOT:-/workspace}"
 else
