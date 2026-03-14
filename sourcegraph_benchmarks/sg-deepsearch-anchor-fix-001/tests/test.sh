@@ -28,12 +28,14 @@ echo "Running TypeScript tests..."
 TEST_FILE="client/web-sveltekit/src/routes/(app)/deepsearch/PromptEditor.plugins.test.ts"
 
 if [ -f "$TEST_FILE" ]; then
-    # Run vitest from root using the full path to the test file.
-    # pnpm hoists vitest to root node_modules; running from a subdirectory
-    # breaks because the subdirectory's node_modules symlinks are lost
-    # after clone-at-verify replaces source files.
-    npx vitest run "$TEST_FILE" --reporter=verbose 2>&1 | tee /tmp/test_output.log
+    # Run from the sveltekit subdirectory using pnpm exec.
+    # pnpm install (above) restores workspace symlinks so pnpm exec
+    # can resolve vitest through the hoisted node_modules chain.
+    cd "${TASK_REPO_ROOT:-/workspace}"/client/web-sveltekit || { echo "0.0" > /logs/verifier/reward.txt; exit 1; }
+    RELATIVE_TEST="src/routes/(app)/deepsearch/PromptEditor.plugins.test.ts"
+    pnpm exec vitest run "$RELATIVE_TEST" --reporter=verbose 2>&1 | tee /tmp/test_output.log
     TEST_EXIT_CODE=${PIPESTATUS[0]}
+    cd "${TASK_REPO_ROOT:-/workspace}"
 else
     echo "Test file not found: $TEST_FILE"
     echo "0.0" > /logs/verifier/reward.txt
