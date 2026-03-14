@@ -16,6 +16,12 @@ cd "${TASK_REPO_ROOT:-/workspace}" || { echo "0.0" > /logs/verifier/reward.txt; 
 
 echo "Working directory: $(pwd)"
 
+# Reinstall JS dependencies after clone-at-verify (verifier wipes node_modules)
+if [ -f /tmp/.sg_only_mode ] && [ -f package.json ]; then
+    echo "Reinstalling JS dependencies (post-clone)..."
+    pnpm install --frozen-lockfile 2>/dev/null || pnpm install 2>/dev/null || true
+fi
+
 # Run targeted TypeScript/Vitest tests
 echo "Running TypeScript tests..."
 TEST_FILE="client/web-sveltekit/src/routes/(app)/deepsearch/PromptEditor.plugins.test.ts"
