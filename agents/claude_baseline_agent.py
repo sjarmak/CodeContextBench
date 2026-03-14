@@ -342,6 +342,119 @@ For more patterns, see `query-patterns.md`.
 
 """
 
+# ---------------------------------------------------------------------------
+# Task-family-specific MCP prompt additions (V6 prompt improvements)
+# ---------------------------------------------------------------------------
+
+# Priority 1: Minimum-diff rule for sg-only fix/debug tasks
+# Prevents MCP agent from reconstructing whole files into truncated workspace
+SGONLY_MINIMUM_DIFF_PROMPT = """
+## SG-ONLY TASK RULES — Minimum Diff Required
+
+This is an sg-only task. Local source files are truncated, and the verifier will
+restore a clean repo and overlay your written files on top.
+
+**You MUST follow these rules:**
+- Make the **minimum diff necessary**. Only touch files directly required by the fix.
+- Do NOT recreate or rewrite entire files from MCP output. The verifier overlays
+  your files onto a fresh repo — writing a whole file from MCP output causes
+  unrelated regressions in untouched code.
+- Do NOT write unrelated files into `/workspace`.
+- Prefer patching only the specific functions/tests needed for the task.
+- Before each file write, confirm the file is **directly relevant** to the task.
+- Treat `sg_read_file` as a **reference source**, not a template to copy wholesale
+  into the workspace.
+
+**Hard guard:** If you find yourself writing more than 3 source files or touching
+unrelated packages, **stop and reassess your plan**.
+
+**Before running tests**, list every modified file and justify why it is necessary
+for the task. If any file is unrelated to the stated fix, revert it from your plan.
+"""
+
+# Priority 2: Coverage gates for org/analysis tasks (answer.json quality)
+# Prevents under-coverage where agent searches a small set then writes answer.json too early
+ORG_COVERAGE_GATE_PROMPT = """
+## COVERAGE REQUIREMENTS — Do Not Write answer.json Too Early
+
+Before writing `answer.json`, you **must** verify coverage across all major
+subsystems named in the task.
+
+**Minimum workflow:**
+1. **Enumerate** — Search for all relevant directories and files across the codebase.
+2. **Read** — Read representative implementation files for each subsystem.
+3. **Extract** — Extract the key symbols required by the task (not just file paths).
+4. **Gap check** — List any providers, services, or middleware layers mentioned in
+   the task that are NOT yet backed by a concrete file read. If any gaps exist,
+   search for them before proceeding.
+5. **Only then** write `answer.json`.
+
+Do not stop after finding a plausible initial set of paths. The task rewards
+**broad, complete coverage** of required files and symbols.
+"""
+
+# Task-specific coverage buckets for known under-coverage tasks
+ORG_COVERAGE_BUCKETS = {
+    "ccx-sgauth": (
+        "\n**Required coverage buckets for this task:** auth providers, session creation, "
+        "middleware registration, authz enforcement, and sub-repo permissions. "
+        "Each bucket must be backed by at least one concrete file read.\n"
+    ),
+    "ccx-sgcompletion": (
+        "\n**Required coverage buckets for this task:** frontend GraphQL, completions client, "
+        "Cody Gateway, limiter/config/auth layers, and provider selection. "
+        "Each bucket must be backed by at least one concrete file read.\n"
+    ),
+}
+
+# Priority 3: Changed-files sanity check (all MCP tasks)
+MCP_SANITY_CHECK_PROMPT = """
+## PRE-TEST SANITY CHECK
+
+Before running tests, perform this check:
+1. List every file you have modified or created.
+2. For each file, state in one sentence why it is necessary for the task.
+3. If any file is unrelated to the stated task, **do not write it** (or revert
+   if already written).
+
+Use MCP for discovery and confirmation. Use local repo state only for narrow
+patching logic. Do not use `sg_read_file` output as a template to copy wholesale
+into the workspace.
+"""
+
+
+def _classify_task_family(task_source_dir: str) -> str:
+    """Classify a task into a family based on its source directory path.
+
+    Returns one of: 'org', 'fix', 'debug', 'feature', 'refactor', 'secure',
+    'test', 'understand', 'design', 'document', or 'unknown'.
+    """
+    if not task_source_dir:
+        return "unknown"
+    path_str = task_source_dir.lower()
+    # Org-scale tasks (analysis, investigation)
+    if "csb_org_" in path_str or "ccx-" in path_str:
+        return "org"
+    # SDLC task families
+    for family in ("fix", "debug", "feature", "refactor", "secure", "test",
+                    "understand", "design", "document"):
+        if f"csb_sdlc_{family}" in path_str or f"_{family}_" in path_str:
+            return family
+    return "unknown"
+
+
+def _get_task_id_prefix(task_source_dir: str) -> str:
+    """Extract task ID prefix (e.g. 'ccx-sgauth') for coverage bucket lookup."""
+    if not task_source_dir:
+        return ""
+    # The task dir name is the last component
+    task_name = Path(task_source_dir).name.lower()
+    # Match known prefixes
+    for prefix in ORG_COVERAGE_BUCKETS:
+        if task_name.startswith(prefix):
+            return prefix
+    return ""
+
 
 class BaselineClaudeCodeAgent(ClaudeCode):
     """Claude Code with MCP-first code discovery enforcement.
@@ -695,6 +808,30 @@ class BaselineClaudeCodeAgent(ClaudeCode):
                 instruction, repo_display, self._get_repo_list()
             )
             instruction = mcp_preamble + instruction
+
+            # --- Task-family-specific prompt additions (V6) ---
+            task_family = _classify_task_family(task_source_dir)
+            logger.info(f"Task family: {task_family} (from {task_source_dir})")
+
+            # Priority 1: Minimum-diff rule for sg-only fix/debug tasks
+            if task_family in ("fix", "debug"):
+                instruction = instruction + SGONLY_MINIMUM_DIFF_PROMPT
+                logger.info("Injected SGONLY_MINIMUM_DIFF_PROMPT for %s task", task_family)
+
+            # Priority 2: Coverage gates for org/analysis tasks
+            if task_family == "org":
+                coverage_prompt = ORG_COVERAGE_GATE_PROMPT
+                # Check for task-specific coverage buckets
+                task_prefix = _get_task_id_prefix(task_source_dir)
+                if task_prefix and task_prefix in ORG_COVERAGE_BUCKETS:
+                    coverage_prompt += ORG_COVERAGE_BUCKETS[task_prefix]
+                    logger.info("Injected task-specific coverage buckets for %s", task_prefix)
+                instruction = instruction + coverage_prompt
+                logger.info("Injected ORG_COVERAGE_GATE_PROMPT for org task")
+
+            # Priority 3: Changed-files sanity check (all MCP tasks)
+            instruction = instruction + MCP_SANITY_CHECK_PROMPT
+            logger.info("Injected MCP_SANITY_CHECK_PROMPT")
 
         elif mcp_type == "sourcegraph_isolated":
             # Isolated mode: agent has only the target package locally (via sparse checkout).

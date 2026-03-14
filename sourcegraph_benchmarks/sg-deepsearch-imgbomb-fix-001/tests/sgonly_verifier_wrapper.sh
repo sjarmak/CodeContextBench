@@ -97,7 +97,12 @@ if [ -f "$MANIFEST" ]; then
     for i in $(seq 0 $((REPO_COUNT - 1))); do
         MIRROR=$(python3 -c "import json; m=json.load(open('$MANIFEST')); print(m['repos'][$i]['mirror'])")
         TARGET_DIR=$(python3 -c "import json; m=json.load(open('$MANIFEST')); print(m['repos'][$i].get('target_dir', '.'))")
-        CLONE_URL="https://github.com/${MIRROR}.git"
+        # Use GITHUB_TOKEN for private repos if available
+        if [ -n "$GITHUB_TOKEN" ]; then
+            CLONE_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${MIRROR}.git"
+        else
+            CLONE_URL="https://github.com/${MIRROR}.git"
+        fi
 
         if [ "$TARGET_DIR" = "." ]; then
             CLONE_TARGET="$WORKDIR"
