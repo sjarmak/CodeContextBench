@@ -97,12 +97,7 @@ if [ -f "$MANIFEST" ]; then
     for i in $(seq 0 $((REPO_COUNT - 1))); do
         MIRROR=$(python3 -c "import json; m=json.load(open('$MANIFEST')); print(m['repos'][$i]['mirror'])")
         TARGET_DIR=$(python3 -c "import json; m=json.load(open('$MANIFEST')); print(m['repos'][$i].get('target_dir', '.'))")
-        # Use GITHUB_TOKEN for private repos if available
-        if [ -n "$GITHUB_TOKEN" ]; then
-            CLONE_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${MIRROR}.git"
-        else
-            CLONE_URL="https://github.com/${MIRROR}.git"
-        fi
+        CLONE_URL="https://github.com/${MIRROR}.git"
 
         if [ "$TARGET_DIR" = "." ]; then
             CLONE_TARGET="$WORKDIR"
@@ -118,9 +113,9 @@ if [ -f "$MANIFEST" ]; then
             # For root workspace: remove everything except .git, then clone into temp and move
             TMPCLONE=$(mktemp -d)
             if git clone --depth 1 "$CLONE_URL" "$TMPCLONE" 2>/dev/null; then
-                # Remove old files (except .git, tests, .claude, and node_modules)
+                # Remove old files (except .git and tests)
                 find "$CLONE_TARGET" -mindepth 1 -maxdepth 1 \
-                    ! -name '.git' ! -name 'tests' ! -name '.claude' ! -name 'node_modules' \
+                    ! -name '.git' ! -name 'tests' ! -name '.claude' \
                     -exec rm -rf {} + 2>/dev/null || true
                 # Copy cloned files (except .git)
                 cd "$TMPCLONE"
