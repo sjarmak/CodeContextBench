@@ -16,10 +16,11 @@ cd "${TASK_REPO_ROOT:-/workspace}" || { echo "0.0" > /logs/verifier/reward.txt; 
 
 echo "Working directory: $(pwd)"
 
-# Reinstall JS dependencies after clone-at-verify (verifier wipes node_modules)
-if [ -f /tmp/.sg_only_mode ] && [ -f package.json ]; then
+# After clone-at-verify, node_modules may need relinking since source files changed.
+# Only run if vitest is missing (node_modules preserved by verifier wrapper).
+if [ -f /tmp/.sg_only_mode ] && [ ! -f client/web-sveltekit/node_modules/.package-lock.json ] && [ -f package.json ]; then
     echo "Reinstalling JS dependencies (post-clone)..."
-    pnpm install --frozen-lockfile 2>/dev/null || pnpm install 2>/dev/null || true
+    pnpm install --no-frozen-lockfile 2>/dev/null || pnpm install 2>/dev/null || true
 fi
 
 # Run targeted TypeScript/Vitest tests
