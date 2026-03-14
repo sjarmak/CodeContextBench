@@ -20,8 +20,9 @@ echo "Working directory: $(pwd)"
 if [ -f /tmp/.sg_only_mode ] && [ -f package.json ]; then
     echo "Installing JS dependencies from scratch (post-clone)..."
     pnpm install --frozen-lockfile 2>&1 | tail -5 || pnpm install 2>&1 | tail -5 || true
-    # Ensure vitest is installed in the sveltekit workspace
-    cd client/web-sveltekit && pnpm add -D vitest 2>&1 | tail -3 && cd ../..
+    # Ensure vitest and its transitive deps are installed in the sveltekit workspace.
+    # pnpm's content-addressable store from the shallow clone misses tinyrainbow.
+    cd client/web-sveltekit && pnpm add -D vitest tinyrainbow 2>&1 | tail -3 && cd ../..
 fi
 
 # Run targeted TypeScript/Vitest tests
