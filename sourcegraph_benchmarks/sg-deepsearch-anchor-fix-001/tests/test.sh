@@ -19,8 +19,9 @@ echo "Working directory: $(pwd)"
 # Clean install after clone-at-verify wipes node_modules with the source files.
 if [ -f /tmp/.sg_only_mode ] && [ -f package.json ]; then
     echo "Installing JS dependencies from scratch (post-clone)..."
-    pnpm install --no-frozen-lockfile 2>&1 | tail -10
-    echo "Install exit code: $?"
+    pnpm install --frozen-lockfile 2>&1 | tail -5 || pnpm install 2>&1 | tail -5 || true
+    # Ensure vitest is installed in the sveltekit workspace
+    cd client/web-sveltekit && pnpm add -D vitest 2>&1 | tail -3 && cd ../..
 fi
 
 # Run targeted TypeScript/Vitest tests
