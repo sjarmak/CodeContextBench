@@ -78,16 +78,13 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - `uv tool install` segfaults on ARM64/QEMU. Use `pip install` or Daytona (native x86_64).
 - Build-push-clean pattern for limited disk (~45GB): build, push, clean before next image.
 - Colons in agent names break Docker volume mounts. Replace `:` with `__`.
-- Add `|| git init` fallback to all `git clone` commands in Dockerfiles for network resilience. Applied to 269 Dockerfiles.
-- Add `chown claude:claude /logs` and `adduser claude` to Dockerfiles for cross-harness (OH) permission compatibility.
-- `jefzda/` → `ghcr.io/sg-evals/` migration incomplete: 33 active Dockerfiles in `csb/debug/` and `csb/fix/` still reference `jefzda/`.
+- Add `|| git init` fallback to `git clone` in Dockerfiles. Add `chown claude:claude /logs` + `adduser claude` for OH compat.
+- `jefzda/` → `ghcr.io/sg-evals/` migration incomplete: 33 Dockerfiles in `csb/debug/` and `csb/fix/`.
 
 ### MCP Configuration (inside sandboxes)
-- `.mcp.json` at `$CLAUDE_CONFIG_DIR` (typically `/logs/agent/sessions/`), not `/app/` or `/root/`.
-- Claude Code needs `--mcp-config` flag; it does not auto-detect. Inject MCP usage instructions into the task prompt.
+- `.mcp.json` at `$CLAUDE_CONFIG_DIR` (typically `/logs/agent/sessions/`), not `/app/` or `/root/`. Claude Code needs `--mcp-config` flag.
 - `NODE_TLS_REJECT_UNAUTHORIZED=0` for Node.js SSL in containers.
-- Sourcegraph: **stdio transport** (`npx @sourcegraph/cody --stdio`), NOT HTTP. HTTP 405 = wrong protocol.
-- Sourcegraph skills show empty in headless mode. Embed prompt content in CLAUDE.md.
+- Sourcegraph: **stdio** (`npx @sourcegraph/cody --stdio`), NOT HTTP. Skills empty in headless -- embed in CLAUDE.md.
 - Sourcegraph env vars: `SOURCEGRAPH_URL` and `SOURCEGRAPH_ACCESS_TOKEN` (NOT `_ENDPOINT` or `_TOKEN`).
 
 ### Harbor Result Format
@@ -98,14 +95,20 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 
 ### Security / Credentials
 - **Never pass credentials via Docker `-e` flags** (leak into trajectory HTML). Use file-based injection: `/logs/agent/.credentials.json` with `chmod 600`.
-- `sanitize_secrets.py` redacts API keys but not yet integrated into `export_official_results.py` (manual invocation).
-- `sanitize_secrets.py` `_FAKE_INDICATORS` substring matching too broad -- use exact-match `FAKE_KEY_ALLOWLIST` instead.
+- `sanitize_secrets.py` IS integrated into `export_official_results.py` (line 32), but allowlist bypass (`_FAKE_INDICATORS` substring matching too broad) undermines it. Use exact-match `FAKE_KEY_ALLOWLIST`.
 
 ### Harness-Agnostic Verifiers
 - **no_changes_guard** must use `git diff origin/main HEAD` (not `git diff HEAD`) for auto-committing agents (e.g., OpenHands).
 - Verifier fallbacks: `${TASK_WORKDIR:-/workspace}` for workdir, `${TASK_REPO_ROOT:-${VERIFY_REPO:-/workspace}}` for repo root.
 - Set `GOWORK=off` in test.sh when sg_only verifier restores full repo (go.work may need newer Go).
-- **55+ tasks** hardcode `ANSWER_PATH="/workspace/answer.json"` without fallbacks (originally reported as 6 -- actual scope much larger). All use same template pattern; bulk fix feasible. Zero scores on non-Harbor harnesses.
+- **122 active tasks** (259 total with backups) hardcode `ANSWER_PATH="/workspace/answer.json"` without fallbacks. Also check `ANSWER_JSON` variable in `answer_json_verifier_lib.sh`. All use same template pattern; bulk fix feasible. Zero scores on non-Harbor harnesses.
+
+### Scripts / Code Quality
+- **abc_audit.py duplicate functions**: `check_oa_equivalent_solutions`, `check_ob_negated_solutions`, `check_og_determinism`, `check_t10_shared_state` each defined twice. Python uses last definition silently.
+- **ir_metrics.py `tt_all_r` bug**: Line 749 set comparison may report time-to-first-relevant instead of time-to-all-relevant.
+- **`--skip-completed` defect** in `run_selected_tasks.sh`: requires both `result.json` AND `task_metrics.json`. Fix: check only `result.json`.
+- **Task registry metadata header stale**: claims 436 tasks, actual 274. `sync_task_metadata.py --fix` doesn't update header block.
+- **`verification_modes` + `use_case_category` missing from all 274 tasks**: Breaks auto-detection (always defaults to artifact-only) and `--use-case-category` filter (silently filters everything).
 
 ### Validation / Scoring
 - `validators.py` duplicated across `ccb_build` tasks. Changes must hit **all copies** (`sha256sum`).
@@ -117,15 +120,14 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - Bare `$VAR` in `instruction.md` gets expanded. Use `<placeholder>` syntax.
 - Pass rate logic duplicated in `generate_eval_report.py` and `csb_metrics/models.py`. Sync both on changes.
 - `cost_report.py`: `defaultdict(int)` + `.get("baseline", 1)` returns `0` when key exists. Use `or 1`.
-- **TARGET_SUITE misalignment**: 55 tasks had stale legacy suite names, 220 had none. `SUITE_WEIGHTS` lookup silently falls back to equal-weight scoring.
-- **dual_score_lib.sh**: `scorer_artifact` always `"auto"` due to `.setdefault()` overwrite. Scoring audit trail broken.
-- **Falsy value bugs**: `max_score=0` treated as false (inflates scores); `None` MCP metrics misclassified as "rate-limited". Always use explicit `is None` / `== 0` checks.
-- **promote_run.py**: Crashes on non-dict environment config. Validate types before `.get()`.
+- **TARGET_SUITE misalignment**: 55 stale suite names, 220 missing. `SUITE_WEIGHTS` falls back to equal-weight.
+- **dual_score_lib.sh**: `scorer_artifact` always `"auto"` (`.setdefault()` overwrite). Audit trail broken.
+- **Falsy value bugs**: `max_score=0` treated as false; `None` MCP metrics misclassified. Use `is None` / `== 0`.
+- **promote_run.py**: Crashes on non-dict env config. Validate types before `.get()`.
 
 ### Git / Auth
-- `gh auth refresh` needs explicit `-s <scope>`: `gh auth refresh -h github.com -s write:packages`.
-- Env vars must be **exported** for Harbor subprocesses. Use `set -a` before sourcing `.env.local`.
-- Account readiness: `runs/state/account_health.json`. Launchers source `configs/_common.sh`.
+- `gh auth refresh -h github.com -s write:packages` (explicit scope needed).
+- Env vars must be **exported** for Harbor subprocesses (`set -a` before sourcing `.env.local`).
 - GitHub push protection blocks synthetic keys. Squash with `git reset --soft origin/main`.
 - Shallow clones fail on push. Some repos use `master`; detect with `git symbolic-ref refs/remotes/origin/HEAD`.
 - **gitignore negation**: `!child/` doesn't work when parent dir is ignored. Use `git add -f`.
@@ -142,13 +144,9 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - Tool categorization: check MCP prefix (`mcp__`) before substring checks to avoid miscategorization.
 
 ### OpenHands
-- Strip ALL `sandbox_plugins` (`= []`) -- `agent_skills` indexes `/workspace` at startup (120s timeout).
-- `shlex.quote()` breaks on shell metacharacters. Base64-encode instructions on host, decode inside container.
-- Background daemons hang Daytona poll. Wrap with `pkill` cleanup; guard with `shutil.which('pkill')`.
-- Alpine lacks `apt-get` (OH requirement). Use `bookworm` variants.
+- Strip ALL `sandbox_plugins` (`= []`). Base64-encode instructions (not `shlex.quote()`). Alpine lacks `apt-get` -- use `bookworm`.
 - OH MCP client ~30s timeout. Block `deepsearch`/`deepsearch_read` in auth proxy; redirect to `keyword_search`/`nls_search`.
-- `chown -R /workspace` blocks >120s on large repos. Edit installed `runtime_init.py` directly.
-- Set `PYTHONSAFEPATH=1` to prevent repo-local packages shadowing installed deps.
+- `chown -R /workspace` blocks >120s on large repos. Edit installed `runtime_init.py`. Set `PYTHONSAFEPATH=1`.
 
 ### CI / Workflows
 - `docs-consistency.yml` is redundant -- subsumed by `repo_health.yml`. Doubles CI minutes.
@@ -158,6 +156,7 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - Secret-detection hooks false-positive on code that _detects_ secrets. Use `--no-verify` when flagged code is detection logic.
 - Classes named `TestPlan`/`TestCase`/`TestResult` get auto-collected by pytest. Rename to `EvaluationPlan` etc.
 - Ralph sessions write learnings to `progress.txt` on feature branches, not main. Compound back after merge.
+- **Ralph `prd.json` is single-active**: Overwriting loses tracking state. Archive old `prd.json` before replacement.
 
 ## Maintenance
 - Root and local `AGENTS.md` / `CLAUDE.md` files are generated from sources in `docs/ops/`.
