@@ -29,6 +29,5 @@ USER root
 # Install VS Code dependencies (required for testing)
 RUN npm install --legacy-peer-deps 2>&1 | tail -10 || true
 
-RUN chmod -R a+rwX /workspace
 
 ENTRYPOINT []

@@ -29,6 +29,5 @@ USER root
 RUN pip install --upgrade pip && \
     pip install pybind11==2.13.6 2>&1 || true
 
-RUN chmod -R a+rwX /workspace
 
 ENTRYPOINT []

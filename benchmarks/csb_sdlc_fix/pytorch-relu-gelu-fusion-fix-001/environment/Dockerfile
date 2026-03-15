@@ -19,6 +19,5 @@ RUN (adduser --disabled-password --gecos '' claude 2>/dev/null || adduser -D -s 
     chown -R claude:claude /workspace
 
 # Harness-agnostic: ensure all users (root/claude) can read+write workspace files
-RUN chmod -R a+rwX /workspace
 
 ENTRYPOINT []

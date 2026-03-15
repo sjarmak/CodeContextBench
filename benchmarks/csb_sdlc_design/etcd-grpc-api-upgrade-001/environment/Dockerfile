@@ -31,6 +31,5 @@ RUN mkdir -p /logs/agent /logs/verifier && \
     chown -R claude:claude /workspace /logs /ccb_crossrepo
 
 # Harness-agnostic: ensure all users (root/claude) can read+write workspace files
-RUN chmod -R a+rwX /workspace
 
 ENTRYPOINT []

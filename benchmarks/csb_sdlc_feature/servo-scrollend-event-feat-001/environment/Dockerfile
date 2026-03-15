@@ -34,4 +34,3 @@ USER root
 # Note: Both baseline and MCP agents now have access to the real Servo source.
 # Baseline will use local grep/find/rg. MCP will use Sourcegraph semantic search.
 
-RUN chmod -R a+rwX /workspace

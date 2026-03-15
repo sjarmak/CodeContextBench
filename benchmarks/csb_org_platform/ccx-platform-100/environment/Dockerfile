@@ -29,6 +29,5 @@ RUN git config --global user.email "agent@example.com" && \
 # Switch back to root for Harbor's runtime setup
 USER root
 
-RUN chmod -R a+rwX /workspace
 
 ENTRYPOINT []
