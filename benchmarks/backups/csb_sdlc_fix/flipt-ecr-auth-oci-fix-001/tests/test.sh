@@ -68,9 +68,12 @@ else
         # Python (pytest): look for "X passed, Y failed" or "X passed"
         PYTEST_LINE=$(grep -E '[0-9]+ passed' test_output.log 2>/dev/null | tail -1)
         if [ -n "$PYTEST_LINE" ]; then
-            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' || echo "0")
-            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' || echo "0")
-            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' || echo "0")
+            PASSED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= passed)' | tail -1)
+            PASSED=${PASSED:-0}
+            FAILED=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= failed)' | tail -1)
+            FAILED=${FAILED:-0}
+            ERRORS=$(echo "$PYTEST_LINE" | grep -oP '\d+(?= error)' | tail -1)
+            ERRORS=${ERRORS:-0}
             TOTAL=$((PASSED + FAILED + ERRORS))
             if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
                 REWARD=$(awk "BEGIN {printf \"%.4f\", $PASSED / $TOTAL}")

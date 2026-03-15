@@ -750,14 +750,9 @@ def _extract_symbols_from_code(code: str) -> set[str]:
     return filtered
 
 
-def _load_ground_truth_symbols(task_name: str) -> Optional[set[str]]:
-    """Load oracle ground truth symbols for a task.
-
-    Returns a set of symbol names or None if no symbols available.
-    Searches oracle_answer.json and ground_truth.json in benchmark dirs.
-    """
+def _find_task_dir(task_name: str) -> Optional[Path]:
+    """Locate the benchmark directory for a task by name."""
     clean_name = _normalize_task_name(task_name)
-
     candidates = [clean_name]
     if clean_name != task_name:
         candidates.append(task_name)
@@ -778,28 +773,119 @@ def _load_ground_truth_symbols(task_name: str) -> Optional[set[str]]:
                             break
                     else:
                         continue
-                if not task_dir.is_dir():
-                    continue
-                for gt_name in ("oracle_answer.json", "ground_truth.json"):
-                    gt_path = task_dir / "tests" / gt_name
-                    if gt_path.is_file():
-                        try:
-                            data = json.loads(gt_path.read_text())
-                            raw_symbols = data.get("symbols", [])
-                            if isinstance(raw_symbols, list) and raw_symbols:
-                                result: set[str] = set()
-                                for s in raw_symbols:
-                                    if isinstance(s, str) and s:
-                                        result.add(s)
-                                    elif isinstance(s, dict):
-                                        sym_name = s.get("symbol", "")
-                                        if sym_name:
-                                            result.add(sym_name)
-                                if result:
-                                    return result
-                        except (json.JSONDecodeError, OSError):
-                            pass
+                if task_dir.is_dir():
+                    return task_dir
     return None
+
+
+def _load_ground_truth_symbols(task_name: str) -> Optional[set[str]]:
+    """Load oracle ground truth symbols for a task.
+
+    Returns a set of symbol names or None if no symbols available.
+    Searches oracle_answer.json, ground_truth.json, and repo_manifest.json.
+    """
+    task_dir = _find_task_dir(task_name)
+    if not task_dir:
+        return None
+
+    # Phase 1: Try oracle symbols (high-confidence, curated)
+    for gt_name in ("oracle_answer.json", "ground_truth.json"):
+        gt_path = task_dir / "tests" / gt_name
+        if gt_path.is_file():
+            try:
+                data = json.loads(gt_path.read_text())
+                raw_symbols = data.get("symbols", [])
+                if isinstance(raw_symbols, list) and raw_symbols:
+                    result: set[str] = set()
+                    for s in raw_symbols:
+                        if isinstance(s, str) and s:
+                            result.add(s)
+                        elif isinstance(s, dict):
+                            sym_name = s.get("symbol", "")
+                            if sym_name:
+                                result.add(sym_name)
+                    if result:
+                        # Phase 2: Augment with repo manifest symbols
+                        manifest_symbols = _load_manifest_symbols(task_dir)
+                        if manifest_symbols:
+                            result |= manifest_symbols
+                        return result
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    # Phase 3: Fallback to manifest-only symbols
+    manifest_symbols = _load_manifest_symbols(task_dir)
+    return manifest_symbols if manifest_symbols else None
+
+
+def _find_manifest_path(task_dir: Path) -> Optional[Path]:
+    """Find repo_manifest.json, checking both the given dir and csb/ subtree."""
+    manifest_path = task_dir / "tests" / "repo_manifest.json"
+    if manifest_path.is_file():
+        return manifest_path
+    # Fallback: search benchmarks/csb/{work_type}/{task_name}/tests/
+    task_name = task_dir.name
+    csb_root = task_dir.parent.parent / "csb" if "benchmarks" in str(task_dir) else None
+    if csb_root is None:
+        for br in BENCHMARKS_DIRS:
+            csb_candidate = br / "csb"
+            if csb_candidate.is_dir():
+                csb_root = csb_candidate
+                break
+    if csb_root and csb_root.is_dir():
+        for work_type_dir in csb_root.iterdir():
+            if not work_type_dir.is_dir():
+                continue
+            alt = work_type_dir / task_name / "tests" / "repo_manifest.json"
+            if alt.is_file():
+                return alt
+    return None
+
+
+def _load_manifest_symbols(task_dir: Path) -> Optional[set[str]]:
+    """Load symbols from repo_manifest.json (filename-derived).
+
+    These are package/module names extracted from the file tree — lower
+    confidence than oracle symbols but vastly more coverage.
+    """
+    manifest_path = _find_manifest_path(task_dir)
+    if not manifest_path:
+        return None
+    try:
+        data = json.loads(manifest_path.read_text())
+        symbols: set[str] = set()
+        for repo in data.get("repos", []):
+            for sym_entry in repo.get("filename_symbols", []):
+                sym = sym_entry.get("symbol", "") if isinstance(sym_entry, dict) else ""
+                if sym and len(sym) > 2:
+                    symbols.add(sym)
+        return symbols if symbols else None
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _load_manifest_files(task_name: str) -> Optional[set[str]]:
+    """Load complete file tree from repo_manifest.json.
+
+    Returns set of file paths (relative to repo root) for verifying
+    that agent-referenced file paths actually exist.
+    """
+    task_dir = _find_task_dir(task_name)
+    if not task_dir:
+        return None
+    manifest_path = _find_manifest_path(task_dir)
+    if not manifest_path:
+        return None
+    try:
+        data = json.loads(manifest_path.read_text())
+        files: set[str] = set()
+        for repo in data.get("repos", []):
+            for f in repo.get("files", []):
+                if isinstance(f, str):
+                    files.add(f)
+        return files if files else None
+    except (json.JSONDecodeError, OSError):
+        return None
 
 
 def _detect_symbol_hallucination(
@@ -897,7 +983,7 @@ def _detect_symbol_hallucination(
 
     unknown_rate = len(unknown_symbols) / len(agent_symbols) if agent_symbols else 0.0
 
-    return {
+    result = {
         "agent_symbols_written": len(agent_symbols),
         "oracle_symbols": len(oracle_symbols),
         "correct_symbols": len(correct_symbols),
@@ -906,6 +992,63 @@ def _detect_symbol_hallucination(
         "sample_unknown": sorted(unknown_symbols)[:10],
         "sample_correct": sorted(correct_symbols)[:10],
     }
+
+    # File-path hallucination check (if manifest available)
+    manifest_files = _load_manifest_files(task_name)
+    if manifest_files:
+        # Extract file paths from Edit/Write tool calls
+        agent_files: set[str] = set()
+        for step in steps:
+            extra = step.get("extra") or {}
+            tool_name = extra.get("tool_use_name", "")
+            raw_args = extra.get("raw_arguments") or {}
+            if not isinstance(raw_args, dict):
+                continue
+            if tool_name in ("Write", "Edit", "Read"):
+                fpath = raw_args.get("file_path", "")
+                if fpath and isinstance(fpath, str):
+                    # Normalize: strip /workspace/ prefix and repo dir prefix
+                    normalized = fpath
+                    for prefix in ("/workspace/", "/app/", "/repo/"):
+                        if normalized.startswith(prefix):
+                            normalized = normalized[len(prefix):]
+                            break
+                    # Strip repo dir name if present (e.g., kubernetes--v1.32.0/pkg/...)
+                    parts = normalized.split("/", 1)
+                    if len(parts) == 2 and "--" in parts[0]:
+                        normalized = parts[1]
+                    agent_files.add(normalized)
+
+        # Filter out agent-created files (not part of original repo)
+        agent_output_files = {"answer.json", "result.json", "output.json", "submission.json"}
+        agent_files = {f for f in agent_files if Path(f).name not in agent_output_files}
+
+        if agent_files:
+            # Exact match first
+            verified = {f for f in agent_files if f in manifest_files}
+            # Suffix match for path prefix mismatches (e.g., agent uses
+            # "core/v1/types.go" but manifest has "staging/.../core/v1/types.go")
+            unmatched = agent_files - verified
+            if unmatched:
+                suffix_matched = set()
+                for af in unmatched:
+                    for mf in manifest_files:
+                        if mf.endswith("/" + af) or mf == af:
+                            suffix_matched.add(af)
+                            break
+                verified |= suffix_matched
+
+            hallucinated = agent_files - verified
+            result["file_paths_checked"] = len(agent_files)
+            result["file_paths_verified"] = len(verified)
+            result["file_paths_hallucinated"] = len(hallucinated)
+            result["file_hallucination_rate"] = round(
+                len(hallucinated) / len(agent_files), 4
+            ) if agent_files else 0.0
+            if hallucinated:
+                result["sample_hallucinated_files"] = sorted(hallucinated)[:10]
+
+    return result
 
 
 def analyze_quality(task_dir: Path, task_name: str, config_name: str, reward: Optional[float]) -> dict:

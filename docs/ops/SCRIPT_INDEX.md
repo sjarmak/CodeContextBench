@@ -119,6 +119,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/build_core_manifest.py` - Infrastructure or mirror management script for build core manifest.
 - `scripts/build_daytona_registry.py` - Infrastructure or mirror management script for build daytona registry.
 - `scripts/build_linux_base_images.sh` - Infrastructure or mirror management script for build linux base images.
+- `scripts/build_repo_manifests.py` - Infrastructure or mirror management script for build repo manifests.
 - `scripts/build_unified_manifest.py` - Infrastructure or mirror management script for build unified manifest.
 - `scripts/create_mcp_expansion_mirrors.sh` - Infrastructure or mirror management script for create mcp expansion mirrors.
 - `scripts/create_missing_mcp_mirrors.sh` - Infrastructure or mirror management script for create missing mcp mirrors.
