@@ -186,7 +186,17 @@ def _load_ground_truth(task_name: str) -> Optional[list[str]]:
             if not suite_dir.is_dir():
                 continue
             for name in candidates:
+                # Try exact match first, then case-insensitive
                 task_dir = suite_dir / name
+                if not task_dir.is_dir():
+                    # Case-insensitive fallback
+                    lower_name = name.lower()
+                    for entry in suite_dir.iterdir():
+                        if entry.is_dir() and entry.name.lower() == lower_name:
+                            task_dir = entry
+                            break
+                    else:
+                        continue
                 if not task_dir.is_dir():
                     continue
                 # Try oracle_answer.json first, then ground_truth.json
@@ -644,16 +654,43 @@ def analyze_quality(task_dir: Path, task_name: str, config_name: str, reward: Op
     search_stats = _count_search_calls(transcript_path)
     if search_stats:
         analysis["retrieval"] = search_stats
+        accessed_files = search_stats.get("files_accessed", [])
+
         # Add file recall if we have ground truth
-        if gt_files is not None and search_stats.get("files_accessed"):
+        if gt_files is not None and accessed_files:
             gt_norm = {_normalize_path(f) for f in gt_files}
-            accessed_norm = {_normalize_path(f) for f in search_stats["files_accessed"]}
+            accessed_norm = {_normalize_path(f) for f in accessed_files}
             overlap = gt_norm & accessed_norm
             analysis["retrieval"]["file_recall"] = round(
                 len(overlap) / len(gt_norm) if gt_norm else 1.0, 4
             )
             analysis["retrieval"]["oracle_files_found"] = len(overlap)
             analysis["retrieval"]["oracle_files_total"] = len(gt_norm)
+
+        # Source 3: Transcript-based hallucination (when verifier debug and answer.json unavailable)
+        if "hallucination" not in analysis and gt_files is not None and accessed_files:
+            gt_norm = {_normalize_path(f) for f in gt_files}
+            accessed_norm = {_normalize_path(f) for f in accessed_files}
+            # Filter out non-source files (answer.json, test files, config)
+            accessed_source = {f for f in accessed_norm
+                               if f and not f.endswith(('.json', '.txt', '.log', '.md'))
+                               and '/tests/' not in f and 'answer' not in f
+                               and not f.startswith(('logs/', '/logs', '/tmp', '/tests'))}
+            if accessed_source:
+                true_pos = accessed_source & gt_norm
+                precision = len(true_pos) / len(accessed_source) if accessed_source else 0.0
+                recall = len(true_pos) / len(gt_norm) if gt_norm else 1.0
+                analysis["hallucination"] = {
+                    "source": "transcript",
+                    "agent_file_count": len(accessed_source),
+                    "oracle_file_count": len(gt_norm),
+                    "true_positives": len(true_pos),
+                    "false_positives": len(accessed_source) - len(true_pos),
+                    "false_negatives": len(gt_norm) - len(true_pos),
+                    "precision": round(precision, 4),
+                    "recall": round(recall, 4),
+                }
+
         # Remove raw file list from output (too large)
         if "files_accessed" in analysis.get("retrieval", {}):
             del analysis["retrieval"]["files_accessed"]
