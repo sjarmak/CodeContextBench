@@ -559,6 +559,55 @@ def check_setup_quality(task_dir: Path, config_name: str) -> dict:
 # Stage 3: Quality Analysis
 # ---------------------------------------------------------------------------
 
+def _compute_recall_at_k(ordered_accesses: list[tuple[int, str]],
+                         gt_norm: set[str],
+                         checkpoints: tuple[int, ...] = (5, 10, 20)) -> dict:
+    """Compute recall at k tool calls from an ordered access list.
+
+    Args:
+        ordered_accesses: list of (tool_call_index, normalized_path) in call order
+        gt_norm: set of normalized ground truth file paths
+        checkpoints: k values to compute recall at
+
+    Returns:
+        dict with recall_at_5, recall_at_10, recall_at_20, convergence_score
+    """
+    if not gt_norm or not ordered_accesses:
+        return {}
+
+    found_at: dict[int, set[str]] = {}  # cumulative oracle files found by tool call N
+    cumulative: set[str] = set()
+    result = {}
+
+    for call_idx, norm_path in ordered_accesses:
+        if norm_path in gt_norm:
+            cumulative.add(norm_path)
+        found_at[call_idx] = set(cumulative)
+
+    total_recall = len(cumulative) / len(gt_norm) if gt_norm else 0.0
+
+    # Compute recall at each checkpoint (by ordered position, not call_idx)
+    for k in checkpoints:
+        # Take the first k unique file accesses
+        seen_at_k: set[str] = set()
+        for i, (_, norm_path) in enumerate(ordered_accesses):
+            if i >= k:
+                break
+            if norm_path in gt_norm:
+                seen_at_k.add(norm_path)
+        recall_k = len(seen_at_k) / len(gt_norm) if gt_norm else 0.0
+        result[f"recall_at_{k}"] = round(recall_k, 4)
+
+    # Convergence score: recall@10 / recall@total (how fast the agent converges)
+    recall_at_10 = result.get("recall_at_10", 0.0)
+    if total_recall > 0:
+        result["convergence_score"] = round(recall_at_10 / total_recall, 4)
+    else:
+        result["convergence_score"] = 0.0
+
+    return result
+
+
 def analyze_quality(task_dir: Path, task_name: str, config_name: str, reward: Optional[float]) -> dict:
     """Perform quality analysis on a valid_goodsetup trial.
 
@@ -649,9 +698,13 @@ def analyze_quality(task_dir: Path, task_name: str, config_name: str, reward: Op
                 continue
 
     # --- Retrieval quality ---
-    transcript_path = task_dir / "agent" / "claude-code.txt"
+    # Try trajectory.json first (structured, complete, no 4MB cap issue),
+    # fall back to raw transcript parsing if unavailable.
+    search_stats = _parse_trajectory(task_dir)
+    if search_stats is None:
+        transcript_path = task_dir / "agent" / "claude-code.txt"
+        search_stats = _count_search_calls(transcript_path)
 
-    search_stats = _count_search_calls(transcript_path)
     if search_stats:
         analysis["retrieval"] = search_stats
         accessed_files = search_stats.get("files_accessed", [])
@@ -666,6 +719,65 @@ def analyze_quality(task_dir: Path, task_name: str, config_name: str, reward: Op
             )
             analysis["retrieval"]["oracle_files_found"] = len(overlap)
             analysis["retrieval"]["oracle_files_total"] = len(gt_norm)
+
+            # Compute recall@k if we have ordered access data (from trajectory)
+            ordered_accesses = search_stats.get("ordered_file_accesses", [])
+            if ordered_accesses:
+                recall_at_k = _compute_recall_at_k(ordered_accesses, gt_norm)
+                analysis["retrieval"].update(recall_at_k)
+
+        # --- Claimed files precision (from answer.json or trajectory) ---
+        claimed_files = search_stats.get("claimed_files", [])
+        # Also try loading from on-disk answer.json if trajectory didn't capture it
+        if not claimed_files:
+            for ap in [task_dir / "artifacts" / "answer.json",
+                       task_dir / "verifier" / "answer.json",
+                       task_dir / "agent" / "answer.json"]:
+                if not ap.is_file():
+                    continue
+                try:
+                    ad = json.loads(ap.read_text())
+                    asec = ad.get("analysis", {})
+                    if isinstance(asec, dict):
+                        for fe in asec.get("files_examined", []):
+                            if isinstance(fe, dict):
+                                p = fe.get("path", fe.get("file", ""))
+                                if p:
+                                    claimed_files.append(_normalize_path(p))
+                            elif isinstance(fe, str):
+                                claimed_files.append(_normalize_path(fe))
+                    if not claimed_files:
+                        raw = ad.get("files", [])
+                        if isinstance(raw, list):
+                            for f in raw:
+                                if isinstance(f, str):
+                                    claimed_files.append(_normalize_path(f))
+                                elif isinstance(f, dict):
+                                    p = f.get("file", f.get("path", ""))
+                                    if p:
+                                        claimed_files.append(_normalize_path(p))
+                    if claimed_files:
+                        break
+                except (json.JSONDecodeError, OSError):
+                    continue
+
+        if claimed_files and gt_files is not None:
+            gt_norm = {_normalize_path(f) for f in gt_files}
+            claimed_norm = {f for f in claimed_files if f}
+            if claimed_norm:
+                claimed_tp = claimed_norm & gt_norm
+                analysis["retrieval"]["claimed_precision"] = round(
+                    len(claimed_tp) / len(claimed_norm) if claimed_norm else 0.0, 4
+                )
+                analysis["retrieval"]["claimed_file_count"] = len(claimed_norm)
+        # Rename the existing precision metric for clarity when claimed is present
+        if "claimed_precision" in analysis.get("retrieval", {}):
+            analysis["retrieval"]["exploration_precision"] = round(
+                len({_normalize_path(f) for f in accessed_files} & {_normalize_path(f) for f in gt_files})
+                / len({_normalize_path(f) for f in accessed_files})
+                if accessed_files and gt_files else 0.0,
+                4
+            )
 
         # Source 3: Transcript-based hallucination (when verifier debug and answer.json unavailable)
         if "hallucination" not in analysis and gt_files is not None and accessed_files:
@@ -691,9 +803,10 @@ def analyze_quality(task_dir: Path, task_name: str, config_name: str, reward: Op
                     "recall": round(recall, 4),
                 }
 
-        # Remove raw file list from output (too large)
-        if "files_accessed" in analysis.get("retrieval", {}):
-            del analysis["retrieval"]["files_accessed"]
+        # Remove internal data from output (too large / internal)
+        for key in ("files_accessed", "ordered_file_accesses", "claimed_files"):
+            if key in analysis.get("retrieval", {}):
+                del analysis["retrieval"][key]
 
     # --- Verifier false negatives ---
     if reward is not None and reward == 0.0:
@@ -755,10 +868,176 @@ def _normalize_path(path) -> str:
     return p.lower()
 
 
+SEARCH_TOOLS = {"Grep", "Glob", "keyword_search", "nls_search",
+                "find_references", "go_to_definition", "list_files",
+                "diff_search", "commit_search"}
+
+# Tools whose arguments contain a file path (used for ordered access tracking)
+_FILE_ARG_TOOLS = {"Read", "Edit", "Write"}
+
+# Regex for extracting /workspace/ paths from Bash commands
+_WORKSPACE_PATH_RE = re.compile(r'/workspace/([\w./+-]+\.[\w]+)')
+
+
+def _parse_trajectory(task_dir: Path) -> Optional[dict]:
+    """Parse trajectory.json for tool call stats, file access, and ordered access list.
+
+    Returns the same format as _count_search_calls, plus:
+        ordered_file_accesses: list of (tool_call_index, normalized_path) in call order
+        claimed_files: list of file paths from the agent's final answer.json write
+    Or None if trajectory.json is missing/unreadable.
+    """
+    trajectory_path = task_dir / "agent" / "trajectory.json"
+    if not trajectory_path.is_file():
+        return None
+
+    # Size guard: skip files > 10MB
+    try:
+        if trajectory_path.stat().st_size > 10 * 1024 * 1024:
+            return None
+    except OSError:
+        return None
+
+    try:
+        data = json.loads(trajectory_path.read_text(errors="replace"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    steps = data.get("steps", [])
+    if not isinstance(steps, list):
+        return None
+
+    total_tool_calls = 0
+    search_calls = 0
+    mcp_calls = 0
+    seen_files: set[str] = set()
+    ordered_accesses: list[tuple[int, str]] = []  # (tool_call_index, norm_path)
+    claimed_files: list[str] = []
+    last_answer_json_content: Optional[str] = None
+
+    for step in steps:
+        extra = step.get("extra") or {}
+        tool_name = extra.get("tool_use_name", "")
+        if not tool_name:
+            continue
+
+        total_tool_calls += 1
+        raw_args = extra.get("raw_arguments") or {}
+        if not isinstance(raw_args, dict):
+            raw_args = {}
+
+        call_idx = total_tool_calls  # 1-based index
+
+        # Count search calls
+        if tool_name in SEARCH_TOOLS:
+            search_calls += 1
+
+        # Count MCP calls
+        if tool_name.startswith("mcp__sourcegraph__"):
+            mcp_calls += 1
+            # Also count as search if it's a search-type MCP tool
+            short_name = tool_name.replace("mcp__sourcegraph__", "").replace("sg_", "")
+            if short_name in SEARCH_TOOLS:
+                search_calls += 1
+
+        # Extract file paths from tool arguments
+        if tool_name in _FILE_ARG_TOOLS:
+            fp = raw_args.get("file_path") or raw_args.get("file") or raw_args.get("path", "")
+            if fp:
+                norm = _normalize_path(fp)
+                if norm and "." in norm.rsplit("/", 1)[-1]:
+                    if norm not in seen_files:
+                        ordered_accesses.append((call_idx, norm))
+                    seen_files.add(norm)
+                # Track writes to answer.json for claimed_files extraction
+                if tool_name == "Write" and "answer.json" in fp:
+                    content = raw_args.get("content", "")
+                    if content:
+                        last_answer_json_content = content
+
+        elif tool_name == "Bash":
+            cmd = raw_args.get("command", "")
+            if isinstance(cmd, str):
+                for pm in _WORKSPACE_PATH_RE.finditer(cmd):
+                    norm = pm.group(1).lower().strip("/")
+                    if norm and not norm.startswith(("node_modules/", ".git/", "logs/", "tmp/")):
+                        if norm not in seen_files:
+                            ordered_accesses.append((call_idx, norm))
+                        seen_files.add(norm)
+                # Also check for writes to answer.json via cat/echo heredoc
+                if "answer.json" in cmd:
+                    # Try to extract JSON content from heredoc or echo
+                    json_start = cmd.find("{")
+                    json_end = cmd.rfind("}")
+                    if json_start >= 0 and json_end > json_start:
+                        last_answer_json_content = cmd[json_start:json_end + 1]
+
+        elif tool_name == "Grep":
+            # Grep path argument
+            gpath = raw_args.get("path", "")
+            if gpath:
+                norm = _normalize_path(gpath)
+                if norm and "." in norm.rsplit("/", 1)[-1]:
+                    if norm not in seen_files:
+                        ordered_accesses.append((call_idx, norm))
+                    seen_files.add(norm)
+
+        elif tool_name.startswith("mcp__sourcegraph__"):
+            # Extract paths from MCP tool arguments
+            for key in ("path", "file", "filePath", "fileName"):
+                val = raw_args.get(key, "")
+                if val:
+                    norm = _normalize_path(val)
+                    if norm and "." in norm.rsplit("/", 1)[-1]:
+                        if norm not in seen_files:
+                            ordered_accesses.append((call_idx, norm))
+                        seen_files.add(norm)
+
+    # Parse claimed files from the last answer.json write
+    if last_answer_json_content:
+        try:
+            answer_data = json.loads(last_answer_json_content)
+            analysis_section = answer_data.get("analysis", {})
+            if isinstance(analysis_section, dict):
+                for fe in analysis_section.get("files_examined", []):
+                    if isinstance(fe, dict):
+                        p = fe.get("path", fe.get("file", ""))
+                        if p:
+                            claimed_files.append(_normalize_path(p))
+                    elif isinstance(fe, str):
+                        claimed_files.append(_normalize_path(fe))
+            if not claimed_files:
+                raw = answer_data.get("files", [])
+                if isinstance(raw, list):
+                    for f in raw:
+                        if isinstance(f, str):
+                            claimed_files.append(_normalize_path(f))
+                        elif isinstance(f, dict):
+                            p = f.get("file", f.get("path", ""))
+                            if p:
+                                claimed_files.append(_normalize_path(p))
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+    files_accessed = sorted(seen_files)
+
+    return {
+        "total_tool_calls": total_tool_calls,
+        "search_calls": search_calls,
+        "mcp_calls": mcp_calls,
+        "unique_files_read": len(files_accessed),
+        "files_accessed": files_accessed,
+        "ordered_file_accesses": ordered_accesses,
+        "claimed_files": claimed_files,
+        "source": "trajectory",
+    }
+
+
 def _count_search_calls(transcript_path: Path) -> Optional[dict]:
     """Count search tool calls in a transcript. Returns stats dict or None.
 
     Reads up to 4MB of the transcript to keep performance bounded.
+    This is the fallback when trajectory.json is unavailable.
     """
     if not transcript_path.is_file():
         return None
@@ -814,6 +1093,7 @@ def _count_search_calls(transcript_path: Path) -> Optional[dict]:
         "mcp_calls": mcp_calls,
         "unique_files_read": len(files_accessed),
         "files_accessed": files_accessed,
+        "source": "transcript",
     }
 
 
@@ -1058,6 +1338,46 @@ def run_pipeline(
         if recalls:
             avg_file_recall = sum(recalls) / len(recalls)
 
+    # recall@k and convergence aggregates (overall and per-config)
+    def _avg_metric(trials_list, metric_key):
+        vals = [t["stage3"]["retrieval"].get(metric_key) for t in trials_list
+                if t["stage3"].get("retrieval") and t["stage3"]["retrieval"].get(metric_key) is not None]
+        return round(sum(vals) / len(vals), 4) if vals else None
+
+    recall_at_k_overall = {}
+    for k in ("recall_at_5", "recall_at_10", "recall_at_20", "convergence_score",
+              "claimed_precision", "exploration_precision"):
+        val = _avg_metric(retrieval_trials, k)
+        if val is not None:
+            recall_at_k_overall[k] = val
+
+    # Per-config breakdown (BL vs MCP)
+    recall_at_k_by_config = {}
+    for t in retrieval_trials:
+        cfg = t.get("config", "unknown")
+        # Normalize to BL vs MCP
+        config_group = "MCP" if is_mcp_config(cfg) else "BL"
+        if config_group not in recall_at_k_by_config:
+            recall_at_k_by_config[config_group] = []
+        recall_at_k_by_config[config_group].append(t)
+
+    per_config_metrics = {}
+    for config_group, group_trials in recall_at_k_by_config.items():
+        metrics = {}
+        for k in ("recall_at_5", "recall_at_10", "recall_at_20", "convergence_score",
+                  "claimed_precision", "exploration_precision", "file_recall"):
+            val = _avg_metric(group_trials, k)
+            if val is not None:
+                metrics[k] = val
+        metrics["count"] = len(group_trials)
+        per_config_metrics[config_group] = metrics
+
+    # Count trajectory vs transcript source usage
+    traj_source_counts = Counter()
+    for t in retrieval_trials:
+        src = t["stage3"]["retrieval"].get("source", "unknown")
+        traj_source_counts[src] += 1
+
     summary = {
         "total": total,
         "invalid": n_invalid,
@@ -1074,6 +1394,9 @@ def run_pipeline(
             "with_retrieval_data": len(retrieval_trials),
             "avg_file_recall": round(avg_file_recall, 4),
             "verifier_false_negative_flags": len(verifier_flags),
+            "retrieval_source_counts": dict(traj_source_counts),
+            "recall_at_k": recall_at_k_overall,
+            "recall_at_k_by_config": per_config_metrics,
         },
         "elapsed_seconds": round(elapsed, 1),
     }
@@ -1144,7 +1467,42 @@ def print_markdown_summary(report: dict):
         print(f"| With retrieval data | {s3['with_retrieval_data']} |")
         print(f"| Avg file recall | {s3['avg_file_recall']:.4f} |")
         print(f"| Verifier false-negative flags | {s3['verifier_false_negative_flags']} |")
+
+        # Retrieval source counts
+        src_counts = s3.get("retrieval_source_counts", {})
+        if src_counts:
+            src_str = ", ".join(f"{k}={v}" for k, v in sorted(src_counts.items()))
+            print(f"| Retrieval data source | {src_str} |")
+
+        # recall@k overall
+        rak = s3.get("recall_at_k", {})
+        if rak:
+            for key in ("recall_at_5", "recall_at_10", "recall_at_20",
+                        "convergence_score", "claimed_precision", "exploration_precision"):
+                if key in rak:
+                    label = key.replace("_", " ").title()
+                    print(f"| {label} | {rak[key]:.4f} |")
         print()
+
+        # Per-config recall@k breakdown
+        per_cfg = s3.get("recall_at_k_by_config", {})
+        if per_cfg:
+            print("### Retrieval Metrics by Config (BL vs MCP)")
+            cols = ["file_recall", "recall_at_5", "recall_at_10", "recall_at_20",
+                    "convergence_score", "claimed_precision", "exploration_precision"]
+            # Build header
+            present_cols = [c for c in cols if any(c in m for m in per_cfg.values())]
+            if present_cols:
+                header = "| Config | N |" + "|".join(f" {c} " for c in present_cols) + "|"
+                sep = "|--------|--:|" + "|".join("------:" for _ in present_cols) + "|"
+                print(header)
+                print(sep)
+                for cfg_name in sorted(per_cfg.keys()):
+                    m = per_cfg[cfg_name]
+                    vals = "|".join(f" {m.get(c, '-'):.4f} " if isinstance(m.get(c), (int, float)) else " - "
+                                    for c in present_cols)
+                    print(f"| {cfg_name} | {m.get('count', 0)} |{vals}|")
+                print()
 
     # Top-level config breakdown
     trials = report["trials"]
