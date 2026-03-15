@@ -717,7 +717,14 @@ def analyze_quality(task_dir: Path, task_name: str, config_name: str, reward: Op
 
 
 def _normalize_path(path) -> str:
-    """Normalize file path for comparison."""
+    """Normalize file path for comparison.
+
+    Handles:
+    - /workspace/file.py → file.py
+    - /workspace/envoy--v1.31.2/source/tls/... → source/tls/...
+    - repo_slug::path/to/file → path/to/file
+    - a/file.py, b/file.py (diff prefixes) → file.py
+    """
     if isinstance(path, dict):
         path = path.get("file", path.get("path", ""))
     if not isinstance(path, str):
@@ -731,6 +738,19 @@ def _normalize_path(path) -> str:
     # Strip repo:: prefix (multi-repo ground truth)
     if "::" in p:
         p = p.split("::", 1)[1]
+    # Strip version-pinned repo directory prefixes (e.g., envoy--v1.31.2/)
+    # These appear in multi-repo tasks where workspace has repo-slug dirs.
+    if "--" in p.split("/", 1)[0]:
+        parts = p.split("/", 1)
+        if len(parts) == 2:
+            p = parts[1]
+    # Strip sg-evals mirror prefix (e.g., sg-evals/envoy/)
+    if p.startswith("sg-evals/"):
+        p = p[len("sg-evals/"):]
+        # May still have repo name prefix
+        parts = p.split("/", 1)
+        if len(parts) == 2:
+            p = parts[1]
     p = p.strip("/")
     return p.lower()
 
@@ -759,15 +779,34 @@ def _count_search_calls(transcript_path: Path) -> Optional[dict]:
 
     mcp_calls = len(MCP_TOOL_USE_RE.findall(chunk))
 
-    # Extract file paths from Read tool calls
-    files_accessed = []
+    # Extract file paths from transcript using multiple strategies.
     seen_files = set()
+
+    # Strategy 1: Structured tool arguments (Read/Edit/Write file_path)
     for pm in re.finditer(r'"(?:file_path|path)"\s*:\s*"([^"]+)"', chunk):
         fp = pm.group(1)
         norm = _normalize_path(fp)
-        if norm and norm not in seen_files and "." in norm.rsplit("/", 1)[-1]:
+        if norm and "." in norm.rsplit("/", 1)[-1]:
             seen_files.add(norm)
-            files_accessed.append(fp)
+
+    # Strategy 2: All /workspace/ paths in the transcript (catches Bash args,
+    # tool results, find/grep output, MCP read_file responses).
+    # Match paths with file extensions to exclude directories.
+    for pm in re.finditer(r'/workspace/([\w./+-]+\.[\w]+)', chunk):
+        norm = pm.group(1).lower().strip("/")
+        # Filter out common noise
+        if norm and not norm.startswith(("node_modules/", ".git/", "logs/", "tmp/")):
+            seen_files.add(norm)
+
+    # Strategy 3: MCP sg_read_file / sg_keyword_search file references.
+    # These appear as "path": "dir/file.ext" in MCP tool results.
+    for pm in re.finditer(r'"(?:file|filePath|fileName)"\s*:\s*"([^"]+)"', chunk):
+        fp = pm.group(1)
+        norm = _normalize_path(fp)
+        if norm and "." in norm.rsplit("/", 1)[-1]:
+            seen_files.add(norm)
+
+    files_accessed = sorted(seen_files)
 
     return {
         "total_tool_calls": total_tool_calls,
