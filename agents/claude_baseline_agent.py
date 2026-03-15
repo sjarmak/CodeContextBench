@@ -423,6 +423,50 @@ into the workspace.
 """
 
 
+# --- V7 Debug-Specific MCP Prompt (experimental, opt-in) ---
+DEBUG_MCP_PROMPT_VERSION = "v7"
+
+DEBUG_MCP_PROMPT_V7 = """
+## DEBUG STRATEGY — Trace Before You Search (V7)
+
+You are debugging a defect. Follow this disciplined trace-based workflow
+instead of broad keyword searches.
+
+### 1. Start from the error/symptom
+Read the bug description carefully. Identify the **specific** error message,
+exception type, or failing behavior. Write it down before doing anything else.
+
+### 2. Trace the call chain — use `find_references` and `go_to_definition`
+Do NOT search for generic terms like "error", "handler", or "config".
+Instead, locate the function or type named in the stack trace / bug report
+and use **`go_to_definition`** and **`find_references`** to walk the call
+chain. These structural navigation tools are far more precise than keyword
+search for debugging.
+
+### 3. Follow imports
+When you find the function where the bug manifests, trace its **callers**
+(who calls this?) and **callees** (what does this call?) using
+`find_references` and `go_to_definition`. Build a mental map of the data
+flow before forming a hypothesis.
+
+### 4. Limit search breadth
+Only use `keyword_search` for specific, unique identifiers — function names,
+type names, error string literals from the stack trace. Never search for
+single common words. If a keyword search returns more than ~20 results,
+your query is too broad — narrow it.
+
+### 5. Converge before editing
+Once you have traced the call chain, **stop and list**:
+- The root cause (one sentence).
+- The minimal set of files that need changes (with justification for each).
+- Any files you explored but determined are NOT part of the fix.
+
+Only after this convergence step should you begin writing code. If you
+cannot state the root cause clearly, you have not traced far enough —
+go back to step 2.
+"""
+
+
 def _classify_task_family(task_source_dir: str) -> str:
     """Classify a task into a family based on its source directory path.
 
@@ -817,6 +861,11 @@ class BaselineClaudeCodeAgent(ClaudeCode):
             if task_family in ("fix", "debug"):
                 instruction = instruction + SGONLY_MINIMUM_DIFF_PROMPT
                 logger.info("Injected SGONLY_MINIMUM_DIFF_PROMPT for %s task", task_family)
+
+            # V7 debug prompt (experimental — uncomment to enable):
+            # if task_family == "debug" and os.environ.get("DEBUG_PROMPT_VERSION") == "v7":
+            #     instruction = instruction + DEBUG_MCP_PROMPT_V7
+            #     logger.info("Injected DEBUG_MCP_PROMPT_V7")
 
             # Priority 2: Coverage gates for org/analysis tasks
             if task_family == "org":

@@ -532,6 +532,39 @@ def check_setup_quality(task_dir: Path, config_name: str) -> dict:
         except OSError:
             pass
 
+    # Fallback: if no MCP calls found in claude-code.txt, check trajectory files
+    # (OpenHands and Harbor store tool calls in different formats)
+    if mcp_calls == 0:
+        _TRAJ_MCP_PATTERNS = (
+            b"mcp__sourcegraph__",
+            b"sg_keyword_search",
+            b"sg_nls_search",
+            b"sg_read_file",
+        )
+        _traj_candidates = [
+            task_dir / "agent" / "trajectory.json",
+            task_dir / "agent" / "openhands.trajectory.json",
+            task_dir / "openhands.trajectory.json",
+        ]
+        for traj_path in _traj_candidates:
+            if not traj_path.is_file():
+                continue
+            try:
+                with open(traj_path, "rb") as f:
+                    traj_chunk = f.read(2 * 1024 * 1024)
+                if any(pat in traj_chunk for pat in _TRAJ_MCP_PATTERNS):
+                    mcp_calls = len(MCP_TOOL_USE_RE.findall(
+                        traj_chunk.decode("utf-8", errors="replace")
+                    ))
+                    # Also count bare sg_ tool names not caught by the regex
+                    if mcp_calls == 0:
+                        for pat in (b"sg_keyword_search", b"sg_nls_search", b"sg_read_file"):
+                            mcp_calls += traj_chunk.count(pat)
+                if mcp_calls > 0:
+                    break
+            except OSError:
+                pass
+
     if is_mcp:
         # MCP run checks
         has_preamble = V5_PREAMBLE_MARKER in instruction_text
@@ -606,6 +639,273 @@ def _compute_recall_at_k(ordered_accesses: list[tuple[int, str]],
         result["convergence_score"] = 0.0
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Symbol-level hallucination detection
+# ---------------------------------------------------------------------------
+
+# Builtins / stdlib names to filter out (noisy, not hallucination)
+_BUILTIN_SYMBOLS = frozenset({
+    # Python builtins
+    "print", "len", "range", "str", "int", "float", "bool", "list", "dict",
+    "set", "tuple", "type", "isinstance", "issubclass", "hasattr", "getattr",
+    "setattr", "delattr", "open", "close", "read", "write", "append", "extend",
+    "insert", "remove", "pop", "sort", "sorted", "reversed", "enumerate",
+    "zip", "map", "filter", "reduce", "any", "all", "min", "max", "sum",
+    "abs", "round", "format", "repr", "id", "hash", "iter", "next", "super",
+    "property", "staticmethod", "classmethod", "vars", "dir", "help", "input",
+    "exit", "quit", "exec", "eval", "compile", "globals", "locals",
+    "raise", "return", "yield", "import", "from", "class", "def",
+    "if", "else", "elif", "for", "while", "try", "except", "finally",
+    "with", "as", "pass", "break", "continue", "assert", "del", "in", "not",
+    "and", "or", "is", "lambda", "None", "True", "False",
+    # Go builtins
+    "fmt.Println", "fmt.Printf", "fmt.Sprintf", "fmt.Fprintf", "fmt.Errorf",
+    "fmt.Scan", "fmt.Sscanf", "log.Fatal", "log.Fatalf", "log.Println",
+    "log.Printf", "errors.New", "errors.Is", "errors.As", "errors.Unwrap",
+    "strings.Contains", "strings.HasPrefix", "strings.HasSuffix",
+    "strings.Join", "strings.Split", "strings.Replace", "strings.TrimSpace",
+    "strings.ToLower", "strings.ToUpper", "strings.NewReader",
+    "strconv.Itoa", "strconv.Atoi", "strconv.FormatInt",
+    "os.Open", "os.Create", "os.Exit", "os.Getenv", "os.Setenv",
+    "os.Remove", "os.Mkdir", "os.MkdirAll", "os.ReadFile", "os.WriteFile",
+    "os.Stat", "os.IsNotExist",
+    "io.Copy", "io.ReadAll", "io.WriteString",
+    "filepath.Join", "filepath.Dir", "filepath.Base", "filepath.Ext",
+    "path.Join", "path.Dir", "path.Base",
+    "context.Background", "context.TODO", "context.WithCancel",
+    "context.WithTimeout", "context.WithValue",
+    "sync.Mutex", "sync.WaitGroup", "sync.Once",
+    "time.Now", "time.Sleep", "time.Since", "time.Duration",
+    "json.Marshal", "json.Unmarshal", "json.NewDecoder", "json.NewEncoder",
+    "http.Get", "http.Post", "http.ListenAndServe", "http.HandleFunc",
+    "http.NewRequest", "http.Error",
+    "reflect.TypeOf", "reflect.ValueOf",
+    "testing.T", "testing.B",
+    "make", "new", "len", "cap", "append", "copy", "delete", "close",
+    "panic", "recover", "print", "println",
+    # JS/TS builtins
+    "console.log", "console.error", "console.warn", "console.info",
+    "console.debug", "console.trace",
+    "JSON.parse", "JSON.stringify", "Math.floor", "Math.ceil", "Math.round",
+    "Math.random", "Math.min", "Math.max", "Math.abs",
+    "Array.isArray", "Array.from", "Object.keys", "Object.values",
+    "Object.entries", "Object.assign", "Object.freeze",
+    "Promise.resolve", "Promise.reject", "Promise.all", "Promise.race",
+    "String.fromCharCode", "Number.parseInt", "Number.parseFloat",
+    "parseInt", "parseFloat", "isNaN", "isFinite",
+    "setTimeout", "setInterval", "clearTimeout", "clearInterval",
+    "require", "module", "exports",
+    "describe", "it", "test", "expect", "beforeEach", "afterEach",
+    "beforeAll", "afterAll", "jest", "vi",
+    # Common short names that are noise
+    "get", "set", "put", "post", "run", "do", "go", "ok", "err", "nil",
+    "self", "this", "cls", "args", "kwargs",
+})
+
+# Regex patterns for extracting function/method calls from code
+_FUNC_CALL_RE = re.compile(r'\b([a-zA-Z_]\w*)\s*\(')
+_METHOD_CALL_RE = re.compile(r'\b([a-zA-Z_]\w+\.[a-zA-Z_]\w+)\s*\(')
+
+
+def _extract_symbols_from_code(code: str) -> set[str]:
+    """Extract function/method call symbols from a code string.
+
+    Returns a set of symbol names, filtered to remove obvious noise.
+    """
+    symbols: set[str] = set()
+
+    # Extract dotted method calls (e.g., obj.method, pkg.Function)
+    for m in _METHOD_CALL_RE.finditer(code):
+        sym = m.group(1)
+        symbols.add(sym)
+
+    # Extract bare function calls (e.g., myFunc, helper_fn)
+    for m in _FUNC_CALL_RE.finditer(code):
+        sym = m.group(1)
+        symbols.add(sym)
+
+    # Filter noise
+    filtered: set[str] = set()
+    for sym in symbols:
+        # Skip builtins
+        if sym in _BUILTIN_SYMBOLS:
+            continue
+        # Skip single-char names
+        if len(sym) <= 1:
+            continue
+        # Skip ALL_CAPS constants (e.g., MAX_RETRIES)
+        base = sym.split(".")[-1] if "." in sym else sym
+        if base.isupper() and "_" in base:
+            continue
+        # Skip names starting with _ (private/internal)
+        if base.startswith("_"):
+            continue
+        # Skip very short base names (2 chars) that are likely loop vars
+        if len(base) <= 2 and "." not in sym:
+            continue
+        filtered.add(sym)
+
+    return filtered
+
+
+def _load_ground_truth_symbols(task_name: str) -> Optional[set[str]]:
+    """Load oracle ground truth symbols for a task.
+
+    Returns a set of symbol names or None if no symbols available.
+    Searches oracle_answer.json and ground_truth.json in benchmark dirs.
+    """
+    clean_name = _normalize_task_name(task_name)
+
+    candidates = [clean_name]
+    if clean_name != task_name:
+        candidates.append(task_name)
+
+    for bench_root in BENCHMARKS_DIRS:
+        if not bench_root.is_dir():
+            continue
+        for suite_dir in bench_root.iterdir():
+            if not suite_dir.is_dir():
+                continue
+            for name in candidates:
+                task_dir = suite_dir / name
+                if not task_dir.is_dir():
+                    lower_name = name.lower()
+                    for entry in suite_dir.iterdir():
+                        if entry.is_dir() and entry.name.lower() == lower_name:
+                            task_dir = entry
+                            break
+                    else:
+                        continue
+                if not task_dir.is_dir():
+                    continue
+                for gt_name in ("oracle_answer.json", "ground_truth.json"):
+                    gt_path = task_dir / "tests" / gt_name
+                    if gt_path.is_file():
+                        try:
+                            data = json.loads(gt_path.read_text())
+                            raw_symbols = data.get("symbols", [])
+                            if isinstance(raw_symbols, list) and raw_symbols:
+                                result: set[str] = set()
+                                for s in raw_symbols:
+                                    if isinstance(s, str) and s:
+                                        result.add(s)
+                                    elif isinstance(s, dict):
+                                        sym_name = s.get("symbol", "")
+                                        if sym_name:
+                                            result.add(sym_name)
+                                if result:
+                                    return result
+                        except (json.JSONDecodeError, OSError):
+                            pass
+    return None
+
+
+def _detect_symbol_hallucination(
+    task_dir: Path, task_name: str, gt_files: Optional[list[str]]
+) -> Optional[dict]:
+    """Detect when the agent writes code referencing symbols that don't exist in the codebase.
+
+    Parses Edit/Write tool calls from trajectory.json, extracts function/method
+    call symbols from written code, and compares against oracle ground truth symbols.
+
+    Returns analysis dict or None if detection cannot run (no trajectory, no GT symbols,
+    or no Edit/Write calls).
+    """
+    # Load trajectory
+    trajectory_path = task_dir / "agent" / "trajectory.json"
+    if not trajectory_path.is_file():
+        return None
+
+    # Size guard
+    try:
+        if trajectory_path.stat().st_size > 10 * 1024 * 1024:
+            return None
+    except OSError:
+        return None
+
+    # Load oracle symbols
+    oracle_symbols = _load_ground_truth_symbols(task_name)
+    if not oracle_symbols:
+        return None
+
+    # Parse trajectory for Edit/Write code content
+    try:
+        data = json.loads(trajectory_path.read_text(errors="replace"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    steps = data.get("steps", [])
+    if not isinstance(steps, list):
+        return None
+
+    written_code_chunks: list[str] = []
+    for step in steps:
+        extra = step.get("extra") or {}
+        tool_name = extra.get("tool_use_name", "")
+        if not tool_name:
+            continue
+
+        raw_args = extra.get("raw_arguments") or {}
+        if not isinstance(raw_args, dict):
+            continue
+
+        if tool_name == "Write":
+            content = raw_args.get("content", "")
+            if content and isinstance(content, str):
+                written_code_chunks.append(content)
+        elif tool_name == "Edit":
+            new_string = raw_args.get("new_string", "")
+            if new_string and isinstance(new_string, str):
+                written_code_chunks.append(new_string)
+
+    if not written_code_chunks:
+        return None
+
+    # Extract symbols from all written code
+    agent_symbols: set[str] = set()
+    for chunk in written_code_chunks:
+        agent_symbols |= _extract_symbols_from_code(chunk)
+
+    if not agent_symbols:
+        return None
+
+    # Compare: check both exact match and base-name match
+    # Oracle symbols may be bare names like "authenticate" while agent uses
+    # "auth.authenticate" or vice versa. Check both the full symbol and the
+    # base name (after the dot).
+    oracle_base_names = set()
+    for s in oracle_symbols:
+        oracle_base_names.add(s)
+        if "." in s:
+            oracle_base_names.add(s.rsplit(".", 1)[1])
+
+    correct_symbols: set[str] = set()
+    unknown_symbols: set[str] = set()
+    for sym in agent_symbols:
+        # Check full match
+        if sym in oracle_symbols:
+            correct_symbols.add(sym)
+            continue
+        # Check base name match (agent wrote pkg.Func, oracle has Func)
+        base = sym.rsplit(".", 1)[1] if "." in sym else sym
+        if base in oracle_base_names or sym in oracle_base_names:
+            correct_symbols.add(sym)
+            continue
+        unknown_symbols.add(sym)
+
+    unknown_rate = len(unknown_symbols) / len(agent_symbols) if agent_symbols else 0.0
+
+    return {
+        "agent_symbols_written": len(agent_symbols),
+        "oracle_symbols": len(oracle_symbols),
+        "correct_symbols": len(correct_symbols),
+        "unknown_symbols": len(unknown_symbols),
+        "unknown_rate": round(unknown_rate, 4),
+        "sample_unknown": sorted(unknown_symbols)[:10],
+        "sample_correct": sorted(correct_symbols)[:10],
+    }
 
 
 def analyze_quality(task_dir: Path, task_name: str, config_name: str, reward: Optional[float]) -> dict:
@@ -825,6 +1125,11 @@ def analyze_quality(task_dir: Path, task_name: str, config_name: str, reward: Op
                 "reason": f"reward=0 but verifier-computed F1={verifier_debug['f1']:.4f} (>0.5)",
                 "f1": verifier_debug["f1"],
             }
+
+    # --- Symbol-level hallucination detection ---
+    sym_halluc = _detect_symbol_hallucination(task_dir, task_name, gt_files)
+    if sym_halluc is not None:
+        analysis["symbol_hallucination"] = sym_halluc
 
     return analysis
 
@@ -1378,6 +1683,25 @@ def run_pipeline(
         src = t["stage3"]["retrieval"].get("source", "unknown")
         traj_source_counts[src] += 1
 
+    # Symbol hallucination aggregates
+    sym_halluc_trials = [t for t in s3_trials if t["stage3"].get("symbol_hallucination")]
+    avg_unknown_rate = 0.0
+    avg_agent_symbols = 0.0
+    avg_correct_symbols = 0.0
+    if sym_halluc_trials:
+        avg_unknown_rate = sum(
+            t["stage3"]["symbol_hallucination"]["unknown_rate"]
+            for t in sym_halluc_trials
+        ) / len(sym_halluc_trials)
+        avg_agent_symbols = sum(
+            t["stage3"]["symbol_hallucination"]["agent_symbols_written"]
+            for t in sym_halluc_trials
+        ) / len(sym_halluc_trials)
+        avg_correct_symbols = sum(
+            t["stage3"]["symbol_hallucination"]["correct_symbols"]
+            for t in sym_halluc_trials
+        ) / len(sym_halluc_trials)
+
     summary = {
         "total": total,
         "invalid": n_invalid,
@@ -1397,6 +1721,10 @@ def run_pipeline(
             "retrieval_source_counts": dict(traj_source_counts),
             "recall_at_k": recall_at_k_overall,
             "recall_at_k_by_config": per_config_metrics,
+            "with_symbol_hallucination_data": len(sym_halluc_trials),
+            "avg_unknown_symbol_rate": round(avg_unknown_rate, 4),
+            "avg_agent_symbols_written": round(avg_agent_symbols, 1),
+            "avg_correct_symbols": round(avg_correct_symbols, 1),
         },
         "elapsed_seconds": round(elapsed, 1),
     }
@@ -1467,6 +1795,11 @@ def print_markdown_summary(report: dict):
         print(f"| With retrieval data | {s3['with_retrieval_data']} |")
         print(f"| Avg file recall | {s3['avg_file_recall']:.4f} |")
         print(f"| Verifier false-negative flags | {s3['verifier_false_negative_flags']} |")
+        if s3.get("with_symbol_hallucination_data", 0) > 0:
+            print(f"| With symbol hallucination data | {s3['with_symbol_hallucination_data']} |")
+            print(f"| Avg unknown symbol rate | {s3['avg_unknown_symbol_rate']:.4f} |")
+            print(f"| Avg agent symbols written | {s3['avg_agent_symbols_written']:.1f} |")
+            print(f"| Avg correct symbols | {s3['avg_correct_symbols']:.1f} |")
 
         # Retrieval source counts
         src_counts = s3.get("retrieval_source_counts", {})
