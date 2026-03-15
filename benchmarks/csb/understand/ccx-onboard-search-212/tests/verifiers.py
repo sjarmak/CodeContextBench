@@ -43,6 +43,8 @@ class SemanticRetrievalQAVerifier:
             function_score = 0.8
         elif path_score > 0.5 and name_score > 0.5:
             function_score = 0.3
+        elif path_score > 0.8 and name_score > 0.3:
+            function_score = 0.2
         else:
             function_score = 0.0
 
