@@ -291,6 +291,7 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 - `scripts/smoke_artifact_verifier.py` - Utility script for smoke artifact verifier.
 - `scripts/smoke_test_tasks.py` - Utility script for smoke test tasks.
 - `scripts/split_edit_reference_files.py` - Utility script for split edit reference files.
+- `scripts/trace_quality_pipeline.py` - Utility script for trace quality pipeline.
 - `scripts/verify_oracle_fail2pass.py` - Utility script for verify oracle fail2pass.
 - `scripts/verify_retrieval_eval_smoke.py` - Utility script for verify retrieval eval smoke.
 

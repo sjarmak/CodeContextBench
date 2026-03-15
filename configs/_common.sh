@@ -1189,7 +1189,7 @@ run_tasks_parallel() {
     local assignment_for_pid=()
     local failed=0
     local abort=false
-    local account_idx=0
+    local account_idx=${ACCOUNT_START_IDX:-0}
     local num_accounts=${#CLAUDE_HOMES[@]}
 
     # Retry queue: tasks to retry on a different account (rate-limit)
