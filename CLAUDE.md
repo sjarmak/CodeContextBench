@@ -75,11 +75,10 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - Registry types enum: `internal`, `organization`, `transient`, `backup`. Use `organization` for GHCR/Docker Hub.
 
 ### Docker / Build
-- `uv tool install` segfaults on ARM64/QEMU. Use `pip install` or Daytona (native x86_64).
-- Build-push-clean pattern for limited disk (~45GB): build, push, clean before next image.
-- Colons in agent names break Docker volume mounts. Replace `:` with `__`.
-- Add `|| git init` fallback to `git clone` in Dockerfiles. Add `chown claude:claude /logs` + `adduser claude` for OH compat.
-- `jefzda/` → `ghcr.io/sg-evals/` migration incomplete: 33 Dockerfiles in `csb/debug/` and `csb/fix/`.
+- `uv tool install` segfaults on ARM64/QEMU. Use `pip install` or Daytona.
+- Build-push-clean for limited disk. Colons in agent names break mounts (use `__`).
+- Dockerfile: `git clone || git init` fallback, `adduser claude` + `chown claude:claude /logs` for OH.
+- `jefzda/` → `ghcr.io/sg-evals/` migration incomplete (33 Dockerfiles).
 
 ### MCP Configuration (inside sandboxes)
 - `.mcp.json` at `$CLAUDE_CONFIG_DIR` (typically `/logs/agent/sessions/`), not `/app/` or `/root/`. Claude Code needs `--mcp-config` flag.
@@ -112,18 +111,25 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 
 ### Validation / Scoring
 - `validators.py` duplicated across `ccb_build` tasks. Changes must hit **all copies** (`sha256sum`).
-- Agent completing in **<2s** = never installed/ran. Real name in `config.json` at `task.path`.
-- **no_changes_guard**: write `reward.txt` inside Python block, not in bash after it.
-- `timeout 600` on all test runners. `--forceExit` for Jest. Jest+TS needs `memory_mb = 8192`.
-- **CSB dual-score**: file edits + `answer.json` scored independently. Fallback: `promoted_verifier.py` -> `oracle_checks.py` -> heuristic.
-- Rate-limited results (score=0, <30s): `scripts/quarantine_invalid_tasks.py --execute`.
-- Bare `$VAR` in `instruction.md` gets expanded. Use `<placeholder>` syntax.
-- Pass rate logic duplicated in `generate_eval_report.py` and `csb_metrics/models.py`. Sync both on changes.
-- `cost_report.py`: `defaultdict(int)` + `.get("baseline", 1)` returns `0` when key exists. Use `or 1`.
-- **TARGET_SUITE misalignment**: 55 stale suite names, 220 missing. `SUITE_WEIGHTS` falls back to equal-weight.
-- **dual_score_lib.sh**: `scorer_artifact` always `"auto"` (`.setdefault()` overwrite). Audit trail broken.
-- **Falsy value bugs**: `max_score=0` treated as false; `None` MCP metrics misclassified. Use `is None` / `== 0`.
-- **promote_run.py**: Crashes on non-dict env config. Validate types before `.get()`.
+- Agent <2s = never ran. `no_changes_guard`: write `reward.txt` in Python, not bash after it.
+- `timeout 600` on test runners. `--forceExit` for Jest. Jest+TS: `memory_mb = 8192`.
+- **CSB dual-score**: file edits + `answer.json` independent. Fallback: `promoted_verifier.py` → `oracle_checks.py` → heuristic.
+- Rate-limited (score=0, <30s): `quarantine_invalid_tasks.py --execute`. Bare `$VAR` in `instruction.md` → use `<placeholder>`.
+- Pass rate logic duplicated in `generate_eval_report.py` and `csb_metrics/models.py`.
+- `cost_report.py`: `defaultdict(int)` + `.get("baseline", 1)` returns `0`. Use `or 1`.
+- **TARGET_SUITE**: 55 stale, 220 missing. `dual_score_lib.sh` `scorer_artifact` always `"auto"`.
+- **Falsy bugs**: `max_score=0` as false; `None` MCP metrics misclassified. `promote_run.py` crashes on non-dict env.
+
+### Agent / Runner Robustness
+- **Agent `/tmp` race**: `claude_baseline_agent.py:1134` uses fixed `/tmp/claude_system_prompt.txt`, `/tmp/claude_run.sh`. Concurrent tasks cross-contaminate. Use `mktemp`.
+- **Token refresh**: `claude_baseline_agent.py:1523` only catches `HTTPError`. Add `URLError`/`socket.timeout`. `e.read()` leaks socket FD; use `with e:`.
+- **Runner pipefail**: `run_selected_tasks.sh:681` `harbor_run_guarded | tee || echo` -- `||` applies to `tee` (always 0). Add `set -o pipefail`.
+- **Runner cleanup**: No `trap` for temp dirs on early exit. `mktemp` failure (line 648) silently copies to CWD.
+- **`grep -P` macOS**: `run_selected_tasks.sh:726` silently fails on BSD grep. Use `sed -n` instead.
+
+### Schema / Suite Naming
+- 3 schemas use deprecated `ccb_mcp_*` enums; actual names are `csb_org_*`. 8 schema files have zero consumers.
+- **16 copies of `DIR_PREFIX_TO_SUITE`** across 30+ scripts with divergent definitions. Centralize in `csb_metrics/suite_registry.py`.
 
 ### Git / Auth
 - `gh auth refresh -h github.com -s write:packages` (explicit scope needed).
@@ -131,32 +137,29 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - GitHub push protection blocks synthetic keys. Squash with `git reset --soft origin/main`.
 - Shallow clones fail on push. Some repos use `master`; detect with `git symbolic-ref refs/remotes/origin/HEAD`.
 - **gitignore negation**: `!child/` doesn't work when parent dir is ignored. Use `git add -f`.
+- **Remote URL stale**: `CodeContextBench.git` redirects to `CodeScaleBench.git`. Update local git remote config.
 
 ### Python / Subprocess
-- `dict.get(key, default)` does NOT protect against `None` values. Use `data.get("key") or default_value`.
-- `with open(log) as f: subprocess.Popen(stdout=f)` closes the handle. Use `open()` without context manager for long-running subprocesses.
-- `json.load(open(path))` leaks file descriptors. Use `with open(path) as f: json.load(f)`. Affects 12 scripts.
-- macOS Bash 3.2 lacks `declare -A`. Use pipe-delimited strings with `IFS='|' read -r`.
+- `dict.get(key, default)` doesn't guard against `None`. Use `data.get("key") or default_value`.
+- `with open(log) as f: Popen(stdout=f)` closes handle. Use bare `open()` for long-running subprocesses.
+- `json.load(open(path))` leaks FDs; use `with open`. macOS Bash 3.2 lacks `declare -A`; use `IFS='|' read -r`.
 
 ### LLM Judge
-- Always include "Respond with valid JSON only" in judge prompts. Unescaped quotes break parsing.
-- Judge should use task-type-aware evaluation: different rubrics per task type.
-- Tool categorization: check MCP prefix (`mcp__`) before substring checks to avoid miscategorization.
+- Include "Respond with valid JSON only" in prompts. Unescaped quotes break parsing.
+- Task-type-aware rubrics. Check `mcp__` prefix before substring-based tool categorization.
 
 ### OpenHands
-- Strip ALL `sandbox_plugins` (`= []`). Base64-encode instructions (not `shlex.quote()`). Alpine lacks `apt-get` -- use `bookworm`.
-- OH MCP client ~30s timeout. Block `deepsearch`/`deepsearch_read` in auth proxy; redirect to `keyword_search`/`nls_search`.
-- `chown -R /workspace` blocks >120s on large repos. Edit installed `runtime_init.py`. Set `PYTHONSAFEPATH=1`.
+- `sandbox_plugins = []`. Base64-encode instructions. Alpine → `bookworm`. MCP client ~30s timeout.
+- Block `deepsearch`/`deepsearch_read` in proxy; redirect to `keyword_search`/`nls_search`.
+- `chown -R /workspace` blocks on large repos. Edit `runtime_init.py`. Set `PYTHONSAFEPATH=1`.
 
 ### CI / Workflows
-- `docs-consistency.yml` is redundant -- subsumed by `repo_health.yml`. Doubles CI minutes.
-- Export HTML silently truncates at 1200 rows (`filtered.slice(0, 1200)` in `export_official_results.py`).
+- `docs-consistency.yml` redundant (subsumed by `repo_health.yml`). Export HTML truncates at 1200 rows.
 
 ### Pre-commit / Pytest / Ralph
-- Secret-detection hooks false-positive on code that _detects_ secrets. Use `--no-verify` when flagged code is detection logic.
-- Classes named `TestPlan`/`TestCase`/`TestResult` get auto-collected by pytest. Rename to `EvaluationPlan` etc.
-- Ralph sessions write learnings to `progress.txt` on feature branches, not main. Compound back after merge.
-- **Ralph `prd.json` is single-active**: Overwriting loses tracking state. Archive old `prd.json` before replacement.
+- Secret-detection false-positives on detection code. Use `--no-verify` when flagged code is detection logic.
+- Classes named `TestPlan`/`TestCase`/`TestResult` auto-collected by pytest. Rename to `EvaluationPlan` etc.
+- Ralph: `progress.txt` on feature branches, compound after merge. `prd.json` is single-active; archive before overwrite.
 
 ## Maintenance
 - Root and local `AGENTS.md` / `CLAUDE.md` files are generated from sources in `docs/ops/`.
