@@ -13,13 +13,13 @@ Set up and launch reruns for tasks identified by the trace audit. Three categori
   - `nodebb-notif-dropdown-fix-001/tests/test.sh` — pytest→npx mocha + Mocha reward parsing
   - `nodebb-plugin-validate-fix-001/tests/test.sh` — pytest→npx mocha + Mocha reward parsing
   - `openlibrary-solr-boolean-fix-001/environment/Dockerfile.sg_only` — Node.js 22 + Claude Code pre-install
-  - `scripts/generate_manifest.py` — model fallback fix (was defaulting to opus)
+  - `scripts/maintenance/generate_manifest.py` — model fallback fix (was defaulting to opus)
   - `configs/selected_benchmark_tasks.json` — 2 llamacpp TAC tasks removed (414→412)
 - **MANIFEST regenerated** with correct model attribution
 - **2 llamacpp TAC tasks dropped** to `benchmarks/backups/csb_sdlc_test_tac/` (need external RocketChat server)
 
 ## Files Changed This Session
-- `scripts/generate_manifest.py` — model extraction fallback to result.json
+- `scripts/maintenance/generate_manifest.py` — model extraction fallback to result.json
 - `benchmarks/csb_sdlc_fix/navidrome-windows-log-fix-001/tests/test.sh`
 - `benchmarks/csb_sdlc_fix/nodebb-notif-dropdown-fix-001/tests/test.sh`
 - `benchmarks/csb_sdlc_fix/nodebb-plugin-validate-fix-001/tests/test.sh`
@@ -47,7 +47,7 @@ python3 scripts/promote_run.py --execute --max-warnings 21 refactor_haiku_202603
 
 After promotion, regenerate MANIFEST:
 ```bash
-python3 scripts/generate_manifest.py
+python3 scripts/maintenance/generate_manifest.py
 ```
 
 ### 2. Local Docker Reruns (sweap-images — Daytona-incompatible)

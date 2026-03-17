@@ -10,7 +10,7 @@
 - Repeated infra failures: stop reruns, fix root cause first (`scripts/infra/check_infra.py`).
 - Suspected verifier bug: quarantine task, collect evidence, open follow-up.
 - Missing trajectories: use transcript/JSONL fallback and document limitation.
-- Widespread MCP regressions: run `scripts/mcp_audit.py` before changing prompts/configs.
+- Widespread MCP regressions: run `scripts/evaluation/mcp_audit.py` before changing prompts/configs.
 
 ## Useful References
 - `docs/ERROR_CATALOG.md`

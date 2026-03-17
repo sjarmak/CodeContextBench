@@ -208,7 +208,7 @@ Official runs layout note:
 
 ```bash
 # Generate evaluation report from analysis runs
-python3 scripts/generate_eval_report.py \
+python3 scripts/maintenance/generate_eval_report.py \
   --runs-dir /path/to/runs/analysis/ \
   --output-dir ./eval_reports/
 
@@ -225,7 +225,7 @@ The report generator produces:
 - `harness_configs.json` -- exact harness configuration per run
 - CSV files per table for downstream analysis
 
-See `python3 scripts/generate_eval_report.py --help` for all options.
+See `python3 scripts/maintenance/generate_eval_report.py --help` for all options.
 
 ### Official Results + Trace Browser
 
@@ -233,7 +233,7 @@ To export official results (valid scored tasks only) with parsed
 trace summaries and local browsing UI:
 
 ```bash
-python3 scripts/export_official_results.py \
+python3 scripts/analysis/export_official_results.py \
   --runs-dir ./runs/official/ \
   --output-dir ./docs/official_results/
 ```
@@ -256,7 +256,7 @@ Export normalizes legacy config labels:
 Serve locally:
 
 ```bash
-python3 scripts/export_official_results.py --serve
+python3 scripts/analysis/export_official_results.py --serve
 ```
 
 For the full multi-layer evaluation pipeline (verifier, LLM judge, statistical analysis, dual-score reporting), see [docs/EVALUATION_PIPELINE.md](docs/EVALUATION_PIPELINE.md).
@@ -288,15 +288,15 @@ bash configs/harnesses/run_selected_tasks.sh --dry-run
 Per-phase runners are also available:
 
 ```bash
-bash configs/feature_2config.sh          # 23 Feature Implementation tasks
-bash configs/fix_2config.sh              # 19 Bug Repair tasks
-bash configs/refactor_2config.sh         # 18 Cross-File Refactoring tasks
-bash configs/debug_2config.sh            # 13 Debugging & Investigation tasks
-bash configs/secure_2config.sh           # 13 Security & Compliance tasks
-bash configs/test_2config.sh             # 12 Testing & QA tasks
-bash configs/design_2config.sh           # 11 Architecture & Design tasks
-bash configs/document_2config.sh         # 11 Documentation tasks
-bash configs/understand_2config.sh       # 11 Requirements & Discovery tasks
+bash configs/harnesses/feature_2config.sh          # 23 Feature Implementation tasks
+bash configs/harnesses/fix_2config.sh              # 19 Bug Repair tasks
+bash configs/harnesses/refactor_2config.sh         # 18 Cross-File Refactoring tasks
+bash configs/harnesses/debug_2config.sh            # 13 Debugging & Investigation tasks
+bash configs/harnesses/secure_2config.sh           # 13 Security & Compliance tasks
+bash configs/harnesses/test_2config.sh             # 12 Testing & QA tasks
+bash configs/harnesses/design_2config.sh           # 11 Architecture & Design tasks
+bash configs/harnesses/document_2config.sh         # 11 Documentation tasks
+bash configs/harnesses/understand_2config.sh       # 11 Requirements & Discovery tasks
 ```
 
 ### Filtering by Suite
@@ -323,9 +323,9 @@ CodeScaleBench includes a multi-stage QA pipeline to ensure task integrity, repr
 |-------|--------|---------|
 | **Pre-flight** | `scripts/authoring/validate_tasks_preflight.py` | Catches truncated instructions, template placeholders, language/difficulty mismatches, missing test.sh |
 | **Infra check** | `scripts/infra/check_infra.py` | Verifies OAuth tokens (all accounts), Docker, disk space, Harbor CLI |
-| **Error fingerprinting** | `scripts/status_fingerprints.py` | Classifies failures with 12 regex patterns; auto-retry guidance per pattern |
+| **Error fingerprinting** | `scripts/analysis/status_fingerprints.py` | Classifies failures with 12 regex patterns; auto-retry guidance per pattern |
 | **Post-run** | `scripts/authoring/validate_task_run.py` | Flags crashes, MCP tool usage anomalies, suspicious scoring |
-| **Metadata sync** | `scripts/sync_task_metadata.py` | Keeps task.toml in sync with `selected_benchmark_tasks.json`; `--fix` to auto-update |
+| **Metadata sync** | `scripts/maintenance/sync_task_metadata.py` | Keeps task.toml in sync with `selected_benchmark_tasks.json`; `--fix` to auto-update |
 | **Run analysis** | `scripts/analysis/aggregate_status.py` | Scans run dirs, classifies per-task status, writes status.json, supports `--watch` mode |
 
 The QA methodology uses a 6-dimension audit framework: instruction contamination, reproducibility, verifier correctness, ghost/false-positive detection, error misclassification, and tool effectiveness analysis.
@@ -345,12 +345,12 @@ Key scripts organized by workflow phase:
 | **During run** | `aggregate_status.py --since 2h` | `python3 scripts/analysis/aggregate_status.py --since 2h` |
 | **Post-run** | `aggregate_status.py` | `python3 scripts/analysis/aggregate_status.py [--watch]` |
 | **Post-run** | `validate_task_run.py` | `python3 scripts/authoring/validate_task_run.py <run_dir>` |
-| **Analysis** | `compare_configs.py` | `python3 scripts/compare_configs.py` |
-| **Analysis** | `cost_report.py` | `python3 scripts/cost_report.py` |
-| **Analysis** | `generate_manifest.py` | `python3 scripts/generate_manifest.py` |
-| **Maintenance** | `sync_task_metadata.py` | `python3 scripts/sync_task_metadata.py [--fix]` |
-| **Maintenance** | `archive_run.py` | `python3 scripts/archive_run.py <run_dir> [--compress]` |
-| **Maintenance** | `rerun_failed.py` | `python3 scripts/rerun_failed.py [--fingerprint timeout] [--suite csb_sdlc_fix]` |
+| **Analysis** | `compare_configs.py` | `python3 scripts/evaluation/compare_configs.py` |
+| **Analysis** | `cost_report.py` | `python3 scripts/evaluation/cost_report.py` |
+| **Analysis** | `generate_manifest.py` | `python3 scripts/maintenance/generate_manifest.py` |
+| **Maintenance** | `sync_task_metadata.py` | `python3 scripts/maintenance/sync_task_metadata.py [--fix]` |
+| **Maintenance** | `archive_run.py` | `python3 scripts/maintenance/archive_run.py <run_dir> [--compress]` |
+| **Maintenance** | `rerun_failed.py` | `python3 scripts/running/rerun_failed.py [--fingerprint timeout] [--suite csb_sdlc_fix]` |
 
 ---
 

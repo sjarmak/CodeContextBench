@@ -39,7 +39,7 @@ cross-repo tasks — not whether MCP can access information the baseline can't.
 │  configs/use_case_registry.json        (100 use cases)     │
 │         │                                                   │
 │         ▼                                                   │
-│  scripts/generate_csb_org_tasks.py  (task generator)    │
+│  scripts/maintenance/generate_csb_org_tasks.py  (task generator)    │
 │         │                                                   │
 │         ▼                                                   │
 │  benchmarks/csb_org_<suite>/<task>/                        │
@@ -57,7 +57,7 @@ cross-repo tasks — not whether MCP can access information the baseline can't.
 │                                                             │
 │  scripts/csb_metrics/retrieval.py      (KPI extractor)     │
 │  scripts/curate_oracle.py              (oracle auto-curator)│
-│  scripts/validate_org_task_instance.py (validity gate)     │
+│  scripts/authoring/validate_org_task_instance.py (validity gate)     │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -106,16 +106,16 @@ source of truth for which repos a task uses and at what version.
 
 ```bash
 # Generate a task for use case ID 1 (dry run to preview)
-python3 scripts/generate_csb_org_tasks.py --use-case-ids 1 --dry-run
+python3 scripts/maintenance/generate_csb_org_tasks.py --use-case-ids 1 --dry-run
 
 # Generate with oracle curation
-python3 scripts/generate_csb_org_tasks.py --use-case-ids 1 --curate-oracle
+python3 scripts/maintenance/generate_csb_org_tasks.py --use-case-ids 1 --curate-oracle
 
 # Generate all category A tasks
-python3 scripts/generate_csb_org_tasks.py --category A
+python3 scripts/maintenance/generate_csb_org_tasks.py --category A
 
 # Generate and validate
-python3 scripts/generate_csb_org_tasks.py --use-case-ids 1 --validate
+python3 scripts/maintenance/generate_csb_org_tasks.py --use-case-ids 1 --validate
 ```
 
 The generator reads `configs/use_case_registry.json` to fill
@@ -138,7 +138,7 @@ print(uc['customer_prompt'])
 
 **Step 2: Generate the task skeleton**
 ```bash
-python3 scripts/generate_csb_org_tasks.py \
+python3 scripts/maintenance/generate_csb_org_tasks.py \
   --use-case-ids 1 \
   --out benchmarks/ \
   --verbose
@@ -159,7 +159,7 @@ to discover all files matching the task's `seed_prompt`. It writes:
 
 **Step 4: Validate the oracle (fail2pass gate)**
 ```bash
-python3 scripts/validate_org_task_instance.py \
+python3 scripts/authoring/validate_org_task_instance.py \
   --task-dir benchmarks/csb_org_crossrepo_tracing/ccx-dep-trace-001 \
   --verbose
 ```
@@ -361,7 +361,7 @@ many sequential steps.
 (Accurate, Attributed, Actionable). Run hybrid scoring:
 
 ```bash
-python3 scripts/run_judge.py --hybrid --task CCX-onboard-050-ds
+python3 scripts/evaluation/run_judge.py --hybrid --task CCX-onboard-050-ds
 ```
 
 Hybrid score = 0.6 × verifier_reward + 0.4 × rubric_score.
@@ -385,8 +385,8 @@ Hybrid score = 0.6 × verifier_reward + 0.4 × rubric_score.
 3. The suite directory `benchmarks/csb_org_<suite>/` must be created manually
 4. Add the suite prefix to `DIR_PREFIX_TO_SUITE` in:
    - `scripts/analysis/aggregate_status.py`
-   - `scripts/generate_manifest.py`
-   - `scripts/run_judge.py`
+   - `scripts/maintenance/generate_manifest.py`
+   - `scripts/evaluation/run_judge.py`
 
 ### Add sg-evals Mirrors for New Repos
 

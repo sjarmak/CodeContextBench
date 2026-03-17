@@ -130,16 +130,16 @@ This replaces the previous (broken) logic that looked for a `files` field that d
 
 ```bash
 # Phase 0: Test (1 task) — verify setup
-python3 scripts/validate_on_contextbench.py --limit 1 --verbose
+python3 scripts/authoring/validate_on_contextbench.py --limit 1 --verbose
 
 # Phase 1: Pilot (10 tasks) — quick feedback
-python3 scripts/validate_on_contextbench.py --limit 10
+python3 scripts/authoring/validate_on_contextbench.py --limit 10
 
 # Phase 2: Verify (50 tasks) — stable metrics
-python3 scripts/validate_on_contextbench.py --limit 50
+python3 scripts/authoring/validate_on_contextbench.py --limit 50
 
 # Phase 3: Full (500 tasks) — comprehensive eval
-python3 scripts/validate_on_contextbench.py --verified
+python3 scripts/authoring/validate_on_contextbench.py --verified
 ```
 
 Each phase:
@@ -164,7 +164,7 @@ From Phase 2 baseline (50 tasks, Opus 4.6, hybrid backend):
 Uses `run_agent()` — direct Python API calls:
 
 ```bash
-python3 scripts/context_retrieval_agent.py \
+python3 scripts/running/context_retrieval_agent.py \
     --task-dir benchmarks/csb_sdlc_fix/task-001 \
     --backend hybrid \
     --model claude-opus-4-6
@@ -184,7 +184,7 @@ python3 scripts/context_retrieval_agent.py \
 Uses `run_agent_cli()` — subprocess invocation of `claude` binary:
 
 ```bash
-CLAUDE_CODE_OAUTH_TOKEN=... python3 scripts/context_retrieval_agent.py \
+CLAUDE_CODE_OAUTH_TOKEN=... python3 scripts/running/context_retrieval_agent.py \
     --cli-mode \
     --model claude-opus-4-6
 ```
@@ -204,7 +204,7 @@ CLAUDE_CODE_OAUTH_TOKEN=... python3 scripts/context_retrieval_agent.py \
 After generation, verify agent oracles:
 
 ```bash
-python3 scripts/cross_validate_oracles.py \
+python3 scripts/running/cross_validate_oracles.py \
     --oracle1 ground_truth.json \
     --oracle2 ground_truth_agent.json
 ```
@@ -373,10 +373,10 @@ By complexity:
 - [CodeScaleBench Retrieval Eval Spec](./RETRIEVAL_EVAL_SPEC.md)
 
 ### Scripts
-- `scripts/context_retrieval_agent.py` — agent implementation (run_agent, run_agent_cli)
-- `scripts/validate_on_contextbench.py` — calibration harness
-- `scripts/cross_validate_oracles.py` — oracle agreement metrics
-- `scripts/promote_agent_oracles.py` — promotion to canonical ground truth
+- `scripts/running/context_retrieval_agent.py` — agent implementation (run_agent, run_agent_cli)
+- `scripts/authoring/validate_on_contextbench.py` — calibration harness
+- `scripts/running/cross_validate_oracles.py` — oracle agreement metrics
+- `scripts/running/promote_agent_oracles.py` — promotion to canonical ground truth
 
 ### Progress Tracking
 - `ralph-oracle/progress.txt` — implementation log (local, gitignored)

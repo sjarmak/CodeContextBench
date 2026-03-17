@@ -174,7 +174,7 @@ enterprise, etc.) need the full repo for compilation/test execution.
 
 ### Adding sg_only support to a new task
 
-Prefer using the generator: `python3 scripts/generate_sgonly_dockerfiles.py`.
+Prefer using the generator: `python3 scripts/maintenance/generate_sgonly_dockerfiles.py`.
 To add manually:
 
 1. Create `environment/Dockerfile.sg_only` — write sentinel, write clone
@@ -319,7 +319,7 @@ FULL_CONFIG=mcp-remote-direct configs/harnesses/run_selected_tasks.sh
 Use `compare_configs.py` with both config names to see where SCIP helps/hurts:
 
 ```bash
-python3 scripts/compare_configs.py --run <run_dir> \
+python3 scripts/evaluation/compare_configs.py --run <run_dir> \
   --configs mcp-remote-direct mcp-scip-remote-direct
 ```
 

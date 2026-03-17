@@ -125,7 +125,7 @@ mv benchmarks/backups/csb_sdlc_fix_extra/<task>/ benchmarks/csb_sdlc_fix/
 
 ```bash
 python3 scripts/select_benchmark_tasks.py  # regenerate selection JSON
-python3 scripts/generate_manifest.py        # update MANIFEST
+python3 scripts/maintenance/generate_manifest.py        # update MANIFEST
 python3 scripts/maintenance/repo_health.py              # health gate
 ```
 

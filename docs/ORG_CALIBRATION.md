@@ -215,5 +215,5 @@ will depend on task complexity, LLM capability, and tool usage patterns.
    measure how often baseline agents cite vendored copies as authoritative (false
    precision). This is a key differentiating signal.
 
-4. **LLM grader for hybrid tasks**: Run `python3 scripts/run_judge.py --hybrid` on
+4. **LLM grader for hybrid tasks**: Run `python3 scripts/evaluation/run_judge.py --hybrid` on
    E and J Deep Search tasks after results are available.

@@ -64,7 +64,7 @@ Harbor has a built-in `DaytonaEnvironment` that plugs into the standard trial ru
 For benchmark batches in this repo, do not launch raw Daytona `harbor run` commands directly.
 
 - Use the `configs/*` launcher wrappers.
-- The wrappers now run `scripts/daytona_cost_guard.py preflight` before launch.
+- The wrappers now run `scripts/infra/daytona_cost_guard.py preflight` before launch.
 - The wrappers inject a repo-local Daytona environment that labels sandboxes with run, benchmark, task, config, and launcher metadata.
 - The shared wrapper blocks Daytona launches unless preflight has succeeded, unless you deliberately set `HARBOR_ALLOW_UNGUARDED_DAYTONA=1`.
 
@@ -161,12 +161,12 @@ When planning large runs on Daytona, you should:
 
 ## Cost guard workflow
 
-The repo now has a built-in Daytona guard at `scripts/daytona_cost_guard.py`.
+The repo now has a built-in Daytona guard at `scripts/infra/daytona_cost_guard.py`.
 
 ### Summary current account state
 
 ```bash
-python3 scripts/daytona_cost_guard.py summary
+python3 scripts/infra/daytona_cost_guard.py summary
 ```
 
 This reports:
@@ -178,7 +178,7 @@ This reports:
 ### Preflight a planned batch
 
 ```bash
-python3 scripts/daytona_cost_guard.py preflight \
+python3 scripts/infra/daytona_cost_guard.py preflight \
   --selection-file configs/selected_benchmark_tasks.json \
   --benchmark csb_sdlc_feature \
   --config baseline-local-direct \
@@ -200,7 +200,7 @@ The enforcement chain is:
 5. `harbor_run_guarded` injects the repo-local Daytona environment import path so sandbox labels are always attached.
 
 Launcher note:
-- The shared launcher helper now exports `REPO_ROOT` automatically when sourced, so repo wrappers can invoke `scripts/daytona_cost_guard.py` reliably during targeted reruns as well as full batches.
+- The shared launcher helper now exports `REPO_ROOT` automatically when sourced, so repo wrappers can invoke `scripts/infra/daytona_cost_guard.py` reliably during targeted reruns as well as full batches.
 
 ## Alternative: Standalone Runner
 

@@ -32,7 +32,7 @@ Recommended pattern:
 
 For cross-agent comparison scaffolding, see:
 
-- `configs/multi_harness_compare.sh`
+- `configs/harnesses/multi_harness_compare.sh`
 
 ## 3) Add New Code Intelligence Config (e.g., GitHub MCP)
 
@@ -49,15 +49,15 @@ Use `configs/eval_matrix.json` as the first change.
 After introducing new configs/suites:
 
 ```bash
-python3 scripts/generate_manifest.py --require-triage --fail-on-unknown-prefix
-python3 scripts/validate_official_integrity.py --runs-dir runs/official --check-mcp-trace-health
-python3 scripts/audit_traces.py --json
+python3 scripts/maintenance/generate_manifest.py --require-triage --fail-on-unknown-prefix
+python3 scripts/authoring/validate_official_integrity.py --runs-dir runs/official --check-mcp-trace-health
+python3 scripts/evaluation/audit_traces.py --json
 ```
 
 If MCP-enabled failed tasks have zero MCP calls, quarantine before analysis:
 
 ```bash
-python3 scripts/quarantine_invalid_tasks.py --execute
+python3 scripts/maintenance/quarantine_invalid_tasks.py --execute
 ```
 
 ## 5) Documentation Drift Guard
@@ -90,13 +90,13 @@ cannot do. See `docs/ORG_TASKS.md` for the full authoring guide.
 
 ```bash
 # 1. Generate from use case registry
-python3 scripts/generate_csb_org_tasks.py --use-case-ids <N> --curate-oracle --validate
+python3 scripts/maintenance/generate_csb_org_tasks.py --use-case-ids <N> --curate-oracle --validate
 
 # 2. Register in selection file
 #    configs/selected_benchmark_tasks.json
 
 # 3. Validate
-python3 scripts/validate_org_task_instance.py --task-dir benchmarks/csb_org_<suite>/<task>
+python3 scripts/authoring/validate_org_task_instance.py --task-dir benchmarks/csb_org_<suite>/<task>
 python3 scripts/authoring/validate_tasks_preflight.py --suite csb_org_<suite>
 ```
 
@@ -125,5 +125,5 @@ benchmarks/csb_org_<suite>/<task>/
 
 When adding a new csb_org_* suite, add the prefix to `DIR_PREFIX_TO_SUITE` in:
 - `scripts/analysis/aggregate_status.py`
-- `scripts/generate_manifest.py`
-- `scripts/run_judge.py`
+- `scripts/maintenance/generate_manifest.py`
+- `scripts/evaluation/run_judge.py`

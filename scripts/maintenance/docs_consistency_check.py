@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DOCS = [
     "README.md",
     "AGENTS.md",
@@ -115,8 +115,8 @@ def _check_script_registry(errors: list[str], warnings: list[str]) -> None:
         listed.add(path.split("/", 1)[1])
 
     actual = {
-        p.name
-        for p in (ROOT / "scripts").iterdir()
+        p.relative_to(ROOT / "scripts").as_posix()
+        for p in (ROOT / "scripts").rglob("*")
         if p.is_file()
         and p.suffix in {".py", ".sh"}
         and p.name != "registry.json"
@@ -141,7 +141,7 @@ def _check_script_registry(errors: list[str], warnings: list[str]) -> None:
 
 
 def _check_generated_agent_nav(errors: list[str]) -> None:
-    cmd = [sys.executable, str(ROOT / "scripts" / "refresh_agent_navigation.py"), "--check"]
+    cmd = [sys.executable, str(ROOT / "scripts" / "maintenance" / "refresh_agent_navigation.py"), "--check"]
     result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if result.returncode == 0:
         return

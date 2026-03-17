@@ -94,7 +94,7 @@ python3 scripts/authoring/validate_tasks_preflight.py --suite csb_sdlc_feature
 python3 scripts/authoring/validate_tasks_preflight.py --task benchmarks/csb_sdlc_feature/envoy-grpc-server-impl-001
 
 # Audit modified prompt files for hygiene issues
-python3 scripts/prompt_hygiene.py --git-modified --include-mcp --fail-on-findings
+python3 scripts/evaluation/prompt_hygiene.py --git-modified --include-mcp --fail-on-findings
 
 # Runtime smoke for a single task (no agent)
 python3 scripts/authoring/validate_tasks_preflight.py --task benchmarks/csb_sdlc_understand/terraform-plan-pipeline-qa-001 --smoke-runtime
@@ -247,7 +247,7 @@ Prompt-hygiene review is broader than MCP contamination. For both `instruction.m
 
 Recommended investigation command:
 ```bash
-python3 scripts/prompt_hygiene.py --scan-root benchmarks/<suite_or_task_dir> --include-mcp
+python3 scripts/evaluation/prompt_hygiene.py --scan-root benchmarks/<suite_or_task_dir> --include-mcp
 ```
 
 ### Dimension 2: Reproducibility

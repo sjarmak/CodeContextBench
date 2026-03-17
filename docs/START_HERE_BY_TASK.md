@@ -38,7 +38,7 @@ export HARBOR_ENV=daytona DAYTONA_OVERRIDE_STORAGE=10240
 ### Key Commands
 ```bash
 python3 scripts/analysis/aggregate_status.py --staging
-python3 scripts/mcp_audit.py --run <run_dir>
+python3 scripts/evaluation/mcp_audit.py --run <run_dir>
 ```
 
 ## Triage Failed Tasks
@@ -53,8 +53,8 @@ python3 scripts/mcp_audit.py --run <run_dir>
 ### Key Commands
 ```bash
 python3 scripts/authoring/validate_task_run.py --run <run_dir>
-python3 scripts/prompt_hygiene.py --scan-root benchmarks/<suite_or_task_dir> --include-mcp
-python3 scripts/rerun_failed.py --help
+python3 scripts/evaluation/prompt_hygiene.py --scan-root benchmarks/<suite_or_task_dir> --include-mcp
+python3 scripts/running/rerun_failed.py --help
 ```
 
 ## Analyze Results (Configs / MCP / IR / Cost)
@@ -68,10 +68,10 @@ python3 scripts/rerun_failed.py --help
 
 ### Key Commands
 ```bash
-python3 scripts/compare_configs.py --run <run_dir>
-python3 scripts/mcp_audit.py --run <run_dir>
-python3 scripts/ir_analysis.py --run <run_dir>
-python3 scripts/cost_report.py --run <run_dir>
+python3 scripts/evaluation/compare_configs.py --run <run_dir>
+python3 scripts/evaluation/mcp_audit.py --run <run_dir>
+python3 scripts/analysis/ir_analysis.py --run <run_dir>
+python3 scripts/evaluation/cost_report.py --run <run_dir>
 ```
 
 ## Generate Reports / Submission Artifacts
@@ -85,9 +85,9 @@ python3 scripts/cost_report.py --run <run_dir>
 
 ### Key Commands
 ```bash
-python3 scripts/generate_manifest.py
-python3 scripts/generate_eval_report.py
-python3 scripts/package_submission.py --help
+python3 scripts/maintenance/generate_manifest.py
+python3 scripts/maintenance/generate_eval_report.py
+python3 scripts/evaluation/package_submission.py --help
 ```
 
 ## Modify Tasks / Task Metadata
@@ -102,6 +102,6 @@ python3 scripts/package_submission.py --help
 ### Key Commands
 ```bash
 python3 scripts/authoring/validate_tasks_preflight.py --task <task_dir> --smoke-runtime
-python3 scripts/prompt_hygiene.py --scan-root <task_dir> --include-mcp
-python3 scripts/sync_task_metadata.py --help
+python3 scripts/evaluation/prompt_hygiene.py --scan-root <task_dir> --include-mcp
+python3 scripts/maintenance/sync_task_metadata.py --help
 ```

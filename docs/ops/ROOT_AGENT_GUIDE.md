@@ -115,7 +115,7 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - Wrap all test runners with `timeout 600`. Add `--forceExit` to Jest. Indefinite hangs (>2h) observed without timeout.
 - Jest + TypeScript needs 4-6GB RAM. Set `memory_mb = 8192` in `task.toml` for front-end test suites (default 2GB causes OOM).
 - **CSB dual-score**: agents produce file edits + `answer.json`; scored independently. Fallback: `promoted_verifier.py` → `oracle_checks.py` → heuristic.
-- Rate-limited results (score=0, duration <30s): quarantine with `scripts/quarantine_invalid_tasks.py --execute`.
+- Rate-limited results (score=0, duration <30s): quarantine with `scripts/maintenance/quarantine_invalid_tasks.py --execute`.
 - Bare `$VAR` in `instruction.md` gets expanded. Use `<placeholder>` syntax.
 
 ### Git / Auth

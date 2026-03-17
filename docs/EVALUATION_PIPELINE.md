@@ -31,7 +31,7 @@ Harbor run output (result.json, transcript)
         ▼
 ┌──────────────────────────────┐
 │  Layer 2: LLM Judge          │  Optional. Multi-round voting, 5 dimensions.
-│  (scripts/run_judge.py)      │  Post-run, host-side. Needs API key.
+│  (scripts/evaluation/run_judge.py)      │  Post-run, host-side. Needs API key.
 └──────────────────────────────┘
         │
         ▼
@@ -151,16 +151,16 @@ Confidence level flows into the judge result for downstream filtering.
 
 ```bash
 # Score all tasks in a run
-python3 scripts/run_judge.py --run runs/official/my_run/
+python3 scripts/evaluation/run_judge.py --run runs/official/my_run/
 
 # Score a specific suite with 3-round voting
-python3 scripts/run_judge.py --run runs/official/my_run/ --suite csb_sdlc_fix --ensemble
+python3 scripts/evaluation/run_judge.py --run runs/official/my_run/ --suite csb_sdlc_fix --ensemble
 
 # Dry run — show tasks and oracle confidence without calling API
-python3 scripts/run_judge.py --run runs/official/my_run/ --dry-run
+python3 scripts/evaluation/run_judge.py --run runs/official/my_run/ --dry-run
 
 # Force re-score tasks that already have judge results
-python3 scripts/run_judge.py --run runs/official/my_run/ --force
+python3 scripts/evaluation/run_judge.py --run runs/official/my_run/ --force
 ```
 
 Output: `judge_result.json` written alongside each task's `result.json`.

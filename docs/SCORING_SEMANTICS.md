@@ -290,7 +290,7 @@ hybrid_score = 0.6 × verifier_reward + 0.4 × rubric_score
 
 Run hybrid scoring:
 ```bash
-python3 scripts/run_judge.py --hybrid --task CCX-onboard-050-ds
+python3 scripts/evaluation/run_judge.py --hybrid --task CCX-onboard-050-ds
 ```
 
 The `judge_result.json` output includes `criteria_scores`, `rubric_score`, and

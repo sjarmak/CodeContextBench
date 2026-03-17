@@ -318,6 +318,6 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 
 ## Regeneration
 ```bash
-python3 scripts/generate_script_registry.py
+python3 scripts/maintenance/generate_script_registry.py
 python3 scripts/maintenance/generate_script_index.py
 ```

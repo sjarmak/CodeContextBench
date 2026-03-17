@@ -97,7 +97,7 @@ print(f'Mean reward: {sum(rewards)/len(rewards):.3f}')
 python3 scripts/promote_run.py --execute <staging_run_name>
 
 # Regenerate MANIFEST
-python3 scripts/generate_manifest.py
+python3 scripts/maintenance/generate_manifest.py
 ```
 
 ### 6. Verify full coverage
@@ -128,4 +128,4 @@ Target: all 81 Org tasks fully paired.
 - `configs/_common.sh` — shared infra (token refresh, account rotation, `baseline_config_for()`)
 - `agents/claude_baseline_agent.py` — agent code (V5 preamble)
 - `scripts/promote_run.py` — staging → official promotion
-- `scripts/generate_manifest.py` — MANIFEST regeneration
+- `scripts/maintenance/generate_manifest.py` — MANIFEST regeneration
