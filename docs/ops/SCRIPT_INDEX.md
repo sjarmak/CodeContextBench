@@ -271,6 +271,7 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/analysis/plot_conversation_blog_svgs.py` - Utility script for plot conversation blog svgs.
 - `scripts/running/prepare_analysis_runs.py` - Utility script for prepare analysis runs.
 - `scripts/running/promote_agent_oracles.py` - Utility script for promote agent oracles.
+- `scripts/running/promote_atomic.py` - Utility script for promote atomic.
 - `scripts/running/promote_blocked.py` - Utility script for promote blocked.
 - `scripts/evaluation/promoted_verifier.py` - Utility script for promoted verifier.
 - `scripts/evaluation/prompt_hygiene.py` - Utility script for prompt hygiene.
@@ -292,6 +293,7 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/csb_metrics/retrieval.py` - Utility script for retrieval.
 - `scripts/evaluation/run_judge.py` - Utility script for run judge.
 - `scripts/running/run_missing_oracles.sh` - Utility script for run missing oracles.
+- `scripts/csb_metrics/run_promotion.py` - Utility script for run promotion.
 - `scripts/running/run_scaling_gap_oracles.sh` - Utility script for run scaling gap oracles.
 - `scripts/csb_metrics/run_scanner.py` - Utility script for run scanner.
 - `scripts/running/run_sg_local.sh` - Utility script for run sg local.

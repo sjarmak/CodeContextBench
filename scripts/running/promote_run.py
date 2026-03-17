@@ -31,10 +31,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "maintenance"))
+sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "evaluation"))
 from config_utils import discover_configs, load_suite_mapping, detect_suite
 from official_runs import raw_runs_dir
+from csb_metrics.run_promotion import RunPromotionOrchestrator, validate_promotion_feasibility
 
 STAGING_DIR = PROJECT_ROOT / "runs" / "staging"
 OFFICIAL_DIR = PROJECT_ROOT / "runs" / "official"
@@ -513,7 +516,7 @@ def cmd_promote(
     regenerate: bool,
     export_official_results: bool,
 ):
-    """Validate and promote staging runs."""
+    """Validate and promote staging runs atomically."""
     if promote_all:
         staging_runs = discover_staging_runs()
         if not staging_runs:
@@ -532,6 +535,7 @@ def cmd_promote(
 
     promoted = []
     skipped = []
+    runs_to_promote = []  # Collect runs that passed validation for atomic promotion
 
     for run_dir in run_dirs:
         print(f"\n{BOLD}Validating:{RESET} {run_dir.name}")
@@ -603,13 +607,13 @@ def cmd_promote(
             )
 
         if execute:
-            print(f"\n  Promoting: {run_dir.name}")
-            shutil.move(str(run_dir), str(official_dest))
-            print(f"  {GREEN}Moved to:{RESET} {official_dest}")
-            promoted.append(official_dest.name)
+            # Collect run for atomic promotion
+            runs_to_promote.append(run_dir.name)
+            print(f"\n  Queued for atomic promotion: {run_dir.name}")
+            promoted.append(run_dir.name)
         else:
-            print(f"\n  {BOLD}DRY RUN:{RESET} Would move:")
-            print(f"    {run_dir} → {official_dest}")
+            print(f"\n  {BOLD}DRY RUN:{RESET} Would atomically promote:")
+            print(f"    {run_dir.name}")
             promoted.append(run_dir.name)
 
     # Summary
@@ -622,72 +626,119 @@ def cmd_promote(
     if not execute and promoted:
         print(f"\nUse --execute to perform the promotion.")
 
-    manifest_regenerated = False
+    # Perform atomic promotion if runs were validated
+    if execute and runs_to_promote:
+        print(f"\n{'=' * 60}")
+        print("ATOMIC PROMOTION")
+        print(f"{'=' * 60}\n")
 
-    # Regenerate MANIFEST after promotion
-    if execute and promoted and regenerate:
-        print(f"\nRegenerating MANIFEST.json...")
-        try:
-            proc = subprocess.run(
-                [sys.executable, str(MANIFEST_SCRIPT)],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            if proc.returncode == 0:
-                print(f"  {GREEN}MANIFEST regenerated.{RESET}")
-                manifest_regenerated = True
-                # Show summary from stdout
-                for line in proc.stdout.strip().split("\n")[-3:]:
-                    print(f"  {line}")
+        # Use RunPromotionOrchestrator for atomic, all-or-nothing promotion
+        orchestrator = RunPromotionOrchestrator(
+            staging_dir=STAGING_DIR,
+            official_dir=OFFICIAL_RAW_DIR,
+            manifest_script=PROJECT_ROOT / "scripts" / "maintenance" / "generate_manifest.py",
+            extract_metrics_script=EXTRACT_METRICS_SCRIPT,
+            export_results_script=EXPORT_OFFICIAL_RESULTS_SCRIPT,
+        )
+
+        results = orchestrator.promote_runs(
+            run_names=runs_to_promote,
+            dry_run=False,
+            continue_on_error=True,
+        )
+
+        # Report atomic promotion results
+        print(f"\n{'=' * 60}")
+        print("ATOMIC PROMOTION RESULTS")
+        print(f"{'=' * 60}\n")
+
+        successful = 0
+        failed = 0
+
+        for result in results:
+            status_icon = "✓" if result.success else "✗"
+            print(f"{status_icon} {result.run_name}")
+            print(f"  Duration: {result.duration_seconds:.1f}s")
+            print(f"  Completed: {', '.join(result.steps_completed)}")
+
+            if result.steps_failed:
+                print(f"  Failed: {', '.join(result.steps_failed)}")
+            if result.error_message:
+                print(f"  Error: {result.error_message}")
+
+            if result.success:
+                successful += 1
             else:
-                print(f"  {YELLOW}MANIFEST generation returned code {proc.returncode}{RESET}")
-                if proc.stderr:
-                    print(f"  {proc.stderr[:200]}")
-        except (subprocess.TimeoutExpired, OSError) as e:
-            print(f"  {RED}MANIFEST generation failed: {e}{RESET}")
+                failed += 1
 
-    # Auto-refresh docs/official_results after successful promotion.
-    if execute and promoted and export_official_results:
-        if not regenerate:
-            print(
-                f"\n{YELLOW}Skipping official results export:{RESET} "
-                "--no-regenerate was set, so MANIFEST may be stale."
-            )
-        elif not manifest_regenerated:
-            print(
-                f"\n{YELLOW}Skipping official results export:{RESET} "
-                "MANIFEST regeneration did not complete successfully."
-            )
-        else:
-            print("\nExporting docs/official_results...")
+            print()
+
+        print(f"Summary: {successful} successful, {failed} failed\n")
+
+        # If promotion failed, don't attempt MANIFEST regeneration or results export
+        if failed > 0:
+            print(f"{RED}[ALERT]{RESET} Atomic promotion had failures. Stopping here to prevent partial state.")
+            return
+
+        # If promotion succeeded and regenerate flag is set, run manifest generation
+        if successful > 0 and regenerate:
+            print(f"\nRegenerating MANIFEST.json...")
             try:
                 proc = subprocess.run(
-                    [
-                        sys.executable,
-                        str(EXPORT_OFFICIAL_RESULTS_SCRIPT),
-                        "--runs-dir",
-                        str(OFFICIAL_DIR),
-                        "--output-dir",
-                        str(OFFICIAL_RESULTS_DIR),
-                    ],
+                    [sys.executable, str(MANIFEST_SCRIPT)],
                     capture_output=True,
                     text=True,
-                    timeout=1200,
+                    timeout=120,
                 )
                 if proc.returncode == 0:
-                    print(f"  {GREEN}Official results export complete.{RESET}")
-                    for line in proc.stdout.strip().split("\n")[-6:]:
+                    print(f"  {GREEN}MANIFEST regenerated.{RESET}")
+                    # Show summary from stdout
+                    for line in proc.stdout.strip().split("\n")[-3:]:
                         if line.strip():
                             print(f"  {line}")
                 else:
-                    print(
-                        f"  {YELLOW}Official results export returned code {proc.returncode}{RESET}"
-                    )
+                    print(f"  {YELLOW}MANIFEST generation returned code {proc.returncode}{RESET}")
                     if proc.stderr:
-                        print(f"  {proc.stderr[:400]}")
+                        print(f"  {proc.stderr[:200]}")
             except (subprocess.TimeoutExpired, OSError) as e:
-                print(f"  {RED}Official results export failed: {e}{RESET}")
+                print(f"  {RED}MANIFEST generation failed: {e}{RESET}")
+
+        # If promotion succeeded and export flag is set, run results export
+        if successful > 0 and export_official_results:
+            if not regenerate:
+                print(
+                    f"\n{YELLOW}Skipping official results export:{RESET} "
+                    "--no-regenerate was set, so MANIFEST may be stale."
+                )
+            else:
+                print("\nExporting docs/official_results...")
+                try:
+                    proc = subprocess.run(
+                        [
+                            sys.executable,
+                            str(EXPORT_OFFICIAL_RESULTS_SCRIPT),
+                            "--runs-dir",
+                            str(OFFICIAL_DIR),
+                            "--output-dir",
+                            str(OFFICIAL_RESULTS_DIR),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=1200,
+                    )
+                    if proc.returncode == 0:
+                        print(f"  {GREEN}Official results export complete.{RESET}")
+                        for line in proc.stdout.strip().split("\n")[-6:]:
+                            if line.strip():
+                                print(f"  {line}")
+                    else:
+                        print(
+                            f"  {YELLOW}Official results export returned code {proc.returncode}{RESET}"
+                        )
+                        if proc.stderr:
+                            print(f"  {proc.stderr[:400]}")
+                except (subprocess.TimeoutExpired, OSError) as e:
+                    print(f"  {RED}Official results export failed: {e}{RESET}")
 
 
 def main():
