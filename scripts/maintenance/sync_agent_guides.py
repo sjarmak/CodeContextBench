@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 
 ROOT_SOURCE = ROOT / "docs" / "ops" / "ROOT_AGENT_GUIDE.md"
 LOCAL_SOURCES = {

@@ -8,13 +8,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 
 COMMANDS = [
-    [sys.executable, "scripts/sync_agent_guides.py"],
-    [sys.executable, "scripts/generate_script_registry.py"],
-    [sys.executable, "scripts/generate_script_index.py"],
-    [sys.executable, "scripts/generate_start_here_by_task.py"],
+    [sys.executable, "scripts/maintenance/sync_agent_guides.py"],
+    [sys.executable, "scripts/maintenance/generate_script_registry.py"],
+    [sys.executable, "scripts/maintenance/generate_script_index.py"],
+    [sys.executable, "scripts/maintenance/generate_start_here_by_task.py"],
 ]
 
 

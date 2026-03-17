@@ -70,10 +70,10 @@ def verify_small_fix_run(staging_root: Path, out_root: Path) -> dict:
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True, exist_ok=True)
 
-    _run(["python3", "scripts/normalize_retrieval_events.py", "--run-dir", str(run_dir)], REPO_ROOT)
+    _run(["python3", "scripts/evaluation/normalize_retrieval_events.py", "--run-dir", str(run_dir)], REPO_ROOT)
     with (out / "normalize.log").open("w") as f:
         subprocess.run(
-            ["python3", "scripts/retrieval_eval_pipeline.py", "--run-dir", str(run_dir), "--output-dir", str(out / "artifacts")],
+            ["python3", "scripts/evaluation/retrieval_eval_pipeline.py", "--run-dir", str(run_dir), "--output-dir", str(out / "artifacts")],
             cwd=REPO_ROOT,
             check=True,
             stdout=f,
@@ -140,10 +140,10 @@ def verify_debug_matched_run(staging_root: Path, out_root: Path) -> dict:
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True, exist_ok=True)
 
-    _run(["python3", "scripts/normalize_retrieval_events.py", "--run-dir", str(run_dir)], REPO_ROOT)
+    _run(["python3", "scripts/evaluation/normalize_retrieval_events.py", "--run-dir", str(run_dir)], REPO_ROOT)
     with (out / "pipeline_summary.json").open("w") as f:
         subprocess.run(
-            ["python3", "scripts/retrieval_eval_pipeline.py", "--run-dir", str(run_dir), "--output-dir", str(out / "artifacts")],
+            ["python3", "scripts/evaluation/retrieval_eval_pipeline.py", "--run-dir", str(run_dir), "--output-dir", str(out / "artifacts")],
             cwd=REPO_ROOT,
             check=True,
             stdout=f,
@@ -193,12 +193,12 @@ def verify_pooled_multi_run(staging_root: Path, out_root: Path) -> dict:
     _symlink_run_subset(staging_root, DEFAULT_POOLED_RUNS, out)
 
     pooled_runs_root = out / "runs"
-    _run(["python3", "scripts/normalize_retrieval_events.py", "--run-dir", str(pooled_runs_root), "--all"], REPO_ROOT)
+    _run(["python3", "scripts/evaluation/normalize_retrieval_events.py", "--run-dir", str(pooled_runs_root), "--all"], REPO_ROOT)
     (out / "out").mkdir(parents=True, exist_ok=True)
     with (out / "pipeline_summary.json").open("w") as f:
         subprocess.run(
             [
-                "python3", "scripts/retrieval_eval_pipeline.py",
+                "python3", "scripts/evaluation/retrieval_eval_pipeline.py",
                 "--run-dir", str(pooled_runs_root),
                 "--all",
                 "--output-dir", str(out / "out"),

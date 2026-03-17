@@ -8,7 +8,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 REGISTRY_PATH = ROOT / "scripts" / "registry.json"
 OUT_PATH = ROOT / "docs" / "ops" / "SCRIPT_INDEX.md"
 

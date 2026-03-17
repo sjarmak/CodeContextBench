@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 ROUTES_PATH = ROOT / "docs" / "ops" / "task_routes.json"
 OUT_PATH = ROOT / "docs" / "START_HERE_BY_TASK.md"
 

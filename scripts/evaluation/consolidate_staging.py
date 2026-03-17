@@ -28,7 +28,7 @@ STAGING = REPO_ROOT / "runs" / "staging"
 
 def get_aggregate_data():
     result = subprocess.run(
-        ["python3", "scripts/aggregate_status.py", "--staging"],
+        ["python3", "scripts/analysis/aggregate_status.py", "--staging"],
         capture_output=True, text=True,
         cwd=str(REPO_ROOT),
     )

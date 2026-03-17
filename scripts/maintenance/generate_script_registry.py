@@ -8,7 +8,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPTS_DIR = ROOT / "scripts"
 REGISTRY_PATH = SCRIPTS_DIR / "registry.json"
 OVERRIDES_PATH = SCRIPTS_DIR / "registry_overrides.json"
@@ -178,7 +178,8 @@ def load_overrides() -> dict[str, dict]:
 def script_entries() -> list[dict]:
     overrides = load_overrides()
     entries: list[dict] = []
-    for path in sorted(SCRIPTS_DIR.iterdir()):
+    # Scan root level and all subdirectories for scripts
+    for path in sorted(SCRIPTS_DIR.rglob("*")):
         if not path.is_file():
             continue
         if path.suffix not in {".py", ".sh"}:
@@ -189,9 +190,10 @@ def script_entries() -> list[dict]:
             continue
         category = detect_category(path.name)
         status = detect_status(path.name)
+        rel_path = path.relative_to(SCRIPTS_DIR)
         entry = {
             "name": path.name,
-            "path": f"scripts/{path.name}",
+            "path": f"scripts/{rel_path}",
             "category": category,
             "status": status,
             "language": "python" if path.suffix == ".py" else "shell" if path.suffix == ".sh" else "other",

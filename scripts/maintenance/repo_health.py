@@ -18,7 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 CONTRACT_PATH = REPO_ROOT / "configs" / "repo_health.json"
 
 
@@ -29,8 +29,8 @@ def load_contract() -> dict:
             return json.load(f)
     return {
         "checks": {
-            "docs_consistency": {"script": "scripts/docs_consistency_check.py", "required": True},
-            "task_preflight_static": {"script": "scripts/validate_tasks_preflight.py", "args": ["--all"], "required": True},
+            "docs_consistency": {"script": "scripts/maintenance/docs_consistency_check.py", "required": True},
+            "task_preflight_static": {"script": "scripts/authoring/validate_tasks_preflight.py", "args": ["--all"], "required": True},
             "selection_file": {"script": None, "required": True},
         },
         "quick_checks": ["docs_consistency", "selection_file"],
