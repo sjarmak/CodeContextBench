@@ -33,7 +33,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
-from config_utils import discover_configs
+from config_utils import discover_configs, load_suite_mapping, detect_suite
 from official_runs import raw_runs_dir
 
 STAGING_DIR = PROJECT_ROOT / "runs" / "staging"
@@ -48,111 +48,7 @@ SELECTED_TASKS_FILE = PROJECT_ROOT / "configs" / "selected_benchmark_tasks.json"
 
 SKIP_PATTERNS = ["__broken_verifier", "validation_test", "archive", "__v1_hinted"]
 
-DIR_PREFIX_TO_SUITE = {
-    # Legacy SDLC suites (run names: ccb_<suite>_haiku_*)
-    "ccb_debug_": "csb_sdlc_debug",
-    "ccb_design_": "csb_sdlc_design",
-    "ccb_document_": "csb_sdlc_document",
-    "ccb_feature_": "csb_sdlc_feature",
-    "ccb_fix_": "csb_sdlc_fix",
-    "ccb_refactor_": "csb_sdlc_refactor",
-    "ccb_secure_": "csb_sdlc_secure",
-    "ccb_test_": "csb_sdlc_test",
-    "ccb_understand_": "csb_sdlc_understand",
-    # Legacy short-form SDLC prefixes (run names: debug_haiku_*, feature_haiku_*, etc.)
-    "debug_": "csb_sdlc_debug",
-    "design_": "csb_sdlc_design",
-    "document_": "csb_sdlc_document",
-    "feature_": "csb_sdlc_feature",
-    "fix_": "csb_sdlc_fix",
-    "refactor_": "csb_sdlc_refactor",
-    "secure_": "csb_sdlc_secure",
-    "test_": "csb_sdlc_test",
-    "understand_": "csb_sdlc_understand",
-    # Legacy MCP-unique suites (run names: ccb_mcp_<suite>_haiku_*)
-    "ccb_mcp_compliance_": "csb_org_compliance",
-    "ccb_mcp_crossorg_": "csb_org_crossorg",
-    "ccb_mcp_crossrepo_tracing_": "csb_org_crossrepo_tracing",
-    "ccb_mcp_crossrepo_": "csb_org_crossrepo",
-    "ccb_mcp_domain_": "csb_org_domain",
-    "ccb_mcp_incident_": "csb_org_incident",
-    "ccb_mcp_migration_": "csb_org_migration",
-    "ccb_mcp_onboarding_": "csb_org_onboarding",
-    "ccb_mcp_org_": "csb_org_org",
-    "ccb_mcp_platform_": "csb_org_platform",
-    "ccb_mcp_security_": "csb_org_security",
-    # Legacy suites (historical runs)
-    "bigcode_mcp_": "ccb_largerepo",
-    "bigcode_sgcompare_": "ccb_largerepo",
-    "codereview_": "ccb_codereview",
-    "crossrepo_": "ccb_crossrepo",
-    "dependeval_": "ccb_dependeval",
-    "dibench_": "ccb_dibench",
-    "docgen_": "ccb_docgen",
-    "enterprise_": "ccb_enterprise",
-    "governance_": "ccb_governance",
-    "investigation_": "ccb_investigation",
-    "k8s_docs_": "ccb_k8sdocs",
-    "linuxflbench_": "ccb_linuxflbench",
-    "locobench_": "ccb_locobench",
-    "navprove_": "ccb_navprove",
-    "nlqa_": "ccb_nlqa",
-    "onboarding_": "ccb_onboarding",
-    "paired_rerun_crossrepo_": "ccb_crossrepo",
-    "paired_rerun_dibench_": "ccb_dibench",
-    "paired_rerun_pytorch_": "ccb_pytorch",
-    "pytorch_": "ccb_pytorch",
-    "repoqa_": "ccb_repoqa",
-    "security_": "ccb_security",
-    "swebenchpro_": "ccb_swebenchpro",
-    "sweperf_": "ccb_sweperf",
-    "tac_": "ccb_tac",
-    # CodeScaleBench renamed suites (new canonical names)
-    "csb_sdlc_feature_": "csb_sdlc_feature",
-    "csb_sdlc_refactor_": "csb_sdlc_refactor",
-    "csb_sdlc_build_": "csb_sdlc_build",
-    "csb_sdlc_debug_": "csb_sdlc_debug",
-    "csb_sdlc_design_": "csb_sdlc_design",
-    "csb_sdlc_document_": "csb_sdlc_document",
-    "csb_sdlc_fix_": "csb_sdlc_fix",
-    "csb_sdlc_secure_": "csb_sdlc_secure",
-    "csb_sdlc_test_": "csb_sdlc_test",
-    "csb_sdlc_understand_": "csb_sdlc_understand",
-    # CSB Org suites (must check crossrepo_tracing before crossrepo)
-    "csb_org_crossrepo_tracing_": "csb_org_crossrepo_tracing",
-    "csb_org_crossrepo_": "csb_org_crossrepo",
-    "csb_org_security_": "csb_org_security",
-    "csb_org_migration_": "csb_org_migration",
-    "csb_org_incident_": "csb_org_incident",
-    "csb_org_onboarding_": "csb_org_onboarding",
-    "csb_org_compliance_": "csb_org_compliance",
-    "csb_org_crossorg_": "csb_org_crossorg",
-    "csb_org_domain_": "csb_org_domain",
-    "csb_org_org_": "csb_org_org",
-    "csb_org_platform_": "csb_org_platform",
-    # Bare sdlc_ and org_ prefixes (short-form run names)
-    "sdlc_feature_": "csb_sdlc_feature",
-    "sdlc_refactor_": "csb_sdlc_refactor",
-    "sdlc_build_": "csb_sdlc_build",
-    "sdlc_debug_": "csb_sdlc_debug",
-    "sdlc_design_": "csb_sdlc_design",
-    "sdlc_document_": "csb_sdlc_document",
-    "sdlc_fix_": "csb_sdlc_fix",
-    "sdlc_secure_": "csb_sdlc_secure",
-    "sdlc_test_": "csb_sdlc_test",
-    "sdlc_understand_": "csb_sdlc_understand",
-    "org_crossrepo_tracing_": "csb_org_crossrepo_tracing",
-    "org_crossrepo_": "csb_org_crossrepo",
-    "org_security_": "csb_org_security",
-    "org_migration_": "csb_org_migration",
-    "org_incident_": "csb_org_incident",
-    "org_onboarding_": "csb_org_onboarding",
-    "org_compliance_": "csb_org_compliance",
-    "org_crossorg_": "csb_org_crossorg",
-    "org_domain_": "csb_org_domain",
-    "org_org_": "csb_org_org",
-    "org_platform_": "csb_org_platform",
-}
+# Suite mapping is now loaded from configs/suite_mapping.json via config_utils
 
 # ANSI colors
 GREEN = "\033[92m"
@@ -290,12 +186,8 @@ def _suite_from_selection_file(task_id: str) -> str | None:
 
 
 def suite_from_run_name(run_name: str) -> str | None:
-    # Check longest prefixes first to avoid partial matches
-    # (e.g. ccb_mcp_crossrepo_tracing_ before ccb_mcp_crossrepo_)
-    for prefix in sorted(DIR_PREFIX_TO_SUITE, key=len, reverse=True):
-        if run_name.startswith(prefix):
-            return DIR_PREFIX_TO_SUITE[prefix]
-    return None
+    """Detect suite from run name using canonical suite mapping."""
+    return detect_suite(run_name)
 
 
 def _benchmark_from_config_json(task_dir: Path) -> str | None:

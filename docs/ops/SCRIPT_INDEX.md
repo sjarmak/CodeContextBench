@@ -243,6 +243,7 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/infra/fix_memory_mb.py` [one_off] - Historical one-off script: fix memory mb.
 - `scripts/infra/fix_workspace_perms.py` [one_off] - Historical one-off script: fix workspace perms.
 - `scripts/csb_metrics/ground_truth.py` - Utility script for ground truth.
+- `scripts/csb_metrics/ground_truth_registry.py` - Utility script for ground truth registry.
 - `scripts/evaluation/handoff_monitor_scrollend.sh` - Utility script for handoff monitor scrollend.
 - `scripts/evaluation/hybrid_retrieval_pipeline.py` - Utility script for hybrid retrieval pipeline.
 - `scripts/infra/hydrate_task_specs.py` - Utility script for hydrate task specs.
@@ -287,10 +288,12 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/running/rerun_fixed_tasks.sh` [one_off] - Historical one-off script: rerun fixed tasks.
 - `scripts/running/rerun_zero_mcp_tasks.sh` [one_off] - Historical one-off script: rerun zero mcp tasks.
 - `scripts/evaluation/rescore_difficulty.py` - Utility script for rescore difficulty.
+- `scripts/csb_metrics/result_parser.py` - Utility script for result parser.
 - `scripts/csb_metrics/retrieval.py` - Utility script for retrieval.
 - `scripts/evaluation/run_judge.py` - Utility script for run judge.
 - `scripts/running/run_missing_oracles.sh` - Utility script for run missing oracles.
 - `scripts/running/run_scaling_gap_oracles.sh` - Utility script for run scaling gap oracles.
+- `scripts/csb_metrics/run_scanner.py` - Utility script for run scanner.
 - `scripts/running/run_sg_local.sh` - Utility script for run sg local.
 - `scripts/evaluation/run_sg_validation.py` - Utility script for run sg validation.
 - `scripts/maintenance/sanitize_secrets.py` - Utility script for sanitize secrets.

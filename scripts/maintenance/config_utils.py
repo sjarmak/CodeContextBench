@@ -102,3 +102,45 @@ def is_baseline_config(config_name: str) -> bool:
 def config_short_name(config_name: str) -> str:
     """Abbreviated display name for a config."""
     return _SHORT_NAMES.get(config_name, config_name[:10])
+
+
+# Suite mapping utilities
+_SUITE_MAPPING_CACHE = None
+
+
+def load_suite_mapping() -> dict[str, str]:
+    """Load the canonical suite mapping from configs/suite_mapping.json.
+
+    Returns a dict mapping dir prefixes (e.g., 'csb_sdlc_fix_') to suite names
+    (e.g., 'csb_sdlc_fix'). This is the single source of truth for suite detection
+    across all pipelines.
+    """
+    global _SUITE_MAPPING_CACHE
+    if _SUITE_MAPPING_CACHE is not None:
+        return _SUITE_MAPPING_CACHE
+
+    import json
+    suite_mapping_path = Path(__file__).resolve().parent.parent.parent / "configs" / "suite_mapping.json"
+    if not suite_mapping_path.is_file():
+        raise FileNotFoundError(f"Suite mapping not found: {suite_mapping_path}")
+
+    payload = json.loads(suite_mapping_path.read_text())
+    _SUITE_MAPPING_CACHE = payload.get("mapping", {})
+    return _SUITE_MAPPING_CACHE
+
+
+def detect_suite(name: str) -> str | None:
+    """Detect suite name from a run/task directory name using the canonical mapping.
+
+    Args:
+        name: Directory or run name to check (e.g., 'csb_sdlc_fix_haiku_20260315_120000')
+
+    Returns:
+        Suite name if detected (e.g., 'csb_sdlc_fix'), else None.
+    """
+    mapping = load_suite_mapping()
+    # Check longer prefixes first to match 'crossrepo_tracing' before 'crossrepo'
+    for prefix in sorted(mapping.keys(), key=len, reverse=True):
+        if name.startswith(prefix):
+            return mapping[prefix]
+    return None
