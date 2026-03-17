@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 RUN_ROOTS = [
     REPO_ROOT / "runs" / "official" / "_raw",
     REPO_ROOT / "runs" / "staging",
@@ -31,7 +31,7 @@ RUN_ROOTS = [
 ]
 CACHE_PATH = REPO_ROOT / "runs" / "analysis" / "daytona_cost_history_cache.json"
 REGISTRY_PATH = REPO_ROOT / "scripts" / "daytona_task_registry.json"
-DEFAULT_OPENHANDS_ROUTING_POLICY = REPO_ROOT / "configs" / "openhands_daytona_routing.json"
+DEFAULT_OPENHANDS_ROUTING_POLICY = REPO_ROOT / "configs" / "harnesses" / "openhands_daytona_routing.json"
 CACHE_VERSION = 1
 
 CPU_HOURLY_USD = 0.0504
