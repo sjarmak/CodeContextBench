@@ -53,7 +53,7 @@ def parse_iso(value: str | None) -> datetime | None:
 
 
 def repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+    return Path(__file__).resolve().parent.parent.parent
 
 
 def default_state_file() -> Path:
