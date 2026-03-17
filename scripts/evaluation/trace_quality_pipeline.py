@@ -2069,6 +2069,16 @@ def main():
         output_path.write_text(json.dumps(report, indent=2, default=str) + "\n")
         print(f"\nJSON report written to: {args.output}")
 
+        # Also export structured metrics via TraceQualityReporter
+        try:
+            from csb_metrics.trace_quality import TraceQualityReporter
+            reporter = TraceQualityReporter(report)
+            metrics_output = output_path.parent / "trace_quality_metrics.json"
+            reporter.export_to_json(metrics_output)
+            print(f"Structured metrics written to: {metrics_output}")
+        except ImportError:
+            pass  # TraceQualityReporter not available
+
 
 if __name__ == "__main__":
     main()

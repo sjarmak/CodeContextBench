@@ -316,6 +316,7 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/csb_metrics/statistics.py` - Utility script for statistics.
 - `scripts/csb_metrics/task_selection.py` - Utility script for task selection.
 - `scripts/analysis/token_cost_quality.py` - Utility script for token cost quality.
+- `scripts/csb_metrics/trace_quality.py` - Utility script for trace quality.
 - `scripts/evaluation/trace_quality_pipeline.py` - Utility script for trace quality pipeline.
 - `scripts/csb_metrics/transcript_paths.py` - Utility script for transcript paths.
 - `scripts/evaluation/verify_oracle_fail2pass.py` - Utility script for verify oracle fail2pass.

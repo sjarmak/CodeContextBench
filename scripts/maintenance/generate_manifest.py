@@ -13,9 +13,11 @@ import sys
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "maintenance"))
 from config_utils import discover_configs
 from official_runs import raw_runs_dir
 
@@ -145,6 +147,30 @@ def load_judge_scores(path: Path) -> dict[str, dict]:
     try:
         data = json.loads(path.read_text())
         return data.get("scores", {})
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def load_trace_quality_metrics(path: Optional[Path] = None) -> dict[str, dict]:
+    """Load trace quality metrics from structured metrics file.
+
+    Args:
+        path: Path to trace_quality_metrics.json. If None, uses default location.
+
+    Returns:
+        Dict mapping 'run_name/config/task_name' -> quality metrics.
+        Returns empty dict if file doesn't exist or is invalid.
+    """
+    if path is None:
+        path = PROJECT_ROOT / "runs" / "official" / "trace_quality_metrics.json"
+
+    if not path.is_file():
+        return {}
+
+    try:
+        data = json.loads(path.read_text())
+        metrics = data.get("metrics", {})
+        return metrics
     except (json.JSONDecodeError, OSError):
         return {}
 
@@ -755,6 +781,21 @@ def main():
 
     judge_scores = load_judge_scores(cli_args.judge_scores)
 
+    # Load trace quality metrics if available
+    quality_metrics = load_trace_quality_metrics()
+    # Build inverted index: (config, task_name) -> list of quality flags
+    quality_flags_by_task: dict[tuple[str, str], list[str]] = defaultdict(list)
+    for metric_key, metric_data in quality_metrics.items():
+        config = metric_data.get("config", "")
+        task_name = metric_data.get("task_name", "")
+        flags = metric_data.get("quality_flags", [])
+        if flags:
+            quality_flags_by_task[(config, task_name)].extend(flags)
+            # Deduplicate
+            quality_flags_by_task[(config, task_name)] = list(
+                set(quality_flags_by_task[(config, task_name)])
+            )
+
     # Collect all tasks grouped by (suite, config)
     # Structure: {(suite, config): {task_name: task_entry}}
     all_tasks: dict[tuple[str, str], dict[str, dict]] = defaultdict(dict)
@@ -860,6 +901,16 @@ def main():
                     jc = judge_entry.get("judge_confidence")
                     if jc is not None:
                         info["judge_confidence"] = round(float(jc), 4)
+
+            # Merge trace quality flags if available
+            quality_flag_key = (config, task_name)
+            if quality_flag_key in quality_flags_by_task:
+                flags = quality_flags_by_task[quality_flag_key]
+                if flags:
+                    info["quality_flags"] = sorted(flags)
+                    # Add has_quality_issues marker for easy filtering
+                    if any(f in ["invalid", "bad_setup", "hallucination", "verifier_flag"] for f in flags):
+                        info["has_quality_issues"] = True
 
             task_infos[task_name] = info
             if info["status"] == "passed":
