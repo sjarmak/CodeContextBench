@@ -5,12 +5,14 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/.."
+# REPO_ROOT is 2 levels up: harnesses -> configs -> repo
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$REPO_ROOT"
 
 # Agent code lives in-repo under agents/
 export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
-source "$SCRIPT_DIR/_common.sh"
+source "$REPO_ROOT/configs/_common.sh"
 
 # ============================================
 # LOAD CREDENTIALS

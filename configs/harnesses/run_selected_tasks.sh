@@ -42,7 +42,7 @@ cd "$REPO_ROOT"
 export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
 # Shared config: subscription mode + token refresh
-source "$SCRIPT_DIR/_common.sh"
+source "$SCRIPT_DIR/../_common.sh"
 
 SELECTION_FILE="$REPO_ROOT/configs/selected_benchmark_tasks.json"
 DAYTONA_COST_POLICY="${DAYTONA_COST_POLICY:-$REPO_ROOT/configs/daytona_cost_policy.json}"

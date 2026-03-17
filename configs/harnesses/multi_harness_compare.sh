@@ -26,7 +26,7 @@ cd "$REPO_ROOT"
 # Agent code lives in-repo under agents/
 export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
-source "$SCRIPT_DIR/_common.sh"
+source "$SCRIPT_DIR/../_common.sh"
 load_credentials
 enforce_subscription_mode
 

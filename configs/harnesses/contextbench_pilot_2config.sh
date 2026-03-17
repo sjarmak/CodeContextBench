@@ -16,9 +16,11 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# REPO_ROOT is 2 levels up: harnesses -> configs -> repo
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$REPO_ROOT" && pwd)"
 
-source "$SCRIPT_DIR/_common.sh"
+source "$REPO_ROOT/configs/_common.sh"
 load_credentials
 enforce_subscription_mode
 

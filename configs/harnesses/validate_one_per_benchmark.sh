@@ -25,7 +25,7 @@ cd "$REPO_ROOT"
 
 # Agent code lives in-repo under agents/
 export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
-source "$SCRIPT_DIR/_common.sh"
+source "$SCRIPT_DIR/../_common.sh"
 
 SELECTION_FILE="$REPO_ROOT/configs/selected_benchmark_tasks.json"
 MODEL="${MODEL:-anthropic/claude-haiku-4-5-20251001}"
