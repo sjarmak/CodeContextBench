@@ -322,6 +322,7 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/csb_metrics/trace_quality.py` - Utility script for trace quality.
 - `scripts/evaluation/trace_quality_pipeline.py` - Utility script for trace quality pipeline.
 - `scripts/csb_metrics/transcript_paths.py` - Utility script for transcript paths.
+- `scripts/analysis/triage_staging_runs.py` - Utility script for triage staging runs.
 - `scripts/evaluation/verify_oracle_fail2pass.py` - Utility script for verify oracle fail2pass.
 - `scripts/evaluation/verify_retrieval_eval_smoke.py` - Utility script for verify retrieval eval smoke.
 
