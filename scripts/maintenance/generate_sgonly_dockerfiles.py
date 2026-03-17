@@ -24,7 +24,7 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 BENCHMARKS = REPO_ROOT / "benchmarks"
 WRAPPER_SRC = REPO_ROOT / "scripts" / "sgonly_verifier_wrapper.sh"
 
