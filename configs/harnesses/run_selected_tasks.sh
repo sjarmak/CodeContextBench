@@ -35,7 +35,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$SCRIPT_DIR/.."
+REPO_ROOT="$SCRIPT_DIR/../.."
 cd "$REPO_ROOT"
 
 # Agent code lives in-repo under agents/
