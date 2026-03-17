@@ -120,7 +120,7 @@ security, incident):
 
 2. **More runs per task:** Increasing from 3 to 5+ runs per task reduces the within-task
    noise component of sigma, which can modestly improve power. The Neyman decomposition
-   (see `scripts/doe_variance_analysis.py`) separates task heterogeneity from agent
+   (see `scripts/analysis/doe_variance_analysis.py`) separates task heterogeneity from agent
    stochasticity to quantify this effect.
 
 3. **Report effect sizes with CIs:** Instead of binary significance testing, report

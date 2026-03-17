@@ -143,7 +143,7 @@ A plain text transcript of the agent session. No required format — any readabl
 Validate your submission before packaging:
 
 ```bash
-python3 scripts/validate_submission.py --submission-dir my-submission/
+python3 scripts/authoring/validate_submission.py --submission-dir my-submission/
 ```
 
 This checks every `result.json` against the schema and reports errors per task:

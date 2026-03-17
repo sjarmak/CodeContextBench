@@ -46,19 +46,19 @@ Set `OPENAI_API_KEY` in `.env.local`. For Codex models, you can also use `CODEX_
 
 ```bash
 # Full 2-config run (baseline + MCP) with Sonnet 4.6
-MODEL=anthropic/claude-sonnet-4-6 ./configs/openhands_2config.sh
+MODEL=anthropic/claude-sonnet-4-6 ./configs/harnesses/openhands_2config.sh
 
 # Baseline-only with Opus 4.6 (default model)
-./configs/openhands_2config.sh --baseline-only
+./configs/harnesses/openhands_2config.sh --baseline-only
 
 # Single task
-./configs/openhands_2config.sh --benchmark csb_sdlc_fix --task my-task-001
+./configs/harnesses/openhands_2config.sh --benchmark csb_sdlc_fix --task my-task-001
 
 # Override parallelism
-./configs/openhands_2config.sh --parallel 4
+./configs/harnesses/openhands_2config.sh --parallel 4
 
 # GPT-4o run
-MODEL=openai/gpt-4o ./configs/openhands_2config.sh --baseline-only
+MODEL=openai/gpt-4o ./configs/harnesses/openhands_2config.sh --baseline-only
 ```
 
 ## Run Directory Structure
@@ -80,7 +80,7 @@ runs/staging/openhands_sonnet46_20260306_120000/
 - OpenHands runs **inside the Docker container** (installed by Harbor's template), not on the host
 - `agents/harnesses/openhands/agent.py` extends Harbor's built-in `OpenHands` agent + `BaselineHarnessMixin`
 - `BaselineHarnessMixin` (`agents/harnesses/base.py`) handles instruction preparation, MCP configuration, and container env propagation
-- The 2-config launcher (`configs/openhands_2config.sh`) runs baseline (no MCP) then MCP-Full (Sourcegraph)
+- The 2-config launcher (`configs/harnesses/openhands_2config.sh`) runs baseline (no MCP) then MCP-Full (Sourcegraph)
 
 ## Known Limitations
 

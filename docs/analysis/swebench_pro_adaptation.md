@@ -24,7 +24,7 @@ Dockerfiles were also misconfigured. Docker Hub auth issues prevented Daytona ex
 **Can the issues be resolved?** Yes:
 1. Select simpler tasks (1-3 file patches instead of 30+ files)
 2. Use correct SWEAP `dockerhub_tag` from the HF dataset for each task
-3. Rehost images to GHCR via `scripts/rehost_sweap_images.py`
+3. Rehost images to GHCR via `scripts/infra/rehost_sweap_images.py`
 4. Run locally (12 slots) for SWEAP tasks until GHCR rehosting is complete
 
 ## HuggingFace Dataset Analysis
@@ -96,7 +96,7 @@ After adaptation:
 
 ## Implementation Status
 
-Tasks scaffolded via `scripts/scaffold_swebench_pro_tasks.py`:
+Tasks scaffolded via `scripts/authoring/scaffold_swebench_pro_tasks.py`:
 
 | Task Name | Repo | Language |
 |-----------|------|----------|
@@ -119,13 +119,13 @@ All 8 registered in `configs/selected_benchmark_tasks.json`.
 
 ## Rehost Execution (8 New SWE-Bench Pro Tasks)
 
-`scripts/rehost_sweap_images.py` now supports targeted operation by task id/tag so we can
+`scripts/infra/rehost_sweap_images.py` now supports targeted operation by task id/tag so we can
 rehost only the new images instead of all SWEAP tags at once.
 
 Targeted dry run (8 tags, 16 Dockerfiles):
 
 ```bash
-python3 scripts/rehost_sweap_images.py --dry-run \
+python3 scripts/infra/rehost_sweap_images.py --dry-run \
   --task-id webclients-excessive-repeated-api-fix-001 \
   --task-id webclients-contact-import-fails-fix-001 \
   --task-id webclients-api-error-metrics-fix-001 \
@@ -139,7 +139,7 @@ python3 scripts/rehost_sweap_images.py --dry-run \
 Rehost:
 
 ```bash
-python3 scripts/rehost_sweap_images.py --pull-push \
+python3 scripts/infra/rehost_sweap_images.py --pull-push \
   --task-id webclients-excessive-repeated-api-fix-001 \
   --task-id webclients-contact-import-fails-fix-001 \
   --task-id webclients-api-error-metrics-fix-001 \
@@ -153,7 +153,7 @@ python3 scripts/rehost_sweap_images.py --pull-push \
 After successful push, rewrite FROM lines for those tasks:
 
 ```bash
-python3 scripts/rehost_sweap_images.py --update-dockerfiles \
+python3 scripts/infra/rehost_sweap_images.py --update-dockerfiles \
   --task-id webclients-excessive-repeated-api-fix-001 \
   --task-id webclients-contact-import-fails-fix-001 \
   --task-id webclients-api-error-metrics-fix-001 \
@@ -180,7 +180,7 @@ a bug-fix execution task (patch + tests), so it remains best aligned to `fix`.
 
 ## 80% Power Task Gap (Current Sigma, Delta=0.05)
 
-Computed from `scripts/suite_power_analysis.py`:
+Computed from `scripts/analysis/suite_power_analysis.py`:
 
 | Suite | Current n | N needed @80% | Gap |
 |-------|-----------|---------------|-----|
@@ -239,6 +239,6 @@ suite-level interpretability, not macro-group viability.
 
 Each SWE-Bench Pro task has a unique Docker image at `jefzda/sweap-images:<tag>`.
 These must be rehosted to `ghcr.io/sg-evals/sweap-images:<tag>` for Daytona.
-The `scripts/rehost_sweap_images.py` script handles this automatically.
+The `scripts/infra/rehost_sweap_images.py` script handles this automatically.
 
 Until rehosted, tasks run locally (12 concurrent slots across 3 accounts).

@@ -116,7 +116,6 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - Jest + TypeScript needs 4-6GB RAM. Set `memory_mb = 8192` in `task.toml` for front-end test suites (default 2GB causes OOM).
 - **CSB dual-score**: agents produce file edits + `answer.json`; scored independently. Fallback: `promoted_verifier.py` → `oracle_checks.py` → heuristic.
 - Rate-limited results (score=0, duration <30s): quarantine with `scripts/maintenance/quarantine_invalid_tasks.py --execute`.
-- Bare `$VAR` in `instruction.md` gets expanded. Use `<placeholder>` syntax.
 
 ### Git / Auth
 - **Dual-remote**: `origin` = private, `upstream` = public. Only push `public` branch to `upstream`. See "Git Remotes and Branching".
@@ -129,7 +128,7 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 ### Python / Subprocess
 - `dict.get(key, default)` does NOT protect against `None` values. Use `data.get("key") or default_value`.
 - `with open(log) as f: subprocess.Popen(stdout=f)` closes the handle. Use `open()` without context manager for long-running subprocesses.
-- macOS Bash 3.2 lacks `declare -A`. Use pipe-delimited strings with `IFS='|' read -r`.
+- macOS Bash 3.2 lacks `declare -A`.
 
 ### LLM Judge
 - Always include "Respond with valid JSON only (escape all quotes and special characters)" in judge prompts. Unescaped quotes in LLM-generated JSON break parsing.

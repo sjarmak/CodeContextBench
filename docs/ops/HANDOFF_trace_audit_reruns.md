@@ -35,14 +35,14 @@ Set up and launch reruns for tasks identified by the trace audit. Three categori
 
 ```bash
 # Check these batches have the previously-errored tasks with valid results:
-python3 scripts/promote_run.py --dry-run feature_haiku_20260301_031848
-python3 scripts/promote_run.py --dry-run feature_haiku_20260301_071229
-python3 scripts/promote_run.py --dry-run refactor_haiku_20260301_031849
+python3 scripts/running/promote_run.py --dry-run feature_haiku_20260301_031848
+python3 scripts/running/promote_run.py --dry-run feature_haiku_20260301_071229
+python3 scripts/running/promote_run.py --dry-run refactor_haiku_20260301_031849
 
 # Promote (may need --force if warning count is high):
-python3 scripts/promote_run.py --execute feature_haiku_20260301_031848
-python3 scripts/promote_run.py --execute feature_haiku_20260301_071229
-python3 scripts/promote_run.py --execute --max-warnings 21 refactor_haiku_20260301_031849
+python3 scripts/running/promote_run.py --execute feature_haiku_20260301_031848
+python3 scripts/running/promote_run.py --execute feature_haiku_20260301_071229
+python3 scripts/running/promote_run.py --execute --max-warnings 21 refactor_haiku_20260301_031849
 ```
 
 After promotion, regenerate MANIFEST:
@@ -179,5 +179,5 @@ export HARBOR_ENV=local
 ## Next Best Command
 ```bash
 # Start with promoting completed staging batches:
-python3 scripts/promote_run.py --dry-run feature_haiku_20260301_031848
+python3 scripts/running/promote_run.py --dry-run feature_haiku_20260301_031848
 ```

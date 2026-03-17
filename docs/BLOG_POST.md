@@ -209,7 +209,7 @@ All results described here, including full traces, tool breakdowns, and IR metri
 In addition to being able to navigate the results via markdowns, if you clone the repo and run:
 
 ```
-python3 scripts/export_official_results.py --serve
+python3 scripts/analysis/export_official_results.py --serve
 ```
 
 You get a local results explorer where you can browse every task run. The current `runs/analysis` export includes 1,281 valid scored rows (and 1,822 total historical rows in `all_tasks`).

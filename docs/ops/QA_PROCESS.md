@@ -132,7 +132,7 @@ python3 scripts/infra/check_infra.py
 
 ## 3. Error Fingerprinting
 
-**Script:** `scripts/status_fingerprints.py`
+**Script:** `scripts/analysis/status_fingerprints.py`
 
 Classifies task failures into known categories using 12 regex patterns. Each pattern includes severity level and auto-retry guidance.
 

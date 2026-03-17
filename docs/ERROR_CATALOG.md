@@ -2,7 +2,7 @@
 
 A living catalog of known error patterns encountered in CodeScaleBench benchmark runs. Each entry documents the pattern signature, root cause, affected benchmarks, and recommended fix. Use this to quickly diagnose and resolve failures.
 
-Fingerprints are defined in `scripts/status_fingerprints.py` and matched in order (first match wins).
+Fingerprints are defined in `scripts/analysis/status_fingerprints.py` and matched in order (first match wins).
 
 ## Summary
 
@@ -196,7 +196,7 @@ Fingerprints are defined in `scripts/status_fingerprints.py` and matched in orde
 Set `DEBUG_MODE=true` before running configs to capture full verifier diagnostics:
 
 ```bash
-DEBUG_MODE=true ./configs/test_2config.sh
+DEBUG_MODE=true ./configs/harnesses/test_2config.sh
 ```
 
 Debug output is written to `/logs/verifier/debug/` inside the container and does not affect scoring. The following files are captured:

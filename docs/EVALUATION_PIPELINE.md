@@ -72,7 +72,7 @@ Verifier types are documented in [SCORING_SEMANTICS.md](SCORING_SEMANTICS.md).
 Set `DEBUG_MODE=true` to capture full diagnostics before verification runs:
 
 ```bash
-DEBUG_MODE=true ./configs/fix_2config.sh --task my-task-001
+DEBUG_MODE=true ./configs/harnesses/fix_2config.sh --task my-task-001
 ```
 
 Debug output goes to `/logs/verifier/debug/`:
@@ -198,7 +198,7 @@ Spearman rank correlation between IR metrics and task rewards, stratified by
 suite:
 
 ```bash
-python3 scripts/ir_analysis.py --correlate --min-confidence medium
+python3 scripts/analysis/ir_analysis.py --correlate --min-confidence medium
 ```
 
 ### Defect Annotation Model
@@ -262,7 +262,7 @@ distinct dimensions. Report generators should use verifier `passed` /
 
 ```bash
 # Full evaluation report (includes judge data if available)
-python3 scripts/generate_eval_report.py \
+python3 scripts/maintenance/generate_eval_report.py \
   --runs-dir runs/official/ \
   --output-dir ./eval_reports/
 

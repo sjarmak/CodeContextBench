@@ -128,7 +128,7 @@ done
 
 ### Generate report
 ```bash
-python3 scripts/generate_eval_report.py
+python3 scripts/maintenance/generate_eval_report.py
 ```
 
 ## Actual Run Results

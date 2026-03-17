@@ -129,10 +129,10 @@ runs/staging/{run_name}/
 ```
 
 These artifacts are fully compatible with:
-- **Runs explorer**: `python3 scripts/export_official_results.py` (defaults to `runs/analysis/`; pass `--runs-dir ./runs/official/` for curated official runs)
-- **IR analysis pipeline**: `python3 scripts/normalize_retrieval_events.py`
+- **Runs explorer**: `python3 scripts/analysis/export_official_results.py` (defaults to `runs/analysis/`; pass `--runs-dir ./runs/official/` for curated official runs)
+- **IR analysis pipeline**: `python3 scripts/evaluation/normalize_retrieval_events.py`
 - **QA validation**: `python3 scripts/authoring/validate_task_run.py`
-- **Metrics extraction**: `python3 scripts/extract_task_metrics.py`
+- **Metrics extraction**: `python3 scripts/evaluation/extract_task_metrics.py`
 - **Staging to official promotion**: copy to `runs/official/`, update `MANIFEST.json`
 
 ### How It Works
@@ -274,7 +274,7 @@ runs/daytona/{run_id}/
 - **TAC images** (4 tasks): `ghcr.io/theagentcompany/*` on GHCR
 - **Linux kernel tasks** (5 tasks): Build from `gcc:13` with inline kernel source clone
 
-**Not Daytona-compatible** (21 tasks): Tasks using `jefzda/sweap-images:*` from Docker Hub (9 csb_sdlc_debug + 12 csb_sdlc_fix) fail because Daytona's remote builder cannot pull from Docker Hub (returns `unauthorized` error even for public images). Run these tasks locally with Docker instead. To re-host them to GHCR, use `scripts/rehost_sweap_images.py` with a GITHUB_TOKEN that has `write:packages` scope.
+**Not Daytona-compatible** (21 tasks): Tasks using `jefzda/sweap-images:*` from Docker Hub (9 csb_sdlc_debug + 12 csb_sdlc_fix) fail because Daytona's remote builder cannot pull from Docker Hub (returns `unauthorized` error even for public images). Run these tasks locally with Docker instead. To re-host them to GHCR, use `scripts/infra/rehost_sweap_images.py` with a GITHUB_TOKEN that has `write:packages` scope.
 
 Regenerate the task registry after adding new tasks:
 ```bash
@@ -343,6 +343,6 @@ Partly. Running the full suite at high parallelism will always use a lot of comp
 
 **Harbor + Daytona: "Sandbox not found"**: Usually a transient resource-contention error — Daytona could not allocate a sandbox when all slots were occupied. The retry logic in `_common.sh` will automatically re-queue these tasks with exponential backoff (up to 3 attempts). If it persists, check your Daytona tier limits or ensure `daytona-sdk` is installed in the same Python environment as Harbor.
 
-**Docker Hub images fail with "unauthorized"**: Daytona's remote builder cannot pull `jefzda/sweap-images:*` from Docker Hub. This affects 21 SWE-bench Pro tasks (9 csb_sdlc_debug + 12 csb_sdlc_fix). Run these locally or re-host images to GHCR using `scripts/rehost_sweap_images.py`.
+**Docker Hub images fail with "unauthorized"**: Daytona's remote builder cannot pull `jefzda/sweap-images:*` from Docker Hub. This affects 21 SWE-bench Pro tasks (9 csb_sdlc_debug + 12 csb_sdlc_fix). Run these locally or re-host images to GHCR using `scripts/infra/rehost_sweap_images.py`.
 
 **Sandbox creation fails for tasks with `storage = "20G"` in task.toml**: Daytona has a hard 10GB per-sandbox storage limit. 39 tasks specify `storage = "20G"` and 1 specifies `"15G"`, exceeding this limit. Set `export DAYTONA_OVERRIDE_STORAGE=10240` before launching runs. This passes `--override-storage-mb 10240` to all `harbor run` commands, capping storage at 10GB. The actual Docker images are 1.5-5GB so 10GB is sufficient.

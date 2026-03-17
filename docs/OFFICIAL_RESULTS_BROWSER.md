@@ -4,7 +4,7 @@ Use this workflow to browse scored task results with parsed traces and task metr
 
 ## What It Exports
 
-`python3 scripts/export_official_results.py` scans `runs/analysis/` by default and exports only valid scored tasks (status `passed`/`failed` with numeric reward) into a static bundle:
+`python3 scripts/analysis/export_official_results.py` scans `runs/analysis/` by default and exports only valid scored tasks (status `passed`/`failed` with numeric reward) into a static bundle:
 
 - `docs/official_results/README.md` - run/config score summary
 - `docs/official_results/runs/*.md` - per-run task tables
@@ -34,14 +34,14 @@ artifact-mode configs:
 Default usage (pull from `runs/analysis/`):
 
 ```bash
-python3 scripts/export_official_results.py \
+python3 scripts/analysis/export_official_results.py \
   --output-dir ./docs/official_results/
 ```
 
 To export curated official runs instead:
 
 ```bash
-python3 scripts/export_official_results.py \
+python3 scripts/analysis/export_official_results.py \
   --runs-dir ./runs/official/ \
   --output-dir ./docs/official_results/
 ```
@@ -53,7 +53,7 @@ views at top-level). Export tooling handles this automatically; pass
 If you promote runs with:
 
 ```bash
-python3 scripts/promote_run.py --execute <staging_run_name>
+python3 scripts/running/promote_run.py --execute <staging_run_name>
 ```
 
 `docs/official_results` is refreshed automatically after successful promotion
@@ -63,7 +63,7 @@ step when needed.
 Filter to specific run(s):
 
 ```bash
-python3 scripts/export_official_results.py \
+python3 scripts/analysis/export_official_results.py \
   --run csb_org_compliance_haiku_20260226_205845 \
   --run csb_org_domain_haiku_20260226_205845
 ```
@@ -71,7 +71,7 @@ python3 scripts/export_official_results.py \
 Serve locally after export:
 
 ```bash
-python3 scripts/export_official_results.py --serve
+python3 scripts/analysis/export_official_results.py --serve
 ```
 
 ## Notes

@@ -89,7 +89,7 @@ def main() -> int:
 
     lines.append("## Regeneration")
     lines.append("```bash")
-    lines.append("python3 scripts/generate_script_registry.py")
+    lines.append("python3 scripts/maintenance/generate_script_registry.py")
     lines.append("python3 scripts/maintenance/generate_script_index.py")
     lines.append("```")
     lines.append("")

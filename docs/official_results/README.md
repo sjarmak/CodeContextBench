@@ -8,7 +8,7 @@ Generated: `2026-03-12T00:37:45.588148+00:00`
 ## Local Browse
 
 ```bash
-python3 scripts/export_official_results.py --serve
+python3 scripts/analysis/export_official_results.py --serve
 ```
 
 Suite-level views are deduplicated to the latest row per `suite + config + task_name`.

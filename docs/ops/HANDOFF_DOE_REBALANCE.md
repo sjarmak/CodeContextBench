@@ -29,7 +29,7 @@ The Neyman-optimal allocation for a 150-task budget (proportional to within-suit
 ## Current Status
 
 - DOE analysis scripts written and validated:
-  - `scripts/doe_variance_analysis.py` — variance decomposition, per-suite power, Neyman/minimax allocation
+  - `scripts/analysis/doe_variance_analysis.py` — variance decomposition, per-suite power, Neyman/minimax allocation
   - `scripts/doe_power_curves.py` — power curves for main effect, SDLC interaction, continuous moderators, 3-arm SCIP design
 - Both scripts read from `runs/official/MANIFEST.json` (run_history section)
 - Analysis outputs verified against 175 paired tasks, 3-8 reps each
@@ -37,7 +37,7 @@ The Neyman-optimal allocation for a 150-task budget (proportional to within-suit
 
 ## Files Changed (this session)
 
-- `scripts/doe_variance_analysis.py` — NEW (variance decomposition + allocation)
+- `scripts/analysis/doe_variance_analysis.py` — NEW (variance decomposition + allocation)
 - `scripts/doe_power_curves.py` — NEW (power curves for interaction effects)
 
 ## Key Findings / Decisions
@@ -88,7 +88,7 @@ Selection criteria for which tasks to move OUT:
 
 ```bash
 # Run the variance analysis to get per-task stats
-python3 scripts/doe_variance_analysis.py --json > /tmp/doe_analysis.json
+python3 scripts/analysis/doe_variance_analysis.py --json > /tmp/doe_analysis.json
 
 # The JSON output includes task_means and task_stds per suite per config
 # Use these to rank tasks by information value
@@ -152,7 +152,7 @@ python3 scripts/authoring/validate_tasks_preflight.py
 ```bash
 # Start by writing the information-value ranking script
 # This is the prerequisite for deciding WHICH tasks to keep/move
-python3 scripts/doe_variance_analysis.py --json 2>/dev/null | python3 -c "
+python3 scripts/analysis/doe_variance_analysis.py --json 2>/dev/null | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 print(json.dumps(data, indent=2)[:2000])

@@ -58,10 +58,10 @@ From the repo root:
 
 ```bash
 # Generate manifest only (no execution)
-python3 scripts/control_plane.py generate --spec configs/control_plane_csb.yaml --output runs/staging/manifest.json
+python3 scripts/running/control_plane.py generate --spec configs/control_plane_csb.yaml --output runs/staging/manifest.json
 
 # Dry-run: print what would be run
-python3 scripts/control_plane.py generate --spec configs/control_plane_csb.yaml --dry-run
+python3 scripts/running/control_plane.py generate --spec configs/control_plane_csb.yaml --dry-run
 ```
 
 The manifest JSON looks like:
@@ -114,7 +114,7 @@ The **control plane layer** described here is complementary:
 
 1. Ensure `configs/selected_benchmark_tasks.json` (or your task source) is up to date.
 2. Create or edit a control plane spec (e.g. `configs/control_plane_csb.yaml`).
-3. Run `python3 scripts/control_plane.py generate --spec ... --output ...` to produce the manifest.
+3. Run `python3 scripts/running/control_plane.py generate --spec ... --output ...` to produce the manifest.
 4. Run the benchmark using that manifest (e.g. `run_selected_tasks.sh --manifest runs/staging/<exp_id>/manifest.json`).
 5. Post-run: `generate_manifest.py`, `generate_eval_report.py`, etc. can key off `experiment_id` and run IDs from the control plane manifest for consistent reporting.
 
@@ -124,5 +124,5 @@ The **control plane layer** described here is complementary:
 |------|---------|
 | `docs/CONTROL_PLANE.md` | This design and usage. |
 | `configs/control_plane_csb.yaml` | Example control plane spec for CSB 2-config. |
-| `scripts/control_plane.py` | Manifest generator: spec + task source → manifest JSON. |
+| `scripts/running/control_plane.py` | Manifest generator: spec + task source → manifest JSON. |
 | `lib/matrix/id_generator.py` | Deterministic experiment_id, run_id, pair_id (unchanged). |

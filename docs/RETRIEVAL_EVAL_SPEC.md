@@ -175,7 +175,7 @@ runs/{staging|official}/{run_id}/retrieval_events/
 
 ## Pipeline Stages
 
-The full evaluation pipeline (`scripts/retrieval_eval_pipeline.py`) runs five
+The full evaluation pipeline (`scripts/evaluation/retrieval_eval_pipeline.py`) runs five
 stages on each normalized event document:
 
 ### Stage 1: File-Level IR Metrics
@@ -343,7 +343,7 @@ these should be implemented without explicit policy discussion.**
   the agent retrieved ≥50% of ground truth files"). This would be
   supplementary, not replacing the primary ranking.
 
-### `scripts/generate_eval_report.py`
+### `scripts/maintenance/generate_eval_report.py`
 
 - **Supplementary tables**: A future version of the report generator could
   optionally include retrieval quality tables and correlation summaries

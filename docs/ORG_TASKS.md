@@ -56,7 +56,7 @@ cross-repo tasks — not whether MCP can access information the baseline can't.
 │        └── criteria.json   (rubric for DS tasks, optional)  │
 │                                                             │
 │  scripts/csb_metrics/retrieval.py      (KPI extractor)     │
-│  scripts/curate_oracle.py              (oracle auto-curator)│
+│  scripts/running/curate_oracle.py              (oracle auto-curator)│
 │  scripts/authoring/validate_org_task_instance.py (validity gate)     │
 └────────────────────────────────────────────────────────────┘
 ```
@@ -148,7 +148,7 @@ files from the template.
 
 **Step 3: Curate the oracle using Sourcegraph MCP**
 ```bash
-python3 scripts/curate_oracle.py \
+python3 scripts/running/curate_oracle.py \
   --task-dir benchmarks/csb_org_crossrepo_tracing/ccx-dep-trace-001 \
   --verbose
 ```
@@ -307,7 +307,7 @@ python3 scripts/analysis/aggregate_status.py --staging
 ### Generate Report
 
 ```bash
-python3 scripts/generate_eval_report.py --runs-dir runs/staging
+python3 scripts/maintenance/generate_eval_report.py --runs-dir runs/staging
 ```
 
 The report automatically includes an **MCP Retrieval Performance** section when
