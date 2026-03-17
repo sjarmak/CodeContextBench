@@ -283,6 +283,7 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/infra/remirror_org_repos.sh` - Utility script for remirror org repos.
 - `scripts/infra/rename_project.py` - Utility script for rename project.
 - `scripts/maintenance/repair_h3_trajectories.py` [one_off] - Historical one-off script: repair h3 trajectories.
+- `scripts/csb_metrics/report_formatter.py` - Utility script for report formatter.
 - `scripts/running/rerun_crossrepo_2tasks.sh` [one_off] - Historical one-off script: rerun crossrepo 2tasks.
 - `scripts/running/rerun_crossrepo_all4.sh` [one_off] - Historical one-off script: rerun crossrepo all4.
 - `scripts/running/rerun_crossrepo_fixed.sh` [one_off] - Historical one-off script: rerun crossrepo fixed.
