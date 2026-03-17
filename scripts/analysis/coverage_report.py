@@ -6,13 +6,14 @@ distinguishing official vs staging and showing validation status for staging run
 
 Usage:
     python3 scripts/analysis/coverage_report.py                          # All suites
-    python3 scripts/analysis/coverage_report.py --model sonnet-4.6       # Filter by model
+    python3 scripts/analysis/coverage_report.py --model sonnet           # Filter by model
     python3 scripts/analysis/coverage_report.py --agent openhands        # Filter by agent
     python3 scripts/analysis/coverage_report.py --model sonnet --agent cc  # Both filters
 """
 
 import argparse
 import json
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -25,8 +26,6 @@ sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "evaluation"))
 
 from config_utils import detect_suite, discover_configs
 from official_runs import raw_runs_dir
-from csb_metrics.run_scanner import RunScanner
-from csb_metrics.coverage_audit import CoverageAudit, CoverageStatus
 
 # ANSI colors
 GREEN = "\033[92m"
@@ -47,14 +46,16 @@ def extract_model_from_run_name(run_name: str) -> Optional[str]:
         csb_sdlc_design_sonnet_20260316_170420 -> sonnet
         openhands_sonnet46_20260316_170312 -> sonnet46
     """
-    parts = run_name.split("_")
-    # Look for part that contains model name (haiku, sonnet, opus, claude-4, etc.)
-    for i, part in enumerate(parts):
-        if any(
-            model in part.lower()
-            for model in ["sonnet", "opus", "haiku", "claude", "gpt"]
-        ):
-            return part
+    # Look for model patterns (sonnet, sonnet46, opus, haiku, etc.)
+    for pattern in ["sonnet46", "sonnet", "opus", "haiku", "claude", "gpt"]:
+        if pattern in run_name.lower():
+            # Extract the actual token
+            match = re.search(
+                r"(sonnet\d*|opus|haiku|claude[^_]*|gpt[^_]*)",
+                run_name.lower()
+            )
+            if match:
+                return match.group(1)
     return None
 
 
@@ -109,7 +110,7 @@ def scan_official_runs() -> dict[str, dict[str, set[str]]]:
     if not RUNS_OFFICIAL.exists():
         return coverage
 
-    # Use RunScanner to find all tasks in official runs
+    # Scan official runs
     try:
         for run_dir in sorted(RUNS_OFFICIAL.iterdir()):
             if not run_dir.is_dir():
@@ -122,11 +123,13 @@ def scan_official_runs() -> dict[str, dict[str, set[str]]]:
             # Scan configs in this run
             for config in discover_configs(run_dir):
                 config_path = run_dir / config
-                scanner = RunScanner(run_dir, validate_results=False)
 
-                for task_dir in scanner.iter_task_dirs():
-                    task_name = task_dir.name.rsplit("__", 1)[0]
-                    coverage[suite][config].add(task_name)
+                # Find all result.json files
+                for result_file in config_path.rglob("result.json"):
+                    task_dir = result_file.parent
+                    if "__" in task_dir.name:
+                        task_name = task_dir.name.rsplit("__", 1)[0]
+                        coverage[suite][config].add(task_name)
     except Exception:
         pass  # Gracefully handle missing or malformed runs
 
@@ -139,8 +142,10 @@ def scan_staging_runs(
 ) -> dict[str, dict[str, dict[str, dict]]]:
     """Scan runs/staging/ for runs and their validation status.
 
+    Staging structure: run_dir/config/timestamp/task_dir/result.json
+
     Returns:
-        Dict mapping suite -> config -> task_name -> {status, run_name, valid/invalid/unlabeled}
+        Dict mapping suite -> config -> task_name -> {status, run_name}
     """
     coverage = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
 
@@ -168,33 +173,63 @@ def scan_staging_runs(
         if not suite:
             continue
 
-        # Scan configs in this staging run
-        for config in discover_configs(run_dir):
-            config_path = run_dir / config
-            scanner = RunScanner(run_dir, validate_results=False)
+        # Staging structure: run_dir/config/timestamp/task_dir/result.json
+        for config_path in run_dir.iterdir():
+            if not config_path.is_dir():
+                continue
 
-            for task_dir in scanner.iter_task_dirs():
-                task_name = task_dir.name.rsplit("__", 1)[0]
+            config_name = config_path.name
 
-                # Check validation status
-                result_json = task_dir / "result.json"
-                validation_status = "unlabeled"  # default
+            # Iterate through timestamp directories
+            for timestamp_path in config_path.iterdir():
+                if not timestamp_path.is_dir():
+                    continue
 
-                if result_json.exists():
-                    try:
-                        data = json.loads(result_json.read_text())
-                        status = data.get("status", "")
-                        if status in ("passed", "failed"):
-                            validation_status = "valid"
-                        elif status == "errored":
-                            validation_status = "invalid"
-                    except (json.JSONDecodeError, OSError):
-                        pass
+                # Iterate through task directories or result.json
+                for task_or_result in timestamp_path.iterdir():
+                    result_file = None
+                    task_name = None
 
-                coverage[suite][config][task_name] = {
-                    "run_name": run_name,
-                    "status": validation_status,
-                }
+                    if task_or_result.is_file() and task_or_result.name == "result.json":
+                        # result.json directly in timestamp dir
+                        result_file = task_or_result
+                        # Extract task name from result.json
+                        try:
+                            data = json.loads(result_file.read_text())
+                            task_name = data.get("task_name", "")
+                            if not task_name:
+                                # Try to get from task_id
+                                task_id = data.get("task_id", {})
+                                if isinstance(task_id, dict):
+                                    task_name = task_id.get("name", "")
+                        except (json.JSONDecodeError, OSError):
+                            pass
+
+                    elif task_or_result.is_dir() and "__" in task_or_result.name:
+                        # task_dir/result.json structure
+                        task_name = task_or_result.name.rsplit("__", 1)[0]
+                        result_file = task_or_result / "result.json"
+                        if not result_file.exists():
+                            result_file = None
+
+                    if result_file and result_file.exists() and task_name:
+                        # Check validation status
+                        validation_status = "unlabeled"  # default
+
+                        try:
+                            data = json.loads(result_file.read_text())
+                            status = data.get("status", "")
+                            if status in ("passed", "failed"):
+                                validation_status = "valid"
+                            elif status == "errored":
+                                validation_status = "invalid"
+                        except (json.JSONDecodeError, OSError):
+                            pass
+
+                        coverage[suite][config_name][task_name] = {
+                            "run_name": run_name,
+                            "status": validation_status,
+                        }
 
     return coverage
 
@@ -298,7 +333,7 @@ def main():
         epilog="""
 Examples:
   %(prog)s                              Show overall coverage
-  %(prog)s --model sonnet-4.6           Filter to model
+  %(prog)s --model sonnet               Filter to model
   %(prog)s --agent openhands            Filter to agent
   %(prog)s --model sonnet --agent cc    Filter to both
         """,
