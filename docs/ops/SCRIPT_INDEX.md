@@ -212,6 +212,7 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/running/context_retrieval_agent.py` - Utility script for context retrieval agent.
 - `scripts/running/control_plane.py` - Utility script for control plane.
 - `scripts/running/convert_harbor_to_contextbench.py` - Utility script for convert harbor to contextbench.
+- `scripts/csb_metrics/coverage_audit.py` - Utility script for coverage audit.
 - `scripts/evaluation/cross_validate_gt.py` - Utility script for cross validate gt.
 - `scripts/evaluation/cross_validate_oracles.py` - Utility script for cross validate oracles.
 - `scripts/infra/daytona_cost_guard.py` - Utility script for daytona cost guard.
