@@ -1597,15 +1597,34 @@ def iter_all_trials(runs_dirs: list[Path], verbose: bool = False):
 
 def _walk_nested(parent: Path, top_name: str, count: int, verbose: bool,
                  results: list):
-    """Walk nested directory structures looking for config/trial patterns."""
+    """Walk nested directory structures looking for config/trial patterns.
+
+    Handles both old-style (config/timestamp/trial) and CSB-style (config/timestamp/task__hash)
+    directory structures.
+    """
     if not parent.is_dir():
         return
+
+    # Pattern to detect timestamp directories (YYYY-MM-DD__HH-MM-SS)
+    import re
+    _TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}__\d{2}-\d{2}-\d{2}")
 
     for child in sorted(parent.iterdir()):
         if not child.is_dir() or should_skip(child.name):
             continue
 
-        # Check if child is a config directory
+        # Special case: if child is a timestamp directory, call _iter_task_dirs on it directly
+        # (This handles CSB staging structure: config/timestamp/task__hash/)
+        if _TIMESTAMP_RE.match(child.name):
+            config_name = _infer_config(child)
+            for trial_dir in _iter_task_dirs(child):
+                result_file = trial_dir / "result.json"
+                if result_file.is_file():
+                    suite = _infer_suite(trial_dir)
+                    results.append((trial_dir, top_name, config_name, suite))
+            continue
+
+        # Check if child is a config directory (has timestamp subdirs or other configs)
         configs = discover_configs(child)
         if configs:
             suite = detect_suite(child.name)
@@ -1613,6 +1632,21 @@ def _walk_nested(parent: Path, top_name: str, count: int, verbose: bool,
                 config_path = child / config_name
                 for trial_dir in _iter_task_dirs(config_path):
                     results.append((trial_dir, top_name, config_name, suite))
+            continue
+
+        # Check if this directory contains timestamp subdirectories (config-level directory)
+        has_timestamps = False
+        for grandchild in sorted(child.iterdir()):
+            if grandchild.is_dir() and _TIMESTAMP_RE.match(grandchild.name):
+                has_timestamps = True
+                config_name = child.name if is_config_dir(child.name) else _infer_config(grandchild)
+                for trial_dir in _iter_task_dirs(grandchild):
+                    result_file = trial_dir / "result.json"
+                    if result_file.is_file():
+                        suite = detect_suite(top_name) or _infer_suite(trial_dir)
+                        results.append((trial_dir, top_name, config_name, suite))
+
+        if has_timestamps:
             continue
 
         # Check if this directory itself has config-like children
