@@ -12,28 +12,28 @@ Checks task definitions for known problems that would waste compute:
 
 Usage:
     # Validate all tasks in a suite
-    python3 scripts/validate_tasks_preflight.py --suite ccb_pytorch
+    python3 scripts/authoring/validate_tasks_preflight.py --suite ccb_pytorch
 
     # Validate all selected tasks
-    python3 scripts/validate_tasks_preflight.py --all
+    python3 scripts/authoring/validate_tasks_preflight.py --all
 
     # Validate a single task
-    python3 scripts/validate_tasks_preflight.py --task benchmarks/ccb_pytorch/sgt-005
+    python3 scripts/authoring/validate_tasks_preflight.py --task benchmarks/ccb_pytorch/sgt-005
 
     # JSON output
-    python3 scripts/validate_tasks_preflight.py --all --format json
+    python3 scripts/authoring/validate_tasks_preflight.py --all --format json
 
     # Runtime smoke (no agent): Docker build + verifier execution + fixture self-tests
-    python3 scripts/validate_tasks_preflight.py --task benchmarks/ccb_largerepo/big-code-k8s-001 --smoke-runtime
+    python3 scripts/authoring/validate_tasks_preflight.py --task benchmarks/ccb_largerepo/big-code-k8s-001 --smoke-runtime
 
     # Runtime smoke for a full suite (expensive)
-    python3 scripts/validate_tasks_preflight.py --suite ccb_largerepo --smoke-runtime --smoke-timeout-sec 900
+    python3 scripts/authoring/validate_tasks_preflight.py --suite ccb_largerepo --smoke-runtime --smoke-timeout-sec 900
 
     # Idempotency check only (also activated by --smoke-runtime)
-    python3 scripts/validate_tasks_preflight.py --all --idempotency
+    python3 scripts/authoring/validate_tasks_preflight.py --all --idempotency
 
     # Fixture self-tests only (without Docker smoke)
-    python3 scripts/validate_tasks_preflight.py --all --fixture-tests
+    python3 scripts/authoring/validate_tasks_preflight.py --all --fixture-tests
 """
 
 import argparse

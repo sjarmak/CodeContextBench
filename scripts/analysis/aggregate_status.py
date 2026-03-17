@@ -6,22 +6,22 @@ fingerprints errors, and produces structured summaries.
 
 Usage:
     # JSON output (default)
-    python3 scripts/aggregate_status.py
+    python3 scripts/analysis/aggregate_status.py
 
     # Compact table
-    python3 scripts/aggregate_status.py --format table
+    python3 scripts/analysis/aggregate_status.py --format table
 
     # Only failures
-    python3 scripts/aggregate_status.py --failures-only --format table
+    python3 scripts/analysis/aggregate_status.py --failures-only --format table
 
     # Filter by suite or config
-    python3 scripts/aggregate_status.py --suite ccb_pytorch --config baseline
+    python3 scripts/analysis/aggregate_status.py --suite ccb_pytorch --config baseline
 
     # Continuous watch mode
-    python3 scripts/aggregate_status.py --format table --watch --interval 30
+    python3 scripts/analysis/aggregate_status.py --format table --watch --interval 30
 
     # Write per-task status.json files
-    python3 scripts/aggregate_status.py --write-status
+    python3 scripts/analysis/aggregate_status.py --write-status
 """
 
 import argparse

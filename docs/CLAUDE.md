@@ -18,4 +18,4 @@ Use this file when editing documentation or improving agent navigation.
 
 ## Maintenance
 - Regenerate agent guides and script index after structural changes.
-- Run `python3 scripts/docs_consistency_check.py` after editing links or references.
+- Run `python3 scripts/maintenance/docs_consistency_check.py` after editing links or references.

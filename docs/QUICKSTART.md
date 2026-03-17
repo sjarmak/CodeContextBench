@@ -10,4 +10,4 @@ For Beads usage in this repository:
 For Daytona benchmark execution:
 
 - Start with [docs/DAYTONA.md](./DAYTONA.md).
-- Check account readiness with `python3 scripts/check_infra.py` and `python3 scripts/account_health.py status`.
+- Check account readiness with `python3 scripts/infra/check_infra.py` and `python3 scripts/infra/account_health.py status`.

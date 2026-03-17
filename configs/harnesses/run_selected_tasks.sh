@@ -9,7 +9,7 @@
 # and runs each task through Harbor with the specified configuration(s).
 #
 # Usage:
-#   ./configs/run_selected_tasks.sh [OPTIONS]
+#   ./configs/harnesses/run_selected_tasks.sh [OPTIONS]
 #
 # Options:
 #   --benchmark BENCHMARK           Run only this benchmark (e.g., csb_sdlc_feature, csb_sdlc_fix)

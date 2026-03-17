@@ -114,7 +114,7 @@ All 8 registered in `configs/selected_benchmark_tasks.json`.
 ## Remaining Steps
 
 1. Rehost the 8 SWEAP images from Docker Hub to GHCR
-2. Run preflight validation: `python3 scripts/validate_tasks_preflight.py`
+2. Run preflight validation: `python3 scripts/authoring/validate_tasks_preflight.py`
 3. Execute baseline + MCP paired runs (3+ per task)
 
 ## Rehost Execution (8 New SWE-Bench Pro Tasks)

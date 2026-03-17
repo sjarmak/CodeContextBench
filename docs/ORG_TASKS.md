@@ -170,7 +170,7 @@ Add an entry to `configs/selected_benchmark_tasks.json`.
 
 **Step 6: Run preflight**
 ```bash
-python3 scripts/validate_tasks_preflight.py --suite csb_org_crossrepo_tracing
+python3 scripts/authoring/validate_tasks_preflight.py --suite csb_org_crossrepo_tracing
 ```
 
 ### Manual Oracle Authoring
@@ -282,26 +282,26 @@ Some legacy runs used `baseline-local-artifact` + `mcp-remote-artifact` configs;
 
 ```bash
 # Both configs (baseline-local-direct + mcp-remote-direct)
-configs/run_selected_tasks.sh --benchmark csb_org --parallel 8
+configs/harnesses/run_selected_tasks.sh --benchmark csb_org --parallel 8
 
 # Dry run to preview
-configs/run_selected_tasks.sh --benchmark csb_org --dry-run
+configs/harnesses/run_selected_tasks.sh --benchmark csb_org --dry-run
 ```
 
 ### Category-Filtered Run
 
 ```bash
 # Run only cross-repo tracing suite
-configs/run_selected_tasks.sh --benchmark csb_org_crossrepo_tracing
+configs/harnesses/run_selected_tasks.sh --benchmark csb_org_crossrepo_tracing
 
 # Run only onboarding suite
-configs/run_selected_tasks.sh --benchmark csb_org_onboarding
+configs/harnesses/run_selected_tasks.sh --benchmark csb_org_onboarding
 ```
 
 ### Monitoring
 
 ```bash
-python3 scripts/aggregate_status.py --staging
+python3 scripts/analysis/aggregate_status.py --staging
 ```
 
 ### Generate Report
@@ -384,7 +384,7 @@ Hybrid score = 0.6 × verifier_reward + 0.4 × rubric_score.
 2. Copy an existing task as a template, update Dockerfile with the required repos
 3. The suite directory `benchmarks/csb_org_<suite>/` must be created manually
 4. Add the suite prefix to `DIR_PREFIX_TO_SUITE` in:
-   - `scripts/aggregate_status.py`
+   - `scripts/analysis/aggregate_status.py`
    - `scripts/generate_manifest.py`
    - `scripts/run_judge.py`
 

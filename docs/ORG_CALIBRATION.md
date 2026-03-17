@@ -102,18 +102,18 @@ Disk: 290GB free
 ### Launch both configs (baseline + MCP-Full)
 ```bash
 # Full starter pack — both configs (all Org tasks)
-configs/run_selected_tasks.sh --benchmark csb_org --parallel 8
+configs/harnesses/run_selected_tasks.sh --benchmark csb_org --parallel 8
 
 # Suite-specific run
-configs/run_selected_tasks.sh --benchmark csb_org_crossrepo_tracing --parallel 4
+configs/harnesses/run_selected_tasks.sh --benchmark csb_org_crossrepo_tracing --parallel 4
 
 # Single task test
-configs/run_selected_tasks.sh --task ccx-onboard-041
+configs/harnesses/run_selected_tasks.sh --task ccx-onboard-041
 ```
 
 ### Monitor progress
 ```bash
-python3 scripts/aggregate_status.py --staging
+python3 scripts/analysis/aggregate_status.py --staging
 ```
 
 ### Extract retrieval metrics after runs complete

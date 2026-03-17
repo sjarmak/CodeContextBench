@@ -13,7 +13,7 @@ mkdir -p "$LOG_DIR"
 name="openlibrary_fix_rerun_20260303"
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] START $name"
 set +o pipefail
-./configs/run_selected_tasks.sh \
+./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/coverage_gap_20260303/openlibrary_solr_boolean_fix_rerun_20260303.json \
   <<< "" 2>&1 | tee "$LOG_DIR/${name}.log"
 cmd_status=${PIPESTATUS[0]}

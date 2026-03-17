@@ -13,7 +13,7 @@ CodeScaleBench.
 3. Register tasks in `configs/selected_benchmark_tasks.json`.
 4. Run preflight:
    ```bash
-   python3 scripts/validate_tasks_preflight.py --suite <suite>
+   python3 scripts/authoring/validate_tasks_preflight.py --suite <suite>
    ```
 5. Add/update the phase runner in `configs/<phase>_2config.sh` (e.g. `understand_2config.sh` for suite `csb_sdlc_understand`). Runner names use the phase name without the `csb_sdlc_` prefix.
 
@@ -65,7 +65,7 @@ python3 scripts/quarantine_invalid_tasks.py --execute
 Run:
 
 ```bash
-python3 scripts/docs_consistency_check.py
+python3 scripts/maintenance/docs_consistency_check.py
 ```
 
 This validates that core docs do not reference missing scripts/configs.
@@ -97,7 +97,7 @@ python3 scripts/generate_csb_org_tasks.py --use-case-ids <N> --curate-oracle --v
 
 # 3. Validate
 python3 scripts/validate_org_task_instance.py --task-dir benchmarks/csb_org_<suite>/<task>
-python3 scripts/validate_tasks_preflight.py --suite csb_org_<suite>
+python3 scripts/authoring/validate_tasks_preflight.py --suite csb_org_<suite>
 ```
 
 **Key constraints:**
@@ -124,6 +124,6 @@ benchmarks/csb_org_<suite>/<task>/
 ```
 
 When adding a new csb_org_* suite, add the prefix to `DIR_PREFIX_TO_SUITE` in:
-- `scripts/aggregate_status.py`
+- `scripts/analysis/aggregate_status.py`
 - `scripts/generate_manifest.py`
 - `scripts/run_judge.py`

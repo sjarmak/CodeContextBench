@@ -26,15 +26,15 @@ run_wave() {
 }
 
 run_wave "vm_recovery_paired_20260303" \
-  ./configs/run_selected_tasks.sh \
+  ./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/coverage_gap_20260303/vm_recovery_paired_no_openlibrary_20260303.json
 
 run_wave "vm_recovery_baseline_only_20260303" \
-  ./configs/run_selected_tasks.sh \
+  ./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/coverage_gap_20260303/vm_recovery_baseline_only_20260303.json \
   --baseline-only
 
 run_wave "vm_recovery_mcp_only_20260303" \
-  ./configs/run_selected_tasks.sh \
+  ./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/coverage_gap_20260303/vm_recovery_mcp_only_20260303.json \
   --full-only

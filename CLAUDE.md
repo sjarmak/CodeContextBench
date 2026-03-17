@@ -75,7 +75,7 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 
 ### Documentation Generation
 - **NEVER edit root `CLAUDE.md` or `AGENTS.md` directly.** Edit canonical sources under `docs/ops/` and regenerate. Direct edits cause `agent_guides_drift` failures in `repo_health.py`.
-- After removing directories from the repo, also clean references from `scripts/sync_agent_guides.py` (`LOCAL_SOURCES`) and `scripts/docs_consistency_check.py` (`LOCAL_AGENT_TARGET_DIRS`).
+- After removing directories from the repo, also clean references from `scripts/maintenance/sync_agent_guides.py` (`LOCAL_SOURCES`) and `scripts/maintenance/docs_consistency_check.py` (`LOCAL_AGENT_TARGET_DIRS`).
 
 ### Daytona / Harbor
 - Daytona builds images from Dockerfiles at sandbox creation time (`Image.from_dockerfile()`). Dockerfile fixes pushed to `main` take effect on the next run -- **no manual image rebuild needed**. Exception: pre-built GHCR base images must be rebuilt separately.
@@ -155,5 +155,5 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - `docs/START_HERE_BY_TASK.md` is generated from `docs/ops/task_routes.json`.
 - Regenerate after edits (single command):
 ```bash
-python3 scripts/refresh_agent_navigation.py
+python3 scripts/maintenance/refresh_agent_navigation.py
 ```

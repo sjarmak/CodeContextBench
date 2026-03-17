@@ -505,7 +505,7 @@ def main():
         print("Next steps:")
         print("  1. Review generated files")
         print("  2. Add to configs/selected_benchmark_tasks.json")
-        print("  3. Run preflight validation: python3 scripts/validate_tasks_preflight.py")
+        print("  3. Run preflight validation: python3 scripts/authoring/validate_tasks_preflight.py")
         print("  4. Rehost SWEAP images: python3 scripts/rehost_sweap_images.py --pull-push")
 
 

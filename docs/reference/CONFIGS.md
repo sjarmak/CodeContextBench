@@ -227,13 +227,13 @@ All 275 tasks are in `configs/selected_benchmark_tasks.json`. Filter by source d
 
 ```bash
 # Run all tasks (both configs)
-configs/run_selected_tasks.sh
+configs/harnesses/run_selected_tasks.sh
 
 # Run tasks from a specific source directory
-configs/run_selected_tasks.sh --benchmark csb_org_security
+configs/harnesses/run_selected_tasks.sh --benchmark csb_org_security
 
 # Dry run to preview
-configs/run_selected_tasks.sh --dry-run
+configs/harnesses/run_selected_tasks.sh --dry-run
 ```
 
 ### Verifier Modes by Source Directory
@@ -305,13 +305,13 @@ The swap script:
 ./scripts/swap_default_branch.sh scip-enabled
 # 2. Wait for indexing to complete
 # 3. Run SCIP config
-FULL_CONFIG=mcp-scip-remote-direct configs/run_selected_tasks.sh
+FULL_CONFIG=mcp-scip-remote-direct configs/harnesses/run_selected_tasks.sh
 
 # 4. Swap back to control
 ./scripts/swap_default_branch.sh main
 # 5. Wait for re-index
 # 6. Run standard MCP config
-FULL_CONFIG=mcp-remote-direct configs/run_selected_tasks.sh
+FULL_CONFIG=mcp-remote-direct configs/harnesses/run_selected_tasks.sh
 ```
 
 ### Comparing Results

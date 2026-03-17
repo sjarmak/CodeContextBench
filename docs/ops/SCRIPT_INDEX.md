@@ -1,6 +1,6 @@
 # Script Index
 
-Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
+Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_index.py`.
 
 ## When To Read This
 - You need to find the right script without opening many files.
@@ -319,5 +319,5 @@ Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.
 ## Regeneration
 ```bash
 python3 scripts/generate_script_registry.py
-python3 scripts/generate_script_index.py
+python3 scripts/maintenance/generate_script_index.py
 ```

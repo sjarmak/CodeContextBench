@@ -14,10 +14,10 @@ From repo root:
 
 ```bash
 # Full health (docs + config + task preflight static)
-python3 scripts/repo_health.py
+python3 scripts/maintenance/repo_health.py
 
 # Quick health (docs + selection file only; no full task sweep)
-python3 scripts/repo_health.py --quick
+python3 scripts/maintenance/repo_health.py --quick
 
 # Exit code: 0 = all required checks passed, 1 = at least one failed
 ```
@@ -36,15 +36,15 @@ Contract: `configs/repo_health.json`. Add or relax checks there without changing
 
 ## Branch hygiene (recommendations)
 
-- **Run health before push** — `python3 scripts/repo_health.py` or `--quick` so you don’t push broken refs or task defs.
+- **Run health before push** — `python3 scripts/maintenance/repo_health.py` or `--quick` so you don’t push broken refs or task defs.
 - **Merge working state often** — small PRs that pass the gate reduce long-lived branches and merge conflicts.
-- **After editing docs/config** — run at least `python3 scripts/docs_consistency_check.py` to catch missing refs and matrix drift.
+- **After editing docs/config** — run at least `python3 scripts/maintenance/docs_consistency_check.py` to catch missing refs and matrix drift.
 
 ## Fixing common failures
 
-- **missing_ref:README.md:scripts/docs_consistency_check.py** — Remove or fix the reference in the doc, or add the missing file.
+- **missing_ref:README.md:scripts/maintenance/docs_consistency_check.py** — Remove or fix the reference in the doc, or add the missing file.
 - **eval_matrix_*** — Fix `configs/eval_matrix.json` (supported_configs, official_default_configs, config_definitions).
-- **Task preflight errors** — Run `python3 scripts/validate_tasks_preflight.py --all` and fix reported tasks (instruction length, test.sh, placeholders, or sync task list).
+- **Task preflight errors** — Run `python3 scripts/authoring/validate_tasks_preflight.py --all` and fix reported tasks (instruction length, test.sh, placeholders, or sync task list).
 
 ## CI
 

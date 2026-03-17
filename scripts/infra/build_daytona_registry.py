@@ -6,7 +6,7 @@ produces a JSON registry cataloging metadata, Docker image requirements,
 test infrastructure, and Daytona readiness classification.
 
 Usage:
-    python3 scripts/build_daytona_registry.py [--output PATH] [--summary]
+    python3 scripts/infra/build_daytona_registry.py [--output PATH] [--summary]
 
 Output: scripts/daytona_task_registry.json (default)
 """
@@ -473,7 +473,7 @@ def build_registry() -> Dict[str, Any]:
 
     return {
         "version": "1.0",
-        "generated_by": "scripts/build_daytona_registry.py",
+        "generated_by": "scripts/infra/build_daytona_registry.py",
         "benchmarks_dir": str(BENCHMARKS_DIR),
         "summary": {
             "total_tasks": len(tasks),

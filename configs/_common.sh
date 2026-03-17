@@ -132,7 +132,7 @@ account_readiness_preflight() {
     local report_json
     local report_rc=0
     local cmd=(
-        python3 "$REPO_ROOT/scripts/account_health.py" preflight
+        python3 "$REPO_ROOT/scripts/infra/account_health.py" preflight
         --format json
         --state-file "$ACCOUNT_HEALTH_STATE_FILE"
         --real-home "$REAL_HOME"
@@ -545,7 +545,7 @@ ensure_fresh_token() {
         if ! refresh_claude_token; then
             echo "ERROR: Token refresh failed — aborting to prevent wasted compute."
             echo "  Fix: python3 scripts/headless_login.py --all-accounts"
-            echo "  Or:  python3 scripts/check_infra.py  (to diagnose)"
+            echo "  Or:  python3 scripts/infra/check_infra.py  (to diagnose)"
             exit 1
         fi
     fi
@@ -562,7 +562,7 @@ validate_and_report() {
     local mode=$2
     echo "Validating task results in $jobs_dir..."
     local _val_output
-    _val_output=$(python3 "$(dirname "${BASH_SOURCE[0]}")/../scripts/validate_task_run.py" \
+    _val_output=$(python3 "$(dirname "${BASH_SOURCE[0]}")/../scripts/authoring/validate_task_run.py" \
         --jobs-dir "$jobs_dir" --config "$mode" 2>&1) || true
     echo "$_val_output"
     VALIDATION_LOG+="$_val_output"$'\n'
@@ -1145,8 +1145,8 @@ _account_health_record_begin() {
     local launcher=$5
     local pid=$6
 
-    [ -f "$REPO_ROOT/scripts/account_health.py" ] || return 0
-    python3 "$REPO_ROOT/scripts/account_health.py" begin-assignment \
+    [ -f "$REPO_ROOT/scripts/infra/account_health.py" ] || return 0
+    python3 "$REPO_ROOT/scripts/infra/account_health.py" begin-assignment \
         --state-file "$ACCOUNT_HEALTH_STATE_FILE" \
         --home "$account_home" \
         --assignment-id "$assignment_id" \
@@ -1160,8 +1160,8 @@ _account_health_record_end() {
     local account_home=$1
     local assignment_id=$2
 
-    [ -f "$REPO_ROOT/scripts/account_health.py" ] || return 0
-    python3 "$REPO_ROOT/scripts/account_health.py" end-assignment \
+    [ -f "$REPO_ROOT/scripts/infra/account_health.py" ] || return 0
+    python3 "$REPO_ROOT/scripts/infra/account_health.py" end-assignment \
         --state-file "$ACCOUNT_HEALTH_STATE_FILE" \
         --home "$account_home" \
         --assignment-id "$assignment_id" >/dev/null 2>&1 || true
@@ -1172,8 +1172,8 @@ _account_health_record_rate_limit() {
     local task_id=$2
     local reason=${3:-runtime rate limit detected}
 
-    [ -f "$REPO_ROOT/scripts/account_health.py" ] || return 0
-    python3 "$REPO_ROOT/scripts/account_health.py" mark-rate-limit \
+    [ -f "$REPO_ROOT/scripts/infra/account_health.py" ] || return 0
+    python3 "$REPO_ROOT/scripts/infra/account_health.py" mark-rate-limit \
         --state-file "$ACCOUNT_HEALTH_STATE_FILE" \
         --home "$account_home" \
         --task-id "$task_id" \

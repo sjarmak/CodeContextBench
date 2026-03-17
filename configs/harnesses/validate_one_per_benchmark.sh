@@ -244,7 +244,7 @@ if [ "$DRY_RUN" = true ]; then
         if [ -d "$path" ] && [ -f "$path/task.toml" ]; then
             echo "  OK   $path"
             if [ "$SMOKE_RUNTIME" = true ]; then
-                echo "      cmd: python3 scripts/validate_tasks_preflight.py --task $path --smoke-runtime --smoke-timeout-sec $TASK_TIMEOUT --format json"
+                echo "      cmd: python3 scripts/authoring/validate_tasks_preflight.py --task $path --smoke-runtime --smoke-timeout-sec $TASK_TIMEOUT --format json"
             else
                 echo "      cmd: BASELINE_MCP_TYPE=none harbor run --path $path --agent-import-path $AGENT_PATH --model $MODEL ..."
             fi
@@ -358,7 +358,7 @@ for line in "${TASK_LINES[@]}"; do
             if [ "$__variant_swapped" = true ]; then
                 trap 'restore_dockerfile "'"$abs_path"'"' EXIT
             fi
-            python3 scripts/validate_tasks_preflight.py \
+            python3 scripts/authoring/validate_tasks_preflight.py \
                 --task "$abs_path" \
                 --smoke-runtime \
                 --smoke-timeout-sec "$TASK_TIMEOUT" \

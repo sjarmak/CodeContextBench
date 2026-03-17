@@ -28,7 +28,7 @@ git clone https://github.com/sourcegraph/CodeScaleBench.git
 cd CodeScaleBench
 
 # Fast repo sanity check (docs/config refs)
-python3 scripts/repo_health.py --quick
+python3 scripts/maintenance/repo_health.py --quick
 
 # Explore task-based docs navigation
 sed -n '1,120p' docs/START_HERE_BY_TASK.md
@@ -51,14 +51,14 @@ Our internal default setup often uses:
 Recommended pre-run checks:
 
 ```bash
-python3 scripts/check_infra.py
-python3 scripts/validate_tasks_preflight.py --all
+python3 scripts/infra/check_infra.py
+python3 scripts/authoring/validate_tasks_preflight.py --all
 ```
 
 Then start with a dry run:
 
 ```bash
-bash configs/run_selected_tasks.sh --dry-run
+bash configs/harnesses/run_selected_tasks.sh --dry-run
 ```
 
 ### First places to read
@@ -265,7 +265,7 @@ For the full multi-layer evaluation pipeline (verifier, LLM judge, statistical a
 
 ## Running with Harbor
 
-This section assumes Harbor is already installed and configured. If not, start with the Quickstart section above and `python3 scripts/check_infra.py`.
+This section assumes Harbor is already installed and configured. If not, start with the Quickstart section above and `python3 scripts/infra/check_infra.py`.
 
 ### All Tasks
 
@@ -273,16 +273,16 @@ The unified runner executes all 275 canonical tasks across the 2-config matrix:
 
 ```bash
 # Run all 275 tasks across 2 configs
-bash configs/run_selected_tasks.sh
+bash configs/harnesses/run_selected_tasks.sh
 
 # Run only the baseline config
-bash configs/run_selected_tasks.sh --baseline-only
+bash configs/harnesses/run_selected_tasks.sh --baseline-only
 
 # Run a single SDLC phase
-bash configs/run_selected_tasks.sh --benchmark csb_sdlc_fix
+bash configs/harnesses/run_selected_tasks.sh --benchmark csb_sdlc_fix
 
 # Dry run to list tasks without executing
-bash configs/run_selected_tasks.sh --dry-run
+bash configs/harnesses/run_selected_tasks.sh --dry-run
 ```
 
 Per-phase runners are also available:
@@ -305,10 +305,10 @@ All 275 tasks are in `selected_benchmark_tasks.json`. Filter by source directory
 
 ```bash
 # Run only security-related tasks from a specific source
-bash configs/run_selected_tasks.sh --benchmark csb_org_security
+bash configs/harnesses/run_selected_tasks.sh --benchmark csb_org_security
 
 # Run only fix tasks
-bash configs/run_selected_tasks.sh --benchmark csb_sdlc_fix
+bash configs/harnesses/run_selected_tasks.sh --benchmark csb_sdlc_fix
 ```
 
 All runners support `--baseline-only`, `--full-only`, `--task TASK_ID`, and `--parallel N` flags.
@@ -321,12 +321,12 @@ CodeScaleBench includes a multi-stage QA pipeline to ensure task integrity, repr
 
 | Phase | Script | Purpose |
 |-------|--------|---------|
-| **Pre-flight** | `scripts/validate_tasks_preflight.py` | Catches truncated instructions, template placeholders, language/difficulty mismatches, missing test.sh |
-| **Infra check** | `scripts/check_infra.py` | Verifies OAuth tokens (all accounts), Docker, disk space, Harbor CLI |
+| **Pre-flight** | `scripts/authoring/validate_tasks_preflight.py` | Catches truncated instructions, template placeholders, language/difficulty mismatches, missing test.sh |
+| **Infra check** | `scripts/infra/check_infra.py` | Verifies OAuth tokens (all accounts), Docker, disk space, Harbor CLI |
 | **Error fingerprinting** | `scripts/status_fingerprints.py` | Classifies failures with 12 regex patterns; auto-retry guidance per pattern |
-| **Post-run** | `scripts/validate_task_run.py` | Flags crashes, MCP tool usage anomalies, suspicious scoring |
+| **Post-run** | `scripts/authoring/validate_task_run.py` | Flags crashes, MCP tool usage anomalies, suspicious scoring |
 | **Metadata sync** | `scripts/sync_task_metadata.py` | Keeps task.toml in sync with `selected_benchmark_tasks.json`; `--fix` to auto-update |
-| **Run analysis** | `scripts/aggregate_status.py` | Scans run dirs, classifies per-task status, writes status.json, supports `--watch` mode |
+| **Run analysis** | `scripts/analysis/aggregate_status.py` | Scans run dirs, classifies per-task status, writes status.json, supports `--watch` mode |
 
 The QA methodology uses a 6-dimension audit framework: instruction contamination, reproducibility, verifier correctness, ghost/false-positive detection, error misclassification, and tool effectiveness analysis.
 
@@ -340,11 +340,11 @@ Key scripts organized by workflow phase:
 
 | Phase | Script | Usage |
 |-------|--------|-------|
-| **Pre-run** | `validate_tasks_preflight.py` | `python3 scripts/validate_tasks_preflight.py [--suite csb_sdlc_fix] [--task sgt-001]` |
-| **Pre-run** | `check_infra.py` | `python3 scripts/check_infra.py` |
-| **During run** | `aggregate_status.py --since 2h` | `python3 scripts/aggregate_status.py --since 2h` |
-| **Post-run** | `aggregate_status.py` | `python3 scripts/aggregate_status.py [--watch]` |
-| **Post-run** | `validate_task_run.py` | `python3 scripts/validate_task_run.py <run_dir>` |
+| **Pre-run** | `validate_tasks_preflight.py` | `python3 scripts/authoring/validate_tasks_preflight.py [--suite csb_sdlc_fix] [--task sgt-001]` |
+| **Pre-run** | `check_infra.py` | `python3 scripts/infra/check_infra.py` |
+| **During run** | `aggregate_status.py --since 2h` | `python3 scripts/analysis/aggregate_status.py --since 2h` |
+| **Post-run** | `aggregate_status.py` | `python3 scripts/analysis/aggregate_status.py [--watch]` |
+| **Post-run** | `validate_task_run.py` | `python3 scripts/authoring/validate_task_run.py <run_dir>` |
 | **Analysis** | `compare_configs.py` | `python3 scripts/compare_configs.py` |
 | **Analysis** | `cost_report.py` | `python3 scripts/cost_report.py` |
 | **Analysis** | `generate_manifest.py` | `python3 scripts/generate_manifest.py` |

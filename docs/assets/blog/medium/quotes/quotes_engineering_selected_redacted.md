@@ -420,7 +420,7 @@ Some source files in `runs/archive` were `root:root` and not readable by your no
 - Keep a single reference to `docs/reference/CONFIGS.md` (removed compatibility-stub note)
 
 Validation:
-- `python3 scripts/repo_health.py --quick` passes.
+- `python3 scripts/maintenance/repo_health.py --quick` passes.
 
 If you want, I can commit and push this README change now.
 
@@ -502,7 +502,7 @@ Completed: 0/72 | Failed: 72 | Cost: $0.00
 
 A targeted gap-fill rerun will address the 4 `CancelledError` task lanes, but it does not automatically fix a real script bug if one exists.
 
-I checked syntax directly: `bash -n configs/run_selected_tasks.sh` returns clean (`0`), so there is no persistent parse error in the current file. That makes the `line 773 ... unexpected token 'fi'` likely transient during shutdown, not a stable code defect.
+I checked syntax directly: `bash -n configs/harnesses/run_selected_tasks.sh` returns clean (`0`), so there is no persistent parse error in the current file. That makes the `line 773 ... unexpected token 'fi'` likely transient during shutdown, not a stable code defect.
 
 So:
 1. Yes, rerun is the right next step for missing results.
@@ -609,7 +609,7 @@ ENTRYPOINT []
 - redaction_flags: `none`
 
 > - generated_agent_navigation_detail:Start-here routes doc: OK
-      - generated_agent_navigation_detail:$ /usr/bin/python3 scripts/sync_agent_guides.py --check
+      - generated_agent_navigation_detail:$ /usr/bin/python3 scripts/maintenance/sync_agent_guides.py --check
     Warnings:
       - missing_ref_archive:docs archive ENTERPRISE_MIRRORS.md:docs architecture.md
       - missing_ref_archive:docs archive TASK_REVIEW.md:scripts validate_patch.py

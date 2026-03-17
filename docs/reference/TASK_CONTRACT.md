@@ -3,7 +3,7 @@
 ## Agent Navigation
 - `docs/reference/README.md` is the reference index for agent navigation.
 - This file is the stable contract for publishing CodeScaleBench tasks that should run across Harbor-compatible harnesses.
-- Use `scripts/validate_tasks_preflight.py` to enforce the low-cost checks in this spec before launch.
+- Use `scripts/authoring/validate_tasks_preflight.py` to enforce the low-cost checks in this spec before launch.
 
 This document defines the minimum task contract for registry-ready benchmark
 tasks. The goal is to make a task runnable under any Harbor-compatible harness
@@ -182,14 +182,14 @@ Before publishing a task, confirm:
 - sg-only mode includes a restore path when verification needs the full repo
 - missing output is classified invalid, not hidden as a normal zero
 - `task.toml` storage is justified and not inflated by default
-- `python3 scripts/validate_tasks_preflight.py --task <task_dir>` passes
+- `python3 scripts/authoring/validate_tasks_preflight.py --task <task_dir>` passes
 - new or changed tasks also pass `--smoke-runtime` before large batch use
 - curated smoke coverage includes regression sentinels for task families that
   previously needed harness or variant fixes
 
 ## CI / Validation Guidance
 
-`scripts/validate_tasks_preflight.py` should be treated as the minimum gate.
+`scripts/authoring/validate_tasks_preflight.py` should be treated as the minimum gate.
 
 It should catch at least:
 

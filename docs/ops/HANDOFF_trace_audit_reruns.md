@@ -66,7 +66,7 @@ source .env.local
 export HARBOR_ENV=local
 
 # Run each task with both configs:
-configs/run_selected_tasks.sh --suite csb_sdlc_fix \
+configs/harnesses/run_selected_tasks.sh --suite csb_sdlc_fix \
   --tasks "navidrome-windows-log-fix-001,nodebb-notif-dropdown-fix-001,nodebb-plugin-validate-fix-001" \
   --full-config
 ```
@@ -91,7 +91,7 @@ source .env.local
 export HARBOR_ENV=daytona
 export DAYTONA_OVERRIDE_STORAGE=10240
 
-configs/run_selected_tasks.sh --suite csb_sdlc_fix \
+configs/harnesses/run_selected_tasks.sh --suite csb_sdlc_fix \
   --tasks "openlibrary-solr-boolean-fix-001" \
   --mcp-only
 ```
@@ -101,7 +101,7 @@ One-off Harbor extraction failure. Just needs a simple rerun:
 - `flipt-dep-refactor-001` — baseline config only
 
 ```bash
-configs/run_selected_tasks.sh --suite csb_sdlc_refactor \
+configs/harnesses/run_selected_tasks.sh --suite csb_sdlc_refactor \
   --tasks "flipt-dep-refactor-001" \
   --baseline-only
 ```
@@ -111,7 +111,7 @@ csb_sdlc_fix has 3 complete passes for baseline but only 2 for MCP on 17 tasks.
 
 ```bash
 # Launch MCP-only pass for csb_sdlc_fix variance:
-configs/run_selected_tasks.sh --suite csb_sdlc_fix --mcp-only
+configs/harnesses/run_selected_tasks.sh --suite csb_sdlc_fix --mcp-only
 ```
 
 #### 3d. Org gap tasks (211 tasks across 11 suites)
@@ -119,7 +119,7 @@ Priority split:
 - **77 tasks**: Have baseline results, need MCP runs only
 - **134 tasks**: Need both baseline AND MCP runs
 
-The gap is documented in the run-gap context below. Use `configs/run_selected_tasks.sh` with per-suite filtering.
+The gap is documented in the run-gap context below. Use `configs/harnesses/run_selected_tasks.sh` with per-suite filtering.
 
 **Suites with Org gaps** (task counts — both/mcp-only):
 | Suite | Both needed | MCP only needed |
@@ -138,10 +138,10 @@ The gap is documented in the run-gap context below. Use `configs/run_selected_ta
 
 ```bash
 # For suites needing both configs:
-configs/run_selected_tasks.sh --suite csb_org_compliance --full-config
+configs/harnesses/run_selected_tasks.sh --suite csb_org_compliance --full-config
 
 # For suites needing MCP only:
-configs/run_selected_tasks.sh --suite csb_org_compliance --mcp-only
+configs/harnesses/run_selected_tasks.sh --suite csb_org_compliance --mcp-only
 ```
 
 ### 4. SDLC Variance Promotions

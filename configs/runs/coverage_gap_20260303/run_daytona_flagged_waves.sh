@@ -27,39 +27,39 @@ run_wave() {
 }
 
 run_wave "direct_paired_wave1" \
-  ./configs/run_selected_tasks.sh \
+  ./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/coverage_gap_20260303/flagged_direct_paired_wave1.json
 
 run_wave "direct_paired_wave2" \
-  ./configs/run_selected_tasks.sh \
+  ./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/coverage_gap_20260303/flagged_direct_paired_wave2.json
 
 run_wave "direct_baseline_only_wave1" \
-  ./configs/run_selected_tasks.sh \
+  ./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/coverage_gap_20260303/flagged_direct_baseline_only_wave1.json \
   --baseline-only
 
 run_wave "direct_baseline_only_wave2" \
-  ./configs/run_selected_tasks.sh \
+  ./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/coverage_gap_20260303/flagged_direct_baseline_only_wave2.json \
   --baseline-only
 
 run_wave "direct_baseline_only_wave3" \
-  ./configs/run_selected_tasks.sh \
+  ./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/coverage_gap_20260303/flagged_direct_baseline_only_wave3.json \
   --baseline-only
 
 run_wave "direct_full_only_wave1" \
-  ./configs/run_selected_tasks.sh \
+  ./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/coverage_gap_20260303/flagged_direct_full_only_wave1.json \
   --full-only
 
 run_wave "direct_full_only_wave2" \
-  ./configs/run_selected_tasks.sh \
+  ./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/coverage_gap_20260303/flagged_direct_full_only_wave2.json \
   --full-only
 
 run_wave "direct_full_only_wave3" \
-  ./configs/run_selected_tasks.sh \
+  ./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/coverage_gap_20260303/flagged_direct_full_only_wave3.json \
   --full-only

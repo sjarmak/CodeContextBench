@@ -5,8 +5,8 @@ Runs docs consistency, selection file validity, and (unless --quick) full task
 preflight static checks. Exit 0 only if all required checks pass.
 
 Usage:
-    python3 scripts/repo_health.py           # Full health
-    python3 scripts/repo_health.py --quick    # Docs + selection file only
+    python3 scripts/maintenance/repo_health.py           # Full health
+    python3 scripts/maintenance/repo_health.py --quick    # Docs + selection file only
 """
 
 from __future__ import annotations

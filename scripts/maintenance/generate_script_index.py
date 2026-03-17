@@ -60,7 +60,7 @@ def main() -> int:
     lines: list[str] = []
     lines.append("# Script Index")
     lines.append("")
-    lines.append("Generated from `scripts/registry.json` by `scripts/generate_script_index.py`.")
+    lines.append("Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_index.py`.")
     lines.append("")
     lines.append("## When To Read This")
     lines.append("- You need to find the right script without opening many files.")
@@ -90,7 +90,7 @@ def main() -> int:
     lines.append("## Regeneration")
     lines.append("```bash")
     lines.append("python3 scripts/generate_script_registry.py")
-    lines.append("python3 scripts/generate_script_index.py")
+    lines.append("python3 scripts/maintenance/generate_script_index.py")
     lines.append("```")
     lines.append("")
 
@@ -98,7 +98,7 @@ def main() -> int:
     if args.check:
         if not OUT_PATH.is_file() or OUT_PATH.read_text() != rendered:
             print("Script index: STALE")
-            print("  - run: python3 scripts/generate_script_index.py")
+            print("  - run: python3 scripts/maintenance/generate_script_index.py")
             return 1
         print("Script index: OK")
         return 0

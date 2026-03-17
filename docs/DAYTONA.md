@@ -75,7 +75,7 @@ This matters because unlabeled or orphaned sandboxes are what made cost attribut
 ```bash
 # Preferred: repo launcher wrapper with Daytona guard + labels
 export HARBOR_ENV=daytona
-./configs/run_selected_tasks.sh --benchmark csb_sdlc_feature --baseline-only
+./configs/harnesses/run_selected_tasks.sh --benchmark csb_sdlc_feature --baseline-only
 ```
 
 Use direct `harbor run --env daytona` only for ad hoc debugging when you intentionally accept bypassing the benchmark cost/label workflow.
@@ -131,7 +131,7 @@ runs/staging/{run_name}/
 These artifacts are fully compatible with:
 - **Runs explorer**: `python3 scripts/export_official_results.py` (defaults to `runs/analysis/`; pass `--runs-dir ./runs/official/` for curated official runs)
 - **IR analysis pipeline**: `python3 scripts/normalize_retrieval_events.py`
-- **QA validation**: `python3 scripts/validate_task_run.py`
+- **QA validation**: `python3 scripts/authoring/validate_task_run.py`
 - **Metrics extraction**: `python3 scripts/extract_task_metrics.py`
 - **Staging to official promotion**: copy to `runs/official/`, update `MANIFEST.json`
 
@@ -204,28 +204,28 @@ Launcher note:
 
 ## Alternative: Standalone Runner
 
-The standalone runner (`scripts/daytona_runner.py`) is useful for quick validation and task discovery but produces truncated outputs not compatible with the downstream analysis pipeline.
+The standalone runner (`scripts/running/daytona_runner.py`) is useful for quick validation and task discovery but produces truncated outputs not compatible with the downstream analysis pipeline.
 
 ### Quick Start
 
 ```bash
 # List suites and readiness counts
-python3 scripts/daytona_runner.py --list-suites
+python3 scripts/running/daytona_runner.py --list-suites
 
 # List tasks in a suite
-python3 scripts/daytona_runner.py --list-tasks --suite csb_sdlc_feature
+python3 scripts/running/daytona_runner.py --list-tasks --suite csb_sdlc_feature
 
 # Dry run (validate task selection, no sandboxes created)
-python3 scripts/daytona_runner.py --suite csb_sdlc_feature --dry-run
+python3 scripts/running/daytona_runner.py --suite csb_sdlc_feature --dry-run
 
 # Run a single task
-python3 scripts/daytona_runner.py --task cgen-deps-install-001
+python3 scripts/running/daytona_runner.py --task cgen-deps-install-001
 
 # Run a full suite
-python3 scripts/daytona_runner.py --suite csb_sdlc_feature --parallel 4
+python3 scripts/running/daytona_runner.py --suite csb_sdlc_feature --parallel 4
 
 # Run all 370 tasks
-python3 scripts/daytona_runner.py --all --parallel 8
+python3 scripts/running/daytona_runner.py --all --parallel 8
 ```
 
 ### Standalone Runner Configs
@@ -278,7 +278,7 @@ runs/daytona/{run_id}/
 
 Regenerate the task registry after adding new tasks:
 ```bash
-python3 scripts/build_daytona_registry.py
+python3 scripts/infra/build_daytona_registry.py
 ```
 
 ## Environment Variable Reference

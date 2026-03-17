@@ -36,13 +36,13 @@ Run baseline-local-artifact evaluation for 39 Org tasks that currently only have
 
 ### 1. Pre-flight checks
 ```bash
-python3 scripts/check_infra.py
-python3 scripts/validate_tasks_preflight.py --selection-file configs/mcp_baseline_rerun.json
+python3 scripts/infra/check_infra.py
+python3 scripts/authoring/validate_tasks_preflight.py --selection-file configs/mcp_baseline_rerun.json
 ```
 
 ### 2. Dry run (verify task detection)
 ```bash
-./configs/run_selected_tasks.sh \
+./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/mcp_baseline_rerun.json \
   --baseline-only \
   --parallel 12 \
@@ -57,7 +57,7 @@ You should see:
 
 ### 3. Launch baselines
 ```bash
-./configs/run_selected_tasks.sh \
+./configs/harnesses/run_selected_tasks.sh \
   --selection-file configs/mcp_baseline_rerun.json \
   --baseline-only \
   --parallel 12
@@ -124,7 +124,7 @@ Target: all 81 Org tasks fully paired.
 
 ## Key Files
 - `configs/mcp_baseline_rerun.json` — sub-selection file (39 tasks)
-- `configs/run_selected_tasks.sh` — unified runner
+- `configs/harnesses/run_selected_tasks.sh` — unified runner
 - `configs/_common.sh` — shared infra (token refresh, account rotation, `baseline_config_for()`)
 - `agents/claude_baseline_agent.py` — agent code (V5 preamble)
 - `scripts/promote_run.py` — staging → official promotion

@@ -7,11 +7,11 @@ full operations manual.
 ## Non-Negotiables
 - All work happens on `main` by default. If you use feature branches, keep them small, short-lived, and easy to fast-forward back into `main`.
 - Every `harbor run` must be gated by interactive confirmation.
-- Before commit/push, run `python3 scripts/repo_health.py` (or `--quick` for docs/config-only changes).
+- Before commit/push, run `python3 scripts/maintenance/repo_health.py` (or `--quick` for docs/config-only changes).
 - **Never push `main` to `upstream`** (public). See "Git Remotes and Branching".
 - Prefer a **remote execution environment** (e.g., Daytona) for large benchmark runs; use local Docker only when a task’s image or registry is incompatible with your cloud environment. See `docs/DAYTONA.md`.
 - Set **parallelism based on your own account and model limits**. Avoid exceeding documented concurrency or rate caps for your environment or provider.
-- Before launching any benchmark batch, check account readiness with `python3 scripts/check_infra.py` or `python3 scripts/account_health.py status`. Do not assume OAuth accounts are usable just because credentials exist.
+- Before launching any benchmark batch, check account readiness with `python3 scripts/infra/check_infra.py` or `python3 scripts/infra/account_health.py status`. Do not assume OAuth accounts are usable just because credentials exist.
 
 ## Git Remotes and Branching
 - `origin` = sjarmak/CodeScaleBench (private), `upstream` = sourcegraph/CodeScaleBench (public).
@@ -57,7 +57,7 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 
 ## Landing the Plane (Session Completion)
 - Track remaining follow-up in issues or beads.
-- Run `python3 scripts/repo_health.py` (or `--quick` for docs/config-only changes).
+- Run `python3 scripts/maintenance/repo_health.py` (or `--quick` for docs/config-only changes).
 - Update issue/task status.
 - `git pull --rebase && git push && git status` — pushes to `origin` (private). Do NOT push to `upstream` unless doing a public release.
 - Clean up and hand off using `/handoff` plus `docs/ops/HANDOFF_TEMPLATE.md`.
@@ -75,11 +75,11 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 
 ### Documentation Generation
 - **NEVER edit root `CLAUDE.md` or `AGENTS.md` directly.** Edit canonical sources under `docs/ops/` and regenerate. Direct edits cause `agent_guides_drift` failures in `repo_health.py`.
-- After removing directories from the repo, also clean references from `scripts/sync_agent_guides.py` (`LOCAL_SOURCES`) and `scripts/docs_consistency_check.py` (`LOCAL_AGENT_TARGET_DIRS`).
+- After removing directories from the repo, also clean references from `scripts/maintenance/sync_agent_guides.py` (`LOCAL_SOURCES`) and `scripts/maintenance/docs_consistency_check.py` (`LOCAL_AGENT_TARGET_DIRS`).
 
 ### Daytona / Harbor
 - Daytona builds images from Dockerfiles at sandbox creation time (`Image.from_dockerfile()`). Dockerfile fixes pushed to `main` take effect on the next run -- **no manual image rebuild needed**. Exception: pre-built GHCR base images must be rebuilt separately.
-- Harbor+Daytona (`harbor run --environment-type daytona`) is the recommended production approach. The standalone `scripts/daytona_runner.py` is for quick validation only.
+- Harbor+Daytona (`harbor run --environment-type daytona`) is the recommended production approach. The standalone `scripts/running/daytona_runner.py` is for quick validation only.
 - Use `BASELINE_MCP_TYPE` env var to control MCP configuration: `none`, `sourcegraph`, `deepsearch`.
 - Daytona SDK (`daytona_sdk`) over CLI for sandbox interaction -- the CLI is interactive-only for SSH.
 - GHCR packages default to **private** for personal accounts and visibility cannot be changed via API. Use the GitHub web UI or push to an org.
@@ -155,5 +155,5 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - `docs/START_HERE_BY_TASK.md` is generated from `docs/ops/task_routes.json`.
 - Regenerate after edits (single command):
 ```bash
-python3 scripts/refresh_agent_navigation.py
+python3 scripts/maintenance/refresh_agent_navigation.py
 ```

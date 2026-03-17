@@ -5,8 +5,8 @@ Validates that all infrastructure prerequisites are met before launching
 a benchmark run: OAuth tokens, API credentials, Docker, disk space.
 
 Usage:
-    python3 scripts/check_infra.py
-    python3 scripts/check_infra.py --format json
+    python3 scripts/infra/check_infra.py
+    python3 scripts/infra/check_infra.py --format json
 """
 
 import argparse

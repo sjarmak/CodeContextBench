@@ -8,17 +8,17 @@
 - You need policy definitions/spec semantics: use `docs/reference/README.md`.
 
 ## Run Batch Workflow
-1. Run infra checks (`scripts/check_infra.py`).
-2. Inspect account readiness with `scripts/account_health.py status` if there is any chance accounts are rate-limited, near expiry, or already in use.
-3. Validate tasks (`scripts/validate_tasks_preflight.py`).
+1. Run infra checks (`scripts/infra/check_infra.py`).
+2. Inspect account readiness with `scripts/infra/account_health.py status` if there is any chance accounts are rate-limited, near expiry, or already in use.
+3. Validate tasks (`scripts/authoring/validate_tasks_preflight.py`).
 4. If using Daytona, inspect current account state with `scripts/daytona_cost_guard.py summary` when needed.
 5. Launch benchmark via `configs/*` runner only (interactive confirmation required).
 6. Do not use raw Daytona `harbor run` for benchmark batches; the wrappers enforce preflight, account gating, and labeling.
-7. Monitor with `scripts/aggregate_status.py` and classify errors.
-8. Validate outputs (`scripts/validate_task_run.py`).
+7. Monitor with `scripts/analysis/aggregate_status.py` and classify errors.
+8. Validate outputs (`scripts/authoring/validate_task_run.py`).
 9. Triage before reruns.
 10. Regenerate manifest/report after completion.
-11. Run `scripts/repo_health.py` before commit/push.
+11. Run `scripts/maintenance/repo_health.py` before commit/push.
 
 ### Daytona wrapper rules
 
@@ -60,8 +60,8 @@ source .env.local && python3 scripts/validate_on_contextbench.py --verified
 1. Edit canonical sources under `docs/ops/`.
 2. Regenerate guides and indexes:
 ```bash
-python3 scripts/refresh_agent_navigation.py
+python3 scripts/maintenance/refresh_agent_navigation.py
 ```
-3. Verify freshness in CI/local (`python3 scripts/refresh_agent_navigation.py --check`).
-4. Run `python3 scripts/docs_consistency_check.py`.
-5. Run `python3 scripts/repo_health.py --quick` before commit.
+3. Verify freshness in CI/local (`python3 scripts/maintenance/refresh_agent_navigation.py --check`).
+4. Run `python3 scripts/maintenance/docs_consistency_check.py`.
+5. Run `python3 scripts/maintenance/repo_health.py --quick` before commit.

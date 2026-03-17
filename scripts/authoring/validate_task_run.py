@@ -3,10 +3,10 @@
 
 Usage:
     # Validate all tasks in a jobs directory
-    python3 scripts/validate_task_run.py --jobs-dir <dir> --config <mode>
+    python3 scripts/authoring/validate_task_run.py --jobs-dir <dir> --config <mode>
 
     # Validate a single task directory
-    python3 scripts/validate_task_run.py --task-dir <dir> --config <mode>
+    python3 scripts/authoring/validate_task_run.py --task-dir <dir> --config <mode>
 
 Exit codes:
     0  Clean (no issues or INFO only)

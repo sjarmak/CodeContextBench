@@ -13,14 +13,14 @@ Use this file when working in `scripts/`.
 - Check `scripts/registry.json` for category and status metadata before broad searching.
 
 ## Common Entry Points
-- `scripts/repo_health.py` - pre-commit/push health gate
-- `scripts/check_infra.py` - infra readiness
-- `scripts/account_health.py` - account readiness, recent rate-limit observations, active assignment tracking
-- `scripts/validate_tasks_preflight.py` - task preflight validation
-- `scripts/aggregate_status.py` - run status scan
-- `scripts/validate_task_run.py` - post-run validation
-- `scripts/daytona_runner.py` - standalone Daytona runner (task listing, dry runs, quick validation)
-- `scripts/build_daytona_registry.py` - regenerate Daytona task registry
+- `scripts/maintenance/repo_health.py` - pre-commit/push health gate
+- `scripts/infra/check_infra.py` - infra readiness
+- `scripts/infra/account_health.py` - account readiness, recent rate-limit observations, active assignment tracking
+- `scripts/authoring/validate_tasks_preflight.py` - task preflight validation
+- `scripts/analysis/aggregate_status.py` - run status scan
+- `scripts/authoring/validate_task_run.py` - post-run validation
+- `scripts/running/daytona_runner.py` - standalone Daytona runner (task listing, dry runs, quick validation)
+- `scripts/infra/build_daytona_registry.py` - regenerate Daytona task registry
 
 ## Editing Rules
 - Preserve backward compatibility for high-use scripts unless the change is intentional.

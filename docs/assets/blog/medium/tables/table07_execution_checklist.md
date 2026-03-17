@@ -8,7 +8,7 @@
 | 4. Verify figure set | `ls docs/assets/blog/medium/figures/fig0*_*.svg` | 7 engineering-diary SVG assets |
 | 5. Verify placement map | `sed -n '1,200p' docs/assets/blog/medium/tables/table06_post_asset_placement.md` | Section-to-asset mapping exists |
 | 6. Verify narrative draft | `sed -n '1,260p' docs/assets/blog/medium/post_codescalebench_engineering_diary.md` | Complete technical narrative with figure/table insertion points |
-| 7. Optional repo gate | `python3 scripts/repo_health.py --quick` | Green checks for docs/config-only updates |
+| 7. Optional repo gate | `python3 scripts/maintenance/repo_health.py --quick` | Green checks for docs/config-only updates |
 
 ## Required Inputs
 

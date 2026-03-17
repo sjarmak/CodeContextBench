@@ -9,7 +9,7 @@ Use this file when modifying benchmark task definitions or task metadata.
 ## Navigation Rules
 - Start with `docs/TASK_CATALOG.md` for inventory context only if you need cross-suite coverage.
 - For edits, open the specific task directory and `task.toml` first.
-- Run preflight validation after task changes (`scripts/validate_tasks_preflight.py`).
+- Run preflight validation after task changes (`scripts/authoring/validate_tasks_preflight.py`).
 
 ## Guardrails
 - Keep task metadata synchronized with `configs/selected_benchmark_tasks.json` when applicable.
@@ -18,6 +18,6 @@ Use this file when modifying benchmark task definitions or task metadata.
 - Document verifier quirks in the relevant docs instead of expanding root agent guides.
 
 ## Migration Workflow
-- Audit contract drift with `python3 scripts/validate_tasks_preflight.py --all --contract-only --summary-by-check`.
+- Audit contract drift with `python3 scripts/authoring/validate_tasks_preflight.py --all --contract-only --summary-by-check`.
 - Fix the highest-count checks first: path contract drift, variant workdir mismatches, then storage over-requests.
-- Re-run `python3 scripts/validate_tasks_preflight.py --task <task_dir>` after each migrated task or generator.
+- Re-run `python3 scripts/authoring/validate_tasks_preflight.py --task <task_dir>` after each migrated task or generator.

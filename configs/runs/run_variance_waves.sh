@@ -23,7 +23,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 WAVE_DIR="configs/variance_reruns"
-RUNNER="./configs/run_selected_tasks.sh"
+RUNNER="./configs/harnesses/run_selected_tasks.sh"
 LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
 

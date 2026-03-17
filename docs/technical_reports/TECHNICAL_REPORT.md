@@ -1186,7 +1186,7 @@ This report uses two complementary audit layers: (1) the operational six-dimensi
 
 ### Appendix F: Repository Health Checks
 
-Pre-commit validation via `scripts/repo_health.py`:
+Pre-commit validation via `scripts/maintenance/repo_health.py`:
 
 - CLAUDE.md consistency between root and local guides
 - Documentation link integrity

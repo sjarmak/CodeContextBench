@@ -14,9 +14,9 @@ Use this page first for operational work. Each path is intentionally short to mi
 
 ### Key Commands
 ```bash
-python3 scripts/check_infra.py
-python3 scripts/account_health.py status
-python3 scripts/validate_tasks_preflight.py --all
+python3 scripts/infra/check_infra.py
+python3 scripts/infra/account_health.py status
+python3 scripts/authoring/validate_tasks_preflight.py --all
 
 # Daytona Cloud (default — up to 125 concurrent sandboxes, no local Docker needed)
 export HARBOR_ENV=daytona DAYTONA_OVERRIDE_STORAGE=10240
@@ -37,7 +37,7 @@ export HARBOR_ENV=daytona DAYTONA_OVERRIDE_STORAGE=10240
 
 ### Key Commands
 ```bash
-python3 scripts/aggregate_status.py --staging
+python3 scripts/analysis/aggregate_status.py --staging
 python3 scripts/mcp_audit.py --run <run_dir>
 ```
 
@@ -52,7 +52,7 @@ python3 scripts/mcp_audit.py --run <run_dir>
 
 ### Key Commands
 ```bash
-python3 scripts/validate_task_run.py --run <run_dir>
+python3 scripts/authoring/validate_task_run.py --run <run_dir>
 python3 scripts/prompt_hygiene.py --scan-root benchmarks/<suite_or_task_dir> --include-mcp
 python3 scripts/rerun_failed.py --help
 ```
@@ -101,7 +101,7 @@ python3 scripts/package_submission.py --help
 
 ### Key Commands
 ```bash
-python3 scripts/validate_tasks_preflight.py --task <task_dir> --smoke-runtime
+python3 scripts/authoring/validate_tasks_preflight.py --task <task_dir> --smoke-runtime
 python3 scripts/prompt_hygiene.py --scan-root <task_dir> --include-mcp
 python3 scripts/sync_task_metadata.py --help
 ```

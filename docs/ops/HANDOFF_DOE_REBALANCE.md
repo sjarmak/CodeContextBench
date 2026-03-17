@@ -126,14 +126,14 @@ mv benchmarks/backups/csb_sdlc_fix_extra/<task>/ benchmarks/csb_sdlc_fix/
 ```bash
 python3 scripts/select_benchmark_tasks.py  # regenerate selection JSON
 python3 scripts/generate_manifest.py        # update MANIFEST
-python3 scripts/repo_health.py              # health gate
+python3 scripts/maintenance/repo_health.py              # health gate
 ```
 
 ### Phase 5: Validate and run pilot
 
 ```bash
 # Validate all tasks still pass preflight
-python3 scripts/validate_tasks_preflight.py
+python3 scripts/authoring/validate_tasks_preflight.py
 
 # Run one pass of all 150 tasks to confirm nothing broke
 # (use existing variance run configs as template)

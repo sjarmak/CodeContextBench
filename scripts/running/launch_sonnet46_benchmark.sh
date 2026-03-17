@@ -64,7 +64,7 @@ if [ "$RUN_CLAUDE" = true ]; then
     echo "Phase 1: Claude Code + Sonnet 4.6"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-    bash configs/run_selected_tasks.sh \
+    bash configs/harnesses/run_selected_tasks.sh \
         --model "$MODEL" \
         --category "$CATEGORY" \
         --skip-prebuild \

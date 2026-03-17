@@ -156,12 +156,12 @@ Result artifacts are written per task as `judge_result.json`.
 We stopped treating QA as a final step and made it part of the execution loop.
 
 Operational gate chain:
-- preflight static and runtime smoke: `scripts/validate_tasks_preflight.py`
-- infrastructure readiness: `scripts/check_infra.py`
-- post-run task validation: `scripts/validate_task_run.py`
-- run-wide status + fingerprints: `scripts/aggregate_status.py`, `scripts/status_fingerprints.py`
+- preflight static and runtime smoke: `scripts/authoring/validate_tasks_preflight.py`
+- infrastructure readiness: `scripts/infra/check_infra.py`
+- post-run task validation: `scripts/authoring/validate_task_run.py`
+- run-wide status + fingerprints: `scripts/analysis/aggregate_status.py`, `scripts/status_fingerprints.py`
 - metadata drift checks: `scripts/sync_task_metadata.py`
-- repo-level health gate before merge/push: `scripts/repo_health.py`
+- repo-level health gate before merge/push: `scripts/maintenance/repo_health.py`
 
 The audit layer had two tracks.
 - 6-dimension operational QA framework
@@ -220,7 +220,7 @@ For cross-agent evaluation we also built multi-harness scaffolding.
 
 Implementation anchors:
 - `docs/DAYTONA.md`
-- `scripts/daytona_runner.py`
+- `scripts/running/daytona_runner.py`
 - `scripts/check_harness_readiness.py`
 - `configs/multi_harness_compare.sh`
 

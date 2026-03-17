@@ -266,7 +266,7 @@ def main():
                 write_selection_file(tasks, filepath)
 
             cmd = (
-                f"./configs/run_selected_tasks.sh "
+                f"./configs/harnesses/run_selected_tasks.sh "
                 f"--selection-file configs/variance_reruns/{filename} "
                 f"--category staging"
             )

@@ -43,10 +43,10 @@ Each task follows this layout:
 
 ```bash
 # Run all 275 canonical tasks across 2 configs
-bash configs/run_selected_tasks.sh
+bash configs/harnesses/run_selected_tasks.sh
 
 # Run a specific source directory
-bash configs/run_selected_tasks.sh --benchmark csb_sdlc_fix
+bash configs/harnesses/run_selected_tasks.sh --benchmark csb_sdlc_fix
 
 # Single task
 harbor run --path benchmarks/csb_sdlc_feature/servo-scrollend-event-feat-001 \

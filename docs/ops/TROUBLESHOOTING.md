@@ -7,7 +7,7 @@
 - You only need the standard run flow: use `docs/ops/WORKFLOWS.md`.
 
 ## Escalation Routing
-- Repeated infra failures: stop reruns, fix root cause first (`scripts/check_infra.py`).
+- Repeated infra failures: stop reruns, fix root cause first (`scripts/infra/check_infra.py`).
 - Suspected verifier bug: quarantine task, collect evidence, open follow-up.
 - Missing trajectories: use transcript/JSONL fallback and document limitation.
 - Widespread MCP regressions: run `scripts/mcp_audit.py` before changing prompts/configs.

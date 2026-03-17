@@ -70,7 +70,7 @@ for i in 0 1 2; do
         exit 1
     fi
 
-    bash configs/run_selected_tasks.sh \
+    bash configs/harnesses/run_selected_tasks.sh \
         --selection-file "$config" \
         --skip-prebuild \
         $DRY_RUN_FLAG

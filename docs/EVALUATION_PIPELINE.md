@@ -95,8 +95,8 @@ tests/fixtures/
 Run fixture self-tests:
 
 ```bash
-python3 scripts/validate_tasks_preflight.py --fixture-tests
-python3 scripts/validate_tasks_preflight.py --smoke-runtime   # includes fixtures + idempotency
+python3 scripts/authoring/validate_tasks_preflight.py --fixture-tests
+python3 scripts/authoring/validate_tasks_preflight.py --smoke-runtime   # includes fixtures + idempotency
 ```
 
 Idempotency checks run the verifier twice on the same input and assert scores

@@ -25,7 +25,7 @@ check_infra.py                (--since / --watch)     aggregate_status.py
 
 ## 1. Pre-Flight Validation
 
-**Script:** `scripts/validate_tasks_preflight.py`
+**Script:** `scripts/authoring/validate_tasks_preflight.py`
 
 Runs before any benchmark execution to catch task definition errors that would waste compute time.
 
@@ -85,25 +85,25 @@ bash configs/validate_one_per_benchmark.sh \
 **Usage:**
 ```bash
 # Validate all tasks (static checks)
-python3 scripts/validate_tasks_preflight.py --all
+python3 scripts/authoring/validate_tasks_preflight.py --all
 
 # Validate a specific suite
-python3 scripts/validate_tasks_preflight.py --suite csb_sdlc_feature
+python3 scripts/authoring/validate_tasks_preflight.py --suite csb_sdlc_feature
 
 # Validate a single task
-python3 scripts/validate_tasks_preflight.py --task benchmarks/csb_sdlc_feature/envoy-grpc-server-impl-001
+python3 scripts/authoring/validate_tasks_preflight.py --task benchmarks/csb_sdlc_feature/envoy-grpc-server-impl-001
 
 # Audit modified prompt files for hygiene issues
 python3 scripts/prompt_hygiene.py --git-modified --include-mcp --fail-on-findings
 
 # Runtime smoke for a single task (no agent)
-python3 scripts/validate_tasks_preflight.py --task benchmarks/csb_sdlc_understand/terraform-plan-pipeline-qa-001 --smoke-runtime
+python3 scripts/authoring/validate_tasks_preflight.py --task benchmarks/csb_sdlc_understand/terraform-plan-pipeline-qa-001 --smoke-runtime
 
 # Runtime smoke for a suite (expensive)
-python3 scripts/validate_tasks_preflight.py --suite csb_sdlc_fix --smoke-runtime --smoke-timeout-sec 900
+python3 scripts/authoring/validate_tasks_preflight.py --suite csb_sdlc_fix --smoke-runtime --smoke-timeout-sec 900
 
 # Separate build/verifier timeouts (for phase-level diagnosis)
-python3 scripts/validate_tasks_preflight.py --task benchmarks/csb_sdlc_fix/pytorch-relu-gelu-fusion-fix-001 \
+python3 scripts/authoring/validate_tasks_preflight.py --task benchmarks/csb_sdlc_fix/pytorch-relu-gelu-fusion-fix-001 \
   --smoke-runtime --smoke-build-timeout-sec 900 --smoke-verify-timeout-sec 900
 ```
 
@@ -111,7 +111,7 @@ python3 scripts/validate_tasks_preflight.py --task benchmarks/csb_sdlc_fix/pytor
 
 ## 2. Infrastructure Checks
 
-**Script:** `scripts/check_infra.py`
+**Script:** `scripts/infra/check_infra.py`
 
 Verifies that the execution environment is ready before launching runs.
 
@@ -123,7 +123,7 @@ Verifies that the execution environment is ready before launching runs.
 
 **Usage:**
 ```bash
-python3 scripts/check_infra.py
+python3 scripts/infra/check_infra.py
 ```
 
 **Multi-account support:** When using `~/.claude-homes/accountN/` directories for parallel execution, the script validates OAuth credentials for each account independently.
@@ -161,7 +161,7 @@ See [ERROR_CATALOG.md](ERROR_CATALOG.md) for the full catalog with root causes, 
 
 ## 4. Post-Run Validation
 
-**Script:** `scripts/validate_task_run.py`
+**Script:** `scripts/authoring/validate_task_run.py`
 
 Validates individual task run output after execution completes.
 
@@ -173,14 +173,14 @@ Validates individual task run output after execution completes.
 
 **Usage:**
 ```bash
-python3 scripts/validate_task_run.py <run_dir>
+python3 scripts/authoring/validate_task_run.py <run_dir>
 ```
 
 ---
 
 ## 5. Run Analysis & Status Scanning
 
-**Script:** `scripts/aggregate_status.py`
+**Script:** `scripts/analysis/aggregate_status.py`
 
 Core run scanner that processes all run directories under `runs/official/`.
 
@@ -197,13 +197,13 @@ Core run scanner that processes all run directories under `runs/official/`.
 **Usage:**
 ```bash
 # Full scan
-python3 scripts/aggregate_status.py
+python3 scripts/analysis/aggregate_status.py
 
 # Watch mode (re-scans every 30s)
-python3 scripts/aggregate_status.py --watch
+python3 scripts/analysis/aggregate_status.py --watch
 
 # Recent activity only
-python3 scripts/aggregate_status.py --since 2h
+python3 scripts/analysis/aggregate_status.py --since 2h
 ```
 
 ---

@@ -300,9 +300,9 @@ def main():
 
                     flag = sub_mode or ""
                     if env == "daytona":
-                        cmd = f"./configs/run_selected_tasks.sh --selection-file configs/coverage_gap_20260302/{fname} --category staging {flag}".strip()
+                        cmd = f"./configs/harnesses/run_selected_tasks.sh --selection-file configs/coverage_gap_20260302/{fname} --category staging {flag}".strip()
                     else:
-                        cmd = f"HARBOR_ENV= ./configs/run_selected_tasks.sh --selection-file configs/coverage_gap_20260302/{fname} --category staging {flag}".strip()
+                        cmd = f"HARBOR_ENV= ./configs/harnesses/run_selected_tasks.sh --selection-file configs/coverage_gap_20260302/{fname} --category staging {flag}".strip()
                     commands.append((wave, env, cmd))
             else:
                 fname = f"{batch_name}_wave{wave}.json"
@@ -313,9 +313,9 @@ def main():
                 files_to_write[fname] = {"tasks": clean_tasks}
 
                 if env == "daytona":
-                    cmd = f"./configs/run_selected_tasks.sh --selection-file configs/coverage_gap_20260302/{fname} --category staging {flag}"
+                    cmd = f"./configs/harnesses/run_selected_tasks.sh --selection-file configs/coverage_gap_20260302/{fname} --category staging {flag}"
                 else:
-                    cmd = f"HARBOR_ENV= ./configs/run_selected_tasks.sh --selection-file configs/coverage_gap_20260302/{fname} --category staging {flag}"
+                    cmd = f"HARBOR_ENV= ./configs/harnesses/run_selected_tasks.sh --selection-file configs/coverage_gap_20260302/{fname} --category staging {flag}"
                 commands.append((wave, env, cmd))
 
     print()
