@@ -209,6 +209,7 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/evaluation/compare_old_new_ground_truth.py` - Utility script for compare old new ground truth.
 - `scripts/evaluation/compute_analysis_ir_metrics.py` - Utility script for compute analysis ir metrics.
 - `scripts/analysis/compute_bootstrap_cis.py` - Utility script for compute bootstrap cis.
+- `scripts/maintenance/config_fingerprint.py` - Utility script for config fingerprint.
 - `scripts/running/context_retrieval_agent.py` - Utility script for context retrieval agent.
 - `scripts/running/control_plane.py` - Utility script for control plane.
 - `scripts/running/convert_harbor_to_contextbench.py` - Utility script for convert harbor to contextbench.

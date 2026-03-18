@@ -19,6 +19,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "maintenance"))
 sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "evaluation"))
+from config_fingerprint import (
+    build_fingerprint_timeline,
+    compute_current_fingerprint,
+    fingerprint_for_timestamp,
+)
 from config_utils import discover_configs
 from official_runs import raw_runs_dir
 
@@ -795,6 +800,16 @@ def main():
         print(f"ERROR: Runs directory not found: {RUNS_DIR}", file=sys.stderr)
         sys.exit(1)
 
+    # Compute config fingerprint (agent harness identity) for staleness detection.
+    # The timeline maps git commit timestamps to fingerprints so we can look up
+    # what version of the harness was active when each run was executed.
+    print("Computing config fingerprints...")
+    current_fp_info = compute_current_fingerprint(PROJECT_ROOT)
+    current_fingerprint = current_fp_info["fingerprint"]
+    fp_timeline = build_fingerprint_timeline(PROJECT_ROOT)
+    print(f"  Current fingerprint: {current_fingerprint}")
+    print(f"  Timeline entries: {len(fp_timeline)}")
+
     judge_scores = load_judge_scores(cli_args.judge_scores)
 
     # Load trace quality metrics if available
@@ -970,6 +985,18 @@ def main():
         if not model:
             model = "unknown"
 
+        # Determine the config fingerprint active when this run was executed.
+        # Use the raw started_at from result.json (more precise than normalized timestamp).
+        raw_timestamp = first_task["data"].get("started_at", "")
+        run_fingerprint = fingerprint_for_timestamp(fp_timeline, raw_timestamp)
+
+        # A run is stale when its fingerprint is known and differs from current.
+        # Runs predating git history (run_fingerprint is None) have stale=None (unknown).
+        if run_fingerprint is None:
+            stale: Optional[bool] = None
+        else:
+            stale = run_fingerprint != current_fingerprint
+
         run_entry = {
             "run_id": manifest_key.replace("/", "_"),
             "model": model,
@@ -979,6 +1006,8 @@ def main():
             "failed": failed,
             "errored": errored,
             "mean_reward": mean_reward,
+            "config_fingerprint": run_fingerprint,
+            "stale": stale,
             "tasks": task_infos,
         }
         if mean_judge_score is not None:
@@ -998,11 +1027,16 @@ def main():
             if task_data["n_runs"] > 1:
                 multi_run_count += 1
 
+    # Summarise staleness for reporting
+    stale_count = sum(1 for r in runs.values() if r.get("stale") is True)
+    unknown_fp_count = sum(1 for r in runs.values() if r.get("config_fingerprint") is None)
+
     manifest = {
         "description": "Canonical run manifest for CodeScaleBench evaluation",
         "generated": datetime.now(timezone.utc).isoformat(),
         "total_tasks": total_tasks,
         "total_runs": len(runs),
+        "current_config_fingerprint": current_fingerprint,
         "runs": runs,
         "run_history": run_history_section,
     }
@@ -1016,6 +1050,11 @@ def main():
     print(f"  Total tasks: {total_tasks}")
     if multi_run_count:
         print(f"  Tasks with multiple valid runs: {multi_run_count}")
+    print(f"  Current config fingerprint: {current_fingerprint}")
+    if stale_count:
+        print(f"  Stale runs (fingerprint mismatch): {stale_count}")
+    if unknown_fp_count:
+        print(f"  Runs with unknown fingerprint (pre-history): {unknown_fp_count}")
     print()
     for key, run in runs.items():
         print(f"  {key:45s}  tasks={run['task_count']:>3d}  passed={run['passed']:>3d}  failed={run['failed']:>3d}  errored={run['errored']:>3d}  mean_reward={run['mean_reward']:.3f}")
