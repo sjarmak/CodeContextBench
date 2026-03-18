@@ -204,7 +204,7 @@ CLAUDE_CODE_OAUTH_TOKEN=... python3 scripts/running/context_retrieval_agent.py \
 After generation, verify agent oracles:
 
 ```bash
-python3 scripts/running/cross_validate_oracles.py \
+python3 scripts/evaluation/cross_validate_oracles.py \
     --oracle1 ground_truth.json \
     --oracle2 ground_truth_agent.json
 ```
@@ -375,7 +375,7 @@ By complexity:
 ### Scripts
 - `scripts/running/context_retrieval_agent.py` — agent implementation (run_agent, run_agent_cli)
 - `scripts/authoring/validate_on_contextbench.py` — calibration harness
-- `scripts/running/cross_validate_oracles.py` — oracle agreement metrics
+- `scripts/evaluation/cross_validate_oracles.py` — oracle agreement metrics
 - `scripts/running/promote_agent_oracles.py` — promotion to canonical ground truth
 
 ### Progress Tracking

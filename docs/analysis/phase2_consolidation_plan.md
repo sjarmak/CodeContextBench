@@ -62,7 +62,7 @@
 - scripts/csb_metrics/coverage_audit.py (new - unified abstraction)
 - scripts/evaluation/audit_gt_coverage.py
 - scripts/analysis/analyze_run_coverage.py
-- scripts/analysis/audit_official_scores.py
+- scripts/evaluation/audit_official_scores.py
 - scripts/infra/build_canonical_manifest.py
 - scripts/infra/build_repo_manifests.py
 

@@ -163,7 +163,7 @@ Exit code 0 means all files are valid. Exit code 1 means at least one file faile
 Use the packaging script to create a validated submission archive:
 
 ```bash
-python3 scripts/package_submission.py \
+python3 scripts/evaluation/package_submission.py \
   --results-dir my-submission/ \
   --output my-submission.tar.gz
 ```
