@@ -26,7 +26,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 BENCHMARKS = REPO_ROOT / "benchmarks"
-WRAPPER_SRC = REPO_ROOT / "scripts" / "sgonly_verifier_wrapper.sh"
+WRAPPER_SRC = REPO_ROOT / "scripts" / "evaluation" / "sgonly_verifier_wrapper.sh"
 
 # Mapping from upstream GitHub repos (as they appear in Dockerfile git clone URLs)
 # to their version-pinned sg-evals mirrors on Sourcegraph.
