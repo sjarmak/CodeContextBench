@@ -23,7 +23,7 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import List, Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "maintenance"))
 from config_utils import is_mcp_config
 
 # ANSI color codes
