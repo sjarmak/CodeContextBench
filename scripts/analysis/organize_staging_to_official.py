@@ -21,7 +21,7 @@ import shutil
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 STAGING = REPO_ROOT / "runs" / "staging"
 OFFICIAL = REPO_ROOT / "runs" / "official"
 
@@ -100,7 +100,8 @@ def parse_run_name(run_dir_name: str) -> tuple[str, str, str] | None:
         ccb_secure_opus_20260223_210902     -> (ccb_secure, opus, 022326)
     """
     # Match model + timestamp at end: _{model}_YYYYMMDD_HHMMSS
-    m = re.search(r"_(haiku|opus|sonnet)_(\d{4})(\d{2})(\d{2})_\d{6}$", run_dir_name)
+    # Supports model variants like sonnet46, opus45 etc.
+    m = re.search(r"_(haiku|opus|sonnet\d*)_(\d{4})(\d{2})(\d{2})_\d{6}$", run_dir_name)
     if not m:
         return None
     model = m.group(1)
@@ -108,14 +109,14 @@ def parse_run_name(run_dir_name: str) -> tuple[str, str, str] | None:
     date_str = f"{month}{day}{year[2:]}"  # MMDDYY
 
     # Extract suite: everything before _{model}_{timestamp}
-    prefix = re.sub(r"_(haiku|opus|sonnet)_\d{8}_\d{6}$", "", run_dir_name)
+    prefix = re.sub(r"_(haiku|opus|sonnet\d*)_\d{8}_\d{6}$", "", run_dir_name)
 
     # Normalize: SDLC phases without prefix get csb_sdlc_ added
     sdlc_phases = {"build", "debug", "design", "document", "fix", "secure", "test", "understand",
                    "feature", "refactor"}
     if prefix in sdlc_phases:
         suite = f"csb_sdlc_{prefix}"
-    elif prefix.startswith(("csb_", "ccb_")):
+    elif prefix.startswith(("csb_", "ccb_", "openhands")):
         suite = prefix
     else:
         suite = f"csb_sdlc_{prefix}"

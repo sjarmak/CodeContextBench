@@ -15,9 +15,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "maintenance"))
+sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "evaluation"))
 from config_utils import discover_configs
 from official_runs import raw_runs_dir
 
@@ -55,6 +56,8 @@ DIR_PREFIX_TO_SUITE = {
     "understand_": "csb_sdlc_understand",
     # Legacy benchmark prefixes
     "bigcode_mcp_": "ccb_largerepo",
+    # OpenHands agent runs
+    "openhands_": "openhands",
     "codereview_": "ccb_codereview",
     "crossrepo_": "ccb_crossrepo",
     "dependeval_": "ccb_dependeval",
@@ -251,6 +254,21 @@ def _extract_model_from_config(trial_dir: Path) -> str | None:
                 return model
         except (json.JSONDecodeError, OSError):
             pass
+
+    # Last resort: infer model from run directory name
+    # e.g., openhands_sonnet46_031526 -> anthropic/claude-sonnet-4-6
+    for parent in [trial_dir] + list(trial_dir.parents):
+        name = parent.name
+        if "sonnet46" in name or "sonnet4-6" in name:
+            return "anthropic/claude-sonnet-4-6"
+        if re.match(r".*_sonnet_\d{6}$", name):
+            return "anthropic/claude-sonnet-4-6"
+        if re.match(r".*_haiku_\d{6}$", name):
+            return "anthropic/claude-haiku-4-5-20251001"
+        if re.match(r".*_opus_\d{6}$", name):
+            return "anthropic/claude-opus-4-5-20251101"
+        if name == "_raw":
+            break
 
     return None
 
@@ -528,20 +546,18 @@ def _normalize_task_name(name: str) -> str:
     # not include these prefixes.
     if name.startswith("mcp_"):
         name = name[4:]
-        # Harbor's MCP wrapper often appends a random 6-char suffix to tmp task IDs
-        # (e.g. django-role-based-access-001_2ERzmK). Strip it for canonical matching.
-        name = re.sub(r"_[A-Za-z0-9]{6}$", "", name)
     elif name.startswith("bl_"):
         name = name[3:]
-        # Baseline wrappers for MCP-unique tasks use the same tmp suffix scheme.
-        name = re.sub(r"_[A-Za-z0-9]{6}$", "", name)
     elif name.startswith("sgonly_"):
         name = name[7:]
 
-    # MCP-unique task IDs sometimes appear with lowercase "ccx-" in direct baseline
-    # runs and uppercase "CCX-" in MCP runs. Canonicalize to uppercase prefix.
-    if name.startswith("ccx-"):
-        name = "CCX-" + name[4:]
+    # Strip random hash suffixes appended by Harbor/OpenHands wrappers.
+    # These are 6-8 char alphanumeric/hex suffixes after an underscore
+    # (e.g. django-role-based-access-001_2ERzmK, ccx-compliance-124_f755cd71).
+    name = re.sub(r"_[A-Za-z0-9]{6,8}$", "", name)
+
+    # Canonicalize to lowercase (canonical IDs are all lowercase).
+    name = name.lower()
 
     if not name.startswith("instance_"):
         return name
