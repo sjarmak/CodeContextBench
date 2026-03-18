@@ -132,32 +132,31 @@ full operations manual.
 - **3 deprecated model IDs**: `claude-opus-4-5-20251101` → `claude-opus-4-6` in skills.
 
 ### Git / Auth
-- `gh auth refresh -h github.com -s write:packages`. Env vars must be **exported** for Harbor subprocesses (`set -a` before sourcing `.env.local`).
-- GitHub push protection blocks synthetic keys. Squash with `git reset --soft origin/main`.
-- Shallow clones fail on push. Some repos use `master`; detect with `git symbolic-ref refs/remotes/origin/HEAD`.
-- **gitignore negation**: `!child/` doesn't work when parent dir is ignored. Use `git add -f`.
-- **Remote URL stale**: `CodeContextBench.git` redirects to `CodeScaleBench.git`. Update local git remote config.
+- `gh auth refresh -h github.com -s write:packages`. Env vars must be **exported** (`set -a` before sourcing `.env.local`).
+- Push protection blocks synthetic keys: `git reset --soft origin/main`. **gitignore negation**: use `git add -f`.
+- **Remote URL stale**: `CodeContextBench.git` → `CodeScaleBench.git`. Update remote config.
 
 ### Python / Subprocess
 - `dict.get(key, default)` doesn't guard `None`; use `or default_value`. `json.load(open())` leaks FDs; use `with open`.
 - `with open(log) as f: Popen(stdout=f)` closes handle; use bare `open()`. macOS Bash 3.2 lacks `declare -A`.
-- No `pyproject.toml`/`requirements.txt`. 200+ scripts + 9 tests use `sys.path.insert` hack. Blocks packaging, onboarding.
-
-### LLM Judge
-- "Respond with valid JSON only" in prompts. Task-type-aware rubrics. Check `mcp__` prefix before substring-based categorization.
-
-### OpenHands
-- `sandbox_plugins = []`. Base64-encode instructions. Alpine → `bookworm`. MCP client ~30s timeout. Block `deepsearch`/`deepsearch_read` in proxy.
-- `chown -R /workspace` blocks large repos; edit `runtime_init.py`. Set `PYTHONSAFEPATH=1`.
+- No `pyproject.toml`/`requirements.txt`. 200+ scripts + 9 tests use `sys.path.insert` hack.
 
 ### CI / Workflows
-- `docs-consistency.yml` redundant (subsumed by `repo_health.yml`). Export HTML truncates at 1200 rows.
 - 4 workflows use 3 Python versions (3.10/3.11/3.12); standardize to 3.10. `roam.yml` unpinned `pip install roam-code`.
 - 3/4 CI workflows missing top-level `permissions:` block → overly broad default GitHub Actions token scope.
 
 ### Pre-commit / Pytest / Ralph
-- Secret-detection false-positives: use `--no-verify` when flagged code is detection logic. Classes `TestPlan`/`TestCase`/`TestResult` auto-collected by pytest; rename.
-- Ralph: `prd.json` single-active; archive before overwrite. `prd-archive/` and `prd.json` not gitignored; risk of accidental commit.
+- Secret-detection false-positives: use `--no-verify` when flagged code is detection logic.
+- Ralph: `prd.json` single-active; archive before overwrite. `prd-archive/` and `prd.json` not gitignored.
+
+### Scripts / Code Quality (Mar 17 additions)
+- `apply_verifier_fixes.py:9` hardcodes `/home/stephanie_jarmak/CodeScaleBench`; fails on other machines.
+- `context_retrieval_agent.py:432,544,552,584` `shell=True` + "no allowlist" (line 429); injection risk.
+- Non-atomic writes: `aggregate_status.py:669`, `apply_verifier_fixes.py:103,117,134`; use temp+rename.
+- Bare `except:` (swallows KeyboardInterrupt): `audit_v2_report_data.py:104`, `ds_audit.py:244,288`, `extract_v2_report_data.py:144,286`.
+- FD leaks: 17+ sites (not 12): `daytona_curator_runner.py:564`, `generate_csb_org_tasks.py:494`, `generate_promoted_verifiers.py:220`, `sync_oracle_files.py:50`, `validate_task_run.py:217`.
+- **Ruff** S603/S604, SIM115, BLE001 catch shell injection, FD leaks, bare excepts; add `pyproject.toml`.
+- Report #11; PRD: code quality gate (Ruff + pre-commit + custom hooks).
 
 ## Maintenance
 - Root and local `AGENTS.md` / `CLAUDE.md` files are generated from sources in `docs/ops/`.
