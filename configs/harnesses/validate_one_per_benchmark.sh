@@ -258,7 +258,7 @@ fi
 if [ "$SMOKE_RUNTIME" = false ] && [ "${HARBOR_ENV:-}" = "daytona" ]; then
     clear_daytona_cost_guard_ready
     _cost_guard_cmd=(
-        python3 "$REPO_ROOT/scripts/daytona_cost_guard.py" preflight
+        python3 "$REPO_ROOT/scripts/infra/daytona_cost_guard.py" preflight
         --selection-file "$SELECTION_FILE"
         --parallel-tasks "${#TASK_LINES[@]}"
         --concurrency 1

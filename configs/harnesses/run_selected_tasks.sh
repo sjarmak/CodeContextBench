@@ -419,7 +419,7 @@ if [ "${HARBOR_ENV:-}" = "daytona" ]; then
     echo "Execution env: Daytona"
     echo "Cost policy:   $DAYTONA_COST_POLICY"
     _cost_guard_cmd=(
-        python3 "$REPO_ROOT/scripts/daytona_cost_guard.py" preflight
+        python3 "$REPO_ROOT/scripts/infra/daytona_cost_guard.py" preflight
         --selection-file "$SELECTION_FILE"
         --parallel-tasks "$PARALLEL_TASKS"
         --concurrency "$CONCURRENCY"
