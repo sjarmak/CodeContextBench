@@ -140,6 +140,9 @@ if [ -d "$_MAYOR_RUNS" ]; then
         EXTRA_SCAN_ROOTS=("$_MAYOR_RUNS" "${EXTRA_SCAN_ROOTS[@]}")
         echo "Auto-detected mayor runs dir: $_MAYOR_RUNS"
     fi
+    # Export CSB_RUNS_DIR so openhands_2config.sh writes results to the mayor's
+    # canonical runs path rather than a relative runs/ dir in the worktree.
+    export CSB_RUNS_DIR="$_MAYOR_RUNS"
 fi
 
 echo "=============================================="

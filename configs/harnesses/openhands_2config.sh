@@ -205,7 +205,7 @@ case "$_model_lower" in
 esac
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-JOBS_BASE="runs/${CATEGORY}/openhands_${MODEL_SHORT}_${TIMESTAMP}"
+JOBS_BASE="${CSB_RUNS_DIR:-runs}/${CATEGORY}/openhands_${MODEL_SHORT}_${TIMESTAMP}"
 mkdir -p "$JOBS_BASE"
 
 readarray -t DAYTONA_SKIP_FROM_PREFIXES < <(python3 - "$OPENHANDS_ROUTING_POLICY" <<'PYEOF'
