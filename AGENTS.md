@@ -150,13 +150,12 @@ full operations manual.
 - Ralph: `prd.json` single-active; archive before overwrite. `prd-archive/` and `prd.json` not gitignored.
 
 ### Scripts / Code Quality (Mar 17 additions)
-- `apply_verifier_fixes.py:9` hardcodes `/home/stephanie_jarmak/CodeScaleBench`; fails on other machines.
+- `apply_verifier_fixes.py:9` hardcodes `~/CodeScaleBench` path; fails on other machines.
 - `context_retrieval_agent.py:432,544,552,584` `shell=True` + "no allowlist" (line 429); injection risk.
 - Non-atomic writes: `aggregate_status.py:669`, `apply_verifier_fixes.py:103,117,134`; use temp+rename.
-- Bare `except:` (swallows KeyboardInterrupt): `audit_v2_report_data.py:104`, `ds_audit.py:244,288`, `extract_v2_report_data.py:144,286`.
-- FD leaks: 17+ sites (not 12): `daytona_curator_runner.py:564`, `generate_csb_org_tasks.py:494`, `generate_promoted_verifiers.py:220`, `sync_oracle_files.py:50`, `validate_task_run.py:217`.
-- **Ruff** S603/S604, SIM115, BLE001 catch shell injection, FD leaks, bare excepts; add `pyproject.toml`.
-- Report #11; PRD: code quality gate (Ruff + pre-commit + custom hooks).
+- Bare `except:`: `audit_v2_report_data.py:104`, `ds_audit.py:244,288`, `extract_v2_report_data.py:144,286`.
+- FD leaks: 17+ sites: `daytona_curator_runner.py:564`, `generate_csb_org_tasks.py:494`, `generate_promoted_verifiers.py:220`, `sync_oracle_files.py:50`, `validate_task_run.py:217`.
+- **Ruff** S603/S604, SIM115, BLE001 catch shell injection, FD leaks, bare excepts; add `pyproject.toml`. SIM115 skips `Popen(stdout=f)` (fix manually). `sanitize_secrets.py`: per-file S105/S106 ignores (intentional fake keys).
 
 ## Maintenance
 - Root and local `AGENTS.md` / `CLAUDE.md` files are generated from sources in `docs/ops/`.
