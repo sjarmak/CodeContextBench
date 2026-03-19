@@ -12,6 +12,15 @@ The runner resolves the agent → harness script mapping via
 ``configs/harness_registry.json`` and delegates execution to the underlying
 bash harness, which is the single source of truth for account rotation,
 token refresh, and Harbor invocation.
+
+Runtime watchdog
+----------------
+``launch_run`` wraps the harness subprocess with a background watchdog thread
+that monitors ``CSB_RUNS_DIR`` for new ``validation_result.json`` files.
+If more than 50 % of the last ``WATCHDOG_WINDOW`` results are ``invalid_output``
+or ``no_status``, the watchdog probes all account tokens.  If any token is
+expired the harness process is killed and the run exits with a non-zero code so
+the operator can refresh tokens and restart.
 """
 
 from __future__ import annotations
@@ -20,7 +29,11 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
+from collections import deque
 from pathlib import Path
+from typing import Deque
 
 from lib.csb.run_config import RunConfig, AugmentationMode
 
@@ -89,15 +102,15 @@ def detect_account_count(real_home: str | None = None) -> int:
 def default_parallel_jobs(agent: str, account_count: int) -> int:
     """Return the default parallel job count per PIPELINE_SPEC §5.2.
 
-    * OpenHands: 4 per account.
+    * OpenHands: 6 per account.
     * Claude/Daytona: min(account_count × 62, 124).
-    * Others: account_count × 4.
+    * Others: account_count × 6.
     """
     if agent == "openhands":
-        return account_count * 4
+        return account_count * 6
     if agent == "claude":
         return min(account_count * 62, 124)
-    return account_count * 4
+    return account_count * 6
 
 
 # ---------------------------------------------------------------------------
@@ -188,13 +201,167 @@ def build_harness_args(config: RunConfig, repo_root: Path, parallel: int) -> lis
 
 
 # ---------------------------------------------------------------------------
+# Runtime watchdog
+# ---------------------------------------------------------------------------
+
+#: How many recent results to keep in the sliding window.
+WATCHDOG_WINDOW = 10
+#: Fraction of bad results that triggers a token probe (0.5 = 50 %).
+WATCHDOG_ERROR_THRESHOLD = 0.5
+#: Seconds between directory scans.
+WATCHDOG_POLL_INTERVAL = 60
+
+
+def _probe_token_health(real_home: str | None = None) -> tuple[bool, list[str]]:
+    """Check OAuth token validity for all account homes.
+
+    Returns:
+        (all_ok, messages) where all_ok is False if any token is expired.
+    """
+    # Import here to avoid circular imports and keep the dependency optional.
+    try:
+        from scripts.infra.account_health import read_token_status  # type: ignore[import]
+    except ImportError:
+        # If the module isn't importable, fall through gracefully.
+        return True, ["[watchdog] account_health module not importable; skipping token probe"]
+
+    home = real_home or os.environ.get("REAL_HOME") or os.path.expanduser("~")
+    claude_homes = Path(home) / ".claude-homes"
+    messages: list[str] = []
+    all_ok = True
+
+    if not claude_homes.is_dir():
+        # Single-account setup — check ~/.claude directly
+        status = read_token_status(Path(home))
+        state = status.get("token_state", "unknown")
+        rem = status.get("remaining_minutes")
+        rem_text = f"{rem}m remaining" if rem is not None else "unknown expiry"
+        messages.append(f"[watchdog] account {home}: token={state} ({rem_text})")
+        if state in ("expired", "expiring_now", "missing_credentials", "missing_oauth", "corrupt_credentials"):
+            all_ok = False
+        return all_ok, messages
+
+    for account_dir in sorted(claude_homes.iterdir()):
+        if not account_dir.is_dir() or not account_dir.name.startswith("account"):
+            continue
+        status = read_token_status(account_dir)
+        state = status.get("token_state", "unknown")
+        rem = status.get("remaining_minutes")
+        rem_text = f"{rem}m remaining" if rem is not None else "unknown expiry"
+        messages.append(f"[watchdog] {account_dir.name}: token={state} ({rem_text})")
+        if state in ("expired", "expiring_now", "missing_credentials", "missing_oauth", "corrupt_credentials"):
+            all_ok = False
+
+    return all_ok, messages
+
+
+class _RuntimeWatchdog(threading.Thread):
+    """Background thread that monitors validation results and kills the harness on bad-token conditions.
+
+    The watchdog:
+    1. Scans CSB_RUNS_DIR every WATCHDOG_POLL_INTERVAL seconds for new
+       ``validation_result.json`` files.
+    2. Maintains a sliding window (deque) of the last WATCHDOG_WINDOW statuses.
+    3. If more than WATCHDOG_ERROR_THRESHOLD of the window is ``invalid_output``
+       (or missing a status entirely), probes account tokens.
+    4. If any token is expired, sends SIGTERM to the harness process, sets
+       ``self.killed_reason``, and exits.
+    """
+
+    def __init__(self, proc: subprocess.Popen, csb_runs_dir: Path) -> None:
+        super().__init__(name="csb-watchdog", daemon=True)
+        self._proc = proc
+        self._runs_dir = csb_runs_dir
+        self._stop_event = threading.Event()
+        #: Set to a non-empty string if the watchdog killed the process.
+        self.killed_reason: str = ""
+        # Track which files we've already seen so we only process new results.
+        self._seen: set[Path] = set()
+        self._window: Deque[str] = deque(maxlen=WATCHDOG_WINDOW)
+
+    def stop(self) -> None:
+        """Signal the watchdog to exit its poll loop."""
+        self._stop_event.set()
+
+    def _collect_new_results(self) -> list[str]:
+        """Return statuses from validation_result.json files not yet seen."""
+        new_statuses: list[str] = []
+        for result_file in self._runs_dir.rglob("validation_result.json"):
+            if result_file in self._seen:
+                continue
+            self._seen.add(result_file)
+            try:
+                data = json.loads(result_file.read_text())
+                status = data.get("status", "no_status")
+            except (json.JSONDecodeError, OSError):
+                status = "no_status"
+            new_statuses.append(status)
+        return new_statuses
+
+    def _error_rate(self) -> float:
+        if not self._window:
+            return 0.0
+        bad = sum(1 for s in self._window if s in ("invalid_output", "no_status"))
+        return bad / len(self._window)
+
+    def run(self) -> None:
+        while not self._stop_event.is_set():
+            # Collect any new validation results written since last scan.
+            new_statuses = self._collect_new_results()
+            for s in new_statuses:
+                self._window.append(s)
+
+            if len(self._window) >= WATCHDOG_WINDOW:
+                rate = self._error_rate()
+                if rate > WATCHDOG_ERROR_THRESHOLD:
+                    print(
+                        f"[watchdog] ERROR RATE ALERT: {rate:.0%} of last "
+                        f"{len(self._window)} results are bad "
+                        f"(invalid_output/no_status). Probing tokens...",
+                        flush=True,
+                    )
+                    all_ok, messages = _probe_token_health()
+                    for msg in messages:
+                        print(msg, flush=True)
+                    if not all_ok:
+                        self.killed_reason = (
+                            f"Watchdog killed harness: {rate:.0%} error rate "
+                            f"with expired/invalid tokens. Refresh tokens and restart."
+                        )
+                        print(
+                            f"[watchdog] KILLING HARNESS — {self.killed_reason}",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        try:
+                            self._proc.terminate()
+                        except OSError:
+                            pass
+                        return
+                    else:
+                        print(
+                            "[watchdog] Tokens look healthy; high error rate may be a task issue.",
+                            flush=True,
+                        )
+                        # Reset window so we don't fire again immediately.
+                        self._window.clear()
+
+            self._stop_event.wait(WATCHDOG_POLL_INTERVAL)
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 def launch_run(config: RunConfig, repo_root: Path | None = None) -> int:
-    """Launch the harness for the given RunConfig.
+    """Launch the harness for the given RunConfig with a runtime watchdog.
 
-    Returns the harness exit code.
+    The harness subprocess is monitored for error-rate spikes that indicate
+    expired OAuth tokens.  If the watchdog detects that >50 % of the last 10
+    results are ``invalid_output`` AND token probing confirms at least one
+    expired token, the harness is killed and this function returns 2.
+
+    Returns the harness exit code (0 = success, non-zero = failure/killed).
 
     Raises:
         ValueError: If the harness cannot be resolved.
@@ -214,7 +381,7 @@ def launch_run(config: RunConfig, repo_root: Path | None = None) -> int:
     cmd = ["bash", str(harness)] + args
 
     # Print launch summary
-    csb_runs_dir = env.get("CSB_RUNS_DIR", "(not set)")
+    csb_runs_dir_str = env.get("CSB_RUNS_DIR", "(not set)")
     subset = config.resolved_task_subset(repo_root)
     print(f"[csb run] Agent:        {config.agent.value}")
     print(f"[csb run] Model:        {config.model}")
@@ -222,11 +389,34 @@ def launch_run(config: RunConfig, repo_root: Path | None = None) -> int:
     print(f"[csb run] Category:     {config.category.value}")
     print(f"[csb run] Task subset:  {subset}")
     print(f"[csb run] Parallel:     {parallel} (accounts: {account_count})")
-    print(f"[csb run] Output root:  {csb_runs_dir}")
+    print(f"[csb run] Output root:  {csb_runs_dir_str}")
     if config.dry_run:
         print(f"[csb run] DRY RUN — no tasks will execute")
     print(f"[csb run] Harness:      {harness}")
+    print(f"[csb run] Watchdog:     enabled (window={WATCHDOG_WINDOW}, threshold={WATCHDOG_ERROR_THRESHOLD:.0%})")
     print()
 
-    result = subprocess.run(cmd, env=env, cwd=str(repo_root))
-    return result.returncode
+    csb_runs_dir = Path(csb_runs_dir_str) if csb_runs_dir_str != "(not set)" else Path(".")
+
+    proc = subprocess.Popen(cmd, env=env, cwd=str(repo_root))
+
+    watchdog = _RuntimeWatchdog(proc, csb_runs_dir)
+    watchdog.start()
+
+    try:
+        proc.wait()
+    except KeyboardInterrupt:
+        proc.terminate()
+        proc.wait()
+    finally:
+        watchdog.stop()
+        watchdog.join(timeout=5)
+
+    if watchdog.killed_reason:
+        print(
+            f"\n[csb run] Run aborted by watchdog: {watchdog.killed_reason}",
+            file=sys.stderr,
+        )
+        return 2
+
+    return proc.returncode
