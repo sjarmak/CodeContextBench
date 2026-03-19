@@ -113,6 +113,24 @@ while [[ $# -gt 0 ]]; do
             SELECTION_FILE="$SCRIPT_DIR/$2"
             shift 2
             ;;
+        --selection-file)
+            # Accept absolute path (used by csb run via harness_runner.py)
+            SELECTION_FILE="$2"
+            shift 2
+            ;;
+        --full-config)
+            # Accept and ignore — MCP type already set via --full-only
+            shift 2
+            ;;
+        --skip-completed)
+            # Accept and ignore — gap filtering is handled via --selection-file/--subset
+            shift
+            ;;
+        --dry-run)
+            # Propagate to environment for inner scripts; no-op here as harness_runner handles it
+            export DRY_RUN=1
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
             exit 1
