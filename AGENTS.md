@@ -35,7 +35,7 @@ curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/insta
 - Prefer directory-local `AGENTS.md` / `CLAUDE.md` when working under `scripts/`, `configs/`, `tasks/`, or `docs/`.
 
 ## Fast Routing By Intent
-- Launch or rerun benchmarks: `docs/DAYTONA.md` (Daytona, preferred) or `docs/START_HERE_BY_TASK.md`
+- Launch benchmarks: `csb run config.yaml` / `csb coverage` (gaps). Schema: `schemas/csb_run_config.schema.json`. Docs: `docs/DAYTONA.md`
 - Monitor / status: `docs/START_HERE_BY_TASK.md` -> "Monitor Active Runs"
 - Triage failures: `docs/START_HERE_BY_TASK.md` -> "Triage Failed Tasks"
 - Compare configs / MCP impact / IR: `docs/START_HERE_BY_TASK.md` -> "Analyze Results"
