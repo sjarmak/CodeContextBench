@@ -96,23 +96,23 @@ full operations manual.
 - **Verifier lib duplication**: 401 copies of `answer_json_verifier_lib.sh` (13 suites; task copies diverged with extra funcs). 275 copies of `dual_score_lib.sh` (csb/ only). `benchmarks/_shared/` missing; every fix requires touching 401+ files.
 
 ### Scripts / Code Quality
-- **abc_audit.py**: 4 functions defined twice (`check_oa_*`, `check_ob_*`, `check_og_*`, `check_t10_*`); Python silently uses last definition.
-- **`rerun_failed.py`**: `shell=True` + dynamic commands (injection risk); `sourcegraph_full → deepsearch` mapping wrong (invalid MCP type); contains deprecated model ID.
-- **ir_metrics.py `tt_all_r` bug**: Line 749 set comparison may report time-to-first-relevant instead of time-to-all-relevant.
-- **`--skip-completed`**: requires both `result.json` + `task_metrics.json`. Fix: check only `result.json`.
-- **Task registry header stale**: claims 436, actual 274. `sync_task_metadata.py --fix` doesn't update it.
-- **`verification_modes`/`use_case_category` missing from all 274 tasks**: breaks auto-detection + `--use-case-category` filter (silently filters all).
+- `abc_audit.py`: 4 functions defined twice; Python silently uses last definition.
+- `rerun_failed.py`: `shell=True` injection; wrong `sourcegraph_full→deepsearch` mapping; deprecated model.
+- `ir_metrics.py:749`: `tt_all_r` set comparison bug (first-relevant, not all-relevant).
+- `--skip-completed` requires result.json + task_metrics.json; fix: check only result.json.
+- Task registry header: claims 436, actual 274 (`sync_task_metadata.py --fix` doesn't update it).
+- `verification_modes`/`use_case_category` missing from all 274 tasks; `--use-case-category` silently returns 0.
 
 ### Validation / Scoring
-- `validators.py` duplicated across `ccb_build` tasks. Changes must hit **all copies** (`sha256sum`).
-- Agent <2s = never ran. `no_changes_guard`: write `reward.txt` in Python, not bash. `timeout 600` on runners; `--forceExit` for Jest; Jest+TS: `memory_mb = 8192`.
-- **CSB dual-score**: file edits + `answer.json` independent. Fallback: `promoted_verifier.py` → `oracle_checks.py` → heuristic.
-- Rate-limited (score=0, <30s): `quarantine_invalid_tasks.py --execute`. Bare `$VAR` in `instruction.md` → use `<placeholder>`.
-- Pass rate logic duplicated in `generate_eval_report.py` and `csb_metrics/models.py`.
-- `cost_report.py`: `defaultdict(int)` + `.get("baseline", 1)` returns `0`. Use `or 1`.
-- **TARGET_SUITE**: 55 stale, 220 missing. `dual_score_lib.sh` `scorer_artifact` always `"auto"`.
-- **Falsy bugs**: `max_score=0` as false; `None` MCP metrics misclassified. `promote_run.py` crashes on non-dict env. `generate_eval_report.py:147,1005` `mcp_mode or config_name` falls through on empty string (both sites).
-- `models.py` `from_dict()` mutates caller's dict via `.pop()`.
+- `validators.py` duplicated in `ccb_build`; update all copies (`sha256sum`).
+- Agent <2s = never ran. `reward.txt` in Python. `timeout 600`; Jest `--forceExit`; `memory_mb=8192`.
+- CSB dual-score: edits + `answer.json` independent. Fallback: promoted_verifier→oracle_checks→heuristic.
+- Rate-limited (score=0, <30s): `quarantine_invalid_tasks.py --execute`. Bare `$VAR` → `<placeholder>`.
+- Pass rate logic duplicated: `generate_eval_report.py` + `csb_metrics/models.py`.
+- `cost_report.py`: use `or 1` guard (not `.get(..., 1)` which returns 0 for key=0).
+- TARGET_SUITE: 55 stale, 220 missing. `dual_score_lib.sh scorer_artifact` always `"auto"`.
+- Falsy bugs: `max_score=0`, None MCP, promote_run.py non-dict env, eval_report.py:147,1005.
+- `models.py from_dict()` mutates caller dict via `.pop()`.
 
 ### Agent / Runner Robustness
 - **Agent `/tmp` race**: `claude_baseline_agent.py:1134` uses fixed `/tmp/claude_system_prompt.txt`, `/tmp/claude_run.sh`. Concurrent tasks cross-contaminate. Use `mktemp`.
@@ -128,9 +128,9 @@ full operations manual.
 - **16 copies of `DIR_PREFIX_TO_SUITE`** across 30+ scripts with divergent definitions. Centralize in `csb_metrics/suite_registry.py`.
 
 ### Skills / Automation
-- **54 stale paths**: 25 skill files hardcode `~/CodeScaleBench` (actual `~/CodeContextBench`). Use `$(git rev-parse --show-toplevel)`.
-- **21 stale `sourcegraph_full` refs**: 14 skill files + 5 schemas. Invalid `BASELINE_MCP_TYPE` value (accepts `none`/`sourcegraph`/`deepsearch`).
-- **3 deprecated model IDs**: `claude-opus-4-5-20251101` → `claude-opus-4-6` in skills.
+- 25 skill files hardcode `~/CodeScaleBench` (use `git rev-parse --show-toplevel`).
+- 14 skill files + 5 schemas have stale `sourcegraph_full` (valid: `none`/`sourcegraph`/`deepsearch`).
+- 3 deprecated model IDs in skills: `claude-opus-4-5-20251101` → `claude-opus-4-6`.
 
 ### Git / Auth
 - `gh auth refresh -h github.com -s write:packages`. Env vars must be **exported** (`set -a` before sourcing `.env.local`).
@@ -150,13 +150,17 @@ full operations manual.
 - Secret-detection false-positives: use `--no-verify` when flagged code is detection logic.
 - Ralph: `prd.json` single-active; archive before overwrite. `prd-archive/` and `prd.json` not gitignored.
 
-### Scripts / Code Quality (Mar 17-18 additions)
-- `apply_verifier_fixes.py:9` hardcodes `~/CodeScaleBench` path; crash on other machines.
+### Scripts / Code Quality (Mar 17-20 additions)
+- `apply_verifier_fixes.py:9` hardcodes `~/CodeScaleBench`; crash on other machines.
 - `context_retrieval_agent.py:432+` `shell=True` without allowlist; injection risk.
 - Non-atomic writes: `aggregate_status.py:669`, `apply_verifier_fixes.py:103+`; use temp+rename.
 - Bare `except:`: `audit_v2_report_data.py:104`, `ds_audit.py:244+`, `extract_v2_report_data.py:144+`.
-- FD leaks: 17+ sites; use `with open()`. `export_official_results.py:45` `DEFAULT_REPO_BLOB_BASE` → old org `CodeScaleBench`; links 404.
-- **Ruff** S603/S604, SIM115, BLE001; add `pyproject.toml`. SIM115 skips `Popen(stdout=f)`. `sanitize_secrets.py`: S105/S106 per-file ignores.
+- FD leaks: 17+ sites; use `with open()`. `export_official_results.py:45` `DEFAULT_REPO_BLOB_BASE` → stale org; links 404.
+- Ruff S603/S604, SIM115, BLE001; add `pyproject.toml`. SIM115 skips `Popen(stdout=f)`. `sanitize_secrets.py`: S105/S106 per-file ignores.
+- Hardcoded-path epidemic: `fix_memory_mb.py:8`, `extract_build_diary.py:121`, `plot_build_diary_supplementary.py:121+` also use `/home/stephanie_jarmak/CodeScaleBench`; 5 scripts total.
+- Shell scripts `rerun_fixed_tasks.sh:34`, `rerun_zero_mcp_tasks.sh:29` use deprecated `claude-opus-4-5-20251101`; Ruff misses `.sh` — add `grep -rn "claude-opus-4-5" scripts/` to CI.
+- `run_selected_tasks.sh:648,699,711`: mktemp+mv race — `mv` failure swallowed by subshell, `cp` targets missing dir.
+- `csb_metrics/extractors.py:669`: FD leak via `tp.open()` (pathlib form; missed by SIM115 grep sweep).
 
 ## Maintenance
 - Root and local `AGENTS.md` / `CLAUDE.md` files are generated from sources in `docs/ops/`.
