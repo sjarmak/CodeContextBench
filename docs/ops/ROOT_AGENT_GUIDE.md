@@ -148,7 +148,7 @@ full operations manual.
 
 ### Pre-commit / Pytest / Ralph
 - Secret-detection false-positives: use `--no-verify` when flagged code is detection logic.
-- Ralph: `prd.json` single-active; archive before overwrite. `prd-archive/` and `prd.json` not gitignored.
+- Ralph: `prd.json` single-active; archive as `prd-archive/prd-<feature>-<date>.json`; validate: `python3 -c "import json; json.load(open('prd.json'))"`. Not gitignored.
 
 ### Scripts / Code Quality (Mar 17-20 additions)
 - `apply_verifier_fixes.py:9` hardcodes `~/CodeScaleBench`; crash on other machines.
@@ -156,9 +156,9 @@ full operations manual.
 - Non-atomic writes: `aggregate_status.py:669`, `apply_verifier_fixes.py:103+`; use temp+rename.
 - Bare `except:`: `audit_v2_report_data.py:104`, `ds_audit.py:244+`, `extract_v2_report_data.py:144+`.
 - FD leaks: 17+ sites; use `with open()`. `export_official_results.py:45` `DEFAULT_REPO_BLOB_BASE` → stale org; links 404.
-- Ruff S603/S604, SIM115, BLE001; add `pyproject.toml`. SIM115 skips `Popen(stdout=f)`. `sanitize_secrets.py`: S105/S106 per-file ignores.
-- Hardcoded-path epidemic: `fix_memory_mb.py:8`, `extract_build_diary.py:121`, `plot_build_diary_supplementary.py:121+` also use `/home/stephanie_jarmak/CodeScaleBench`; 5 scripts total.
-- Shell scripts `rerun_fixed_tasks.sh:34`, `rerun_zero_mcp_tasks.sh:29` use deprecated `claude-opus-4-5-20251101`; Ruff misses `.sh` — add `grep -rn "claude-opus-4-5" scripts/` to CI.
+- Ruff S603/S604, SIM115 (skips `Popen(stdout=f)`), BLE001; add `pyproject.toml`; `sanitize_secrets.py` needs S105/S106.
+- Hardcoded `/home/stephanie_jarmak/CodeScaleBench`: 5 scripts (`fix_memory_mb.py:8`, `extract_build_diary.py:121`, `plot_build_diary_supplementary.py:121+`, etc.).
+- `rerun_fixed_tasks.sh:34`, `rerun_zero_mcp_tasks.sh:29`: deprecated model; Ruff misses `.sh` — add `grep -rn "claude-opus-4-5" scripts/` to CI.
 - `run_selected_tasks.sh:648,699,711`: mktemp+mv race — `mv` failure swallowed by subshell, `cp` targets missing dir.
 - `csb_metrics/extractors.py:669`: FD leak via `tp.open()` (pathlib form; missed by SIM115 grep sweep).
 
