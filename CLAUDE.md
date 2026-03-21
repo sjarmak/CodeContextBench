@@ -96,12 +96,10 @@ full operations manual.
 - **Verifier lib duplication**: 401 copies of `answer_json_verifier_lib.sh` (13 suites; task copies diverged with extra funcs). 275 copies of `dual_score_lib.sh` (csb/ only). `benchmarks/_shared/` missing; every fix requires touching 401+ files.
 
 ### Scripts / Code Quality
-- `abc_audit.py`: 4 functions defined twice; Python silently uses last definition.
-- `rerun_failed.py`: `shell=True` injection; wrong `sourcegraph_full→deepsearch` mapping; deprecated model.
-- `ir_metrics.py:749`: `tt_all_r` set comparison bug (first-relevant, not all-relevant).
-- `--skip-completed` requires result.json + task_metrics.json; fix: check only result.json.
-- Task registry header: claims 436, actual 274 (`sync_task_metadata.py --fix` doesn't update it).
-- `verification_modes`/`use_case_category` missing from all 274 tasks; `--use-case-category` silently returns 0.
+- `abc_audit.py`: 4 functions defined twice; Python uses last. `check_t5_no_solution_leak` + `check_r2_no_contamination` broken — `pytest tests/test_abc_audit.py` confirms 2 FAIL / 40 pass. Tasks with solution leaks / sourcegraph refs pass audit silently.
+- `rerun_failed.py`: `shell=True` injection; wrong `sourcegraph_full→deepsearch`; deprecated model.
+- `ir_metrics.py:749`: `tt_all_r` set comparison bug. `--skip-completed`: check only result.json.
+- Task registry header: claims 436, actual 274. `verification_modes`/`use_case_category` missing from all tasks.
 
 ### Validation / Scoring
 - `validators.py` duplicated in `ccb_build`; update all copies (`sha256sum`).
@@ -150,17 +148,17 @@ full operations manual.
 - Secret-detection false-positives: use `--no-verify` when flagged code is detection logic.
 - Ralph: `prd.json` single-active; archive as `prd-archive/prd-<feature>-<date>.json`; validate: `python3 -c "import json; json.load(open('prd.json'))"`. Not gitignored.
 
-### Scripts / Code Quality (Mar 17-20 additions)
-- `apply_verifier_fixes.py:9` hardcodes `~/CodeScaleBench`; crash on other machines.
-- `context_retrieval_agent.py:432+` `shell=True` without allowlist; injection risk.
-- Non-atomic writes: `aggregate_status.py:669`, `apply_verifier_fixes.py:103+`; use temp+rename.
+### Scripts / Code Quality (Mar 17-21 additions)
+- Hardcoded `~/CodeScaleBench`: `apply_verifier_fixes.py:9`, `fix_memory_mb.py:8`, `extract_build_diary.py:121`, `plot_build_diary_supplementary.py:121+`.
+- `context_retrieval_agent.py:432+`, `oracle_checks.py:498`: `shell=True` injection risk.
+- Non-atomic writes: `aggregate_status.py:669`, `daytona_runner.py:234`; use temp+rename pattern.
 - Bare `except:`: `audit_v2_report_data.py:104`, `ds_audit.py:244+`, `extract_v2_report_data.py:144+`.
-- FD leaks: 17+ sites; use `with open()`. `export_official_results.py:45` `DEFAULT_REPO_BLOB_BASE` → stale org; links 404.
-- Ruff S603/S604, SIM115 (skips `Popen(stdout=f)`), BLE001; add `pyproject.toml`; `sanitize_secrets.py` needs S105/S106.
-- Hardcoded `/home/stephanie_jarmak/CodeScaleBench`: 5 scripts (`fix_memory_mb.py:8`, `extract_build_diary.py:121`, `plot_build_diary_supplementary.py:121+`, etc.).
-- `rerun_fixed_tasks.sh:34`, `rerun_zero_mcp_tasks.sh:29`: deprecated model; Ruff misses `.sh` — add `grep -rn "claude-opus-4-5" scripts/` to CI.
-- `run_selected_tasks.sh:648,699,711`: mktemp+mv race — `mv` failure swallowed by subshell, `cp` targets missing dir.
-- `csb_metrics/extractors.py:669`: FD leak via `tp.open()` (pathlib form; missed by SIM115 grep sweep).
+- FD leaks: 17+ sites; `export_official_results.py:45` stale org URL; `extractors.py:669` pathlib form.
+- Deprecated model in shell: `rerun_fixed_tasks.sh:34`, `rerun_zero_mcp_tasks.sh:29`; add grep CI check.
+- `run_selected_tasks.sh:648,699,711`: mktemp+mv race — `mv` failure swallowed by subshell.
+- **Cost pipeline**: `extract_task_metrics.py:266`, `discovery.py:310` never pass model → all costs at Opus-4.5 rates. `claude-sonnet-4-6` + `claude-haiku-4-6` absent from `MODEL_PRICING` (`extractors.py:1071`). Sonnet runs: 5× overstatement.
+- **CI test gap**: 212 tests / 2 confirmed failing / none of the 4 CI workflows run `pytest`.
+- `verify_retrieval_eval_smoke.py:26-30`: 5 hardcoded Feb-2026 run IDs; smoke test breaks if staging rotated.
 
 ## Maintenance
 - Root and local `AGENTS.md` / `CLAUDE.md` files are generated from sources in `docs/ops/`.
