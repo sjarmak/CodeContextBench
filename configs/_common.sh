@@ -269,10 +269,6 @@ config_to_mcp_type() {
             VERIFIER_MODE="direct"; SOURCE_ACCESS="remote"; echo "sourcegraph_full" ;;
         augment-remote-direct)
             VERIFIER_MODE="direct"; SOURCE_ACCESS="remote"; echo "augment_remote" ;;
-        augment-local-direct)
-            VERIFIER_MODE="direct"; SOURCE_ACCESS="local"; echo "augment_local" ;;
-        github-remote-direct)
-            VERIFIER_MODE="direct"; SOURCE_ACCESS="remote"; echo "github_remote" ;;
         mcp-scip-remote-direct)
             VERIFIER_MODE="direct"; SOURCE_ACCESS="remote"
             export SOURCEGRAPH_SEARCH_BRANCH="scip-enabled"
@@ -327,14 +323,13 @@ validate_config_name() {
     local config_name="$1"
     case "$config_name" in
         baseline-local-direct|mcp-remote-direct|augment-remote-direct|\
-        augment-local-direct|github-remote-direct|\
         mcp-scip-remote-direct|mcp-scip-remote-artifact|\
         baseline-local-artifact|mcp-remote-artifact|augment-remote-artifact|\
         baseline|sourcegraph_full|artifact_full|none)
             return 0 ;;
         *)
             echo "ERROR: Unknown config name: '$config_name'" >&2
-            echo "  Valid: baseline-local-direct, mcp-remote-direct, augment-remote-direct, augment-local-direct, github-remote-direct, mcp-scip-remote-direct" >&2
+            echo "  Valid: baseline-local-direct, mcp-remote-direct, augment-remote-direct, mcp-scip-remote-direct" >&2
             echo "         baseline-local-artifact, mcp-remote-artifact, augment-remote-artifact, mcp-scip-remote-artifact" >&2
             echo "  Legacy: baseline, sourcegraph_full, artifact_full, none" >&2
             exit 1 ;;

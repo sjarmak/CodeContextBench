@@ -73,10 +73,10 @@ class GuardedDaytonaEnvironment(DaytonaEnvironment):
             self._ccb_labels.get("config", ""),
         ]
         sandbox_name_core = "-".join(part for part in sandbox_name_parts if part)
-        # Reserve 5 chars for random suffix (-xxxx) to prevent collisions
-        # when long task names truncate to the same prefix.
+        # Reserve 9 chars for random suffix (-xxxxxxxx) to make collisions
+        # between concurrent runs near-impossible.
         sandbox_name_core = _sanitize_label_value(sandbox_name_core, max_length=40)
-        rand_suffix = secrets.token_hex(2)  # 4 hex chars
+        rand_suffix = secrets.token_hex(4)  # 8 hex chars
         session_hint = kwargs.get("session_id", "")
         session_hint = _sanitize_label_value(str(session_hint), max_length=12)
         if sandbox_name_core:
@@ -124,45 +124,74 @@ class GuardedDaytonaEnvironment(DaytonaEnvironment):
         if not getattr(params, "name", None):
             params.name = self._ccb_sandbox_name
 
-        try:
-            await super()._create_sandbox(params)
-        except DaytonaError as exc:
-            if "already exists" not in str(exc):
-                raise
-
-            # A stale sandbox (e.g. BUILD_FAILED) is blocking this name.
-            # Delete it and retry with a fresh random suffix.
-            sandbox_name = getattr(params, "name", "")
-            logger.warning(
-                "Sandbox %r already exists — deleting stale sandbox and retrying",
-                sandbox_name,
-            )
+        max_retries = 3
+        for attempt in range(max_retries + 1):
             try:
-                daytona = await self._client_manager.get_client()
-                stale = await daytona.get(sandbox_name)
-                await daytona.delete(stale, timeout=60)
-            except Exception as cleanup_err:
-                logger.warning(
-                    "Failed to delete stale sandbox %r: %s",
-                    sandbox_name,
-                    cleanup_err,
-                )
+                await super()._create_sandbox(params)
+                return
+            except DaytonaError as exc:
+                if "already exists" not in str(exc):
+                    raise
+                if attempt >= max_retries:
+                    raise
 
-            # Generate a new random suffix so the name is fresh even if
-            # deletion failed (the old name stays registered).
-            new_suffix = secrets.token_hex(2)
-            new_name = re.sub(
-                r"-[0-9a-f]{4}(-|$)",
-                f"-{new_suffix}\\1",
-                sandbox_name,
-                count=1,
-            )
-            if new_name == sandbox_name:
-                # Regex didn't match; append suffix instead.
-                new_name = _sanitize_label_value(
-                    f"{sandbox_name}-{new_suffix}", max_length=63
+                sandbox_name = getattr(params, "name", "")
+
+                # Check if the existing sandbox is failed/stale before deleting.
+                # Never delete actively running sandboxes from concurrent batches.
+                _deleted = False
+                try:
+                    daytona = await self._client_manager.get_client()
+                    stale = await daytona.get(sandbox_name)
+                    stale_state = str(getattr(stale, "state", ""))
+                    if "FAILED" in stale_state or "ERROR" in stale_state:
+                        logger.warning(
+                            "Sandbox %r is %s — deleting stale sandbox",
+                            sandbox_name,
+                            stale_state,
+                        )
+                        await daytona.delete(stale, timeout=60)
+                        _deleted = True
+                    else:
+                        logger.info(
+                            "Sandbox %r exists and is %s (not stale) — "
+                            "retrying with new name",
+                            sandbox_name,
+                            stale_state,
+                        )
+                except Exception as lookup_err:
+                    logger.warning(
+                        "Could not inspect sandbox %r: %s",
+                        sandbox_name,
+                        lookup_err,
+                    )
+
+                # Always generate a fresh random suffix for the retry,
+                # whether or not we deleted the old sandbox.
+                new_suffix = secrets.token_hex(4)
+                new_name = re.sub(
+                    r"-[0-9a-f]{8}(-|$)",
+                    f"-{new_suffix}\\1",
+                    sandbox_name,
+                    count=1,
                 )
-            params.name = new_name
-            self._ccb_sandbox_name = new_name
-            logger.info("Retrying sandbox creation as %r", new_name)
-            await super()._create_sandbox(params)
+                if new_name == sandbox_name:
+                    # Also handle old 4-char suffixes from pre-existing runs.
+                    new_name = re.sub(
+                        r"-[0-9a-f]{4}(-|$)",
+                        f"-{new_suffix}\\1",
+                        sandbox_name,
+                        count=1,
+                    )
+                if new_name == sandbox_name:
+                    new_name = _sanitize_label_value(
+                        f"{sandbox_name}-{new_suffix}", max_length=63
+                    )
+                params.name = new_name
+                self._ccb_sandbox_name = new_name
+                logger.info(
+                    "Retry %d/%d: creating sandbox as %r",
+                    attempt + 1,
+                    max_retries,
+                    new_name,
+                )

@@ -9,6 +9,12 @@
 [ -f /tmp/.sg_only_mode ] && [ -f /tests/sgonly_verifier_wrapper.sh ] && source /tests/sgonly_verifier_wrapper.sh
 
 set -x
+
+# Artifact mode: parse answer.json, extract analysis text, apply diffs
+if [ -f /tests/answer_json_verifier_lib.sh ]; then
+    source /tests/answer_json_verifier_lib.sh
+fi
+
 # NOTE: set -e intentionally NOT used — fallback logic requires graceful failure handling
 
 # --- Timeout guard: re-exec under timeout if not already guarded ---
@@ -78,6 +84,72 @@ else
             done
         fi
     done
+
+    # Fallback: also scan /workspace/ for files matching expected paths
+    # OpenHands agents write to /workspace/ instead of /ccb_crossrepo/src/
+    if [ -d "/workspace" ] && [ ! -s "$FALLBACK_PATCH" ]; then
+        echo "  Scanning /workspace/ for expected file matches..." >&2
+        EXPECTED_FILE_LIST=$(python3 -c "import json; [print(p) for p in json.load(open('$EXPECTED_CHANGES')).get('expected_files',[])]" 2>/dev/null || true)
+
+        # Check git repos under /workspace for staged/unstaged changes
+        for ws_git_dir in $(find /workspace -name .git -type d -maxdepth 4 2>/dev/null); do
+            ws_repo_dir=$(dirname "$ws_git_dir")
+            echo "  Checking workspace repo $ws_repo_dir for changes..." >&2
+            cd "$ws_repo_dir"
+            git diff HEAD -- . >> "$FALLBACK_PATCH" 2>/dev/null || true
+            git ls-files --others --exclude-standard | while read -r f; do
+                is_expected=false
+                for ef in $EXPECTED_FILE_LIST; do
+                    case "$ef" in *"$f"*) is_expected=true; break;; esac
+                    case "$f" in *"$ef"*) is_expected=true; break;; esac
+                done
+                if [ "$is_expected" = true ] && [ -f "$f" ]; then
+                    echo "diff --git a/$f b/$f" >> "$FALLBACK_PATCH"
+                    echo "new file mode 100644" >> "$FALLBACK_PATCH"
+                    echo "--- /dev/null" >> "$FALLBACK_PATCH"
+                    echo "+++ b/$f" >> "$FALLBACK_PATCH"
+                    wc_lines=$(wc -l < "$f")
+                    echo "@@ -0,0 +1,$wc_lines @@" >> "$FALLBACK_PATCH"
+                    sed 's/^/+/' "$f" >> "$FALLBACK_PATCH"
+                fi
+            done
+        done
+
+        # Also scan for non-git files in /workspace that match expected paths
+        if [ ! -s "$FALLBACK_PATCH" ]; then
+            for ef in $EXPECTED_FILE_LIST; do
+                # Try direct path under /workspace
+                candidate="/workspace/$ef"
+                if [ -f "$candidate" ]; then
+                    echo "  Found expected file at $candidate" >&2
+                    echo "diff --git a/$ef b/$ef" >> "$FALLBACK_PATCH"
+                    echo "new file mode 100644" >> "$FALLBACK_PATCH"
+                    echo "--- /dev/null" >> "$FALLBACK_PATCH"
+                    echo "+++ b/$ef" >> "$FALLBACK_PATCH"
+                    wc_lines=$(wc -l < "$candidate")
+                    echo "@@ -0,0 +1,$wc_lines @@" >> "$FALLBACK_PATCH"
+                    sed 's/^/+/' "$candidate" >> "$FALLBACK_PATCH"
+                fi
+                # Also try finding the basename anywhere under /workspace
+                ef_basename=$(basename "$ef")
+                find /workspace -name "$ef_basename" -type f 2>/dev/null | while read -r found_file; do
+                    # Verify the suffix of the path matches
+                    case "$found_file" in *"$ef"*)
+                        if [ -f "$found_file" ]; then
+                            echo "  Found expected file at $found_file" >&2
+                            echo "diff --git a/$ef b/$ef" >> "$FALLBACK_PATCH"
+                            echo "new file mode 100644" >> "$FALLBACK_PATCH"
+                            echo "--- /dev/null" >> "$FALLBACK_PATCH"
+                            echo "+++ b/$ef" >> "$FALLBACK_PATCH"
+                            wc_lines=$(wc -l < "$found_file")
+                            echo "@@ -0,0 +1,$wc_lines @@" >> "$FALLBACK_PATCH"
+                            sed 's/^/+/' "$found_file" >> "$FALLBACK_PATCH"
+                        fi
+                    ;; esac
+                done
+            done
+        fi
+    fi
 
     if [ -s "$FALLBACK_PATCH" ]; then
         echo "Fallback diff collected: $(wc -l < "$FALLBACK_PATCH") lines" >&2
@@ -184,3 +256,6 @@ else
     echo "0.0" > "$REWARD_FILE"
     echo "WARNING: No validation result file generated, defaulting to 0.0" >&2
 fi
+
+# Dual-score: independently score both direct edits and answer.json
+[ -f /tests/dual_score_lib.sh ] && source /tests/dual_score_lib.sh

@@ -184,3 +184,6 @@ else
     echo "0.0" > "$REWARD_FILE"
     echo "WARNING: No validation result file generated, defaulting to 0.0" >&2
 fi
+
+# Dual-score: independently score both direct edits and answer.json
+[ -f /tests/dual_score_lib.sh ] && source /tests/dual_score_lib.sh

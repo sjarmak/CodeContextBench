@@ -13,6 +13,28 @@ full operations manual.
 - Set **parallelism based on your own account and model limits**. Avoid exceeding documented concurrency or rate caps for your environment or provider.
 - Before launching any benchmark batch, check account readiness with `python3 scripts/infra/check_infra.py` or `python3 scripts/infra/account_health.py status`. Do not assume OAuth accounts are usable just because credentials exist.
 
+## Benchmark Capacity Planning
+
+Before launching benchmarks, check available capacity across accounts:
+
+```bash
+# Table view — shows slots per account based on usage + token validity
+python3 ~/CodeScaleBench/scripts/infra/capacity.py
+
+# Distribute N total parallel slots across accounts
+python3 ~/CodeScaleBench/scripts/infra/capacity.py --slots 20
+
+# JSON for programmatic use
+python3 ~/CodeScaleBench/scripts/infra/capacity.py --json
+
+# Cap containers per account (default 6)
+python3 ~/CodeScaleBench/scripts/infra/capacity.py --slots 20 --max-per-account 4
+```
+
+- Accounts with <5% capacity remaining are automatically skipped.
+- Slots are distributed proportionally — accounts with more remaining budget get more.
+- Do not use automated processes that connect to the refresh token endpoint until the rate limit clears.
+
 ## Git Remotes and Branching
 - `origin` = sjarmak/CodeScaleBench (private), `upstream` = sourcegraph/CodeScaleBench (public).
 - `git push` goes to `origin`. **NEVER push `main` to `upstream`** — it has sensitive content.

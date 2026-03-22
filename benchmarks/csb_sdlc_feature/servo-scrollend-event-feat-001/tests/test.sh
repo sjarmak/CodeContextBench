@@ -307,3 +307,6 @@ SCORE=$(awk "BEGIN {printf \"%.2f\", $SCORE_NUMERATOR / 20}")
 write_scored_result "$SCORE" "completed"
 echo ""
 echo "[x] Tests completed - Score: $SCORE"
+
+# Dual-score: independently score both direct edits and answer.json
+[ -f /tests/dual_score_lib.sh ] && source /tests/dual_score_lib.sh

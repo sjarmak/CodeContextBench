@@ -185,7 +185,9 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 
 - `scripts/csb_metrics/__init__.py` - Utility script for   init  .
 - `scripts/csb_metrics/judge/__init__.py` - Utility script for   init  .
+- `scripts/integrations/__init__.py` - Utility script for   init  .
 - `scripts/infra/account_health.py` - Utility script for account health.
+- `scripts/infra/account_status.py` - Utility script for account status.
 - `scripts/evaluation/add_compile_gates.py` - Utility script for add compile gates.
 - `scripts/evaluation/add_verification_metadata.py` - Utility script for add verification metadata.
 - `scripts/csb_metrics/judge/agreement.py` - Utility script for agreement.
@@ -203,7 +205,9 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/evaluation/backfill_triage_from_manifest.py` [one_off] - Historical one-off script: backfill triage from manifest.
 - `scripts/analysis/browse_results.py` - Utility script for browse results.
 - `scripts/evaluation/canary_empty_submission.py` - Utility script for canary empty submission.
+- `scripts/infra/capacity.py` - Utility script for capacity.
 - `scripts/maintenance/check_harness_readiness.py` - Utility script for check harness readiness.
+- `scripts/infra/check_tokens.py` - Utility script for check tokens.
 - `scripts/maintenance/collect_repo_cloc.py` - Utility script for collect repo cloc.
 - `scripts/evaluation/compare_contextbench_results.py` - Utility script for compare contextbench results.
 - `scripts/evaluation/compare_old_new_ground_truth.py` - Utility script for compare old new ground truth.
@@ -215,13 +219,16 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/running/convert_harbor_to_contextbench.py` - Utility script for convert harbor to contextbench.
 - `scripts/csb_metrics/coverage_audit.py` - Utility script for coverage audit.
 - `scripts/evaluation/coverage_gaps.py` - Utility script for coverage gaps.
+- `scripts/integrations/coverage_matrix.py` - Utility script for coverage matrix.
 - `scripts/analysis/coverage_report.py` - Utility script for coverage report.
 - `scripts/evaluation/cross_validate_gt.py` - Utility script for cross validate gt.
 - `scripts/evaluation/cross_validate_oracles.py` - Utility script for cross validate oracles.
+- `scripts/analysis/dashboard.py` - Utility script for dashboard.
 - `scripts/infra/daytona_cost_guard.py` - Utility script for daytona cost guard.
 - `scripts/running/daytona_curator_runner.py` - Utility script for daytona curator runner.
 - `scripts/running/daytona_poc_runner.py` - Utility script for daytona poc runner.
 - `scripts/running/daytona_runner.py` - Utility script for daytona runner.
+- `scripts/daytona_snapshot_cleanup.py` - Utility script for daytona snapshot cleanup.
 - `scripts/analysis/dependeval_eval_dr.py` - Utility script for dependeval eval dr.
 - `scripts/analysis/dependeval_eval_me.py` - Utility script for dependeval eval me.
 - `scripts/analysis/derive_n_repos.py` - Utility script for derive n repos.
@@ -259,6 +266,11 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/csb_metrics/ir_metrics.py` - Utility script for ir metrics.
 - `scripts/csb_metrics/judge_context.py` - Utility script for judge context.
 - `scripts/evaluation/judge_demo.py` - Utility script for judge demo.
+- `scripts/integrations/langsmith_annotations.py` - Utility script for langsmith annotations.
+- `scripts/integrations/langsmith_cli.py` - Utility script for langsmith cli.
+- `scripts/integrations/langsmith_datasets.py` - Utility script for langsmith datasets.
+- `scripts/integrations/langsmith_experiments.py` - Utility script for langsmith experiments.
+- `scripts/integrations/langsmith_tracing.py` - Utility script for langsmith tracing.
 - `scripts/running/launch_sonnet46_benchmark.sh` - Utility script for launch sonnet46 benchmark.
 - `scripts/analysis/list_gemini_models.py` - Utility script for list gemini models.
 - `scripts/infra/mirror_largerepo_expansion.sh` - Utility script for mirror largerepo expansion.
@@ -273,6 +285,7 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/analysis/plot_build_diary_supplementary.py` - Utility script for plot build diary supplementary.
 - `scripts/analysis/plot_build_narrative.py` - Utility script for plot build narrative.
 - `scripts/analysis/plot_conversation_blog_svgs.py` - Utility script for plot conversation blog svgs.
+- `scripts/plot_csb_mcp_blog_figures.py` - Utility script for plot csb mcp blog figures.
 - `scripts/running/prepare_analysis_runs.py` - Utility script for prepare analysis runs.
 - `scripts/running/promote_agent_oracles.py` - Utility script for promote agent oracles.
 - `scripts/running/promote_atomic.py` - Utility script for promote atomic.
@@ -281,6 +294,7 @@ Generated from `scripts/registry.json` by `scripts/maintenance/generate_script_i
 - `scripts/evaluation/prompt_hygiene.py` - Utility script for prompt hygiene.
 - `scripts/csb_metrics/judge/prompts.py` - Utility script for prompts.
 - `scripts/infra/push_base_images_ghcr.sh` - Utility script for push base images ghcr.
+- `scripts/infra/refresh_tokens.py` - Utility script for refresh tokens.
 - `scripts/infra/regenerate_artifact_dockerfiles.py` - Utility script for regenerate artifact dockerfiles.
 - `scripts/infra/rehost_sweap_images.py` - Utility script for rehost sweap images.
 - `scripts/infra/remirror_org_repos.sh` - Utility script for remirror org repos.

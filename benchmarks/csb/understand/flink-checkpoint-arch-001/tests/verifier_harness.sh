@@ -226,7 +226,7 @@ if details:
 with open("/logs/verifier/validation_result.json", "w") as f:
     json.dump(payload, f, indent=2)
 with open("/logs/verifier/reward.txt", "w") as f:
-    f.write(f"{reward:.4f}\n")
+    f.write(f'{payload["reward"]:.4f}\n')
 PYEOF
 }
 

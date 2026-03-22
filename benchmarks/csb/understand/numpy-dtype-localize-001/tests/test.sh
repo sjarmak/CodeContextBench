@@ -58,6 +58,41 @@ if [ -z "$ANALYSIS_FILE" ]; then
     done
 fi
 
+# Fallback: recursively scan /workspace/ for analysis documents
+# OpenHands agents may write to subdirectories of /workspace/ instead of top-level
+if [ -z "$ANALYSIS_FILE" ] && [ -d "/workspace" ]; then
+    echo "  Scanning /workspace/ recursively for analysis documents..." >&2
+    for name in BUG_ANALYSIS.md bug_analysis.md Bug_Analysis.md analysis.md ANALYSIS.md; do
+        found_file=$(find /workspace -maxdepth 4 -name "$name" -type f -size +0c 2>/dev/null | head -1)
+        if [ -n "$found_file" ]; then
+            ANALYSIS_FILE="$found_file"
+            echo "  Found analysis at $found_file (recursive scan)" >&2
+            break
+        fi
+    done
+    # If still not found, try any .md file recursively
+    if [ -z "$ANALYSIS_FILE" ]; then
+        found_file=$(find /workspace -maxdepth 4 -name "*.md" -type f -size +0c 2>/dev/null | head -1)
+        if [ -n "$found_file" ]; then
+            ANALYSIS_FILE="$found_file"
+            echo "  Found .md file at $found_file (recursive scan)" >&2
+        fi
+    fi
+fi
+
+# Fallback: scan /logs/agent/ recursively for analysis documents
+if [ -z "$ANALYSIS_FILE" ] && [ -d "/logs/agent" ]; then
+    echo "  Scanning /logs/agent/ for analysis documents..." >&2
+    for name in BUG_ANALYSIS.md bug_analysis.md analysis.md ANALYSIS.md; do
+        found_file=$(find /logs/agent -maxdepth 4 -name "$name" -type f -size +0c 2>/dev/null | head -1)
+        if [ -n "$found_file" ]; then
+            ANALYSIS_FILE="$found_file"
+            echo "  Found analysis at $found_file" >&2
+            break
+        fi
+    done
+fi
+
 if [ -z "$ANALYSIS_FILE" ]; then
     echo "ERROR: No analysis document found in /workspace/ or /logs/agent/" >&2
     echo "0.0" > "$REWARD_FILE"

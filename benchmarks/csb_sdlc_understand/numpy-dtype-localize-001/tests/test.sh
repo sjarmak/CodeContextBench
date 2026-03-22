@@ -10,6 +10,12 @@
 [ -f /tmp/.sg_only_mode ] && [ -f /tests/sgonly_verifier_wrapper.sh ] && source /tests/sgonly_verifier_wrapper.sh
 
 set -x
+
+# Artifact mode: parse answer.json, extract analysis text, apply diffs
+if [ -f /tests/answer_json_verifier_lib.sh ]; then
+    source /tests/answer_json_verifier_lib.sh
+fi
+
 # NOTE: set -e intentionally NOT used — fallback logic requires graceful failure handling
 
 TASK_WORKDIR="${TASK_WORKDIR:-/workspace}"
@@ -62,6 +68,41 @@ if [ -z "$ANALYSIS_FILE" ]; then
         if [ -f "$f" ] && [ -s "$f" ]; then
             ANALYSIS_FILE="$f"
             echo "No BUG_ANALYSIS.md found, using $f" >&2
+            break
+        fi
+    done
+fi
+
+# Fallback: recursively scan /workspace/ for analysis documents
+# OpenHands agents may write to subdirectories of /workspace/ instead of top-level
+if [ -z "$ANALYSIS_FILE" ] && [ -d "/workspace" ]; then
+    echo "  Scanning /workspace/ recursively for analysis documents..." >&2
+    for name in BUG_ANALYSIS.md bug_analysis.md Bug_Analysis.md analysis.md ANALYSIS.md; do
+        found_file=$(find /workspace -maxdepth 4 -name "$name" -type f -size +0c 2>/dev/null | head -1)
+        if [ -n "$found_file" ]; then
+            ANALYSIS_FILE="$found_file"
+            echo "  Found analysis at $found_file (recursive scan)" >&2
+            break
+        fi
+    done
+    # If still not found, try any .md file recursively
+    if [ -z "$ANALYSIS_FILE" ]; then
+        found_file=$(find /workspace -maxdepth 4 -name "*.md" -type f -size +0c 2>/dev/null | head -1)
+        if [ -n "$found_file" ]; then
+            ANALYSIS_FILE="$found_file"
+            echo "  Found .md file at $found_file (recursive scan)" >&2
+        fi
+    fi
+fi
+
+# Fallback: scan /logs/agent/ recursively for analysis documents
+if [ -z "$ANALYSIS_FILE" ] && [ -d "/logs/agent" ]; then
+    echo "  Scanning /logs/agent/ for analysis documents..." >&2
+    for name in BUG_ANALYSIS.md bug_analysis.md analysis.md ANALYSIS.md; do
+        found_file=$(find /logs/agent -maxdepth 4 -name "$name" -type f -size +0c 2>/dev/null | head -1)
+        if [ -n "$found_file" ]; then
+            ANALYSIS_FILE="$found_file"
+            echo "  Found analysis at $found_file" >&2
             break
         fi
     done
@@ -169,3 +210,6 @@ else
     echo "0.0" > "$REWARD_FILE"
     echo "WARNING: No validation result file generated, defaulting to 0.0" >&2
 fi
+
+# Dual-score: independently score both direct edits and answer.json
+[ -f /tests/dual_score_lib.sh ] && source /tests/dual_score_lib.sh
