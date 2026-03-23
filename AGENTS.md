@@ -96,7 +96,7 @@ full operations manual.
 - **Verifier lib duplication**: 401 copies of `answer_json_verifier_lib.sh` (13 suites; task copies diverged with extra funcs). 275 copies of `dual_score_lib.sh` (csb/ only). `benchmarks/_shared/` missing; every fix requires touching 401+ files.
 
 ### Scripts / Code Quality
-- `abc_audit.py`: 4 functions defined twice; Python uses last. `check_t5_no_solution_leak` + `check_r2_no_contamination` broken — `pytest tests/test_abc_audit.py` confirms 2 FAIL / 40 pass. Tasks with solution leaks / sourcegraph refs pass audit silently.
+- `abc_audit.py`: 6+ functions defined twice (T5,R2,T10,OA,OB,OG); Python uses last. T5+R2: `pytest` 2 FAIL / 40 pass. Leaks/contamination pass audit silently.
 - `rerun_failed.py`: `shell=True` injection; wrong `sourcegraph_full→deepsearch`; deprecated model.
 - `ir_metrics.py:749`: `tt_all_r` set comparison bug. `--skip-completed`: check only result.json.
 - Task registry header: claims 436, actual 274. `verification_modes`/`use_case_category` missing from all tasks.
@@ -126,9 +126,7 @@ full operations manual.
 - **16 copies of `DIR_PREFIX_TO_SUITE`** across 30+ scripts with divergent definitions. Centralize in `csb_metrics/suite_registry.py`.
 
 ### Skills / Automation
-- 25 skill files hardcode `~/CodeScaleBench` (use `git rev-parse --show-toplevel`).
-- 14 skill files + 5 schemas have stale `sourcegraph_full` (valid: `none`/`sourcegraph`/`deepsearch`).
-- 3 deprecated model IDs in skills: `claude-opus-4-5-20251101` → `claude-opus-4-6`.
+- 25 skill files hardcode `~/CodeScaleBench` (fix: `git rev-parse --show-toplevel`); 14+5 stale `sourcegraph_full`; 3 deprecated `claude-opus-4-5-20251101`→`claude-opus-4-6`.
 
 ### Git / Auth
 - `gh auth refresh -h github.com -s write:packages`. Env vars must be **exported** (`set -a` before sourcing `.env.local`).
@@ -151,12 +149,12 @@ full operations manual.
 ### Scripts / Code Quality (Mar 17-21 additions)
 - Hardcoded `~/CodeScaleBench`: `apply_verifier_fixes.py:9`, `fix_memory_mb.py:8`, `extract_build_diary.py:121`, `plot_build_diary_supplementary.py:121+`.
 - `context_retrieval_agent.py:432+`, `oracle_checks.py:498`: `shell=True` injection risk.
-- Non-atomic writes: `aggregate_status.py:669`, `daytona_runner.py:234`; use temp+rename pattern.
+- Non-atomic writes: `aggregate_status.py:669`, `daytona_runner.py:234`, `daytona_cost_guard.py:663`, `sync_agent_guides.py:22`; use temp+rename.
 - Bare `except:`: `audit_v2_report_data.py:104`, `ds_audit.py:244+`, `extract_v2_report_data.py:144+`.
-- FD leaks: 17+ sites; `export_official_results.py:45` stale org URL; `extractors.py:669` pathlib form.
+- FD leaks: 17+ sites; `export_official_results.py:45` stale org URL; `extractors.py:669` pathlib; `validate_task_run.py:217` `json.loads(open().read())` form (missed by std grep).
 - Deprecated model in shell: `rerun_fixed_tasks.sh:34`, `rerun_zero_mcp_tasks.sh:29`; add grep CI check.
 - `run_selected_tasks.sh:648,699,711`: mktemp+mv race — `mv` failure swallowed by subshell.
-- **Cost pipeline**: `extract_task_metrics.py:266`, `discovery.py:310` never pass model → all costs at Opus-4.5 rates. `claude-sonnet-4-6` + `claude-haiku-4-6` absent from `MODEL_PRICING` (`extractors.py:1071`). Sonnet runs: 5× overstatement.
+- **Cost pipeline**: `extract_task_metrics.py:266`, `discovery.py:310` never pass model → all Opus-4.5 rates. `claude-sonnet-4-6`/`haiku-4-6` absent from `MODEL_PRICING` (`extractors.py:1071`). Sonnet: 5×. `TaskMetrics` has no `model` field; schema change required to fix.
 - **CI test gap**: 212 tests / 2 confirmed failing / none of the 4 CI workflows run `pytest`.
 - `verify_retrieval_eval_smoke.py:26-30`: 5 hardcoded Feb-2026 run IDs; smoke test breaks if staging rotated.
 
