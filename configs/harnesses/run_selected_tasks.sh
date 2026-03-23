@@ -1,17 +1,19 @@
 #!/bin/bash
-# Unified Benchmark Runner — Reads tasks from selected_benchmark_tasks.json
+# Unified Benchmark Runner — Reads tasks from a suite JSON or selection file
 #
-# Runs selected benchmark tasks across 2 MCP configurations:
-#   1. Baseline (no MCP)
-#   2. MCP-Full (Sourcegraph + Deep Search)
+# Runs selected benchmark tasks across configurable MCP configurations:
+#   Baseline (no MCP), Sourcegraph, Augment, GitHub, Deep Search
 #
-# This script reads the canonical task selection from selected_benchmark_tasks.json
-# and runs each task through Harbor with the specified configuration(s).
+# Input: suite JSON (benchmarks/suites/*.json) or legacy selection file.
+# Default: benchmarks/suites/csb-v2-dual264.json (264 dual-verifier tasks)
 #
 # Usage:
 #   ./configs/harnesses/run_selected_tasks.sh [OPTIONS]
+#   ./configs/harnesses/run_selected_tasks.sh --suite-file benchmarks/suites/csb-v2-dual264.json
 #
 # Options:
+#   --suite-file PATH               Suite JSON file (default: benchmarks/suites/csb-v2-dual264.json)
+#   --selection-file PATH           Legacy selection file (alternative to --suite-file)
 #   --benchmark BENCHMARK           Run only this benchmark (e.g., csb_sdlc_feature, csb_sdlc_fix)
 #   --selection-file PATH           Use alternate selection file (default: selected_benchmark_tasks.json)
 #   --use-case-category CATEGORY    Filter by MCP-unique use case category (A-J), only valid with --selection-file
@@ -30,7 +32,8 @@
 # Prerequisites:
 #   - configs/selected_benchmark_tasks.json in repo (or --selection-file path)
 #   - .env.local (repo root) with USE_SUBSCRIPTION=true
-#   - SOURCEGRAPH_ACCESS_TOKEN in .env.local (for MCP modes)
+#   - SOURCEGRAPH_ACCESS_TOKEN in .env.local (for Sourcegraph MCP modes)
+#   - AUGMENT_SESSION_AUTH or AUGMENT_API_TOKEN+AUGMENT_API_URL (for Augment MCP modes)
 
 set -e
 
@@ -44,7 +47,8 @@ export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 # Shared config: subscription mode + token refresh
 source "$SCRIPT_DIR/../_common.sh"
 
-SELECTION_FILE="$REPO_ROOT/configs/selected_benchmark_tasks.json"
+SELECTION_FILE=""
+SUITE_FILE=""
 DAYTONA_COST_POLICY="${DAYTONA_COST_POLICY:-$REPO_ROOT/configs/daytona_cost_policy.json}"
 DAYTONA_PARALLEL_TASK_CAP="${DAYTONA_PARALLEL_TASK_CAP:-60}"
 
@@ -75,6 +79,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --selection-file)
             SELECTION_FILE="$2"
+            shift 2
+            ;;
+        --suite-file)
+            SUITE_FILE="$2"
             shift 2
             ;;
         --use-case-category)
@@ -132,9 +140,26 @@ done
 # ============================================
 # VERIFY PREREQUISITES
 # ============================================
+
+# Resolve input: --suite-file (new) takes precedence, --selection-file (legacy) as fallback.
+# If --suite-file is given, convert it to the selection format that extract_tasks() expects.
+if [ -n "$SUITE_FILE" ]; then
+    if [ ! -f "$SUITE_FILE" ]; then
+        echo "ERROR: Suite file not found: $SUITE_FILE"
+        exit 1
+    fi
+    # Suite JSON uses same {task_id, suite (as benchmark), task_dir} structure
+    SELECTION_FILE="$SUITE_FILE"
+    echo "Using suite file: $SUITE_FILE"
+elif [ -z "$SELECTION_FILE" ]; then
+    # Default: canonical suite
+    SELECTION_FILE="$REPO_ROOT/benchmarks/suites/csb-v2-dual264.json"
+    echo "Using default suite: $SELECTION_FILE"
+fi
+
 if [ ! -f "$SELECTION_FILE" ]; then
-    echo "ERROR: selected_benchmark_tasks.json not found at $SELECTION_FILE"
-    echo "Run: python3 scripts/select_benchmark_tasks.py"
+    echo "ERROR: Task file not found at $SELECTION_FILE"
+    echo "Available suites: $(ls benchmarks/suites/*.json 2>/dev/null | xargs -I{} basename {})"
     exit 1
 fi
 
@@ -179,10 +204,34 @@ load_credentials
 
 enforce_subscription_mode
 
-if [ "$RUN_FULL" = true ] && [ -z "$SOURCEGRAPH_ACCESS_TOKEN" ]; then
-    echo "WARNING: MCP mode requested but SOURCEGRAPH_ACCESS_TOKEN not set"
-    echo "Skipping MCP runs."
-    RUN_FULL=false
+# Derive baseline config and mcp_type values from FULL_CONFIG
+BASELINE_CONFIG=$(baseline_config_for "$FULL_CONFIG")
+BL_MCP_TYPE=$(config_to_mcp_type "$BASELINE_CONFIG")
+FULL_MCP_TYPE=$(config_to_mcp_type "$FULL_CONFIG")
+
+# Strict validation — exit immediately on unknown config names
+validate_config_name "$BASELINE_CONFIG"
+validate_config_name "$FULL_CONFIG"
+
+if [ "$RUN_FULL" = true ]; then
+    if [ "$FULL_MCP_TYPE" = "augment_remote" ] || [ "$FULL_MCP_TYPE" = "augment_local" ]; then
+        if [ -z "${AUGMENT_SESSION_AUTH:-}" ] && { [ -z "${AUGMENT_API_TOKEN:-}" ] || [ -z "${AUGMENT_API_URL:-}" ]; }; then
+            echo "WARNING: Augment MCP mode requested but auth is not configured"
+            echo "Set AUGMENT_SESSION_AUTH or both AUGMENT_API_TOKEN and AUGMENT_API_URL."
+            echo "Skipping MCP runs."
+            RUN_FULL=false
+        fi
+    elif [ "$FULL_MCP_TYPE" = "github_remote" ]; then
+        if [ -z "${GITHUB_TOKEN:-}" ]; then
+            echo "WARNING: GitHub MCP mode requested but GITHUB_TOKEN not set"
+            echo "Skipping MCP runs."
+            RUN_FULL=false
+        fi
+    elif [ "$FULL_MCP_TYPE" != "none" ] && [ -z "${SOURCEGRAPH_ACCESS_TOKEN:-}" ]; then
+        echo "WARNING: MCP mode requested but SOURCEGRAPH_ACCESS_TOKEN not set"
+        echo "Skipping MCP runs."
+        RUN_FULL=false
+    fi
 fi
 
 ensure_fresh_token_all  # also populates CLAUDE_HOMES[] via setup_multi_accounts
@@ -203,15 +252,6 @@ if [ "$PARALLEL_TASKS" -eq 0 ]; then
     fi
 fi
 
-# Derive baseline config and mcp_type values from FULL_CONFIG
-BASELINE_CONFIG=$(baseline_config_for "$FULL_CONFIG")
-BL_MCP_TYPE=$(config_to_mcp_type "$BASELINE_CONFIG")
-FULL_MCP_TYPE=$(config_to_mcp_type "$FULL_CONFIG")
-
-# Strict validation — exit immediately on unknown config names
-validate_config_name "$BASELINE_CONFIG"
-validate_config_name "$FULL_CONFIG"
-
 # ============================================
 # EXTRACT TASKS FROM SELECTION FILE
 # ============================================
@@ -227,21 +267,21 @@ benchmark_filter = '$BENCHMARK_FILTER'
 use_case_category_filter = '$USE_CASE_CATEGORY_FILTER'
 
 for task in selection['tasks']:
-    # Support both standard (benchmark) and MCP-unique (mcp_suite) selection files
-    bm = task.get('benchmark') or task.get('mcp_suite', '')
+    # Support suite JSON (suite field), standard (benchmark), and MCP-unique (mcp_suite)
+    bm = task.get('benchmark') or task.get('suite') or task.get('mcp_suite', '')
     if not bm:
         continue
     if benchmark_filter and bm != benchmark_filter:
         continue
     if use_case_category_filter and task.get('use_case_category', '') != use_case_category_filter:
         continue
-    # task_dir is relative to benchmarks/ in both formats.
-    # Some historical selection entries only have task_id; fallback to
-    # benchmarks/{suite}/{task_id} when task_dir is absent.
+    # task_dir is relative to benchmarks/tasks/ — uses {suite}/{task_id} format.
     task_rel = task.get('task_dir') or f\"{bm}/{task.get('task_id', '')}\"
     if not task_rel or task_rel.endswith('/'):
         continue
-    task_dir = 'benchmarks/' + task_rel
+    # Normalize: strip legacy prefixes (csb/crossrepo/ -> actual suite dir)
+    # New suite JSONs use the actual suite name directly.
+    task_dir = 'benchmarks/tasks/' + task_rel
     print(f'{bm}\t{task[\"task_id\"]}\t{task_dir}')
 "
 }
@@ -362,20 +402,17 @@ check_dockerfile_variants() {
 
             # Full/MCP: needs the variant Dockerfile
             if [ "$RUN_FULL" = true ]; then
+                local _required_df="Dockerfile.sg_only"
                 if [ "$_is_artifact" = true ]; then
-                    if [ ! -f "${abs_path}/environment/Dockerfile.artifact_only" ]; then
-                        DOCKERFILE_WARNINGS+="  MISSING: ${task_id} — Dockerfile.artifact_only"$'\n'
-                        DOCKERFILE_MISSING_COUNT=$(( DOCKERFILE_MISSING_COUNT + 1 ))
-                    else
-                        DOCKERFILE_READY_COUNT=$(( DOCKERFILE_READY_COUNT + 1 ))
-                    fi
+                    _required_df="Dockerfile.artifact_only"
+                elif [[ "$FULL_CONFIG" == augment-local-* ]]; then
+                    _required_df="Dockerfile"
+                fi
+                if [ ! -f "${abs_path}/environment/${_required_df}" ]; then
+                    DOCKERFILE_WARNINGS+="  MISSING: ${task_id} — ${_required_df}"$'\n'
+                    DOCKERFILE_MISSING_COUNT=$(( DOCKERFILE_MISSING_COUNT + 1 ))
                 else
-                    if [ ! -f "${abs_path}/environment/Dockerfile.sg_only" ]; then
-                        DOCKERFILE_WARNINGS+="  MISSING: ${task_id} — Dockerfile.sg_only"$'\n'
-                        DOCKERFILE_MISSING_COUNT=$(( DOCKERFILE_MISSING_COUNT + 1 ))
-                    else
-                        DOCKERFILE_READY_COUNT=$(( DOCKERFILE_READY_COUNT + 1 ))
-                    fi
+                    DOCKERFILE_READY_COUNT=$(( DOCKERFILE_READY_COUNT + 1 ))
                 fi
             fi
         done <<< "$(echo "${BENCHMARK_TASK_DIRS[$bm]}" | grep -v '^$')"
@@ -405,6 +442,7 @@ check_dockerfile_variants
 if [ "$RUN_FULL" = true ]; then
     _variant_name="Dockerfile.sg_only"
     [[ "$FULL_CONFIG" == *artifact* ]] && _variant_name="Dockerfile.artifact_only"
+    [[ "$FULL_CONFIG" == augment-local-* ]] && _variant_name="Dockerfile"
     echo "Dockerfile variants ($_variant_name):"
     echo "  Ready:   $DOCKERFILE_READY_COUNT / $TOTAL_TASKS"
     if [ "$DOCKERFILE_MISSING_COUNT" -gt 0 ]; then
@@ -418,20 +456,24 @@ fi
 if [ "${HARBOR_ENV:-}" = "daytona" ]; then
     echo "Execution env: Daytona"
     echo "Cost policy:   $DAYTONA_COST_POLICY"
-    _cost_guard_cmd=(
-        python3 "$REPO_ROOT/scripts/infra/daytona_cost_guard.py" preflight
-        --selection-file "$SELECTION_FILE"
-        --parallel-tasks "$PARALLEL_TASKS"
-        --concurrency "$CONCURRENCY"
-        --policy "$DAYTONA_COST_POLICY"
-    )
-    [ -n "$BENCHMARK_FILTER" ] && _cost_guard_cmd+=(--benchmark "$BENCHMARK_FILTER")
-    [ -n "$USE_CASE_CATEGORY_FILTER" ] && _cost_guard_cmd+=(--use-case-category "$USE_CASE_CATEGORY_FILTER")
-    [ "$RUN_BASELINE" = true ] && _cost_guard_cmd+=(--config "$BASELINE_CONFIG")
-    [ "$RUN_FULL" = true ] && _cost_guard_cmd+=(--config "$FULL_CONFIG")
-    if ! "${_cost_guard_cmd[@]}"; then
-        echo "BLOCKED: Daytona cost guard rejected this launch."
-        exit 1
+    if [ "${CSB_SKIP_COST_GUARD:-}" = "1" ]; then
+        echo "[skip] Cost guard bypassed (CSB_SKIP_COST_GUARD=1)"
+    else
+        _cost_guard_cmd=(
+            python3 "$REPO_ROOT/scripts/infra/daytona_cost_guard.py" preflight
+            --selection-file "$SELECTION_FILE"
+            --parallel-tasks "$PARALLEL_TASKS"
+            --concurrency "$CONCURRENCY"
+            --policy "$DAYTONA_COST_POLICY"
+        )
+        [ -n "$BENCHMARK_FILTER" ] && _cost_guard_cmd+=(--benchmark "$BENCHMARK_FILTER")
+        [ -n "$USE_CASE_CATEGORY_FILTER" ] && _cost_guard_cmd+=(--use-case-category "$USE_CASE_CATEGORY_FILTER")
+        [ "$RUN_BASELINE" = true ] && _cost_guard_cmd+=(--config "$BASELINE_CONFIG")
+        [ "$RUN_FULL" = true ] && _cost_guard_cmd+=(--config "$FULL_CONFIG")
+        if ! "${_cost_guard_cmd[@]}"; then
+            echo "BLOCKED: Daytona cost guard rejected this launch."
+            exit 1
+        fi
     fi
     mark_daytona_cost_guard_ready
 else
@@ -529,7 +571,7 @@ extract_all_metrics() {
     echo "Extracting per-task metrics from $jobs_dir..."
     for result_dir in "$jobs_dir"/*/*/; do
         if [ -f "$result_dir/result.json" ] && [ ! -f "$result_dir/task_metrics.json" ]; then
-            python3 "$REPO_ROOT/scripts/extract_task_metrics.py" \
+            python3 "$REPO_ROOT/scripts/evaluation/extract_task_metrics.py" \
                 --task-dir "$result_dir" \
                 --benchmark "$benchmark" \
                 --config "$config" \
@@ -561,7 +603,8 @@ is_task_completed() {
 declare -a _PIDS=()
 _ACCOUNT_IDX=0  # round-robin index into CLAUDE_HOMES[]
 
-# Advance _ACCOUNT_IDX and set _PICKED_HOME to the next account.
+# Advance _ACCOUNT_IDX and set _PICKED_HOME to the next valid account.
+# Uses _pick_valid_account from _common.sh for token-aware selection.
 # MUST be called directly (not via $()) to keep index in parent shell.
 _pick_next_account() {
     local num=${#CLAUDE_HOMES[@]}
@@ -569,8 +612,15 @@ _pick_next_account() {
         _PICKED_HOME="$HOME"
         return
     fi
-    _PICKED_HOME="${CLAUDE_HOMES[$_ACCOUNT_IDX]}"
-    _ACCOUNT_IDX=$(( (_ACCOUNT_IDX + 1) % num ))
+
+    if _pick_valid_account CLAUDE_HOMES _PICKED_HOME _ACCOUNT_IDX; then
+        :  # valid account found
+    else
+        echo "  ERROR: All accounts expired. Waiting 60s before retry..."
+        sleep 60
+        _PICKED_HOME="${CLAUDE_HOMES[$_ACCOUNT_IDX]}"
+        _ACCOUNT_IDX=$(( (_ACCOUNT_IDX + 1) % num ))
+    fi
 }
 
 # Block until fewer than PARALLEL_TASKS jobs are running.

@@ -25,7 +25,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
-BENCHMARKS_DIR = REPO_ROOT / "benchmarks"
+BENCHMARKS_DIR = REPO_ROOT / "benchmarks" / "tasks"
 GT_CACHE = REPO_ROOT / "configs" / "ground_truth_files.json"
 SELECTION_FILE = REPO_ROOT / "configs" / "selected_benchmark_tasks.json"
 
@@ -116,6 +116,18 @@ _MCP_TOOL_CATEGORIES: dict[str, str] = {
     # other
     "mcp__sourcegraph__sg_get_contributor_repos": "other",
     "mcp__sourcegraph__get_contributor_repos": "other",
+    # augment
+    "mcp__auggie__codebase-retrieval": "code_search",
+    "mcp__auggie__codebase_retrieval": "code_search",
+    # github
+    "mcp__github__search_code": "code_search",
+    "mcp__github__get_file_contents": "file_read",
+    "mcp__github__get_repository_tree": "file_search",
+    "mcp__github__search_repositories": "file_search",
+    "mcp__github__list_commits": "commit_search",
+    "mcp__github__get_commit": "commit_search",
+    "mcp__github__list_branches": "other",
+    "mcp__github__list_tags": "other",
 }
 
 _LOCAL_TOOL_CATEGORIES: dict[str, str] = {
@@ -144,20 +156,20 @@ def _tool_category(name: str) -> str:
         return _MCP_TOOL_CATEGORIES[name]
     if name in _LOCAL_TOOL_CATEGORIES:
         return _LOCAL_TOOL_CATEGORIES[name]
-    if name.startswith("mcp__sourcegraph__"):
+    if name.startswith("mcp__sourcegraph__") or name.startswith("mcp__auggie__") or name.startswith("mcp__github__"):
         return "other"
     return "other"
 
 
 def _is_mcp(name: str) -> bool:
-    return name.startswith("mcp__sourcegraph__")
+    return name.startswith("mcp__sourcegraph__") or name.startswith("mcp__auggie__") or name.startswith("mcp__github__")
 
 
 def _is_retrieval_tool(name: str) -> bool:
     """True for tools tracked by the retrieval evaluation pipeline."""
     if name in _TRACKED_TOOLS:
         return True
-    if name.startswith("mcp__sourcegraph__"):
+    if name.startswith("mcp__sourcegraph__") or name.startswith("mcp__auggie__") or name.startswith("mcp__github__"):
         return True
     return False
 
@@ -640,7 +652,7 @@ def walk_run_tasks(run_dir: Path) -> list[dict]:
             continue
         config_name = config_dir.name
         # Skip non-config directories
-        if not (config_name == "mcp" or any(config_name.startswith(p) for p in ("baseline", "mcp-", "sourcegraph"))):
+        if not (config_name == "mcp" or any(config_name.startswith(p) for p in ("baseline", "mcp-", "sourcegraph", "augment-", "github-"))):
             continue
 
         for batch_dir in sorted(config_dir.iterdir()):

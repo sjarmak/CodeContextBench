@@ -11,7 +11,7 @@ The key mechanism: --tools restricts to only Bash/Read/Edit (for implementation)
 --disallowedTools blocks search patterns (forcing MCP discovery), and --append-system-prompt
 makes the workflow requirement explicit.
 
-Configuration via environment variable: BASELINE_MCP_TYPE (none|sourcegraph|sourcegraph_full|deepsearch|deepsearch_hybrid)
+Configuration via environment variable: BASELINE_MCP_TYPE (none|sourcegraph|sourcegraph_full|augment_remote|deepsearch|deepsearch_hybrid)
 """
 
 import base64
@@ -184,6 +184,153 @@ If MCP search returns no results:
 2. Try `sg_nls_search` for semantic matching
 3. Use `sg_list_files` to browse the directory structure
 4. Use `sg_list_repos` to verify the repository name
+
+---
+
+"""
+
+AUGMENT_REMOTE_PREAMBLE_TEMPLATE = """# IMPORTANT: Source Code Access
+
+**Local source files are not present.** Your workspace does not contain the full source code. You **MUST** use Augment's `codebase-retrieval` MCP tool to discover and understand code before making changes.
+
+{repo_scope}
+
+## Required Workflow
+
+1. **Search first** — Use `codebase-retrieval` to locate relevant files, symbols, and patterns
+2. **Read retrieved context carefully** — Treat retrieved snippets and references as discovery context
+3. **Edit locally** — Use Edit, Write, and Bash to create or modify files in your working directory
+4. **Verify locally** — Run tests with Bash to check your changes
+5. **Produce answer.json** — After completing your edits, also write `/workspace/answer.json` summarizing your work
+
+## Augment Retrieval Guidance
+
+- Use `mcp__auggie__codebase-retrieval` for code discovery and cross-file understanding
+- Include exact identifiers in your query: repo name, file path, symbol names, error text, API names
+- If the tool accepts `directory_path`, set it to your current workspace root
+- Start with a specific query, then broaden only if results are weak
+- Treat retrieval output as navigation context, not as code to copy blindly
+
+---
+
+"""
+
+# Augment LOCAL preamble: code is present locally, auggie supplements local tools
+# with semantic retrieval over the workspace.
+AUGMENT_LOCAL_PREAMBLE_TEMPLATE = """# Augment Context Engine (supplementary MCP tool)
+
+Your workspace contains the full source code. You have all standard local tools
+(Read, Edit, Write, Grep, Glob, Bash). In addition, you have access to Augment's
+Context Engine via the `mcp__auggie__codebase-retrieval` MCP tool, which provides
+**semantic code search** over your local workspace.
+
+{repo_scope}
+
+## When to Use `codebase-retrieval`
+
+| Situation | Tool |
+|-----------|------|
+| Know the exact symbol or filename | Grep, Glob, or Read |
+| Need all occurrences of an identifier | Grep |
+| Exploring unfamiliar code — "how does X work?" | `codebase-retrieval` |
+| Finding related code across files/modules | `codebase-retrieval` |
+| Understanding architecture or data flow | `codebase-retrieval` |
+| Quick file pattern match (`*.test.ts`) | Glob |
+
+**Decision logic:**
+1. Exact identifier lookup → Grep/Glob (faster, precise)
+2. Conceptual / architectural question → `codebase-retrieval` (semantic understanding)
+3. Cross-file relationships or "where is this pattern used?" → `codebase-retrieval`
+4. Verification of a specific file → Read
+
+## Query Best Practices
+
+- **Be specific**: Include exact identifiers, symbol names, error text, file paths
+  - ✅ "Where is the JWT validation middleware defined?"
+  - ✅ "How does the UserService handle password reset?"
+  - ❌ "Tell me about the codebase" (too vague)
+- **Start narrow**, broaden only if results are sparse
+- Augment returns semantically relevant snippets — treat them as **navigation context**,
+  then use Read to see the full file before editing
+
+## Workflow
+
+1. Use local tools (Grep, Glob, Read) for direct lookups
+2. Use `codebase-retrieval` when you need to understand relationships or explore unfamiliar areas
+3. Edit and verify locally (Edit, Bash for tests)
+4. After completing edits, write `/workspace/answer.json` summarizing your work
+
+---
+
+"""
+
+# GitHub MCP preamble: no local code, use GitHub API tools for discovery and reading.
+GITHUB_MCP_PREAMBLE_TEMPLATE = """# IMPORTANT: Source Code Access
+
+**Local source files are not present.** Your workspace does not contain source code.
+You **MUST** use GitHub MCP tools to discover, read, and understand code before making
+any changes.
+
+{repo_scope}
+
+## Required Workflow
+
+1. **Orient** — Use `get_repository_tree` to understand the project structure
+2. **Search** — Use `search_code` to find relevant files and patterns
+3. **Read** — Use `get_file_contents` to read full file contents
+{workflow_tail}
+
+## Tool Selection
+
+| Goal | Tool | Key Parameters |
+|------|------|----------------|
+| Browse project structure | `get_repository_tree` | `owner`, `repo`, `recursive=true`, `path_filter` |
+| Find code by keyword/pattern | `search_code` | `query` with `repo:OWNER/REPO` qualifier |
+| Read a specific file | `get_file_contents` | `owner`, `repo`, `path`, `ref` |
+| View recent changes | `list_commits` | `owner`, `repo`, `sha` (branch) |
+| See a commit's diff | `get_commit` | `owner`, `repo`, `sha`, `include_diff=true` |
+| Find repos by topic | `search_repositories` | `query` |
+
+**Decision logic:**
+1. Need to understand the file layout? → `get_repository_tree` with `recursive=true`
+2. Know the exact symbol or pattern? → `search_code` with `repo:OWNER/REPO symbol_name`
+3. Know the concept, not the name? → `search_code` with broader terms + `language:` filter
+4. Need full file content? → `get_file_contents`
+5. Need change history? → `list_commits` → `get_commit`
+
+## Search Query Syntax (`search_code`)
+
+```
+repo:OWNER/REPO                    # Scope to exact repository (ALWAYS do this)
+language:python                    # Filter by language
+path:src/api/                      # Filter by directory
+content:"exact phrase"             # Exact string match
+NOT test                           # Exclude test files
+symbol_name OR alternative_name    # Boolean OR
+```
+
+**Always start** with `repo:OWNER/REPO` to scope results. Add `language:` and `path:` to narrow further.
+
+## Scoping (Always Do This)
+
+Every `search_code` call MUST include `repo:OWNER/REPO` to scope to the target repository.
+Without scoping, GitHub searches all accessible repositories.
+
+## Efficiency Rules
+
+- Start with `get_repository_tree` to orient yourself, then targeted searches
+- Chain: tree → search → read → edit
+- Don't read 20+ remote files without writing code — once you understand the pattern, start implementing
+- `search_code` is keyword-only (no semantic/NL search) — use exact terms and identifiers
+- For large files (>1MB), `get_file_contents` returns a download link instead of content
+
+## If Stuck
+
+If `search_code` returns no results:
+1. Broaden the query (drop `path:` or `language:` filters)
+2. Try synonyms or partial identifiers
+3. Use `get_repository_tree` with `path_filter` to browse directories
+4. Verify the repo name with `search_repositories`
 
 ---
 
@@ -882,6 +1029,84 @@ class BaselineClaudeCodeAgent(ClaudeCode):
             instruction = instruction + MCP_SANITY_CHECK_PROMPT
             logger.info("Injected MCP_SANITY_CHECK_PROMPT")
 
+        elif mcp_type == "augment_remote":
+            repo_list = self._get_repo_list()
+            if repo_list:
+                scope_lines = ["**Target Repositories (version-pinned mirrors):**\n"]
+                for repo in repo_list:
+                    scope_lines.append(f"- `github.com/{repo}`")
+                scope_lines.append("")
+                scope_lines.append(
+                    "Keep retrieval focused on these repositories. If similarly named upstream repositories appear, prefer the version-pinned mirrors listed above."
+                )
+                repo_scope = "\n".join(scope_lines) + "\n"
+            elif repo_display != "the codebase":
+                repo_scope = (
+                    f"**Target Repository:** `github.com/{repo_display}`\n"
+                    "Mention this exact repository name in retrieval queries when relevant.\n"
+                )
+            else:
+                repo_scope = (
+                    "Discover the relevant repository first, then mention its exact name in retrieval queries.\n"
+                )
+
+            instruction = self._rewrite_repo_references(instruction, repo_display)
+            instruction = self._inject_repo_context(
+                instruction, repo_display, self._get_repo_list()
+            )
+            instruction = AUGMENT_REMOTE_PREAMBLE_TEMPLATE.format(repo_scope=repo_scope) + instruction
+
+        elif mcp_type == "augment_local":
+            # Augment local mode: code IS present locally, auggie supplements as context engine.
+            if repo_display != "the codebase":
+                repo_scope = (
+                    f"**Repository:** `{repo_display}`\n"
+                    "The full source code is available in your working directory.\n"
+                )
+            else:
+                repo_scope = "The full source code is available in your working directory.\n"
+
+            instruction = AUGMENT_LOCAL_PREAMBLE_TEMPLATE.format(repo_scope=repo_scope) + instruction
+
+        elif mcp_type == "github_remote":
+            # GitHub MCP mode: no local code, use GitHub API tools for all code access.
+            if repo_display != "the codebase":
+                parts = repo_display.split("/")
+                if len(parts) == 2:
+                    owner, repo_name = parts
+                    repo_scope = (
+                        f"**Target Repository:** `{owner}/{repo_name}`\n\n"
+                        f"Always use `owner=\"{owner}\"` and `repo=\"{repo_name}\"` for GitHub MCP tool calls.\n"
+                        f"For `search_code`, always include `repo:{owner}/{repo_name}` in the query.\n"
+                    )
+                else:
+                    repo_scope = (
+                        f"**Target Repository:** `{repo_display}`\n"
+                        f"For `search_code`, always include `repo:{repo_display}` in the query.\n"
+                    )
+            else:
+                repo_scope = (
+                    "Use `search_repositories` to discover the target repository first, "
+                    "then scope all `search_code` calls with `repo:OWNER/REPO`.\n"
+                )
+
+            workflow_tail = (
+                "4. **Edit locally** — Use Edit, Write, and Bash to "
+                "create or modify files in your working directory\n"
+                "5. **Verify locally** — Run tests with Bash to check "
+                "your changes\n"
+                "6. **Produce answer.json** — After completing your edits, "
+                "also write `/workspace/answer.json` summarizing your work"
+            )
+
+            instruction = self._rewrite_repo_references(instruction, repo_display)
+            instruction = self._inject_repo_context(
+                instruction, repo_display, self._get_repo_list()
+            )
+            instruction = GITHUB_MCP_PREAMBLE_TEMPLATE.format(
+                repo_scope=repo_scope, workflow_tail=workflow_tail
+            ) + instruction
+
         elif mcp_type == "sourcegraph_isolated":
             # Isolated mode: agent has only the target package locally (via sparse checkout).
             # All cross-package discovery MUST go through Sourcegraph MCP.
@@ -1033,6 +1258,65 @@ before retrying."""
 {repo_filter_system}"""
             system_prompt_append = EVALUATION_CONTEXT_PROMPT + "\n\n---\n\n" + mcp_system_prompt
 
+        elif mcp_type == "augment_remote":
+            if repo_display != "the codebase":
+                repo_hint = f"Target repository: github.com/{repo_display}"
+            else:
+                repo_hint = "Determine the exact target repository before broadening retrieval."
+
+            mcp_system_prompt = f"""IMPORTANT: Local source files are not present. You MUST use Augment's MCP retrieval tool for code discovery before making changes.
+
+Available MCP tool:
+- `mcp__auggie__codebase-retrieval` — retrieve relevant code context across the indexed repository
+
+{repo_hint}
+
+Workflow:
+1) Use `mcp__auggie__codebase-retrieval` first to locate relevant code and patterns
+2) If the tool supports `directory_path`, pass your current workspace root
+3) Use specific queries with exact identifiers, symbols, error text, and repository names
+4) Edit and verify locally after you understand the retrieved context
+
+IMPORTANT: Augment retrieval may return broad or synthesized context if your query is vague. Narrow queries with exact identifiers are preferred."""
+            system_prompt_append = EVALUATION_CONTEXT_PROMPT + "\n\n---\n\n" + mcp_system_prompt
+
+        elif mcp_type == "augment_local":
+            mcp_system_prompt = f"""You have full local source code plus the Augment Context Engine MCP tool for semantic code search.
+
+Available MCP tool:
+- `mcp__auggie__codebase-retrieval` — semantic search over your local workspace
+
+Use `codebase-retrieval` for architectural questions, cross-file relationships, and exploring unfamiliar areas.
+Use Grep/Glob/Read for exact identifier lookups and quick file access.
+Combine both: codebase-retrieval for discovery, local tools for precision."""
+            system_prompt_append = EVALUATION_CONTEXT_PROMPT + "\n\n---\n\n" + mcp_system_prompt
+
+        elif mcp_type == "github_remote":
+            if repo_display != "the codebase":
+                parts = repo_display.split("/")
+                if len(parts) == 2:
+                    owner, repo_name = parts
+                    repo_hint = f"Target: {owner}/{repo_name}. Always use owner=\"{owner}\", repo=\"{repo_name}\" in tool calls. For search_code: repo:{owner}/{repo_name}"
+                else:
+                    repo_hint = f"Target repository: {repo_display}. Scope search_code with repo:{repo_display}"
+            else:
+                repo_hint = "Use search_repositories to find the target repo first."
+
+            mcp_system_prompt = f"""IMPORTANT: Local source files are not present. You MUST use GitHub MCP tools to discover and read code.
+
+Available MCP tools:
+- `search_code` — keyword search (use repo:OWNER/REPO qualifier)
+- `get_file_contents` — read file from repository (owner, repo, path, ref)
+- `get_repository_tree` — browse directory structure (owner, repo, recursive, path_filter)
+- `list_commits` — view commit history
+- `get_commit` — view commit details and diff
+
+{repo_hint}
+
+Workflow: get_repository_tree → search_code → get_file_contents → edit locally → verify with tests.
+After completing edits, write /workspace/answer.json with analysis and changes arrays."""
+            system_prompt_append = EVALUATION_CONTEXT_PROMPT + "\n\n---\n\n" + mcp_system_prompt
+
         elif mcp_type == "deepsearch_hybrid":
             mcp_system_prompt = f"""When exploring this codebase for code discovery, use a hybrid approach:
 
@@ -1110,7 +1394,7 @@ before retrying."""
         
         # MCP configuration flag
         mcp_config_flag = ""
-        if mcp_type in ["sourcegraph", "sourcegraph_full", "sourcegraph_base", "sourcegraph_isolated", "artifact_full", "deepsearch", "deepsearch_hybrid"]:
+        if mcp_type in ["sourcegraph", "sourcegraph_full", "sourcegraph_base", "sourcegraph_isolated", "artifact_full", "augment_remote", "augment_local", "github_remote", "deepsearch", "deepsearch_hybrid"]:
             mcp_config_flag = "--mcp-config /logs/agent/sessions/.mcp.json "
 
         # Build disallowed tools list (blocks local search to force MCP usage)
@@ -1160,7 +1444,7 @@ before retrying."""
                 
                 # For hybrid mode and pure baseline: no tool restrictions
                 # For forced MCP modes (sourcegraph, deepsearch): apply tool restrictions
-                if mcp_type in ["sourcegraph_full", "sourcegraph_isolated", "artifact_full", "deepsearch_hybrid", "none"]:
+                if mcp_type in ["sourcegraph_full", "sourcegraph_isolated", "artifact_full", "augment_remote", "augment_local", "github_remote", "deepsearch_hybrid", "none"]:
                     # Hybrid mode and pure baseline: No tool restrictions
                     # Don't add --tools flag at all - let Claude use all available tools
                     # Skip debug flag - it causes massive bundled JS output to stdout
@@ -1371,6 +1655,19 @@ before retrying."""
                     logger.info(f"All tools available: Bash, Read, Edit, Grep, Glob, mcp__deepsearch__deepsearch")
                     logger.info(f"Strategy: Deep Search for semantic understanding + local search as tactical fallback")
                     logger.info(f"System prompt appended with hybrid workflow guidance")
+                elif mcp_type == "augment_remote":
+                    logger.info("Modified command for Augment remote MCP + local edit/verify workflow")
+                    logger.info("All standard Claude Code tools available plus Augment MCP via stdio server")
+                    logger.info("Strategy: Augment retrieval for discovery, local tools for implementation and verification")
+                    logger.info("System prompt appended with Augment-specific retrieval guidance")
+                elif mcp_type == "augment_local":
+                    logger.info("Modified command for Augment local MCP (baseline + context engine)")
+                    logger.info("All standard tools available plus codebase-retrieval for semantic search")
+                    logger.info("Strategy: local tools primary, Augment for semantic/architectural queries")
+                elif mcp_type == "github_remote":
+                    logger.info("Modified command for GitHub remote MCP (no local source)")
+                    logger.info("All tools available plus GitHub MCP: search_code, get_file_contents, get_repository_tree")
+                    logger.info("Strategy: GitHub API for code discovery, local tools for editing and verification")
                 elif mcp_type == "none":
                     logger.info(f"Pure baseline mode - all standard Claude Code tools available")
                     logger.info(f"No MCP configured, no tool restrictions applied")
@@ -1521,6 +1818,12 @@ before retrying."""
             await self._setup_sourcegraph_mcp(environment)
         elif mcp_type in ("sourcegraph_full", "sourcegraph_base", "sourcegraph_isolated", "artifact_full"):
             await self._setup_sourcegraph_full_mcp(environment, mcp_type=mcp_type)
+        elif mcp_type == "augment_remote":
+            await self._setup_augment_remote_mcp(environment)
+        elif mcp_type == "augment_local":
+            await self._setup_augment_local_mcp(environment)
+        elif mcp_type == "github_remote":
+            await self._setup_github_remote_mcp(environment)
         elif mcp_type == "deepsearch":
             await self._setup_deepsearch_mcp(environment)
         elif mcp_type == "deepsearch_hybrid":
@@ -1544,6 +1847,9 @@ before retrying."""
                 )
             else:
                 raise
+
+        if mcp_type in ("augment_remote", "augment_local"):
+            await self._install_augment_cli(environment)
 
     async def _setup_subscription_auth(self, environment: BaseEnvironment) -> None:
         """Setup Claude Code subscription authentication in container.
@@ -1987,6 +2293,125 @@ Follow the test-first workflow from your system instructions.
         )
         logger.info(f"BaselineClaudeCodeAgent: Sourcegraph Hybrid MCP configured at /logs/agent/sessions/ ({sg_url})")
         # No CLAUDE.md uploaded — V4 preamble in instruction text provides all MCP guidance.
+
+    async def _setup_augment_remote_mcp(self, environment: BaseEnvironment) -> None:
+        """Configure Augment remote MCP via the Auggie stdio server."""
+        augment_session_auth = os.environ.get("AUGMENT_SESSION_AUTH") or ""
+        augment_token = os.environ.get("AUGMENT_API_TOKEN") or ""
+        augment_url = os.environ.get("AUGMENT_API_URL") or ""
+
+        if not augment_session_auth and (not augment_token or not augment_url):
+            logger.warning(
+                "Augment MCP credentials not found. Set AUGMENT_SESSION_AUTH or both AUGMENT_API_TOKEN and AUGMENT_API_URL."
+            )
+            return
+
+        await environment.exec("mkdir -p /logs/agent/sessions")
+
+        server_env = {}
+        if augment_session_auth:
+            server_env["AUGMENT_SESSION_AUTH"] = augment_session_auth
+        else:
+            server_env["AUGMENT_API_TOKEN"] = augment_token
+            server_env["AUGMENT_API_URL"] = augment_url
+
+        mcp_config = {
+            "mcpServers": {
+                "auggie": {
+                    "type": "stdio",
+                    "command": "auggie",
+                    "args": ["--mcp", "--mcp-auto-workspace"],
+                    "env": server_env,
+                }
+            }
+        }
+
+        mcp_config_path = self.logs_dir / ".mcp.json"
+        with open(mcp_config_path, "w") as f:
+            json.dump(mcp_config, f, indent=2)
+
+        await environment.upload_file(
+            source_path=mcp_config_path, target_path="/logs/agent/sessions/.mcp.json"
+        )
+        logger.info("BaselineClaudeCodeAgent: Augment MCP configured at /logs/agent/sessions/ via stdio server")
+
+    async def _install_augment_cli(self, environment: BaseEnvironment) -> None:
+        """Install Auggie inside the task container so Claude can launch it as an MCP server."""
+        logger.info("BaselineClaudeCodeAgent: Installing Auggie CLI for augment_remote mode")
+        result = await environment.exec(
+            "npm install -g @augmentcode/auggie@latest && auggie --version",
+            timeout_sec=300,
+        )
+        setup_dir = self.logs_dir / "setup-auggie"
+        setup_dir.mkdir(parents=True, exist_ok=True)
+        (setup_dir / "return-code.txt").write_text(str(result.return_code))
+        if result.stdout:
+            (setup_dir / "stdout.txt").write_text(result.stdout)
+        if result.stderr:
+            (setup_dir / "stderr.txt").write_text(result.stderr)
+        if result.return_code != 0:
+            raise RuntimeError(
+                f"Auggie install failed with exit code {result.return_code}. See logs in {setup_dir}"
+            )
+
+    async def _setup_augment_local_mcp(self, environment: BaseEnvironment) -> None:
+        """Configure Augment local MCP — same as remote but with local code present."""
+        # Reuse the same augment MCP setup; the difference is the Dockerfile
+        # (full local code vs sg_only) and the preamble (local vs remote).
+        await self._setup_augment_remote_mcp(environment)
+        logger.info("BaselineClaudeCodeAgent: Augment local MCP (baseline + context engine)")
+
+    async def _setup_github_remote_mcp(self, environment: BaseEnvironment) -> None:
+        """Configure GitHub MCP server via pre-built binary (stdio transport)."""
+        github_token = os.environ.get("GITHUB_TOKEN") or ""
+        if not github_token:
+            logger.warning(
+                "GitHub MCP credentials not found. Set GITHUB_TOKEN in .env.local."
+            )
+            return
+
+        await environment.exec("mkdir -p /logs/agent/sessions")
+
+        # Install the pre-built binary
+        logger.info("BaselineClaudeCodeAgent: Installing GitHub MCP server binary")
+        install_result = await environment.exec(
+            "curl -sL https://github.com/github/github-mcp-server/releases/download/v0.32.0/github-mcp-server_Linux_x86_64.tar.gz "
+            "| tar -xz -C /usr/local/bin github-mcp-server "
+            "&& chmod +x /usr/local/bin/github-mcp-server "
+            "&& github-mcp-server --help 2>&1 | head -3",
+            timeout_sec=120,
+        )
+        setup_dir = self.logs_dir / "setup-github-mcp"
+        setup_dir.mkdir(parents=True, exist_ok=True)
+        (setup_dir / "return-code.txt").write_text(str(install_result.return_code))
+        if install_result.stdout:
+            (setup_dir / "stdout.txt").write_text(install_result.stdout)
+        if install_result.return_code != 0:
+            raise RuntimeError(
+                f"GitHub MCP server install failed (exit {install_result.return_code}). See {setup_dir}"
+            )
+
+        mcp_config = {
+            "mcpServers": {
+                "github": {
+                    "type": "stdio",
+                    "command": "github-mcp-server",
+                    "args": ["stdio", "--toolsets", "repos,git"],
+                    "env": {
+                        "GITHUB_PERSONAL_ACCESS_TOKEN": github_token,
+                    },
+                }
+            }
+        }
+
+        mcp_config_path = self.logs_dir / ".mcp.json"
+        with open(mcp_config_path, "w") as f:
+            json.dump(mcp_config, f, indent=2)
+
+        await environment.upload_file(
+            source_path=mcp_config_path, target_path="/logs/agent/sessions/.mcp.json"
+        )
+        logger.info("BaselineClaudeCodeAgent: GitHub MCP configured at /logs/agent/sessions/ via stdio binary")
 
     async def _setup_deepsearch_mcp(self, environment: BaseEnvironment) -> None:
         """Configure Deep Search-only MCP endpoint."""

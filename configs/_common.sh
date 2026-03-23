@@ -129,6 +129,13 @@ account_readiness_preflight() {
         return 0
     fi
 
+    # Refresh usage cache from Anthropic API headers (bypasses Mac push agent bugs)
+    local _fetch_script="$REPO_ROOT/scripts/infra/fetch_usage.py"
+    if [ -f "$_fetch_script" ]; then
+        echo "Refreshing usage cache from API..."
+        python3 "$_fetch_script" 2>/dev/null || echo "WARNING: usage cache refresh failed; using stale data"
+    fi
+
     local report_json
     local report_rc=0
     local cmd=(
@@ -236,7 +243,7 @@ load_credentials() {
 # CONFIG NAME MAPPING
 # ============================================
 # Three-dimensional config names: {agent}-{source}-{verifier}
-#   agent:    baseline (no MCP) | mcp (Sourcegraph MCP)
+#   agent:    baseline (no MCP) | mcp (Sourcegraph MCP) | augment (Augment MCP)
 #   source:   local (full source) | remote (source deleted)
 #   verifier: direct (git changes) | artifact (review.json)
 #
@@ -260,6 +267,12 @@ config_to_mcp_type() {
             VERIFIER_MODE="direct"; SOURCE_ACCESS="local"; echo "none" ;;
         mcp-remote-direct)
             VERIFIER_MODE="direct"; SOURCE_ACCESS="remote"; echo "sourcegraph_full" ;;
+        augment-remote-direct)
+            VERIFIER_MODE="direct"; SOURCE_ACCESS="remote"; echo "augment_remote" ;;
+        augment-local-direct)
+            VERIFIER_MODE="direct"; SOURCE_ACCESS="local"; echo "augment_local" ;;
+        github-remote-direct)
+            VERIFIER_MODE="direct"; SOURCE_ACCESS="remote"; echo "github_remote" ;;
         mcp-scip-remote-direct)
             VERIFIER_MODE="direct"; SOURCE_ACCESS="remote"
             export SOURCEGRAPH_SEARCH_BRANCH="scip-enabled"
@@ -268,6 +281,8 @@ config_to_mcp_type() {
             VERIFIER_MODE="artifact"; SOURCE_ACCESS="local"; echo "none" ;;
         mcp-remote-artifact)
             VERIFIER_MODE="artifact"; SOURCE_ACCESS="remote"; echo "artifact_full" ;;
+        augment-remote-artifact)
+            VERIFIER_MODE="artifact"; SOURCE_ACCESS="remote"; echo "augment_remote" ;;
         mcp-scip-remote-artifact)
             VERIFIER_MODE="artifact"; SOURCE_ACCESS="remote"
             export SOURCEGRAPH_SEARCH_BRANCH="scip-enabled"
@@ -311,15 +326,16 @@ config_uses_scip() {
 validate_config_name() {
     local config_name="$1"
     case "$config_name" in
-        baseline-local-direct|mcp-remote-direct|\
+        baseline-local-direct|mcp-remote-direct|augment-remote-direct|\
+        augment-local-direct|github-remote-direct|\
         mcp-scip-remote-direct|mcp-scip-remote-artifact|\
-        baseline-local-artifact|mcp-remote-artifact|\
+        baseline-local-artifact|mcp-remote-artifact|augment-remote-artifact|\
         baseline|sourcegraph_full|artifact_full|none)
             return 0 ;;
         *)
             echo "ERROR: Unknown config name: '$config_name'" >&2
-            echo "  Valid: baseline-local-direct, mcp-remote-direct, mcp-scip-remote-direct" >&2
-            echo "         baseline-local-artifact, mcp-remote-artifact, mcp-scip-remote-artifact" >&2
+            echo "  Valid: baseline-local-direct, mcp-remote-direct, augment-remote-direct, augment-local-direct, github-remote-direct, mcp-scip-remote-direct" >&2
+            echo "         baseline-local-artifact, mcp-remote-artifact, augment-remote-artifact, mcp-scip-remote-artifact" >&2
             echo "  Legacy: baseline, sourcegraph_full, artifact_full, none" >&2
             exit 1 ;;
     esac
@@ -858,6 +874,11 @@ setup_multi_accounts() {
 setup_dual_accounts() { setup_multi_accounts; }
 
 # Refresh tokens for all registered accounts.
+#
+# Activation: set AUTO_REFRESH_TOKENS=1 in env or .env.local once the
+# Cloudflare rate limit on the token endpoint has cleared. Until then,
+# this stays disabled (default 0) and tokens must be refreshed manually
+# via: python3 scripts/infra/refresh_tokens.py --all
 ensure_fresh_token_all() {
     # Some scripts call this before setup_multi_accounts/setup_dual_accounts.
     # Ensure account homes are discovered so refresh is never silently skipped.
@@ -867,19 +888,33 @@ ensure_fresh_token_all() {
 
     if [ "${AUTO_REFRESH_TOKENS}" != "1" ]; then
         echo "Token refresh: disabled (AUTO_REFRESH_TOKENS=${AUTO_REFRESH_TOKENS}); using read-only preflight state"
+        echo "  To enable: export AUTO_REFRESH_TOKENS=1  (only after token endpoint rate limit clears)"
         export HOME="$REAL_HOME"
         return 0
     fi
 
-    # Safety fallback in case setup_multi_accounts did not populate for any reason.
-    if [ ${#CLAUDE_HOMES[@]} -eq 0 ]; then
-        CLAUDE_HOMES=("${HOME}")
+    # Use the dedicated refresh script (curl_cffi with Chrome TLS fingerprint)
+    # which handles Cloudflare better than raw urllib.
+    local refresh_script="$REPO_ROOT/scripts/infra/refresh_tokens.py"
+    if [ -f "$refresh_script" ]; then
+        echo "Token refresh: using refresh_tokens.py (threshold=${REFRESH_MARGIN_HOURS:-2}h, stagger=8s)..."
+        python3 "$refresh_script" --threshold "${REFRESH_MARGIN_HOURS:-2}" --stagger 8
+        local rc=$?
+        if [ $rc -ne 0 ]; then
+            echo "WARNING: Token refresh script exited with code $rc; continuing with existing tokens"
+        fi
+    else
+        # Fallback to per-account inline refresh
+        echo "Token refresh: refresh_tokens.py not found, using inline fallback..."
+        # Safety fallback in case setup_multi_accounts did not populate for any reason.
+        if [ ${#CLAUDE_HOMES[@]} -eq 0 ]; then
+            CLAUDE_HOMES=("${HOME}")
+        fi
+        for home_dir in "${CLAUDE_HOMES[@]}"; do
+            echo "Refreshing token for HOME=$home_dir ..."
+            HOME="$home_dir" ensure_fresh_token
+        done
     fi
-
-    for home_dir in "${CLAUDE_HOMES[@]}"; do
-        echo "Refreshing token for HOME=$home_dir ..."
-        HOME="$home_dir" ensure_fresh_token
-    done
     # Restore real HOME
     export HOME="$REAL_HOME"
 }
@@ -1001,6 +1036,99 @@ preflight_rate_limits() {
     esac
 
     return 0
+}
+
+# ============================================
+# TOKEN-AWARE ACCOUNT UTILITIES
+# ============================================
+# Shared by run_tasks_parallel and run_selected_tasks.sh for picking accounts
+# with valid tokens and optionally refreshing expired ones mid-run.
+
+# Check remaining token lifetime for an account home dir.
+# Returns minutes remaining (0 if expired or unreadable).
+_token_minutes_remaining() {
+    local home_dir="$1"
+    python3 -c "
+import json, time, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    exp = d.get('claudeAiOauth',{}).get('expiresAt',0)
+    rem = max(0, int((exp - time.time()*1000) / 60000))
+    print(rem)
+except: print(0)
+" "$home_dir/.claude/.credentials.json" 2>/dev/null
+}
+
+# Try to refresh a single account's token using refresh_tokens.py.
+# Returns 0 on success, 1 on failure. Only attempts if AUTO_REFRESH_TOKENS=1.
+_try_refresh_account() {
+    local home_dir="$1"
+    local acct_name
+    acct_name=$(basename "$home_dir")
+
+    if [ "${AUTO_REFRESH_TOKENS}" != "1" ]; then
+        return 1
+    fi
+
+    local refresh_script="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/scripts/infra/refresh_tokens.py"
+    if [ ! -f "$refresh_script" ]; then
+        return 1
+    fi
+
+    local acct_num="${acct_name//[!0-9]/}"
+    echo "    Attempting token refresh for $acct_name..."
+    if python3 "$refresh_script" --account "$acct_num" --threshold 0.1 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+# Pick next valid account from CLAUDE_HOMES starting at a given index.
+# Sets the variable named by $2 to the chosen home dir.
+# Returns the new index via $3.
+# Skips accounts with <5 min remaining, attempts refresh if enabled.
+_pick_valid_account() {
+    local -n _homes_ref=$1
+    local -n _result_ref=$2
+    local -n _idx_ref=$3
+    local num=${#_homes_ref[@]}
+
+    if [ "$num" -eq 0 ]; then
+        _result_ref="$HOME"
+        return 0
+    fi
+
+    local attempts=0
+    while [ "$attempts" -lt "$num" ]; do
+        local candidate="${_homes_ref[$_idx_ref]}"
+        _idx_ref=$(( (_idx_ref + 1) % num ))
+        attempts=$((attempts + 1))
+
+        local remaining
+        remaining=$(_token_minutes_remaining "$candidate")
+
+        if [ "$remaining" -ge 5 ]; then
+            _result_ref="$candidate"
+            return 0
+        fi
+
+        # Token near expiry
+        echo "  WARNING: $(basename "$candidate") token expires in ${remaining}m"
+        if _try_refresh_account "$candidate"; then
+            remaining=$(_token_minutes_remaining "$candidate")
+            if [ "$remaining" -ge 5 ]; then
+                echo "    Refresh succeeded (${remaining}m remaining)"
+                _result_ref="$candidate"
+                return 0
+            fi
+        fi
+        echo "    Skipping $(basename "$candidate") (expired/unrefreshable)"
+    done
+
+    # All accounts exhausted
+    echo "  WARNING: All ${num} accounts have expired tokens"
+    _result_ref="${_homes_ref[$_idx_ref]}"
+    return 1
 }
 
 # ============================================
@@ -1388,8 +1516,12 @@ run_tasks_parallel() {
             fi
         done
 
-        local task_home="${CLAUDE_HOMES[$account_idx]}"
-        account_idx=$(( (account_idx + 1) % num_accounts ))
+        local task_home=""
+        if _pick_valid_account CLAUDE_HOMES task_home account_idx; then
+            :  # valid account found
+        else
+            echo "  WARNING: No valid accounts; launching on $(basename "$task_home") anyway"
+        fi
         _launch "$task_id" "$task_home"
     done
 

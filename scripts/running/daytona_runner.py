@@ -42,7 +42,7 @@ from typing import Any, Dict, List, Optional
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-BENCHMARKS_DIR = REPO_ROOT / "benchmarks"
+BENCHMARKS_DIR = REPO_ROOT / "benchmarks" / "tasks"
 REGISTRY_PATH = REPO_ROOT / "scripts" / "daytona_task_registry.json"
 RUNS_DIR = REPO_ROOT / "runs" / "daytona"
 
@@ -55,18 +55,26 @@ CLAUDE_MAX_TURNS = 30
 CONFIG_DOCKERFILE_MAP = {
     "baseline-local-direct": "Dockerfile",
     "mcp-remote-direct": "Dockerfile.sg_only",
+    "augment-remote-direct": "Dockerfile.sg_only",
+    "augment-local-direct": "Dockerfile",
+    "github-remote-direct": "Dockerfile.sg_only",
     "baseline-local-artifact": "Dockerfile.artifact_baseline",
     "mcp-remote-artifact": "Dockerfile.artifact_only",
+    "augment-remote-artifact": "Dockerfile.artifact_only",
 }
 
 CONFIG_INSTRUCTION_MAP = {
     "baseline-local-direct": "instruction.md",
     "mcp-remote-direct": "instruction_mcp.md",
+    "augment-remote-direct": "instruction_mcp.md",
+    "augment-local-direct": "instruction.md",
+    "github-remote-direct": "instruction_mcp.md",
     "baseline-local-artifact": "instruction.md",
     "mcp-remote-artifact": "instruction_mcp.md",
+    "augment-remote-artifact": "instruction_mcp.md",
 }
 
-MCP_CONFIGS = {"mcp-remote-direct", "mcp-remote-artifact"}
+MCP_CONFIGS = {"mcp-remote-direct", "mcp-remote-artifact", "augment-remote-direct", "augment-remote-artifact", "github-remote-direct"}
 ACCOUNT_NAME_RE = re.compile(r"account(\d+)$")
 
 
@@ -487,7 +495,13 @@ class SandboxManager:
         self._configure_auth(sandbox)
 
         # MCP config
-        if is_mcp and self._creds.get("src_token"):
+        is_augment = self._config.config_name.startswith("augment-")
+        is_github = self._config.config_name.startswith("github-")
+        if is_augment and self._creds.get("augment_session_auth"):
+            self._configure_augment_mcp(sandbox)
+        elif is_github and self._creds.get("github_token"):
+            self._configure_github_mcp(sandbox)
+        elif is_mcp and self._creds.get("src_token"):
             self._configure_mcp(sandbox)
 
         # Directories
@@ -612,6 +626,56 @@ class SandboxManager:
             f"&& echo '{mcp_json}' > /tmp/.mcp.json "
             f"&& chown -R claude:claude /home/claude/.config",
             "Writing MCP config")
+
+    def _configure_augment_mcp(self, sandbox) -> None:
+        session_auth = self._creds["augment_session_auth"]
+        mcp_config = {
+            "mcpServers": {
+                "auggie": {
+                    "type": "stdio",
+                    "command": "auggie",
+                    "args": ["--mcp", "--mcp-auto-workspace"],
+                    "env": {"AUGMENT_SESSION_AUTH": session_auth},
+                }
+            }
+        }
+        mcp_json = json.dumps(mcp_config)
+        # Install auggie CLI
+        exec_cmd(sandbox,
+            "npm install -g @augmentcode/auggie@latest 2>&1 | tail -5 "
+            "&& auggie --version",
+            "Installing Auggie CLI", timeout=180)
+        # Write MCP config
+        exec_cmd(sandbox,
+            f"mkdir -p /home/claude/.config/claude /home/claude/.claude "
+            f"&& cat > /tmp/.mcp.json << 'MCPEOF'\n{mcp_json}\nMCPEOF\n"
+            f"chown -R claude:claude /home/claude/.config",
+            "Writing Augment MCP config")
+
+    def _configure_github_mcp(self, sandbox) -> None:
+        github_token = self._creds["github_token"]
+        # Install GitHub MCP server binary
+        exec_cmd(sandbox,
+            "curl -sL https://github.com/github/github-mcp-server/releases/download/v0.32.0/github-mcp-server_Linux_x86_64.tar.gz "
+            "| tar -xz -C /usr/local/bin github-mcp-server "
+            "&& chmod +x /usr/local/bin/github-mcp-server",
+            "Installing GitHub MCP server", timeout=120)
+        mcp_config = {
+            "mcpServers": {
+                "github": {
+                    "type": "stdio",
+                    "command": "github-mcp-server",
+                    "args": ["stdio", "--toolsets", "repos,git"],
+                    "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": github_token},
+                }
+            }
+        }
+        mcp_json = json.dumps(mcp_config)
+        exec_cmd(sandbox,
+            f"mkdir -p /home/claude/.config/claude /home/claude/.claude "
+            f"&& cat > /tmp/.mcp.json << 'MCPEOF'\n{mcp_json}\nMCPEOF\n"
+            f"chown -R claude:claude /home/claude/.config",
+            "Writing GitHub MCP config")
 
     def _upload_test_files(self, sandbox, task: TaskSpec) -> None:
         tests_dir = task.task_dir / "tests"
@@ -1029,6 +1093,8 @@ def main():
     credentials: Dict[str, Any] = {
         "anthropic_key": "", "oauth_creds": None,
         "src_token": load_src_access_token(),
+        "augment_session_auth": os.environ.get("AUGMENT_SESSION_AUTH", ""),
+        "github_token": os.environ.get("GITHUB_TOKEN", ""),
     }
 
     if not args.dry_run:
