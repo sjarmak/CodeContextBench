@@ -3,75 +3,55 @@
 Benchmark suite for evaluating how AI coding agents leverage external context retrieval tools on realistic developer tasks in large, enterprise-scale codebases.
 
 This repository contains:
-- **275 benchmark tasks** across 9 developer work types (debug, fix, feature, refactor, security, understand, crossrepo, test, document)
-- **Evaluation and run configs** (paired baseline vs MCP-enabled execution modes)
+- **275 benchmark tasks** across 20 suites covering 9 developer work types
+- **Versioned benchmark suites** with dual-verifier support (`benchmarks/suites/`)
+- **Auditable results snapshots** with per-task traces, scores, timing, and cost (`runs/snapshots/`)
 - **Metrics extraction and reporting pipelines** for score/cost/retrieval analysis
-- **Run artifacts and agent traces** (in `runs/` and published summaries under `docs/official_results/`)
+- **Task indexes** by complexity, language, repo size, and multi-repo scope (`benchmarks/indexes/`)
 
 Tasks are executed via the [Harbor](https://github.com/laude-institute/harbor/tree/main) runner with the Claude Code agent harness.
 
 ---
 
-## Quickstart (Public / First-Time Users)
+## Results
 
-### Who this repo is for
+Official results are available as frozen, auditable snapshots in [`runs/snapshots/`](runs/snapshots/).
 
-- Researchers evaluating coding agents on realistic software engineering tasks
-- Practitioners comparing baseline vs MCP-enabled agent configurations
+| Snapshot | Tasks | Model | Configs | Mean Reward |
+|----------|------:|-------|---------|:-----------:|
+| `csb-v1-mixed371--haiku45--030326` | 371 | Haiku 4.5 | Baseline, Sourcegraph MCP | 0.536 / 0.565 |
 
-### What you can do without Harbor
+Each snapshot includes:
+- `browse.html` — Interactive results browser (open in any web browser)
+- `SNAPSHOT.json` — Machine-readable manifest
+- `export/traces/` — Per-task result metadata, reward scores, agent instructions
+- `export/summary/` — Aggregate scores, timing, cost breakdowns
 
-You can inspect task definitions, run validation and analysis scripts, and use the metrics/report pipeline on existing Harbor run outputs.
+Full agent trajectories are available as compressed archives in the corresponding [GitHub Release](https://github.com/sourcegraph/CodeScaleBench/releases).
 
-```bash
-git clone https://github.com/sourcegraph/CodeScaleBench.git
-cd CodeScaleBench
+---
 
-# Fast repo sanity check (docs/config refs)
-python3 scripts/maintenance/repo_health.py --quick
+## Benchmark Suites
 
-# Explore task-based docs navigation
-sed -n '1,120p' docs/START_HERE_BY_TASK.md
+Suite definitions in [`benchmarks/suites/`](benchmarks/suites/) specify exactly which tasks are in each benchmark version:
 
-# Inspect available benchmark suites
-ls benchmarks
-```
+| Suite | Tasks | Description |
+|-------|------:|-------------|
+| `csb-v1-mixed371` | 371 | Initial report: mixed verifiers, 151 SDLC + 220 org tasks |
+| `csb-v2-dual264` | 264 | Canonical: all dual-verifier tasks |
+| `csb-v2-full-validated` | 275 | Complete: all validated tasks including Daytona-excluded |
 
-### What requires Harbor (benchmark execution)
-
-Running benchmark tasks requires:
-
-- [Harbor](https://github.com/laude-institute/harbor/tree/main) installed and configured
-
-Our internal default setup often uses:
-- **Daytona** account and API key (preferred in this repo). See `docs/DAYTONA.md`
-- Docker for Daytona-incompatible tasks
-- Agent/runtime credentials as needed by your Harbor harness
-
-Recommended pre-run checks:
-
-```bash
-python3 scripts/infra/check_infra.py
-python3 scripts/authoring/validate_tasks_preflight.py --all
-```
-
-Then start with a dry run:
-
-```bash
-bash configs/harnesses/run_selected_tasks.sh --dry-run
-```
-
-### First places to read
-
-- `docs/START_HERE_BY_TASK.md` for task-oriented navigation
-- `docs/reference/CONFIGS.md` for the 2-config evaluation matrix
-- `docs/EVALUATION_PIPELINE.md` for scoring and reporting outputs
+Task indexes in [`benchmarks/indexes/`](benchmarks/indexes/) provide views by:
+- **Complexity** — scored by repo size, repo count, GT files, difficulty
+- **Language** — 13 languages (Go, C++, Java, Python, Rust, C#, JS, TS, ...)
+- **Repo size** — small (<100MB) through xlarge (>5GB)
+- **Multi-repo** — 136 multi-repo tasks across 28 repo sets
 
 ---
 
 ## Task Taxonomy
 
-All tasks represent realistic developer work in large, often multi-repo, enterprise codebases. Tasks are organized by **developer work type** — what the developer is doing — not by an artificial SDLC/Org distinction. See [docs/explanations/taxonomy_rationale.md](docs/explanations/taxonomy_rationale.md) for the design rationale.
+All tasks represent realistic developer work in large, often multi-repo, enterprise codebases. Tasks are organized by **developer work type**.
 
 | Work Type | Tasks | Description | Repo Scope |
 |-----------|------:|-------------|------------|
@@ -86,284 +66,88 @@ All tasks represent realistic developer work in large, often multi-repo, enterpr
 | **document** | 11 | API docs, architecture docs, migration guides | 10 single, 1 dual |
 | **Total** | **275** | | 186 single, 28 dual, 61 multi |
 
-**Structural complexity** varies within each work type. Tasks range from single-repo (186) through dual-repo (28) to multi-repo (61), enabling analysis of whether context retrieval tools help more as repo scope widens.
-
-Both baseline and MCP-Full agents have access to **all repos** in each task's fixture. The only difference is the method: baseline reads code locally, MCP-Full uses Sourcegraph MCP tools (local code is truncated). This ensures we measure whether MCP tools help agents work better — not whether MCP can access repos the baseline can't.
-
-Non-canonical tasks are archived in `benchmarks/backups/`. See [docs/ORG_TASKS.md](docs/ORG_TASKS.md) for the oracle evaluation framework.
-
 ---
 
-## 2-Config Evaluation Matrix
+## Evaluation Configurations
 
-All 275 tasks are evaluated across two primary configurations (Baseline vs MCP):
+Tasks are evaluated across multiple MCP configurations to measure the impact of external code retrieval tools:
 
-| Config Name | Internal MCP mode | MCP Tools Available |
-|-------------------|---------------------|---------------------|
-| Baseline | `none` | None (agent uses only built-in tools) |
-| MCP | `sourcegraph` / `artifact` (task-dependent) | All 13 Sourcegraph MCP tools including `sg_deepsearch`, `sg_deepsearch_read` |
-
-See [docs/reference/CONFIGS.md](docs/reference/CONFIGS.md) for the canonical configuration matrix and tool-by-tool breakdown.
+| Config | Code Access | MCP Tools |
+|--------|-------------|-----------|
+| `baseline-local-direct` | Full local code | None (built-in tools only) |
+| `mcp-remote-direct` | Remote only (Sourcegraph) | keyword_search, nls_search, read_file, find_references, go_to_definition, ... |
+| `augment-local-direct` | Full local code | Augment Context Engine (`codebase-retrieval`) |
+| `github-remote-direct` | Remote only (GitHub API) | search_code, get_file_contents, get_repository_tree, ... |
 
 ---
 
 ## Repository Structure
 
 ```
-benchmarks/              # 275 tasks across 20 source directories (9 work types)
-  csb_sdlc_feature/      #   feature: Feature Implementation (23 tasks)
-  csb_sdlc_fix/          #   fix: Bug Repair (19 tasks)
-  csb_sdlc_refactor/     #   refactor: Cross-File Refactoring (18 tasks)
-  csb_sdlc_debug/        #   debug: Debugging & Investigation (13 tasks)
-  csb_sdlc_secure/       #   security: CVE analysis, governance (13 tasks)
-  csb_sdlc_test/         #   test: Testing & QA (12 tasks)
-  csb_sdlc_design/       #   understand: Architecture analysis (11 tasks)
-  csb_sdlc_document/     #   document: API references, guides (11 tasks)
-  csb_sdlc_understand/   #   understand: Comprehension, onboarding (11 tasks)
-  csb_org_migration/     #   refactor: Framework migration (25 tasks)
-  csb_org_compliance/    #   security: Compliance & audit (13 tasks)
-  csb_org_incident/      #   debug: Incident debugging (13 tasks)
-  csb_org_platform/      #   crossrepo: Platform knowledge (13 tasks)
-  csb_org_security/      #   security: Vulnerability remediation (13 tasks)
-  csb_org_crossorg/      #   crossrepo: Cross-org discovery (12 tasks)
-  csb_org_crossrepo/     #   crossrepo: Cross-repo discovery (11 tasks)
-  csb_org_crossrepo_tracing/  #   crossrepo: Dependency tracing (11 tasks)
-  csb_org_domain/        #   understand: Domain lineage (11 tasks)
-  csb_org_onboarding/    #   understand: Onboarding (11 tasks)
-  csb_org_org/           #   feature: Org-wide feature work (11 tasks)
-  backups/               #   Archived non-canonical tasks
-configs/                 # Run configs and task selection
-  _common.sh             #   Shared infra: token refresh, parallel execution, multi-account
-  sdlc_suite_2config.sh  #   Generic SDLC runner (used by phase wrappers below)
-  feature_2config.sh     #   Phase wrapper: Feature (20 tasks)
-  refactor_2config.sh    #   Phase wrapper: Refactor (20 tasks)
-  debug_2config.sh       #   Phase wrapper: Debug (20 tasks)
-  design_2config.sh      #   Phase wrapper: Design (20 tasks)
-  document_2config.sh    #   Phase wrapper: Document (20 tasks)
-  fix_2config.sh         #   Phase wrapper: Fix (25 tasks)
-  secure_2config.sh      #   Phase wrapper: Secure (20 tasks)
-  test_2config.sh        #   Phase wrapper: Test (20 tasks)
-  run_selected_tasks.sh  #   Unified runner for all tasks
-  validate_one_per_benchmark.sh  # Pre-flight smoke (1 task per suite)
-  selected_benchmark_tasks.json  # Canonical task selection: 275 tasks across 9 work types
-  use_case_registry.json #   100 GTM use cases (Org task source)
-  archive/               #   Pre-SDLC migration scripts (preserved for history)
+benchmarks/
+  suites/                # Versioned benchmark suite definitions (JSON)
+  indexes/               # Task indexes by complexity, language, repo size, multi-repo
+  tasks/                 # 275 task definitions across 20 suite directories
+    csb_sdlc_feature/    #   Feature implementation (23 tasks)
+    csb_sdlc_fix/        #   Bug repair (19 tasks)
+    csb_org_migration/   #   Framework migration (25 tasks)
+    ...                  #   (20 suites total)
+runs/
+  snapshots/             # Frozen, auditable result snapshots
+    {snapshot_id}/
+      SNAPSHOT.json      #   Manifest: suite, model, configs, aggregates
+      browse.html        #   Interactive results browser
+      export/            #   Sanitized traces for public consumption
 scripts/                 # Metrics extraction, evaluation, and operational tooling
-  csb_metrics/           #   Python package: models, extractors, discovery, judge context
-  generate_eval_report.py  # CLI: deterministic evaluation report generator
-  aggregate_status.py    #   Core run scanner (status, errors, watch mode)
-  status_fingerprints.py #   Error classification (12 regex patterns)
-  validate_tasks_preflight.py # Pre-flight task validation
-  validate_task_run.py   #   Post-run validation
-  check_infra.py         #   Infrastructure readiness checker
-  compare_configs.py     #   Cross-config divergence analysis
-  cost_report.py         #   Token/cost aggregation
-  sync_task_metadata.py  #   task.toml vs selection registry reconciliation
-  generate_manifest.py   #   Rebuild MANIFEST from on-disk results
-  archive_run.py         #   Archive old runs to save disk
-  rerun_failed.py        #   Generate rerun commands for failed tasks
-  abc_audit.py           #   ABC benchmark quality audit framework
-  abc_score_task.py      #   Per-task quality scoring
-  abc_criteria.py        #   ABC criteria data model (32 criteria)
-  docs_consistency_check.py # Documentation drift guard
-tests/                   # Unit tests for scripts/
-  test_abc_audit.py      #   Tests for ABC audit framework
-  test_abc_criteria.py   #   Tests for ABC criteria data model
-  test_abc_score_task.py #   Tests for task quality scorer
-  test_extract_task_metrics.py # Tests for metrics extraction
-docs/                    # Operational documentation
-  CONFIGS.md             #   2-config tool breakdown
-  ERROR_CATALOG.md       #   Known error fingerprints, causes, fixes
-  QA_PROCESS.md          #   Quality assurance and validation pipeline
-  EVALUATION_PIPELINE.md #   Unified eval: verifier → judge → statistics → report
-  TASK_CATALOG.md        #   Detailed per-task reference
-  TASK_SELECTION.md      #   Selection criteria, difficulty calibration, MCP scoring
-  SCORING_SEMANTICS.md   #   Reward and pass interpretation per benchmark
-  ORG_TASKS.md           #   Org task system, authoring, oracle evaluation
-  ORG_CALIBRATION.md # Oracle coverage analysis and threshold calibration
-  WORKFLOW_METRICS.md    #   Timing/cost metric definitions
-  AGENT_INTERFACE.md     #   Runtime I/O contract for agents
-  EXTENSIBILITY.md       #   Safe suite/task/config extension guide
-  LEADERBOARD.md         #   Ranking policy
-  SUBMISSION.md          #   Submission format specification
-skills/                  # AI agent skill definitions (operational runbooks)
-  csb/                   #   CSB-specific: pre-run, monitoring, triage, analysis, maintenance
-  general/               #   Reusable: workflow tools, agent delegation, dev practices
-schemas/                 # JSON schemas for MANIFEST.json, task.toml, etc.
+  publishing/            #   Snapshot creation, verification, export
+  evaluation/            #   IR metrics, retrieval analysis, judge pipelines
+  csb_metrics/           #   Python package: models, extractors, discovery
+docs/
+  technical_reports/     # Published technical reports
+  official_results/      # Pointer to runs/snapshots/
 ```
-
-Each suite directory contains per-task subdirectories with `instruction.md`, `task.toml`, `tests/`, and ground truth (or `solution/`). Org tasks additionally include `task_spec.json`, `oracle_answer.json`, and Dockerfile variants for baseline/MCP-only execution.
 
 ---
 
-## Metrics Extraction Pipeline
-
-The `scripts/` directory contains a stdlib-only Python 3.10+ pipeline for extracting deterministic metrics from Harbor run output.
-Use `runs/analysis` for active analysis runs (and `runs/official` when producing publishable exports):
-
-Official runs layout note:
-- Raw source-of-truth run dirs now live under `runs/official/_raw/`.
-- Top-level `runs/official/` is kept clean for organized benchmark/model views (`csb_sdlc/`, `csb_org/`) plus `MANIFEST.json`.
-- Core scripts (manifest generation, promotion, organizer) resolve `_raw` automatically.
+## Quickstart
 
 ```bash
-# Generate evaluation report from analysis runs
-python3 scripts/maintenance/generate_eval_report.py \
-  --runs-dir /path/to/runs/analysis/ \
-  --output-dir ./eval_reports/
+git clone https://github.com/sourcegraph/CodeScaleBench.git
+cd CodeScaleBench
 
-# Generate LLM judge context files
-python3 -m scripts.csb_metrics.judge_context \
-  --runs-dir /path/to/runs/analysis/ \
-  --benchmarks-dir ./benchmarks/ \
-  --output-dir ./judge_contexts/
+# Browse benchmark suites
+cat benchmarks/suites/csb-v2-dual264.json | python3 -m json.tool | head -20
+
+# Explore task indexes
+cat benchmarks/indexes/by-complexity.json | python3 -m json.tool | head -30
+
+# Open results browser
+open runs/snapshots/csb-v1-mixed371--haiku45--030326/browse.html
 ```
 
-The report generator produces:
-- `eval_report.json` -- full structured report
-- `REPORT.md` -- markdown tables (performance, efficiency, tool utilization)
-- `harness_configs.json` -- exact harness configuration per run
-- CSV files per table for downstream analysis
-
-See `python3 scripts/maintenance/generate_eval_report.py --help` for all options.
-
-### Official Results + Trace Browser
-
-To export official results (valid scored tasks only) with parsed
-trace summaries and local browsing UI:
+### Running benchmarks (requires Harbor)
 
 ```bash
-python3 scripts/analysis/export_official_results.py \
-  --runs-dir ./runs/official/ \
-  --output-dir ./docs/official_results/
+# Pre-flight checks
+python3 scripts/infra/check_infra.py
+
+# Run canonical suite
+./configs/harnesses/run_selected_tasks.sh \
+  --suite-file benchmarks/suites/csb-v2-dual264.json
 ```
-
-This writes:
-- `docs/official_results/README.md` -- run/config score summary
-- `docs/official_results/runs/*.md` -- per-run task tables
-- `docs/official_results/tasks/*.md` -- per-task metrics + parsed tool/trace view
-- `docs/official_results/data/official_results.json` -- machine-readable dataset
-- `docs/official_results/audits/*.json` -- per-task audit artifacts (checksums + parsed trace events)
-- `docs/official_results/traces/*/trajectory.json` -- bundled raw trajectory traces
-- `docs/official_results/index.html` -- interactive local browser
-
-Suite summaries are deduplicated to the latest result per
-`suite + config + task_name`; full historical rows remain in
-`official_results.json` under `all_tasks`.
-Export normalizes legacy config labels:
-`baseline` -> `baseline-local-direct`, `mcp` -> `mcp-remote-direct`.
-
-Serve locally:
-
-```bash
-python3 scripts/analysis/export_official_results.py --serve
-```
-
-For the full multi-layer evaluation pipeline (verifier, LLM judge, statistical analysis, dual-score reporting), see [docs/EVALUATION_PIPELINE.md](docs/EVALUATION_PIPELINE.md).
 
 ---
 
-## Running with Harbor
+## Quality Assurance
 
-This section assumes Harbor is already installed and configured. If not, start with the Quickstart section above and `python3 scripts/infra/check_infra.py`.
-
-### All Tasks
-
-The unified runner executes all 275 canonical tasks across the 2-config matrix:
-
-```bash
-# Run all 275 tasks across 2 configs
-bash configs/harnesses/run_selected_tasks.sh
-
-# Run only the baseline config
-bash configs/harnesses/run_selected_tasks.sh --baseline-only
-
-# Run a single SDLC phase
-bash configs/harnesses/run_selected_tasks.sh --benchmark csb_sdlc_fix
-
-# Dry run to list tasks without executing
-bash configs/harnesses/run_selected_tasks.sh --dry-run
-```
-
-Per-phase runners are also available:
-
-```bash
-bash configs/harnesses/feature_2config.sh          # 23 Feature Implementation tasks
-bash configs/harnesses/fix_2config.sh              # 19 Bug Repair tasks
-bash configs/harnesses/refactor_2config.sh         # 18 Cross-File Refactoring tasks
-bash configs/harnesses/debug_2config.sh            # 13 Debugging & Investigation tasks
-bash configs/harnesses/secure_2config.sh           # 13 Security & Compliance tasks
-bash configs/harnesses/test_2config.sh             # 12 Testing & QA tasks
-bash configs/harnesses/design_2config.sh           # 11 Architecture & Design tasks
-bash configs/harnesses/document_2config.sh         # 11 Documentation tasks
-bash configs/harnesses/understand_2config.sh       # 11 Requirements & Discovery tasks
-```
-
-### Filtering by Suite
-
-All 275 tasks are in `selected_benchmark_tasks.json`. Filter by source directory with the `--benchmark` flag:
-
-```bash
-# Run only security-related tasks from a specific source
-bash configs/harnesses/run_selected_tasks.sh --benchmark csb_org_security
-
-# Run only fix tasks
-bash configs/harnesses/run_selected_tasks.sh --benchmark csb_sdlc_fix
-```
-
-All runners support `--baseline-only`, `--full-only`, `--task TASK_ID`, and `--parallel N` flags.
-
----
-
-## Quality Assurance & Validation
-
-CodeScaleBench includes a multi-stage QA pipeline to ensure task integrity, reproducible runs, and accurate scoring.
+CodeScaleBench includes a multi-stage QA pipeline:
 
 | Phase | Script | Purpose |
 |-------|--------|---------|
-| **Pre-flight** | `scripts/authoring/validate_tasks_preflight.py` | Catches truncated instructions, template placeholders, language/difficulty mismatches, missing test.sh |
-| **Infra check** | `scripts/infra/check_infra.py` | Verifies OAuth tokens (all accounts), Docker, disk space, Harbor CLI |
-| **Error fingerprinting** | `scripts/analysis/status_fingerprints.py` | Classifies failures with 12 regex patterns; auto-retry guidance per pattern |
-| **Post-run** | `scripts/authoring/validate_task_run.py` | Flags crashes, MCP tool usage anomalies, suspicious scoring |
-| **Metadata sync** | `scripts/maintenance/sync_task_metadata.py` | Keeps task.toml in sync with `selected_benchmark_tasks.json`; `--fix` to auto-update |
-| **Run analysis** | `scripts/analysis/aggregate_status.py` | Scans run dirs, classifies per-task status, writes status.json, supports `--watch` mode |
-
-The QA methodology uses a 6-dimension audit framework: instruction contamination, reproducibility, verifier correctness, ghost/false-positive detection, error misclassification, and tool effectiveness analysis.
-
-See [docs/QA_PROCESS.md](docs/QA_PROCESS.md) for the full pipeline documentation and [docs/ERROR_CATALOG.md](docs/ERROR_CATALOG.md) for the known error catalog.
-
----
-
-## Operational Tooling
-
-Key scripts organized by workflow phase:
-
-| Phase | Script | Usage |
-|-------|--------|-------|
-| **Pre-run** | `validate_tasks_preflight.py` | `python3 scripts/authoring/validate_tasks_preflight.py [--suite csb_sdlc_fix] [--task sgt-001]` |
-| **Pre-run** | `check_infra.py` | `python3 scripts/infra/check_infra.py` |
-| **During run** | `aggregate_status.py --since 2h` | `python3 scripts/analysis/aggregate_status.py --since 2h` |
-| **Post-run** | `aggregate_status.py` | `python3 scripts/analysis/aggregate_status.py [--watch]` |
-| **Post-run** | `validate_task_run.py` | `python3 scripts/authoring/validate_task_run.py <run_dir>` |
-| **Analysis** | `compare_configs.py` | `python3 scripts/evaluation/compare_configs.py` |
-| **Analysis** | `cost_report.py` | `python3 scripts/evaluation/cost_report.py` |
-| **Analysis** | `generate_manifest.py` | `python3 scripts/maintenance/generate_manifest.py` |
-| **Maintenance** | `sync_task_metadata.py` | `python3 scripts/maintenance/sync_task_metadata.py [--fix]` |
-| **Maintenance** | `archive_run.py` | `python3 scripts/maintenance/archive_run.py <run_dir> [--compress]` |
-| **Maintenance** | `rerun_failed.py` | `python3 scripts/running/rerun_failed.py [--fingerprint timeout] [--suite csb_sdlc_fix]` |
-
----
-
-## AI Agent Skills
-
-The `skills/` directory contains structured runbooks for AI coding agents operating on this repository. These encode operational workflows — infrastructure checks, task validation, failure triage, report generation — so any agent (Claude Code, Cursor, Copilot, etc.) can follow them autonomously.
-
-| Category | Skills | Description |
-|----------|--------|-------------|
-| **CSB Operations** | 20 skills in 6 files | Pre-run checks, monitoring, triage, analysis, maintenance, task authoring |
-| **General Purpose** | 11 skills in 4 files | Session management, agent delegation, search patterns, dev practices |
-
-Skills are plain markdown and tool-agnostic. See [`skills/README.md`](skills/README.md) for the full index and integration guides for Cursor, Claude Code, and other agents. See [`docs/SKILLS.md`](docs/SKILLS.md) for background on the skills system.
+| **Pre-flight** | `scripts/authoring/validate_tasks_preflight.py` | Task integrity checks |
+| **Infra check** | `scripts/infra/check_infra.py` | OAuth tokens, Docker, disk |
+| **Post-run** | `scripts/authoring/validate_task_run.py` | Scoring anomalies, MCP usage |
+| **Snapshot verify** | `scripts/publishing/verify_snapshot.py` | Symlink integrity, completeness |
 
 ---
 
