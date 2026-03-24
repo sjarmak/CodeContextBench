@@ -102,61 +102,45 @@ full operations manual.
 - Task registry header: claims 436, actual 274. `verification_modes`/`use_case_category` missing from all tasks.
 
 ### Validation / Scoring
-- `validators.py` duplicated in `ccb_build`; update all copies (`sha256sum`).
-- Agent <2s = never ran. `reward.txt` in Python. `timeout 600`; Jest `--forceExit`; `memory_mb=8192`.
-- CSB dual-score: edits + `answer.json` independent. Fallback: promoted_verifier→oracle_checks→heuristic.
-- Rate-limited (score=0, <30s): `quarantine_invalid_tasks.py --execute`. Bare `$VAR` → `<placeholder>`.
-- Pass rate logic duplicated: `generate_eval_report.py` + `csb_metrics/models.py`.
-- `cost_report.py`: use `or 1` guard (not `.get(..., 1)` which returns 0 for key=0).
-- TARGET_SUITE: 55 stale, 220 missing. `dual_score_lib.sh scorer_artifact` always `"auto"`.
-- Falsy bugs: `max_score=0`, None MCP, promote_run.py non-dict env, eval_report.py:147,1005.
+- `validators.py` duplicated in `ccb_build`; update all copies (`sha256sum`). Agent <2s = never ran. CSB dual-score: edits + `answer.json` independent. Fallback: promoted_verifier→oracle_checks→heuristic.
+- Rate-limited (score=0, <30s): `quarantine_invalid_tasks.py --execute`. Pass rate logic duplicated: `generate_eval_report.py` + `csb_metrics/models.py`.
+- TARGET_SUITE: 55 stale, 220 missing. `dual_score_lib.sh scorer_artifact` always `"auto"`. Falsy bugs: `max_score=0`, None MCP, promote_run.py non-dict env, eval_report.py:147,1005.
 - `models.py from_dict()` mutates caller dict via `.pop()`.
 
 ### Agent / Runner Robustness
-- **Agent `/tmp` race**: `claude_baseline_agent.py:1134` uses fixed `/tmp/claude_system_prompt.txt`, `/tmp/claude_run.sh`. Concurrent tasks cross-contaminate. Use `mktemp`.
+- **Agent `/tmp` race**: `claude_baseline_agent.py:1134` fixed filenames; concurrent tasks cross-contaminate. **LOCOBENCH path**: line 31 hardcodes `/home/stephanie_jarmak/CodeScaleBench`.
 - **Token refresh**: `claude_baseline_agent.py:1523`, `daytona_runner.py:220`, `daytona_poc_runner.py:197` only catch `HTTPError`; add `URLError`/`socket.timeout`.
-- **LOCOBENCH path**: `claude_baseline_agent.py:31` `LOCOBENCH_CLAUDE_MD_TEMPLATE` hardcodes `/home/stephanie_jarmak/CodeScaleBench`; crash on other machines.
-- **Runner pipefail**: `run_selected_tasks.sh:681` `harbor_run_guarded | tee || echo` -- `||` applies to `tee` (always 0). Add `set -o pipefail`.
+- **Runner pipefail**: `run_selected_tasks.sh:681` `||` applies to `tee` (always 0). No `trap` for temp dirs. `grep -P` fails on macOS BSD grep (726 + 12 task test.sh files). `_common.sh` sparse array bug (lines 1344-1352).
 - **Runner cleanup**: No `trap` for temp dirs. `mktemp` failure (line 648) silently copies to CWD.
 - **`grep -P` macOS**: `run_selected_tasks.sh:726` + 12 task test.sh files silently fail on BSD grep. Use `sed -n` or POSIX alternatives.
 - **`_common.sh` sparse array**: `unset` + `pids=("${pids[@]}")` doesn't compact sparse arrays in Bash; gaps persist (lines 1344-1352).
 
 ### Schema / Suite Naming
-- 3 schemas use deprecated `ccb_mcp_*` enums; 8 have zero consumers. Examples embed legacy names (`ccb_crossrepo`); should be `csb_org_*`/`csb_sdlc_*`.
-- **16 copies of `DIR_PREFIX_TO_SUITE`** across 30+ scripts with divergent definitions. Centralize in `csb_metrics/suite_registry.py`.
+- 3 schemas use deprecated `ccb_mcp_*` enums; 8 have zero consumers. **16 copies of `DIR_PREFIX_TO_SUITE`** across 30+ scripts. Centralize in `csb_metrics/suite_registry.py`.
 
-### Skills / Automation
+### Skills / Automation / Git
 - 25 skill files hardcode `~/CodeScaleBench` (fix: `git rev-parse --show-toplevel`); 14+5 stale `sourcegraph_full`; 3 deprecated `claude-opus-4-5-20251101`→`claude-opus-4-6`.
+- `gh auth refresh -h github.com -s write:packages`. Push protection: `git reset --soft origin/main`. gitignore negation: `git add -f`. **Remote URL stale**: CodeContextBench.git→CodeScaleBench.git.
 
-### Git / Auth
-- `gh auth refresh -h github.com -s write:packages`. Env vars must be **exported** (`set -a` before sourcing `.env.local`).
-- Push protection blocks synthetic keys: `git reset --soft origin/main`. **gitignore negation**: use `git add -f`.
-- **Remote URL stale**: `CodeContextBench.git` → `CodeScaleBench.git`. Update remote config.
-
-### Python / Subprocess
-- `dict.get(key, default)` doesn't guard `None`; use `or default_value`. `json.load(open())` leaks FDs; use `with open`.
-- `with open(log) as f: Popen(stdout=f)` closes handle; use bare `open()`. macOS Bash 3.2 lacks `declare -A`.
-- No `pyproject.toml`/`requirements.txt`. 200+ scripts + 9 tests use `sys.path.insert` hack.
-
-### CI / Workflows
-- 4 workflows use 3 Python versions (3.10/3.11/3.12); standardize to 3.10. `roam.yml` unpinned `pip install roam-code`.
-- 3/4 CI workflows missing top-level `permissions:` block → overly broad default GitHub Actions token scope.
+### Python / CI
+- `json.load(open())` leaks FDs (25 sites); use `with open`. `with open(log) as f: Popen(stdout=f)` closes early; use bare open(). No `pyproject.toml`; scripts use `sys.path.insert`.
+- 4 workflows use 3 Python versions (3.10/3.11/3.12). `roam.yml` unpinned. 3/4 workflows missing `permissions:` block.
 
 ### Pre-commit / Pytest / Ralph
 - Secret-detection false-positives: use `--no-verify` when flagged code is detection logic.
 - Ralph: `prd.json` single-active; archive as `prd-archive/prd-<feature>-<date>.json`; validate: `python3 -c "import json; json.load(open('prd.json'))"`. Not gitignored.
 
-### Scripts / Code Quality (Mar 17-21 additions)
+### Scripts / Code Quality (Mar 17-23 additions)
 - Hardcoded `~/CodeScaleBench`: `apply_verifier_fixes.py:9`, `fix_memory_mb.py:8`, `extract_build_diary.py:121`, `plot_build_diary_supplementary.py:121+`.
-- `context_retrieval_agent.py:432+`, `oracle_checks.py:498`: `shell=True` injection risk.
-- Non-atomic writes: `aggregate_status.py:669`, `daytona_runner.py:234`, `daytona_cost_guard.py:663`, `sync_agent_guides.py:22`; use temp+rename.
-- Bare `except:`: `audit_v2_report_data.py:104`, `ds_audit.py:244+`, `extract_v2_report_data.py:144+`.
-- FD leaks: 17+ sites; `export_official_results.py:45` stale org URL; `extractors.py:669` pathlib; `validate_task_run.py:217` `json.loads(open().read())` form (missed by std grep).
-- Deprecated model in shell: `rerun_fixed_tasks.sh:34`, `rerun_zero_mcp_tasks.sh:29`; add grep CI check.
-- `run_selected_tasks.sh:648,699,711`: mktemp+mv race — `mv` failure swallowed by subshell.
-- **Cost pipeline**: `extract_task_metrics.py:266`, `discovery.py:310` never pass model → all Opus-4.5 rates. `claude-sonnet-4-6`/`haiku-4-6` absent from `MODEL_PRICING` (`extractors.py:1071`). Sonnet: 5×. `TaskMetrics` has no `model` field; schema change required to fix.
-- **CI test gap**: 212 tests / 2 confirmed failing / none of the 4 CI workflows run `pytest`.
-- `verify_retrieval_eval_smoke.py:26-30`: 5 hardcoded Feb-2026 run IDs; smoke test breaks if staging rotated.
+- `context_retrieval_agent.py:432+`, `oracle_checks.py:498`: `shell=True` injection. Non-atomic writes: `aggregate_status.py:669`, `daytona_runner.py:234`, `daytona_cost_guard.py:663`, `sync_agent_guides.py:22`.
+- Bare `except:`: `audit_v2_report_data.py:104`, `ds_audit.py:244+`, `extract_v2_report_data.py:144+`. FD leaks: 25 confirmed sites; `extractors.py:669` pathlib; `validate_task_run.py:217` json.loads(open().read()) form.
+- `export_official_results.py:45` stale org URL (CodeScaleBench→CodeContextBench). Deprecated model in shell: `rerun_fixed_tasks.sh:34`, `rerun_zero_mcp_tasks.sh:29`. `run_selected_tasks.sh:648,699,711` mktemp+mv race.
+- **Cost pipeline**: `extract_task_metrics.py:266`, `discovery.py:310` missing model → Opus-4.5 rates. `sonnet-4-6`/`haiku-4-6` absent from `extractors.py:1071 MODEL_PRICING`. No schema change — `RunMetrics.model` exists; fix ~6 lines. `cost_report.py:29–34` has SEPARATE hardcoded Opus dict (NOT fixed by active PRD US-001).
+- `cost_report.py:153`: `"errored"` should be `"error"` — extractors writes "error"; errored count always 0 from task_metrics.json.
+- `compare_configs.py`: 4 hardcoded "baseline"/"sourcegraph_full" lookups (lines 147–148, 227–228, 308–309, 401–402) → silently empty for all "baseline-local-direct"/"mcp-remote-direct" runs. Tool non-functional for current-gen runs.
+- `benchmarks/csb/`: 275 undocumented tasks (old flat org) tracked in git, excluded from selected_benchmark_tasks.json. README says 275 tasks but 550 task.toml files exist.
+- **CI test gap**: 212 tests / 2 confirmed failing / none of 4 CI workflows run `pytest`. `statistics.py:91` normal CDF for t-test: overconfident for df < 30 (per-suite tests).
+- `verify_retrieval_eval_smoke.py:26-30`: 5 hardcoded Feb-2026 run IDs; breaks if staging rotated.
 
 ## Maintenance
 - Root and local `AGENTS.md` / `CLAUDE.md` files are generated from sources in `docs/ops/`.
