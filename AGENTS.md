@@ -99,7 +99,7 @@ full operations manual.
 - `abc_audit.py`: 6+ functions defined twice (T5,R2,T10,OA,OB,OG); Python uses last. T5+R2: `pytest` 2 FAIL / 40 pass. Leaks/contamination pass audit silently.
 - `rerun_failed.py`: `shell=True` injection; wrong `sourcegraph_full→deepsearch`; deprecated model.
 - `ir_metrics.py:749`: `tt_all_r` set comparison bug. `--skip-completed`: check only result.json.
-- Task registry header: claims 436, actual 274. `verification_modes`/`use_case_category` missing from all tasks.
+- Task registry header: claims 436, actual 274. `verification_modes`/`use_case_category` missing from all 274 tasks; `mcp_suite` missing from 139.
 
 ### Validation / Scoring
 - `validators.py` duplicated in `ccb_build`; update all copies (`sha256sum`). Agent <2s = never ran. CSB dual-score: edits + `answer.json` independent. Fallback: promoted_verifier→oracle_checks→heuristic.
