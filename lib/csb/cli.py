@@ -5,6 +5,8 @@ Entry points::
     csb run config.yaml
     csb coverage [OPTIONS]
     csb validate config.yaml
+    csb eval --suite quick --agent-command CMD
+    csb report results.json
 
 Run ``csb --help`` for full usage.
 """
@@ -16,7 +18,6 @@ import json
 import os
 import sys
 from pathlib import Path
-
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -31,12 +32,16 @@ commands:
   run       Launch a benchmark run from a config file.
   coverage  Report coverage gaps across runs.
   validate  Validate a run config file without executing.
+  eval      Run benchmark tasks against an external agent command.
+  report    Display results with CSB Score.
 
 examples:
   csb run configs/my_run.yaml
   csb coverage --format json
   csb coverage --config baseline-local-direct --format json
   csb validate configs/my_run.yaml
+  csb eval --suite quick --agent-command "./my_agent.sh"
+  csb report results.json
         """,
     )
     sub = parser.add_subparsers(dest="command")
@@ -96,8 +101,61 @@ examples:
     )
 
     # ---- csb validate ----
-    val_p = sub.add_parser("validate", help="Validate a run config file without executing.")
+    val_p = sub.add_parser(
+        "validate", help="Validate a run config file without executing."
+    )
     val_p.add_argument("config", help="Path to the run config YAML file.")
+
+    # ---- csb eval ----
+    eval_p = sub.add_parser(
+        "eval", help="Run benchmark tasks against an external agent command."
+    )
+    eval_p.add_argument(
+        "--suite",
+        choices=["quick", "full"],
+        default="quick",
+        help="Benchmark suite to run (default: quick).",
+    )
+    eval_p.add_argument(
+        "--agent-command",
+        required=True,
+        metavar="CMD",
+        help="Shell command to invoke for each task.",
+    )
+    eval_p.add_argument(
+        "--output",
+        default="csb_results.json",
+        metavar="PATH",
+        help="Path to write submission JSON (default: csb_results.json).",
+    )
+    eval_p.add_argument(
+        "--timeout",
+        type=int,
+        default=300,
+        metavar="SECONDS",
+        help="Per-task timeout in seconds (default: 300).",
+    )
+
+    # ---- csb report ----
+    report_p = sub.add_parser(
+        "report", help="Display benchmark results with CSB Score."
+    )
+    report_p.add_argument(
+        "results_file",
+        help="Path to the submission JSON file.",
+    )
+    report_p.add_argument(
+        "--format",
+        choices=["text", "json", "html"],
+        default="text",
+        help="Output format (default: text).",
+    )
+    report_p.add_argument(
+        "--browser",
+        action="store_true",
+        default=False,
+        help="Open HTML report in browser (only with --format html).",
+    )
 
     args = parser.parse_args(argv)
 
@@ -112,6 +170,10 @@ examples:
             return _cmd_coverage(args)
         if args.command == "validate":
             return _cmd_validate(args)
+        if args.command == "eval":
+            return _cmd_eval(args)
+        if args.command == "report":
+            return _cmd_report(args)
     except KeyboardInterrupt:
         print("\n[csb] Interrupted.", file=sys.stderr)
         return 130
@@ -124,8 +186,13 @@ examples:
 # csb run
 # ---------------------------------------------------------------------------
 
+
 def _cmd_run(args) -> int:
-    from lib.csb.run_config import load_run_config, validate_run_config_env, RunConfigError
+    from lib.csb.run_config import (
+        load_run_config,
+        validate_run_config_env,
+        RunConfigError,
+    )
     from lib.csb.harness_runner import launch_run
 
     try:
@@ -137,6 +204,7 @@ def _cmd_run(args) -> int:
     # CLI --dry-run flag overrides config file
     if args.dry_run:
         import dataclasses
+
         config = config.model_copy(update={"dry_run": True})
 
     try:
@@ -158,6 +226,7 @@ def _cmd_run(args) -> int:
 # ---------------------------------------------------------------------------
 # csb coverage
 # ---------------------------------------------------------------------------
+
 
 def _cmd_coverage(args) -> int:
     from lib.csb.gap_scanner import compute_coverage_report, compute_gap_report
@@ -185,7 +254,10 @@ def _cmd_coverage(args) -> int:
     else:
         selection_file = _REPO_ROOT / "configs" / "selected_benchmark_tasks.json"
     if not selection_file.exists():
-        print(f"[csb coverage] ERROR: Selection file not found: {selection_file}", file=sys.stderr)
+        print(
+            f"[csb coverage] ERROR: Selection file not found: {selection_file}",
+            file=sys.stderr,
+        )
         return 1
 
     # Resolve config filter
@@ -245,8 +317,12 @@ def _resolve_config_filter(config_filter: str | None) -> list[str]:
         return [canon]
 
     # If user typed something like "baseline-local-direct" exactly
-    if config_filter in ("baseline-local-direct", "mcp-remote-direct",
-                         "baseline-local-artifact", "mcp-remote-artifact"):
+    if config_filter in (
+        "baseline-local-direct",
+        "mcp-remote-direct",
+        "baseline-local-artifact",
+        "mcp-remote-artifact",
+    ):
         return [config_filter]
 
     print(
@@ -266,8 +342,13 @@ def _coverage_bar(pct: float, width: int = 20) -> str:
 # csb validate
 # ---------------------------------------------------------------------------
 
+
 def _cmd_validate(args) -> int:
-    from lib.csb.run_config import load_run_config, validate_run_config_env, RunConfigError
+    from lib.csb.run_config import (
+        load_run_config,
+        validate_run_config_env,
+        RunConfigError,
+    )
 
     print(f"[csb validate] Checking: {args.config}")
 
@@ -291,7 +372,9 @@ def _cmd_validate(args) -> int:
     print()
     print(f"  Agent:        {config.agent.value}")
     print(f"  Model:        {config.model}")
-    print(f"  Augmentation: {config.augmentation.value} → config={config.config_name()}")
+    print(
+        f"  Augmentation: {config.augmentation.value} → config={config.config_name()}"
+    )
     print(f"  Category:     {config.category.value}")
     subset = config.resolved_task_subset(_REPO_ROOT)
     print(f"  Task subset:  {subset}")
@@ -300,3 +383,39 @@ def _cmd_validate(args) -> int:
     print()
     print("[✓] Config valid")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# csb eval
+# ---------------------------------------------------------------------------
+
+
+def _cmd_eval(args) -> int:
+    from lib.csb.eval_runner import run_eval
+
+    try:
+        run_eval(
+            suite=args.suite,
+            agent_command=args.agent_command,
+            output_path=args.output,
+            timeout=args.timeout,
+        )
+        return 0
+    except ValueError as exc:
+        print(f"[csb eval] ERROR: {exc}", file=sys.stderr)
+        return 1
+
+
+# ---------------------------------------------------------------------------
+# csb report
+# ---------------------------------------------------------------------------
+
+
+def _cmd_report(args) -> int:
+    from lib.csb.report import display_report
+
+    return display_report(
+        results_path=args.results_file,
+        fmt=args.format,
+        open_browser=args.browser,
+    )
