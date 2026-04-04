@@ -1,0 +1,470 @@
+version: "2.0.0"
+
+dimensions:
+  # ── 1. Retrieval ────────────────────────────────────────────────
+  - name: Retrieval
+    description: >-
+      Failures related to finding and navigating to the right code. The agent
+      could not locate relevant files, used ineffective search strategies, or
+      chose the wrong tools for code discovery.
+    categories:
+      - name: retrieval_failure
+        dimension: Retrieval
+        description: >-
+          Relevant code was not found by the agent despite existing in the
+          repository. The agent either never searched for it or searched with
+          queries that missed the target files.
+        polarity: failure
+        detection_hints:
+          - reward is 0 and search call count is low or zero
+          - key files mentioned in the task prompt were never opened
+          - no file reads matching the expected solution path
+        examples:
+          - >-
+            Task required modifying the authentication middleware in
+            src/auth/middleware.ts, but the agent only searched for "login"
+            and "password" — never finding the middleware file. Zero file
+            reads on any file in the src/auth/ directory.
+
+      - name: query_churn
+        dimension: Retrieval
+        description: >-
+          The agent issued many search queries with varying terms without
+          converging on the relevant code. Indicates poor query construction
+          strategy or inability to refine search results.
+        polarity: failure
+        detection_hints:
+          - high number of distinct search queries (>5) with low overlap
+          - search query strings vary significantly across calls
+          - few or no file reads following search results
+        examples:
+          - >-
+            Agent searched for "database connection", then "db config",
+            then "sql pool", then "connection string", then "data source"
+            — eight distinct queries without ever reading the results of
+            any search. The relevant file (config/database.py) appeared in
+            the first result set but was never opened.
+
+      - name: wrong_tool_choice
+        dimension: Retrieval
+        description: >-
+          The agent used an inappropriate tool for the task at hand — e.g.,
+          grep when cross-reference navigation was needed, or keyword search
+          when semantic search would have found the answer directly.
+        polarity: failure
+        detection_hints:
+          - task requires cross-file understanding but no xref tools used
+          - excessive grep calls on a task that needs semantic search
+          - agent used local tools when MCP tools were available and better suited
+        examples:
+          - >-
+            Task required finding all callers of a deprecated API method.
+            The agent ran 14 grep calls with varying regex patterns instead
+            of using find_references, missing callers that used aliased
+            imports or re-exports.
+
+      - name: missing_code_navigation
+        dimension: Retrieval
+        description: >-
+          The agent failed to use code navigation tools (go-to-definition,
+          find-references, symbol search) when the task required understanding
+          cross-file dependencies or call hierarchies.
+        polarity: failure
+        detection_hints:
+          - no go_to_definition or find_references calls in trajectory
+          - task involves API changes, interface implementations, or call chains
+          - agent read many files manually instead of navigating via symbols
+        examples:
+          - >-
+            Task: update an interface and all its implementations. Agent
+            modified the interface file but manually read only 3 of 7
+            implementing classes. A single find_references call would have
+            revealed all 7 implementations.
+
+  # ── 2. Reasoning ────────────────────────────────────────────────
+  - name: Reasoning
+    description: >-
+      Failures in the agent's planning, decomposition, or contextual reasoning.
+      The agent could not break down the problem correctly, operated on stale
+      information, or failed to reason across module boundaries.
+    categories:
+      - name: decomposition_failure
+        dimension: Reasoning
+        description: >-
+          The agent failed to correctly decompose a multi-step task into a
+          viable plan. It may have attempted the wrong approach, skipped
+          necessary steps, or tackled steps in the wrong order.
+        polarity: failure
+        detection_hints:
+          - task requires multiple coordinated changes across files
+          - agent started editing before understanding the full scope
+          - partial solution that addresses only one aspect of the task
+        examples:
+          - >-
+            Migration task requiring schema change, model update, and API
+            endpoint modification. Agent jumped directly to editing the API
+            handler without first updating the database schema, producing
+            code that referenced columns that did not yet exist.
+
+      - name: stale_context
+        dimension: Reasoning
+        description: >-
+          The agent operated on outdated information — e.g., reading a file
+          early in the session and making edits based on that snapshot without
+          re-reading after intervening changes, or misunderstanding the current
+          state of the codebase.
+        polarity: failure
+        detection_hints:
+          - file read early in trajectory but edited much later without re-read
+          - agent references code structures that no longer exist
+          - edits conflict with changes made in the same session
+        examples:
+          - >-
+            Agent read models/user.py at step 3, then edited validators.py
+            and models/user.py at step 15. The edit to models/user.py at
+            step 15 referenced a function signature from step 3 that the
+            agent itself had changed at step 10.
+
+      - name: multi_repo_scope_failure
+        dimension: Reasoning
+        description: >-
+          The agent failed on a task that required understanding or modifying
+          code across multiple repositories, packages, or loosely-coupled
+          modules within a monorepo.
+        polarity: failure
+        detection_hints:
+          - task spans multiple top-level directories or subprojects
+          - agent only explored one package or module
+          - solution requires coordinated changes across boundaries
+        examples:
+          - >-
+            Monorepo task requiring coordinated changes in packages/api/
+            and packages/shared-types/. Agent modified the API package
+            but never explored packages/shared-types/, leaving the shared
+            type definitions inconsistent with the new API contract.
+
+  # ── 3. Execution ────────────────────────────────────────────────
+  - name: Execution
+    description: >-
+      Failures in the agent's code editing and solution construction. The agent
+      found the right code but could not produce a correct or complete solution
+      through its edit-verify cycle.
+    categories:
+      - name: edit_verify_loop_failure
+        dimension: Execution
+        description: >-
+          The agent entered a cycle of editing code and running tests where
+          tests repeatedly failed without the agent converging on a correct
+          fix. The edit-verify loop did not terminate productively.
+        polarity: failure
+        detection_hints:
+          - multiple edit-then-test cycles (>3) with consecutive test failures
+          - same file edited repeatedly with similar changes
+          - test output shows recurring or oscillating errors
+        examples:
+          - >-
+            Agent edited utils/parser.py five times, running pytest after
+            each edit. Tests failed each time with alternating TypeError
+            and AttributeError — the agent oscillated between two incorrect
+            approaches without converging.
+
+      - name: incomplete_solution
+        dimension: Execution
+        description: >-
+          The agent produced a partial fix that addressed some but not all
+          aspects of the task. The solution may pass some tests but fail
+          others, or handle the main case but miss edge cases.
+          Covers any partial reward (0 < reward < 1).
+        polarity: failure
+        detection_hints:
+          - reward is between 0 and 1 (partial credit)
+          - some test cases pass while others fail
+          - agent stopped editing before addressing all requirements
+        examples:
+          - >-
+            Task required fixing a CSV parser to handle quoted fields,
+            escaped commas, and multiline values. Agent fixed quoted field
+            handling (2 of 5 test cases pass) but did not address escaped
+            commas or multiline values. Reward: 0.4.
+
+      - name: near_miss
+        dimension: Execution
+        description: >-
+          The agent came close to a full solution (reward >= 0.5 but < 1.0).
+          Most of the task was completed correctly but a final piece is missing
+          or slightly wrong. These are high-leverage cases for understanding
+          what the last mile of agent capability looks like.
+        polarity: failure
+        detection_hints:
+          - reward >= 0.5 and < 1.0
+          - majority of test cases pass
+          - solution is structurally correct with minor gaps
+        examples:
+          - >-
+            Agent correctly refactored a React component from class-based
+            to functional with hooks, passing 8 of 10 tests. The two
+            failing tests checked cleanup behavior in useEffect — the
+            agent forgot to return a cleanup function. Reward: 0.8.
+
+      - name: minimal_progress
+        dimension: Execution
+        description: >-
+          The agent made some progress but fell far short of a solution
+          (0 < reward < 0.5). This may indicate the agent understood part of
+          the problem but lacked the capability or context to make meaningful
+          headway.
+        polarity: failure
+        detection_hints:
+          - reward > 0 and < 0.5
+          - few test cases pass
+          - edits are partially relevant but insufficient
+        examples:
+          - >-
+            Agent was tasked with implementing a graph traversal algorithm.
+            It correctly set up the data structures and wrote the BFS
+            skeleton but left the visited-node tracking incomplete,
+            causing infinite loops on cyclic graphs. Reward: 0.2.
+
+  # ── 4. Environment ─────────────────────────────────────────────
+  - name: Environment
+    description: >-
+      Failures caused by infrastructure, sandbox, or runtime environment issues
+      rather than the agent's reasoning or coding ability. The environment
+      prevented normal operation.
+    categories:
+      - name: local_remote_mismatch
+        dimension: Environment
+        description: >-
+          The agent's execution environment did not match what was needed —
+          e.g., it attempted local execution when the task required remote
+          context, or vice versa. Infrastructure configuration prevented
+          successful completion.
+        polarity: failure
+        detection_hints:
+          - agent tried to run commands not available in the sandbox
+          - environment-specific errors in tool call outputs
+          - task requires runtime context the agent lacks access to
+        examples:
+          - >-
+            Agent attempted to run "docker compose up" to verify a fix,
+            but Docker was not available in the sandbox environment.
+            The agent spent 12 tool calls trying workarounds before
+            timing out.
+
+      - name: verifier_mismatch
+        dimension: Environment
+        description: >-
+          The test harness or verifier produced a misleading result — either
+          a false negative (correct solution marked wrong) or false positive
+          (incorrect solution marked correct). The agent's work quality does
+          not match the recorded reward.
+        polarity: failure
+        detection_hints:
+          - reward is 0 but agent solution appears correct on inspection
+          - test script has known issues or overly strict assertions
+          - verifier error output suggests infrastructure rather than code issues
+        examples:
+          - >-
+            Agent produced a correct fix for a Django migration bug, but
+            the verifier's test.sh failed because it did not install the
+            correct Python version. The reward was 0 despite a correct
+            code change.
+
+      - name: exception_crash
+        dimension: Environment
+        description: >-
+          The agent run terminated due to an unhandled exception or crash in
+          the agent framework, MCP tools, or sandbox environment. The agent
+          did not complete its work normally.
+        polarity: failure
+        detection_hints:
+          - exception_info is non-null in result.json
+          - agent duration is very short relative to time limit
+          - no edits or very few tool calls before termination
+        examples:
+          - >-
+            Agent crashed after 12 seconds with a ConnectionResetError
+            from the MCP server. Only 3 tool calls were recorded before
+            the exception. The agent never reached the editing phase.
+
+      - name: rate_limited_run
+        dimension: Environment
+        description: >-
+          The agent run was degraded by rate limiting, API throttling, or
+          infrastructure issues that prevented normal operation. The score
+          may not reflect the agent's true capability.
+        polarity: neutral
+        detection_hints:
+          - very short wall clock time with zero reward
+          - exception_info mentions rate limit or throttling
+          - tool call count is abnormally low (<5) for a non-trivial task
+          - duration under 30 seconds on a task that normally takes minutes
+        examples:
+          - >-
+            Agent completed in 8 seconds with 0 reward and only 2 tool
+            calls. The exception_info field contained "rate_limit_exceeded".
+            The same task normally takes 4-6 minutes with 30+ tool calls.
+
+  # ── 5. Strategy ────────────────────────────────────────────────
+  - name: Strategy
+    description: >-
+      Success modes that identify the dominant strategy the agent used to
+      solve the task. These categories explain what worked, enabling
+      correlation between tool availability and success rate.
+    categories:
+      - name: success_via_code_nav
+        dimension: Strategy
+        description: >-
+          The agent succeeded by effectively using code navigation tools such
+          as go-to-definition, find-references, or symbol search to understand
+          code structure and locate the right files to modify.
+        polarity: success
+        detection_hints:
+          - reward is 1 and trajectory contains go_to_definition or find_references calls
+          - agent navigated from usage to definition or vice versa
+          - fewer total tool calls than average (efficient navigation)
+        examples:
+          - >-
+            Agent used go_to_definition on a function call in the test
+            file, jumped to the source in utils/transform.py, then used
+            find_references to locate all callers. Made targeted edits to
+            3 files in 18 tool calls (corpus average: 45). Reward: 1.0.
+
+      - name: success_via_semantic_search
+        dimension: Strategy
+        description: >-
+          The agent succeeded by using semantic or natural-language search
+          (NLS, deep search) to find relevant code that keyword search might
+          have missed.
+        polarity: success
+        detection_hints:
+          - reward is 1 and search_calls_nls or search_calls_deepsearch > 0
+          - semantic search results led directly to the edited files
+          - has_semantic_search is true
+        examples:
+          - >-
+            Agent queried NLS with "function that validates email format
+            before sending welcome message" and found the exact utility
+            in a non-obviously named file (lib/comms_helpers.py). Keyword
+            search for "email validation" had returned 40+ irrelevant
+            results. Reward: 1.0.
+
+      - name: success_via_local_exec
+        dimension: Strategy
+        description: >-
+          The agent succeeded by running tests or code locally in a tight
+          edit-execute-verify loop, using test feedback to iteratively
+          converge on the correct solution.
+        polarity: success
+        detection_hints:
+          - reward is 1 and trajectory contains test execution tool calls
+          - edit-then-test pattern present with eventual success
+          - agent used Bash tool to run tests, linters, or build commands
+        examples:
+          - >-
+            Agent ran "pytest tests/test_parser.py -x" after each edit,
+            using the failure output to guide the next change. After 3
+            edit-test cycles (all converging), all tests passed.
+            Reward: 1.0.
+
+      - name: success_via_commit_context
+        dimension: Strategy
+        description: >-
+          The agent succeeded by leveraging git history, commit messages,
+          blame information, or changelog context to understand the intent
+          behind code changes and inform its solution.
+        polarity: success
+        detection_hints:
+          - reward is 1 and trajectory contains git log, git blame, or git diff calls
+          - agent referenced commit history to understand code evolution
+          - solution aligned with patterns from recent commits
+        examples:
+          - >-
+            Agent ran "git log --oneline -20" and "git blame src/api.py"
+            to understand why a particular pattern was used. The blame
+            output revealed a recent refactor, and the agent's fix
+            followed the same pattern established in that commit.
+            Reward: 1.0.
+
+      - name: success_via_decomposition
+        dimension: Strategy
+        description: >-
+          The agent succeeded by correctly decomposing a complex task into
+          smaller steps and executing them in the right order, demonstrating
+          effective planning and multi-step reasoning.
+        polarity: success
+        detection_hints:
+          - reward is 1 on a task with difficulty >= medium
+          - agent edited multiple files in a logical sequence
+          - trajectory shows deliberate planning steps before editing
+        examples:
+          - >-
+            For a task requiring a new API endpoint with database migration,
+            the agent first created the migration, then the model, then the
+            serializer, then the view, and finally the URL route — each
+            step building on the previous. Five files edited in correct
+            dependency order. Reward: 1.0.
+
+  # ── 6. Observability ───────────────────────────────────────────
+  - name: Observability
+    description: >-
+      Issues related to the interpretability and clarity of the agent's
+      behavior. The agent may have succeeded or failed, but the trajectory
+      does not provide sufficient evidence to understand why.
+    categories:
+      - name: insufficient_provenance
+        dimension: Observability
+        description: >-
+          The agent produced a correct or partially correct answer, but the
+          reasoning trace does not clearly show how it arrived at the solution.
+          The path from retrieval to edit is opaque.
+        polarity: neutral
+        detection_hints:
+          - reward > 0 but trajectory has few intermediate reasoning steps
+          - solution appears without clear search or navigation leading to it
+          - hard to attribute success to a specific tool or strategy
+        examples:
+          - >-
+            Agent achieved reward 1.0 but the trajectory shows only 4
+            tool calls: one file read and three edits. No search or
+            navigation tools were used. It is unclear how the agent knew
+            which files to edit or what changes to make.
+
+      - name: task_ambiguity
+        dimension: Observability
+        description: >-
+          The task specification was ambiguous, underspecified, or could be
+          reasonably interpreted in multiple ways. The agent's approach may
+          have been valid under one interpretation but scored as incorrect
+          under the evaluator's interpretation.
+        polarity: neutral
+        detection_hints:
+          - task prompt is vague or allows multiple valid solutions
+          - agent solution is structurally sound but differs from expected
+          - verifier tests check for one specific approach among several valid ones
+        examples:
+          - >-
+            Task said "optimize the database query". Agent added an index
+            and rewrote the query with a JOIN. The verifier expected only
+            the index addition. The agent's solution was arguably better
+            but scored 0 because the test checked for the original query
+            structure.
+
+      - name: over_exploration
+        dimension: Observability
+        description: >-
+          The agent made an excessive number of tool calls (well above the
+          corpus mean) without making meaningful progress toward a solution.
+          High activity with low or zero reward.
+        polarity: failure
+        detection_hints:
+          - tool_calls_total far above corpus mean (>2 sigma)
+          - reward is 0 or very low
+          - many file reads and searches but few or no edits
+          - wall clock time near or at timeout
+        examples:
+          - >-
+            Agent made 247 tool calls (corpus mean: 45, sigma: 30) over
+            58 minutes, reading 89 distinct files and running 31 searches
+            but making only 2 edits. Reward was 0. The agent appeared to
+            be exploring the repository without a clear strategy.

@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>terraform-phantom-update-debug-001 - Official Results</title>
+  <style>
+    :root { --bg:#0b1117; --panel:#131d27; --border:#2a3a4a; --text:#e9f0f6; --muted:#9fb1c2; --accent:#4fd39b; }
+    body { margin:0; font-family: ui-sans-serif,system-ui,-apple-system,sans-serif; background:linear-gradient(180deg,#0b1117,#0f1720); color:var(--text); }
+    .wrap { max-width:1200px; margin:0 auto; padding:20px; }
+    h1,h2,h3,h4 { margin:0 0 10px; }
+    .panel { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:14px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+    .metric { background:#0f1821; border:1px solid var(--border); border-radius:10px; padding:10px; }
+    .metric .k { color:var(--muted); font-size:12px; }
+    .metric .v { font-size:20px; margin-top:4px; }
+    .meta { color:var(--muted); font-size:13px; }
+    table { width:100%; border-collapse:collapse; }
+    th,td { border-bottom:1px solid var(--border); padding:8px; text-align:left; vertical-align:top; font-size:13px; }
+    th { color:var(--muted); }
+    code,pre { font-family: ui-monospace,SFMono-Regular,Menlo,monospace; }
+    pre { white-space:pre-wrap; overflow-wrap:anywhere; background:#0d151d; border:1px solid var(--border); border-radius:8px; padding:8px; margin:8px 0; }
+    details { border:1px solid var(--border); border-radius:10px; padding:8px 10px; margin:8px 0; background:#0f1821; }
+    summary { cursor:pointer; color:var(--accent); }
+    a { color:var(--accent); text-decoration:none; }
+    .split { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    @media (max-width: 900px) { .split { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>terraform-phantom-update-debug-001</h1>
+    <p class="meta">Suite <code>csb_sdlc_debug</code> | Run <code>debug_haiku_20260301_031844</code> | Config <code>baseline-local-direct</code></p>
+
+    <div class="panel">
+      <h2>Task Information</h2>
+      <div class="grid">
+        <div class="metric"><div class="k">Repositories</div><div class="v" style="font-size:14px">hashicorp/terraform</div></div>
+        <div class="metric"><div class="k">Task ID</div><div class="v" style="font-size:14px">terraform-phantom-update-debug-001</div></div>
+        <div class="metric"><div class="k">Agent</div><div class="v" style="font-size:16px">claude-code</div></div>
+        <div class="metric"><div class="k">Model</div><div class="v" style="font-size:16px">claude-haiku-4-5-20251001</div></div>
+      </div>
+      <p class="meta" style="margin-top:10px">Benchmark path: <code>-</code></p>
+      <details>
+        <summary>Task instruction sent to agent</summary>
+        <pre># Investigation: Phantom In-Place Updates for Resources with Sensitive Attributes in Terraform
+
+**Repository:** hashicorp/terraform
+**Task Type:** Deep Causal Chain (investigation only — no code fixes)
+
+## Scenario
+
+A Terraform user reports that `terraform plan` consistently shows resources &quot;will be updated in-place&quot; even though **no configuration changes** have been made. The phantom update appears for any resource that has provider-schema-defined sensitive attributes (e.g., `password`, `secret_key`).
+
+The user is managing a VPN tunnel resource:
+
+```hcl
+resource &quot;test_instance&quot; &quot;example&quot; {
+  ami      = &quot;ami-12345&quot;
+  password = var.db_password  # provider schema marks &#x27;password&#x27; as Sensitive: true
+}
+```
+
+After a successful `terraform apply`, immediately running `terraform plan` shows:
+
+```
+  # test_instance.example will be updated in-place
+  ~ resource &quot;test_instance&quot; &quot;example&quot; {
+        id       = &quot;i-abc123&quot;
+        # (1 unchanged attribute hidden)
+    }
+
+Plan: 0 to add, 1 to change, 0 to destroy.
+```
+
+There are **no actual attribute changes** — the before and after values are identical. The phantom diff occurs specifically for resources where the provider schema declares one or more attributes with `Sensitive: true`.
+
+Additionally, `terraform show -json` on the state file shows that the `sensitive_values` section in the JSON output is **incomplete** — it lists sensitivity marks that came from variable references (e.g., `var.db_password` is a `sensitive` variable) but **omits** sensitivity marks from the provider schema itself (e.g., the `password` attribute is always sensitive regardless of how it&#x27;s populated).
+
+Running `terraform plan -refresh-only` also shows phantom changes, and `terraform import` followed by `terraform plan` shows even more phantom updates.
+
+## Your Task
+
+Investigate the root cause of why Terraform generates phantom in-place updates for resources with schema-sensitive attributes, and produce a report at `/logs/agent/investigation.md`.
+
+Your report MUST cover:
+
+1. **How provider responses flow through the graph evaluator** — when `ReadResource` (refresh) or `PlanResourceChange` (plan) returns a value from the provider, how does `node_resource_abstract_instance.go` process that response? Specifically, examine `readResourceInstanceState()` (refresh path) and `plan()` (plan path) in `internal/terraform/node_resource_abstract_instance.go`.
+
+2. **The sensitivity mark gap** — the provider response comes back **without** any sensitivity marks (providers don&#x27;t mark values; that&#x27;s Terraform&#x27;s responsibility). The code re-applies marks from the **prior state** (`priorPaths` from `AttrSensitivePaths`), but these only contain marks from sensitive variable references, NOT from the provider schema&#x27;s `Sensitive: true` declarations.
+
+3. **How state serialization records incomplete sensitivity** — when the instance object is written to state via `internal/states/instance_object.go`, `sensitive_attributes` in the state file only has paths from sensitive references, missing the schema-defined sensitive paths. Trace through how `AttrSensitivePaths` is populated and how `unmarkValueForStorage` extracts marks before state serialization.
+
+4. **The evaluator&#x27;s compensating workaround** — `internal/terraform/evaluate.go`&#x27;s `GetResource()` method was the ONLY place that applied schema marks (via `markProviderSensitiveAttributes()` or similar). This meant that when a value was read FROM state and decoded for expression evaluation, it would get schema marks added. But the value stored IN state never had those marks. This created an asymmetry.
+
+5. **How the asymmetry produces phantom diffs** — the plan compares refreshed state (which has schema marks from the evaluator) against the planned state (which was built from provider response without schema marks). The mark difference causes the plan to detect a &quot;change&quot; even though the underlying values are identical. The diff is in the sensitivity metadata, not the attribute values themselves.
+
+6. **The JSON output manifestation** — `internal/command/` layer functions that produce `terraform show -json` read `sensitive_attributes` from state, which is incomplete. This produces incorrect `sensitive_values` in JSON plan/state output, where schema-defined sensitive attributes are missing from the sensitivity map.
+
+## Output Requirements
+
+Write your investigation report to `/logs/agent/investigation.md` with these sections:
+
+```
+# Investigation Report
+
+## Summary
+&lt;1-2 sentence finding&gt;
+
+## Root Cause
+&lt;Specific file, function, and mechanism&gt;
+
+## Evidence
+&lt;Code references with file paths and line numbers&gt;
+
+## Affected Components
+&lt;List of packages/modules impacted&gt;
+
+## Causal Chain
+&lt;Ordered list: symptom → intermediate hops → root cause&gt;
+
+## Recommendation
+&lt;Fix strategy and diagnostic steps&gt;
+```
+
+## Constraints
+
+- Do NOT write any code fixes
+- Do NOT modify any source files
+- Your job is investigation and analysis only
+- The causal chain spans at least 4 packages: `internal/terraform/` (graph evaluation + marks), `internal/states/` (state serialization), `internal/command/` (JSON output), and the provider interaction boundary
+- Focus on how `node_resource_abstract_instance.go` handles provider responses, how `marks.go` applies sensitivity, how `instance_object.go` serializes state, and how `evaluate.go` compensates</pre>
+      </details>
+    </div>
+
+    <div class="panel">
+      <h2>Execution Metrics</h2>
+      <div class="grid">
+        <div class="metric"><div class="k">Reward</div><div class="v">0.9200</div></div>
+        <div class="metric"><div class="k">Status</div><div class="v">passed</div></div>
+        <div class="metric"><div class="k">Total Time</div><div class="v">187.1s</div></div>
+        <div class="metric"><div class="k">Agent Time</div><div class="v">162.3s</div></div>
+        <div class="metric"><div class="k">Input Tokens</div><div class="v">5,159,252</div></div>
+        <div class="metric"><div class="k">Output Tokens</div><div class="v">11,585</div></div>
+        <div class="metric"><div class="k">Cache Tokens</div><div class="v">5,158,304</div></div>
+        <div class="metric"><div class="k">Tool Calls</div><div class="v">48</div></div>
+        <div class="metric"><div class="k">MCP Ratio</div><div class="v">0.000</div></div>
+      </div>
+      <p class="meta">Raw traces: <a href='../audits/debug_haiku_20260301_031844--baseline-local-direct--terraform-phantom-update-debug-001--eb6f49ae5f.json'>audit.json</a> | <a href='../traces/debug_haiku_20260301_031844--baseline-local-direct--terraform-phantom-update-debug-001--eb6f49ae5f/trajectory.json'>trajectory.json</a> | <a href='../traces/debug_haiku_20260301_031844--baseline-local-direct--terraform-phantom-update-debug-001--eb6f49ae5f/claude-code.txt'>transcript</a></p>
+      <details>
+        <summary>Tool Breakdown</summary>
+        <table><thead><tr><th>Tool</th><th>Calls</th></tr></thead><tbody><tr><td><code>Bash</code></td><td>22</td></tr><tr><td><code>Read</code></td><td>22</td></tr><tr><td><code>Grep</code></td><td>3</td></tr><tr><td><code>Write</code></td><td>1</td></tr></tbody></table>
+      </details>
+      <details>
+        <summary>Context Metrics (task_metrics / IR analysis)</summary>
+        <h3>Context</h3>
+        <table><tbody><tr><td>context_window_peak_pct</td><td>0.409</td></tr><tr><td>environment_setup_seconds</td><td>1.003926</td></tr><tr><td>files_modified</td><td>1</td></tr><tr><td>lines_added</td><td>208</td></tr><tr><td>lines_removed</td><td>0</td></tr><tr><td>task_context_length</td><td>900000</td></tr><tr><td>verifier_seconds</td><td>1.729207</td></tr></tbody></table>
+        <h3 style="margin-top:10px">IR</h3>
+        <table><tbody><tr><td colspan='2'>No IR metrics available</td></tr></tbody></table>
+      </details>
+    </div>
+
+    <div class="panel">
+      <h2>Agent Trace</h2>
+      <details open>
+        <summary>Conversation History (103)</summary>
+        <table>
+          <thead><tr><th>#</th><th>Timestamp</th><th>Type</th><th>Subtype</th><th>Tool</th><th>Text</th></tr></thead>
+          <tbody><tr><td>1</td><td>-</td><td>system</td><td>init</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>2</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>I&#x27;ll conduct a deep investigation into this Terraform issue about phantom in-place updates for resources with sensitive attributes. Let me start by exploring the repository structure and understanding the code flow.</pre></td></tr><tr><td>3</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>4</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>5</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>6</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>7</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>8</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>9</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>10</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>11</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Grep</code></td><td><pre></pre></td></tr><tr><td>12</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>13</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Grep</code></td><td><pre></pre></td></tr><tr><td>14</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>15</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>16</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>17</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>18</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>19</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>20</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>21</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>22</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>23</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Grep</code></td><td><pre></pre></td></tr><tr><td>24</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>25</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>26</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>27</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>28</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>29</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>30</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>31</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>32</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>33</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>34</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>35</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>36</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>37</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>38</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>39</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>40</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>41</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>42</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>43</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>44</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>45</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>46</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>47</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>48</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>49</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>50</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>51</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>52</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>53</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Let me check how the plan node gets the prior state with sensitivity marks:</pre></td></tr><tr><td>54</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>55</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>56</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>57</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>58</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>59</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>60</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>61</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>62</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>63</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>64</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>65</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>66</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>67</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>68</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>69</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>70</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>71</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>72</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>73</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>74</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>75</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>76</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>77</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>78</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>79</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>80</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>81</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>82</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>83</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>84</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>85</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>86</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>87</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>88</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>89</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>90</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>91</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>92</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>93</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>94</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Now let me look at one more critical piece - how the prior state gets its marks compared to the planned state in the plan function. Let me search for the specific comparison logic:</pre></td></tr><tr><td>95</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>96</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>97</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Perfect! I now have a complete understanding of the causal chain. Let me write the investigation report:</pre></td></tr><tr><td>98</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Write</code></td><td><pre></pre></td></tr><tr><td>99</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>100</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Perfect! I&#x27;ve completed the investigation and created a comprehensive report at `/logs/agent/investigation.md`. Let me verify it was created successfully:</pre></td></tr><tr><td>101</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>102</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>103</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>## Investigation Complete ✓
+
+I&#x27;ve completed a comprehensive investigation of the phantom in-place updates issue in Terraform for resources with sensitive attributes. The investigation report has been written to `/logs/agent/investigation.md`.
+
+### Key Findings:
+
+**Root Cause**: The issue stems from a **three-layer mark application gap**:
+
+1. **State Storage Gap**: Provider-schema-defined sensitive attributes are never marked on values before state is persisted to disk, so these marks are permanently lost.
+
+2. **State Retrieval Gap**: When state is deserialized, only marks from *variable references* are re-applied (from `AttrSensitivePaths` in the state file), not marks from the provider schema&#x27;s `Sensitive: true` declarations.
+
+3. **Plan Comparison Gap**: The plan function compares sensitivity marks between the prior state and planned value, but the prior state&#x27;s marks are incomplete (missing schema-based marks), causing a mismatch that triggers a phantom update action.
+
+### The Asymmetry:
+
+The evaluator&#x27;s `GetResource()` method applies schema-defined sensitive marks when reading values for expression evaluation, but this happens **after** the plan has already been created with the phantom update. This produces an asymmetry where:
+- The plan shows an update due to mark mismatch
+- Expression evaluation sees the same marks on both values (after schema marks are applied)
+- JSON output correctly shows complete sensitivity information (because it also applies schema marks)
+
+### Evidence Spans Multiple Packages:
+
+- **`internal/terraform/`**: Plan comparison logic, graph evaluation, mark handling
+- **`internal/states/`**: State serialization and deserialization
+- **`internal/command/`**: JSON output generation (which correctly applies schema marks)
+- **Provider interaction bou
+... (truncated)</pre></td></tr></tbody>
+        </table>
+      </details>
+      <details>
+        <summary>Tool Calls (48)</summary>
+        <details><summary>1. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;find /workspace -type f -name \&quot;*.go\&quot; | grep -E \&quot;(node_resource_abstract|evaluate|instance_object|marks)\&quot; | head -20&quot;
+}</pre></details><details><summary>2. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace&quot;
+}</pre></details><details><summary>3. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;ls -la /workspace | head -30&quot;
+}</pre></details><details><summary>4. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_abstract_instance.go&quot;
+}</pre></details><details><summary>5. <code>Grep</code> @ -</summary><pre>{
+  &quot;output_mode&quot;: &quot;content&quot;,
+  &quot;path&quot;: &quot;/workspace/internal/terraform/node_resource_abstract_instance.go&quot;,
+  &quot;pattern&quot;: &quot;func.*readResourceInstanceState|func.*\\bplan\\b&quot;
+}</pre></details><details><summary>6. <code>Grep</code> @ -</summary><pre>{
+  &quot;output_mode&quot;: &quot;content&quot;,
+  &quot;path&quot;: &quot;/workspace/internal/terraform/node_resource_abstract_instance.go&quot;,
+  &quot;pattern&quot;: &quot;readResource&quot;
+}</pre></details><details><summary>7. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_abstract_instance.go&quot;,
+  &quot;limit&quot;: 100,
+  &quot;offset&quot;: 1
+}</pre></details><details><summary>8. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_abstract_instance.go&quot;,
+  &quot;limit&quot;: 150,
+  &quot;offset&quot;: 725
+}</pre></details><details><summary>9. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_abstract_instance.go&quot;,
+  &quot;limit&quot;: 200,
+  &quot;offset&quot;: 868
+}</pre></details><details><summary>10. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_abstract_instance.go&quot;,
+  &quot;limit&quot;: 200,
+  &quot;offset&quot;: 1067
+}</pre></details><details><summary>11. <code>Grep</code> @ -</summary><pre>{
+  &quot;output_mode&quot;: &quot;content&quot;,
+  &quot;path&quot;: &quot;/workspace/internal/terraform/node_resource_abstract_instance.go&quot;,
+  &quot;pattern&quot;: &quot;func.*Refresh|RefreshResourceInstanceState&quot;
+}</pre></details><details><summary>12. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/marks.go&quot;
+}</pre></details><details><summary>13. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;GetResource\\|markProviderSensitive\&quot; /workspace/internal/terraform/evaluate.go | head -20&quot;
+}</pre></details><details><summary>14. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/evaluate.go&quot;,
+  &quot;limit&quot;: 200,
+  &quot;offset&quot;: 541
+}</pre></details><details><summary>15. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;AttachState\\|currentState\\|instanceState\&quot; /workspace/internal/terraform/node_resource_abstract_instance.go | head -30&quot;
+}</pre></details><details><summary>16. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -rn \&quot;AttachState\\|AttachStateAndConfig\&quot; /workspace/internal/terraform/*.go | head -20&quot;
+}</pre></details><details><summary>17. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/transform_attach_state.go&quot;
+}</pre></details><details><summary>18. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/states/instance_object.go&quot;
+}</pre></details><details><summary>19. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;func.*Decode\\|AttrSensitivePaths\&quot; /workspace/internal/states/instance_object.go&quot;
+}</pre></details><details><summary>20. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/states/instance_object_src.go&quot;
+}</pre></details><details><summary>21. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;find /workspace/internal/command -type f -name \&quot;*.go\&quot; | grep -E \&quot;(show|json)\&quot; | head -20&quot;
+}</pre></details><details><summary>22. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;find /workspace/internal/command -type f -name \&quot;show.go\&quot; | head -5&quot;
+}</pre></details><details><summary>23. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;sensitive_values\\|sensitiveValues\\|AttrSensitivePathsreate\&quot; /workspace/internal/command/show.go&quot;
+}</pre></details><details><summary>24. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -rn \&quot;sensitive_values\&quot; /workspace/internal/command/ | head -20&quot;
+}</pre></details><details><summary>25. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/command/jsonstate/state.go&quot;
+}</pre></details><details><summary>26. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_abstract_instance.go&quot;,
+  &quot;limit&quot;: 100,
+  &quot;offset&quot;: 200
+}</pre></details><details><summary>27. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;func.*Execute\&quot; /workspace/internal/terraform/node_resource_abstract_instance.go | head -10&quot;
+}</pre></details><details><summary>28. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;wc -l /workspace/internal/terraform/node_resource_plan.go&quot;
+}</pre></details><details><summary>29. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;currentState\\|instanceState\\|Current\&quot; /workspace/internal/terraform/node_resource_plan.go | head -30&quot;
+}</pre></details><details><summary>30. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_plan.go&quot;,
+  &quot;limit&quot;: 100,
+  &quot;offset&quot;: 1
+}</pre></details><details><summary>31. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;\\.Current\\|\\.Instances\\[\&quot; /workspace/internal/terraform/node_resource_abstract_instance.go | head -20&quot;
+}</pre></details><details><summary>32. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_abstract_instance.go&quot;,
+  &quot;limit&quot;: 50,
+  &quot;offset&quot;: 108
+}</pre></details><details><summary>33. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -B 5 -A 5 \&quot;instanceState.Current\&quot; /workspace/internal/terraform/node_resource_abstract_instance.go | head -40&quot;
+}</pre></details><details><summary>34. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;func.*Execute\\|plan(\&quot; /workspace/internal/terraform/node_resource_plan.go | head -20&quot;
+}</pre></details><details><summary>35. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;type.*Resource.*Instance\\|Execute\&quot; /workspace/internal/terraform/node_resource_plan.go | head -30&quot;
+}</pre></details><details><summary>36. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_plan.go&quot;,
+  &quot;limit&quot;: 200,
+  &quot;offset&quot;: 150
+}</pre></details><details><summary>37. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -rn \&quot;concreteResourceInstance\\|concreteResource\&quot; /workspace/internal/terraform/*.go | grep -E \&quot;^[^:]+:[0-9]+:var|^[^:]+:[0-9]+:func\&quot; | head -20&quot;
+}</pre></details><details><summary>38. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;resourceInstanceSubgraph\\|planResourceInstance\&quot; /workspace/internal/terraform/node_resource_plan.go&quot;
+}</pre></details><details><summary>39. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_plan.go&quot;,
+  &quot;limit&quot;: 100,
+  &quot;offset&quot;: 418
+}</pre></details><details><summary>40. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -rn \&quot;type NodePlannableResourceInstance\\|func.*NodePlannableResourceInstance.*Execute\&quot; /workspace/internal/terraform/*.go | head -20&quot;
+}</pre></details><details><summary>41. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_plan_instance.go&quot;,
+  &quot;limit&quot;: 150,
+  &quot;offset&quot;: 1
+}</pre></details><details><summary>42. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_plan_instance.go&quot;,
+  &quot;limit&quot;: 200,
+  &quot;offset&quot;: 139
+}</pre></details><details><summary>43. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;func.*readResourceInstanceState\&quot; /workspace/internal/terraform/node_resource_plan_instance.go&quot;
+}</pre></details><details><summary>44. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -rn \&quot;func.*readResourceInstanceState\&quot; /workspace/internal/terraform/*.go&quot;
+}</pre></details><details><summary>45. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_abstract.go&quot;,
+  &quot;limit&quot;: 100,
+  &quot;offset&quot;: 438
+}</pre></details><details><summary>46. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/internal/terraform/node_resource_abstract_instance.go&quot;,
+  &quot;limit&quot;: 30,
+  &quot;offset&quot;: 1200
+}</pre></details><details><summary>47. <code>Write</code> @ -</summary><pre>{
+  &quot;content&quot;: &quot;# Investigation Report: Phantom In-Place Updates for Resources with Sensitive Attributes\n\n## Summary\n\nTerraform generates phantom in-place updates for resources with provider-schema-defined sensitive attributes because the plan comparison logic detects a mismatch in sensitivity marks, not attribute values. The root cause is an asymmetry in how and when sensitivity marks from the provider schema are applied: they are omitted from state serialization, stored state never includes them, but the plan comparison logic expects them to match against configuration-based marks.\n\n## Root Cause\n\nThe fundamental issue is a **three-layer mark application gap** in the code:\n\n1. **State Storage Gap**: When state is persisted to disk (`internal/states/instance_object.go`), the Encode method only extracts marks that already exist on the value (line 98). Provider-schema-defined sensitive attributes are never marked on values before state is written, so these marks are lost at serialization time.\n\n2. **State Retrieval Gap**: When state is deserialized from disk (`internal/states/instance_object_src.go` lines 77-104), the Decode method only re-applies marks from `AttrSensitivePaths` which come from the state file. These paths contain only marks from sensitive *variable references*, not from the provider schema&#x27;s `Sensitive: true` declarations.\n\n3. **Plan Comparison Gap**: The plan function (`internal/terraform/node_resource_abstract_instance.go` lines 1208-1210) compares marks using logic that assumes both the prior state marks and planned state marks are complete. It doesn&#x27;t account for the fact that prior state marks are incomplete (missing schema-based marks).\n\nThe evaluator&#x27;s `GetResource()` method (`internal/terraform/evaluate.go` lines 714-723) was introduced as a **compensating workaround** to apply schema marks when reading values for expression evaluation. However, this happens *after* the plan has already been created and written, producing an asymmetry.\n\n## Evidence\n\n### 1. State Serialization (No Schema Marks Applied)\n\n**File**: `internal/states/instance_object.go:94-137` (Encode method)\n\n```go\nfunc (o *ResourceInstanceObject) Encode(ty cty.Type, schemaVersion uint64) (*ResourceInstanceObjectSrc, error) {\n    // Line 98: Extract marks from the value as-is\n    val, pvm := o.Value.UnmarkDeepWithPaths()\n\n    // ...\n\n    // Line 131: Store only the marks extracted above\n    return &amp;ResourceInstanceObjectSrc{\n        SchemaVersion:       schemaVersion,\n        AttrsJSON:           src,\n        AttrSensitivePaths:  pvm,  // Only includes variable-based marks!\n        Private:             o.Private,\n        Status:              o.Status,\n        Dependencies:        dependencies,\n        CreateBeforeDestroy: o.CreateBeforeDestroy,\n    }, nil\n}\n```\n\n**Key Issue**: The value `o.Value` is never marked with schema-defined sensitive paths before extraction. Those marks are only applied during expression evaluation, not during state persistence.\n\n### 2. State Deserialization (Incomplete Marks Re-applied)\n\n**File**: `internal/states/instance_object_src.go:77-104` (Decode method)\n\n```go\nfunc (os *ResourceInstanceObjectSrc) Decode(ty cty.Type) (*ResourceInstanceObject, error) {\n    var val cty.Value\n    if os.AttrsFlat != nil {\n        // ...\n    } else {\n        val, err = ctyjson.Unmarshal(os.AttrsJSON, ty)\n        // Lines 89-90: Only apply stored marks (from variables, not schema)\n        if os.AttrSensitivePaths != nil {\n            val = val.MarkWithPaths(os.AttrSensitivePaths)\n        }\n        if err != nil {\n            return nil, err\n        }\n    }\n    return &amp;ResourceInstanceObject{\n        Value:               val,\n        Status:              os.Status,\n        Dependencies:        os.Dependencies,\n        Private:             os.Private,\n        CreateBeforeDestroy: os.CreateBeforeDestroy,\n    }, nil\n}\n```\n\n**Key Issue**: The Decode method has no access to the provider schema and cannot apply schema-defined sensitive marks.\n\n### 3. State Reading During Plan\n\n**File**: `internal/terraform/node_resource_abstract.go:438-475` (readResourceInstanceState method)\n\n```go\nfunc (n *NodeAbstractResource) readResourceInstanceState(ctx EvalContext, addr addrs.AbsResourceInstance) (*states.ResourceInstanceObject, tfdiags.Diagnostics) {\n    // ...\n    src := ctx.State().ResourceInstanceObject(addr, addrs.NotDeposed)  // Line 448\n    // ...\n    obj, err := src.Decode(schema.ImpliedType())  // Line 469\n    // Decode is called with schema, but schema marks are NOT applied here!\n    return obj, diags\n}\n```\n\n**Key Issue**: Although `schema` is available (line 455), it is not used to apply sensitivity marks during the decode operation.\n\n### 4. Plan Comparison Detecting Mark Mismatch\n\n**File**: `internal/terraform/node_resource_abstract_instance.go:868-870, 995-1000, 1208-1210` (plan method)\n\n```go\n// Line 869: Extract marks from prior state\nunmarkedPriorVal, priorPaths := priorVal.UnmarkDeepWithPaths()\n\n// ...\n\n// Lines 998-1000: Re-apply marks from config (contains config variable marks)\nif len(unmarkedPaths) &gt; 0 {\n    plannedNewVal = plannedNewVal.MarkWithPaths(unmarkedPaths)\n}\n\n// Lines 1208-1210: THE PHANTOM UPDATE TRIGGER\nif action == plans.NoOp &amp;&amp; !marksEqual(filterMarks(plannedNewVal, unmarkedPaths), priorPaths) {\n    action = plans.Update  // Changed from NoOp to Update!\n}\n```\n\n**Key Issue**: This comparison assumes:\n- `plannedNewVal` has the correct set of marks (config marks via `unmarkedPaths`)\n- `priorPaths` extracted from prior state has all relevant marks\n\nHowever, `priorPaths` is incomplete because it comes from a state that never had schema marks applied.\n\n### 5. Evaluator&#x27;s Compensating Workaround\n\n**File**: `internal/terraform/evaluate.go:665-696, 714-723` (GetResource method)\n\n```go\n// Lines 691-692: Schema marks applied during evaluation of PlannedState\nif schema.ContainsSensitive() {\n    afterMarks = append(afterMarks, schema.ValueMarks(val, nil)...)\n}\ninstances[key] = val.MarkWithPaths(afterMarks)\n\n// Lines 718-723: Schema marks applied during evaluation of actual state\nif schema.ContainsSensitive() {\n    var marks []cty.PathValueMarks\n    val, marks = val.UnmarkDeepWithPaths()\n    marks = append(marks, schema.ValueMarks(val, nil)...)\n    val = val.MarkWithPaths(marks)\n}\ninstances[key] = val\n```\n\n**Key Issue**: This is a **defensive layer** added to handle the missing schema marks when evaluating expressions. It works for expression evaluation but doesn&#x27;t help the plan comparison, which happens earlier.\n\n### 6. JSON Output Manifestation\n\n**File**: `internal/command/jsonstate/state.go:402-411` (marshalResources method)\n\n```go\nvalue, marks := riObj.Value.UnmarkDeepWithPaths()\nif schema.ContainsSensitive() {\n    marks = append(marks, schema.ValueMarks(value, nil)...)\n}\ns := SensitiveAsBool(value.MarkWithPaths(marks))\nv, err := ctyjson.Marshal(s, s.Type())\nif err != nil {\n    return nil, err\n}\ncurrent.SensitiveValues = v\n```\n\n**Key Issue**: The JSON output correctly applies schema marks (line 404) when marshaling for display. This produces the **correct** `sensitive_values` in `terraform show -json`, but this mark application happens too late\u2014after the plan has already been created with phantom updates.\n\n## Affected Components\n\n1. **`internal/terraform/node_resource_abstract_instance.go`**: Plan comparison logic (lines 868-870, 995-1000, 1208-1210) that triggers phantom updates when mark sets differ\n2. **`internal/states/instance_object.go`**: State encoding (lines 94-137) that omits schema-based marks during serialization\n3. **`internal/states/instance_object_src.go`**: State decoding (lines 77-104) that cannot apply schema marks without provider schema\n4. **`internal/terraform/node_resource_abstract.go`**: State reading (lines 438-475) that doesn&#x27;t apply schema marks to decoded values\n5. **`internal/terraform/evaluate.go`**: Expression evaluator (lines 714-723) that applies schema marks, but only after plan creation\n6. **`internal/command/jsonstate/state.go`**: JSON output generation (lines 402-411) that correctly applies schema marks for display\n\n## Causal Chain\n\n1. **Provider response** \u2192 Provider returns resource attributes without any marks (marks are Terraform&#x27;s responsibility)\n2. **State encoding** \u2192 Value is encoded and written to state WITHOUT schema marks applied (they&#x27;ve never been applied to the value)\n3. **State file written** \u2192 State file contains `sensitive_attributes` with only marks from variable references, NOT schema declarations\n4. **State loading** \u2192 `readResourceInstanceState()` reads from state, decodes it, applies only stored marks (variable marks)\n5. **Prior state with incomplete marks** \u2192 Prior value has no schema marks, only variable marks in `priorPaths`\n6. **Config evaluation** \u2192 Configuration is evaluated, creating `unmarkedPaths` with variable marks from config expressions\n7. **Planned value marking** \u2192 Planned value from provider gets marked with `unmarkedPaths` (config variable marks)\n8. **Mark comparison** \u2192 Plan logic compares `plannedNewVal` marks (config marks + schema marks??? NO\u2014only config marks!) against `priorPaths` (only variable marks)\n9. **Asymmetry detected** \u2192 Mark sets differ: planned has some marks from config, prior has different marks from state\n10. **Phantom update** \u2192 Logic changes action from NoOp to Update because mark sets don&#x27;t match, even though values are identical\n11. **Evaluator compensation** \u2192 Later, `GetResource()` applies schema marks to values when evaluating expressions, but the plan is already created\n12. **JSON output correct** \u2192 When generating JSON output, schema marks are properly applied (lines 402-411), but plan output shows phantom change\n\n## Recommendation\n\n**Fix Strategy**: Apply schema-defined sensitive marks to the prior state&#x27;s value after it is decoded but before it is used in the plan comparison.\n\nThe fix should be in `readResourceInstanceState()` in `internal/terraform/node_resource_abstract.go`, immediately after calling `Decode()`:\n\n1. After line 469 (`obj, err := src.Decode(schema.ImpliedType())`), check if schema declares sensitive attributes\n2. If `schema.ContainsSensitive()` is true, apply schema marks to `obj.Value` using `schema.ValueMarks(unmarkedValue, nil)`\n3. This will ensure `priorPaths` extracted in the plan function includes both variable marks AND schema marks, matching the marks on `plannedNewVal`\n\n**Alternative Approach** (Defensive): Modify the mark comparison logic at line 1208 to account for schema-defined sensitive attributes by:\n1. Extracting what schema marks *should* be applied to both `plannedNewVal` and `priorVal`\n2. Normalizing both mark sets to include schema marks before comparison\n3. This ensures the comparison is \&quot;apples-to-apples\&quot; with complete mark sets\n\n**Diagnostic Steps** to verify the issue:\n1. Enable detailed logging for mark extraction and comparison in plan logic (node_resource_abstract_instance.go:869 and 1208)\n2. Log the actual mark paths in `priorPaths` and filtered `plannedNewVal` marks\n3. Verify that schema-defined sensitive attributes are missing from `priorPaths`\n4. Confirm that the marks would match if schema marks were applied to prior state\n&quot;,
+  &quot;file_path&quot;: &quot;/logs/agent/investigation.md&quot;
+}</pre></details><details><summary>48. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/logs/agent/investigation.md&quot;,
+  &quot;limit&quot;: 50,
+  &quot;offset&quot;: 1
+}</pre></details>
+      </details>
+      <details>
+        <summary>Code Changes (1)</summary>
+        <details><summary>1. WRITE <code>/logs/agent/investigation.md</code></summary><pre># Investigation Report: Phantom In-Place Updates for Resources with Sensitive Attributes
+
+## Summary
+
+Terraform generates phantom in-place updates for resources with provider-schema-defined sensitive attributes because the plan comparison logic detects a mismatch in sensitivity marks, not attribute values. The root cause is an asymmetry in how and when sensitivity marks from the provider schema are applied: they are omitted from state serialization, stored state never includes them, but the plan comparison logic expects them to match against configuration-based marks.
+
+## Root Cause
+
+The fundamental issue is a **three-layer mark application gap** in the code:
+
+1. **State Storage Gap**: When state is persisted to disk (`internal/states/instance_object.go`), the Encode method only extracts marks that already exist on the value (line 98). Provider-schema-defined sensitive attributes are never marked on values before state is written, so these marks are lost at serialization time.
+
+2. **State Retrieval Gap**: When state is deserialized from disk (`internal/states/instance_object_src.go` lines 77-104), the Decode method only re-applies marks from `AttrSensitivePaths` which come from the state file. These paths contain only marks from sensitive *variable references*, not from the provider schema&#x27;s `Sensitive: true` declarations.
+
+3. **Plan Comparison Gap**: The plan function (`internal/terraform/node_resource_abstract_instance.go` lines 1208-1210) compares marks using logic that assumes both the prior state marks and planned state marks are complete. It doesn&#x27;t account for the fact that prior state marks are incomplete (missing schema-based marks).
+
+The evaluator&#x27;s `GetResource()` method (`internal/terraform/evaluate.go` lines 714-723) was introduced as a **compensating worka
+... (truncated)</pre></details>
+      </details>
+      <details>
+        <summary>Bash Commands (22)</summary>
+        <pre>1. $ find /workspace -type f -name &quot;*.go&quot; | grep -E &quot;(node_resource_abstract|evaluate|instance_object|marks)&quot; | head -20</pre><pre>2. $ ls -la /workspace | head -30</pre><pre>3. $ grep -n &quot;GetResource\|markProviderSensitive&quot; /workspace/internal/terraform/evaluate.go | head -20</pre><pre>4. $ grep -n &quot;AttachState\|currentState\|instanceState&quot; /workspace/internal/terraform/node_resource_abstract_instance.go | head -30</pre><pre>5. $ grep -rn &quot;AttachState\|AttachStateAndConfig&quot; /workspace/internal/terraform/*.go | head -20</pre><pre>6. $ grep -n &quot;func.*Decode\|AttrSensitivePaths&quot; /workspace/internal/states/instance_object.go</pre><pre>7. $ find /workspace/internal/command -type f -name &quot;*.go&quot; | grep -E &quot;(show|json)&quot; | head -20</pre><pre>8. $ find /workspace/internal/command -type f -name &quot;show.go&quot; | head -5</pre><pre>9. $ grep -n &quot;sensitive_values\|sensitiveValues\|AttrSensitivePathsreate&quot; /workspace/internal/command/show.go</pre><pre>10. $ grep -rn &quot;sensitive_values&quot; /workspace/internal/command/ | head -20</pre><pre>11. $ grep -n &quot;func.*Execute&quot; /workspace/internal/terraform/node_resource_abstract_instance.go | head -10</pre><pre>12. $ wc -l /workspace/internal/terraform/node_resource_plan.go</pre><pre>13. $ grep -n &quot;currentState\|instanceState\|Current&quot; /workspace/internal/terraform/node_resource_plan.go | head -30</pre><pre>14. $ grep -n &quot;\.Current\|\.Instances\[&quot; /workspace/internal/terraform/node_resource_abstract_instance.go | head -20</pre><pre>15. $ grep -B 5 -A 5 &quot;instanceState.Current&quot; /workspace/internal/terraform/node_resource_abstract_instance.go | head -40</pre><pre>16. $ grep -n &quot;func.*Execute\|plan(&quot; /workspace/internal/terraform/node_resource_plan.go | head -20</pre><pre>17. $ grep -n &quot;type.*Resource.*Instance\|Execute&quot; /workspace/internal/terraform/node_resource_plan.go | head -30</pre><pre>18. $ grep -rn &quot;concreteResourceInstance\|concreteResource&quot; /workspace/internal/terraform/*.go | grep -E &quot;^[^:]+:[0-9]+:var|^[^:]+:[0-9]+:func&quot; | head -20</pre><pre>19. $ grep -n &quot;resourceInstanceSubgraph\|planResourceInstance&quot; /workspace/internal/terraform/node_resource_plan.go</pre><pre>20. $ grep -rn &quot;type NodePlannableResourceInstance\|func.*NodePlannableResourceInstance.*Execute&quot; /workspace/internal/terraform/*.go | head -20</pre><pre>21. $ grep -n &quot;func.*readResourceInstanceState&quot; /workspace/internal/terraform/node_resource_plan_instance.go</pre><pre>22. $ grep -rn &quot;func.*readResourceInstanceState&quot; /workspace/internal/terraform/*.go</pre>
+      </details>
+    </div>
+  </div>
+</body>
+</html>

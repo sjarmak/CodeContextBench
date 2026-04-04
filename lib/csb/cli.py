@@ -7,6 +7,7 @@ Entry points::
     csb validate config.yaml
     csb eval --suite quick --agent-command CMD
     csb report results.json
+    csb estimate --suite quick --model sonnet
 
 Run ``csb --help`` for full usage.
 """
@@ -34,6 +35,8 @@ commands:
   validate  Validate a run config file without executing.
   eval      Run benchmark tasks against an external agent command.
   report    Display results with CSB Score.
+  estimate  Estimate API cost for a benchmark suite.
+  diagnose  Run automated Observatory annotation on agent traces.
 
 examples:
   csb run configs/my_run.yaml
@@ -42,6 +45,9 @@ examples:
   csb validate configs/my_run.yaml
   csb eval --suite quick --agent-command "./my_agent.sh"
   csb report results.json
+  csb estimate --suite quick --model sonnet
+  csb estimate --suite quick --model opus --format json
+  csb diagnose --traces runs/my_run/trials --output diagnosis.json
         """,
     )
     sub = parser.add_subparsers(dest="command")
@@ -135,6 +141,39 @@ examples:
         metavar="SECONDS",
         help="Per-task timeout in seconds (default: 300).",
     )
+    eval_p.add_argument(
+        "--api-key",
+        default=None,
+        metavar="TOKEN",
+        help=(
+            "JWT API key for accessing the full benchmark suite. "
+            "Without a valid key, only public-partition tasks are run."
+        ),
+    )
+
+    # ---- csb estimate ----
+    est_p = sub.add_parser("estimate", help="Estimate API cost for a benchmark suite.")
+    est_p.add_argument(
+        "--suite",
+        choices=["quick", "full"],
+        default="quick",
+        help="Benchmark suite to estimate (default: quick).",
+    )
+    est_p.add_argument(
+        "--model",
+        default="sonnet",
+        metavar="MODEL",
+        help=(
+            "Model to estimate costs for "
+            "(e.g. sonnet, opus, gpt-4o, gpt-4.1). Default: sonnet."
+        ),
+    )
+    est_p.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text).",
+    )
 
     # ---- csb report ----
     report_p = sub.add_parser(
@@ -154,7 +193,68 @@ examples:
         "--browser",
         action="store_true",
         default=False,
-        help="Open HTML report in browser (only with --format html).",
+        help="Launch interactive results browser on localhost.",
+    )
+    report_p.add_argument(
+        "--port",
+        type=int,
+        default=8770,
+        help="Port for local browser server (default: 8770).",
+    )
+    report_p.add_argument(
+        "--no-baseline",
+        action="store_true",
+        default=False,
+        help="Skip loading official baseline data for comparison.",
+    )
+    report_view = report_p.add_mutually_exclusive_group()
+    report_view.add_argument(
+        "--summary",
+        action="store_true",
+        default=False,
+        help="Group scores and annotations by taxonomy v2 dimensions.",
+    )
+    report_view.add_argument(
+        "--detailed",
+        action="store_true",
+        default=False,
+        help="Show per-leaf-category breakdown.",
+    )
+
+    # ---- csb diagnose ----
+    diag_p = sub.add_parser(
+        "diagnose",
+        help="Run automated Observatory annotation on agent traces.",
+    )
+    diag_p.add_argument(
+        "--traces",
+        required=True,
+        metavar="DIR",
+        help="Directory containing agent trial traces.",
+    )
+    diag_p.add_argument(
+        "--output",
+        default="-",
+        metavar="PATH",
+        help="Output file path (default: stdout).",
+    )
+    diag_p.add_argument(
+        "--calibration-data",
+        default=None,
+        metavar="PATH",
+        help="Path to calibration report JSON (from cross-model comparison).",
+    )
+    diag_p.add_argument(
+        "--model",
+        default="haiku",
+        metavar="MODEL",
+        help="LLM model alias for annotation (default: haiku).",
+    )
+    diag_p.add_argument(
+        "--backend",
+        choices=["api", "claude-code"],
+        default="api",
+        help="Annotation backend (default: api).",
     )
 
     args = parser.parse_args(argv)
@@ -174,6 +274,10 @@ examples:
             return _cmd_eval(args)
         if args.command == "report":
             return _cmd_report(args)
+        if args.command == "estimate":
+            return _cmd_estimate(args)
+        if args.command == "diagnose":
+            return _cmd_diagnose(args)
     except KeyboardInterrupt:
         print("\n[csb] Interrupted.", file=sys.stderr)
         return 130
@@ -391,7 +495,45 @@ def _cmd_validate(args) -> int:
 
 
 def _cmd_eval(args) -> int:
+    from lib.csb.auth import InvalidKeyError, validate_api_key
     from lib.csb.eval_runner import run_eval
+
+    # Determine whether the caller has access to the full suite.
+    api_key: str | None = args.api_key
+    public_only = False
+
+    if args.suite == "full":
+        if api_key is None:
+            print(
+                "[csb eval] No --api-key provided. "
+                "Running public-partition tasks only.",
+                file=sys.stderr,
+            )
+            public_only = True
+        else:
+            try:
+                payload = validate_api_key(api_key)
+            except InvalidKeyError as exc:
+                print(
+                    f"[csb eval] ERROR: Invalid API key — {exc}",
+                    file=sys.stderr,
+                )
+                return 1
+
+            granted_suite = payload.get("suite", "")
+            if granted_suite != "full":
+                print(
+                    f"[csb eval] ERROR: API key grants suite={granted_suite!r}, "
+                    f"but --suite full was requested.",
+                    file=sys.stderr,
+                )
+                return 1
+
+            print(
+                f"[csb eval] API key validated (org={payload.get('org', 'unknown')}). "
+                f"Running full suite.",
+                file=sys.stderr,
+            )
 
     try:
         run_eval(
@@ -399,6 +541,7 @@ def _cmd_eval(args) -> int:
             agent_command=args.agent_command,
             output_path=args.output,
             timeout=args.timeout,
+            public_only=public_only,
         )
         return 0
     except ValueError as exc:
@@ -412,10 +555,47 @@ def _cmd_eval(args) -> int:
 
 
 def _cmd_report(args) -> int:
+    if args.browser:
+        from lib.csb.report import serve_browser
+
+        return serve_browser(
+            results_path=args.results_file,
+            port=args.port,
+            include_baseline=not args.no_baseline,
+        )
+
     from lib.csb.report import display_report
+
+    view_mode = None
+    if getattr(args, "summary", False):
+        view_mode = "summary"
+    elif getattr(args, "detailed", False):
+        view_mode = "detailed"
 
     return display_report(
         results_path=args.results_file,
         fmt=args.format,
-        open_browser=args.browser,
+        view_mode=view_mode,
     )
+
+
+# ---------------------------------------------------------------------------
+# csb estimate
+# ---------------------------------------------------------------------------
+
+
+def _cmd_estimate(args) -> int:
+    from lib.csb.cost_estimator import cmd_estimate
+
+    return cmd_estimate(args)
+
+
+# ---------------------------------------------------------------------------
+# csb diagnose
+# ---------------------------------------------------------------------------
+
+
+def _cmd_diagnose(args) -> int:
+    from lib.csb.diagnose import cmd_diagnose
+
+    return cmd_diagnose(args)

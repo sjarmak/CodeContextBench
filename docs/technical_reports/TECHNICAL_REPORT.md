@@ -62,7 +62,7 @@ CodeScaleBench is built on three core principles:
 | **RQ2** | On which task types does MCP provide the greatest (or least) benefit?                                         | Per-suite and per-phase delta analysis                          |
 | **RQ3** | How does information retrieval quality correlate with task outcomes?                                          | Spearman rank correlation (file recall, MRR, MAP vs. reward)    |
 | **RQ4** | What are the efficiency trade-offs of MCP tool usage?                                                         | Token cost, wall-clock time, TTFR (Time to First Relevant file) |
-| **RQ5** | Can MCP tools enable agents to complete org-scale discovery tasks that are infeasible with local-only access? | Org task scores, cross-repo coverage                     |
+| **RQ5** | Can MCP tools enable agents to complete org-scale discovery tasks that are infeasible with local-only access? | Org task scores, cross-repo coverage                            |
 
 ---
 
@@ -145,8 +145,8 @@ Both SDLC and Org tasks use the same config pair (`baseline-local-direct` + `mcp
 
 Tasks are drawn from established benchmarks and custom-authored challenges, then organized by their primary SDLC phase:
 
-| Suite            | SDLC Phase                | Tasks | Difficulty Range | Languages                            |
-| ---------------- | ------------------------- | ----: | ---------------- | ------------------------------------ |
+| Suite                 | SDLC Phase                | Tasks | Difficulty Range | Languages                            |
+| --------------------- | ------------------------- | ----: | ---------------- | ------------------------------------ |
 | `csb_sdlc_fix`        | Bug Repair                |    26 | medium--hard     | C++, Go, Java, JS, Python, TS        |
 | `csb_sdlc_feature`    | Feature Implementation    |    23 | medium--hard     | C#, C++, Go, Java, JS, Rust, TS      |
 | `csb_sdlc_debug`      | Debugging & Investigation |    18 | medium--expert   | C, C++, Go, Python, TS               |
@@ -195,10 +195,10 @@ Repository Scale:
 
 ### 4.4 Difficulty Distribution
 
-| Difficulty | Tasks | Percentage | Description                                                |
-| ---------- | ----: | ---------- | ---------------------------------------------------------- |
-| medium     |    21 | 7.5%       | Dependency installation, straightforward fixes, unit tests |
-| hard       |   245 | 87.8%      | Multi-file changes, cross-repo reasoning, runbooks         |
+| Difficulty | Tasks | Percentage | Description                                                  |
+| ---------- | ----: | ---------- | ------------------------------------------------------------ |
+| medium     |    21 | 7.5%       | Dependency installation, straightforward fixes, unit tests   |
+| hard       |   245 | 87.8%      | Multi-file changes, cross-repo reasoning, runbooks           |
 | expert     |    13 | 4.7%       | Kernel/debug fault localization and highest-complexity tasks |
 
 ---
@@ -481,7 +481,7 @@ Four shared libraries handle cross-cutting concerns:
 | `verifier_lib.sh`             | IR metric computation (precision, recall, F1, MRR, dependency-chain accuracy), solution.md parsing, path normalization                    | Build, design, and feature tasks |
 | `answer_json_verifier_lib.sh` | Extracts analysis text and file lists from `answer.json` in artifact mode; applies agent diffs to `/repo_full` for zero-copy verification | Artifact-mode SDLC tasks         |
 | `sgonly_verifier_wrapper.sh`  | Restores full source at verify time by cloning mirrors from `/tmp/.sg_only_clone_manifest.json`, then overlays agent changes              | All MCP (sg_only) runs           |
-| `oracle_checks.py`            | Deterministic oracle scoring (file F1, symbol recall, chain recall, provenance, keyword recall) with 3-pass repo normalization            | All Org tasks             |
+| `oracle_checks.py`            | Deterministic oracle scoring (file F1, symbol recall, chain recall, provenance, keyword recall) with 3-pass repo normalization            | All Org tasks                    |
 
 ### 7.6 SG-Only Verifier Wrapper (Clone-at-Verify)
 
@@ -513,7 +513,7 @@ The clone manifest (`/tmp/.sg_only_clone_manifest.json`) is written at Docker bu
 | **test-ratio**    | 0.0--1.0    | Bug-fix tasks                                 | Fraction of project test cases passing                                      |
 | **F1-hybrid**     | 0.0--1.0    | Code review                                   | 0.5 × detection_F1 + 0.5 × fix_score                                        |
 | **rubric**        | 0.0--1.0    | Fault localization                            | Points-based rubric (e.g., 10-point for Linux kernel)                       |
-| **oracle-checks** | 0.0--1.0    | Org (artifact)                         | Composite mean of file/symbol/chain/keyword checks                          |
+| **oracle-checks** | 0.0--1.0    | Org (artifact)                                | Composite mean of file/symbol/chain/keyword checks                          |
 | **external**      | 0.0--1.0    | TAC-sourced tasks                             | External evaluator                                                          |
 
 All scoring types produce a single float in [0.0, 1.0] written to `/logs/verifier/reward.txt`. The primary benchmark metric is mean reward across all tasks in a suite.
@@ -755,17 +755,17 @@ git push --force origin orphan-main:main
 
 ### 9.6 Execution Infrastructure
 
-| Component         | Implementation                                 |
-| ----------------- | ---------------------------------------------- |
-| **Runner**        | Harbor (Docker-based task isolation)                          |
+| Component         | Implementation                                                       |
+| ----------------- | -------------------------------------------------------------------- |
+| **Runner**        | Harbor (Docker-based task isolation)                                 |
 | **Cloud Exec**    | Daytona SDK 0.148.0 (default); local Docker for 18 sweap-image tasks |
-| **Agent**         | Claude Code (Claude Haiku 4.5)                               |
-| **MCP Endpoint**  | Sourcegraph `.api/mcp/v1`                                    |
-| **Time Limits**   | 300--1,800 seconds per task                                  |
-| **Parallelism**   | 62 task pairs (124 sandboxes) on Daytona; 12 slots local     |
-| **Multi-Account** | Round-robin across 3 Max subscription accounts               |
-| **Token Auth**    | OAuth with 30-minute refresh margin                          |
-| **Results**       | `runs/staging/` → promote to `runs/official/`                |
+| **Agent**         | Claude Code (Claude Haiku 4.5)                                       |
+| **MCP Endpoint**  | Sourcegraph `.api/mcp/v1`                                            |
+| **Time Limits**   | 300--1,800 seconds per task                                          |
+| **Parallelism**   | 62 task pairs (124 sandboxes) on Daytona; 12 slots local             |
+| **Multi-Account** | Round-robin across 3 Max subscription accounts                       |
+| **Token Auth**    | OAuth with 30-minute refresh margin                                  |
+| **Results**       | `runs/staging/` → promote to `runs/official/`                        |
 
 ---
 
@@ -801,6 +801,7 @@ Reported metrics in Section 11 are computed from valid scored rows and matched b
 ### 11.1 Data Availability
 
 This section reflects the analysis export generated on **March 3, 2026** from `runs/analysis`:
+
 - Valid scored rows in export: **1,281**
 - Total rows in `all_tasks`: **1,822**
 - Paired baseline/MCP tasks with both sides present: **370**
@@ -812,17 +813,17 @@ This analysis set is the basis for all reward, timing, and cost metrics reported
 
 Paired deltas for SDLC suites in the analysis set (computed from per-task means across all available runs, with variance on per-task deltas and 95% bootstrap CIs):
 
-| Suite | n | Mean Reward Delta (MCP - Baseline) | Var(Δ Reward) | 95% CI |
-|-------|---|-------------------------------------|---------------|--------|
-| csb_sdlc_understand | 10 | +0.1148 | 0.089103 | [-0.0415, +0.3147] |
-| csb_sdlc_refactor | 16 | +0.1029 | 0.256679 | [-0.1519, +0.3425] |
-| csb_sdlc_fix | 26 | +0.0986 | 0.055532 | [+0.0165, +0.1967] |
-| csb_sdlc_design | 14 | +0.0514 | 0.091786 | [-0.1051, +0.2131] |
-| csb_sdlc_document | 13 | +0.0415 | 0.007517 | [-0.0038, +0.0900] |
-| csb_sdlc_feature | 23 | +0.0130 | 0.118041 | [-0.1134, +0.1604] |
-| csb_sdlc_test | 18 | -0.0113 | 0.037797 | [-0.0972, +0.0831] |
-| csb_sdlc_debug | 18 | -0.0372 | 0.017479 | [-0.0909, +0.0300] |
-| csb_sdlc_secure | 12 | -0.0500 | 0.012604 | [-0.1167, +0.0104] |
+| Suite               | n   | Mean Reward Delta (MCP - Baseline) | Var(Δ Reward) | 95% CI             |
+| ------------------- | --- | ---------------------------------- | ------------- | ------------------ |
+| csb_sdlc_understand | 10  | +0.1148                            | 0.089103      | [-0.0415, +0.3147] |
+| csb_sdlc_refactor   | 16  | +0.1029                            | 0.256679      | [-0.1519, +0.3425] |
+| csb_sdlc_fix        | 26  | +0.0986                            | 0.055532      | [+0.0165, +0.1967] |
+| csb_sdlc_design     | 14  | +0.0514                            | 0.091786      | [-0.1051, +0.2131] |
+| csb_sdlc_document   | 13  | +0.0415                            | 0.007517      | [-0.0038, +0.0900] |
+| csb_sdlc_feature    | 23  | +0.0130                            | 0.118041      | [-0.1134, +0.1604] |
+| csb_sdlc_test       | 18  | -0.0113                            | 0.037797      | [-0.0972, +0.0831] |
+| csb_sdlc_debug      | 18  | -0.0372                            | 0.017479      | [-0.0909, +0.0300] |
+| csb_sdlc_secure     | 12  | -0.0500                            | 0.012604      | [-0.1167, +0.0104] |
 
 **SDLC total (weighted by paired task count)**: **+0.0363** across **n=150** paired tasks, 95% CI **[-0.0083, +0.0835]**.
 
@@ -830,19 +831,19 @@ Paired deltas for SDLC suites in the analysis set (computed from per-task means 
 
 Paired deltas for Org suites in the analysis set:
 
-| Suite | n | Mean Reward Delta (MCP - Baseline) | Var(Δ Reward) | 95% CI |
-|-------|---|-------------------------------------|---------------|--------|
-| csb_org_incident | 20 | +0.1125 | 0.056807 | [+0.0246, +0.2305] |
-| csb_org_security | 24 | +0.1057 | 0.055106 | [+0.0250, +0.2102] |
-| csb_org_org | 15 | +0.0568 | 0.015604 | [-0.0067, +0.1180] |
-| csb_org_crossrepo_tracing | 22 | +0.0514 | 0.035013 | [-0.0040, +0.1407] |
-| csb_org_migration | 26 | +0.0381 | 0.020784 | [-0.0087, +0.1006] |
-| csb_org_crossorg | 15 | +0.0252 | 0.004410 | [-0.0094, +0.0572] |
-| csb_org_compliance | 18 | +0.0153 | 0.012530 | [-0.0353, +0.0707] |
-| csb_org_onboarding | 28 | +0.0083 | 0.029982 | [-0.0503, +0.0782] |
-| csb_org_domain | 20 | -0.0165 | 0.006946 | [-0.0523, +0.0209] |
-| csb_org_crossrepo | 14 | -0.0242 | 0.003717 | [-0.0558, +0.0073] |
-| csb_org_platform | 18 | -0.0287 | 0.009930 | [-0.0800, +0.0113] |
+| Suite                     | n   | Mean Reward Delta (MCP - Baseline) | Var(Δ Reward) | 95% CI             |
+| ------------------------- | --- | ---------------------------------- | ------------- | ------------------ |
+| csb_org_incident          | 20  | +0.1125                            | 0.056807      | [+0.0246, +0.2305] |
+| csb_org_security          | 24  | +0.1057                            | 0.055106      | [+0.0250, +0.2102] |
+| csb_org_org               | 15  | +0.0568                            | 0.015604      | [-0.0067, +0.1180] |
+| csb_org_crossrepo_tracing | 22  | +0.0514                            | 0.035013      | [-0.0040, +0.1407] |
+| csb_org_migration         | 26  | +0.0381                            | 0.020784      | [-0.0087, +0.1006] |
+| csb_org_crossorg          | 15  | +0.0252                            | 0.004410      | [-0.0094, +0.0572] |
+| csb_org_compliance        | 18  | +0.0153                            | 0.012530      | [-0.0353, +0.0707] |
+| csb_org_onboarding        | 28  | +0.0083                            | 0.029982      | [-0.0503, +0.0782] |
+| csb_org_domain            | 20  | -0.0165                            | 0.006946      | [-0.0523, +0.0209] |
+| csb_org_crossrepo         | 14  | -0.0242                            | 0.003717      | [-0.0558, +0.0073] |
+| csb_org_platform          | 18  | -0.0287                            | 0.009930      | [-0.0800, +0.0113] |
 
 **Org total (weighted by paired task count)**: **+0.0339** across **n=220** paired tasks, 95% CI **[+0.0133, +0.0571]**.
 
@@ -850,15 +851,15 @@ Paired deltas for Org suites in the analysis set:
 
 ### 11.4 Results Summary
 
-| Metric | Value |
-|--------|------------------|
-| Paired tasks | 370 |
-| Overall reward delta | +0.0349 (95% CI: [+0.0130, +0.0579]) |
-| SDLC reward delta | +0.0363 (95% CI: [-0.0083, +0.0835]) |
-| Org reward delta | +0.0339 (95% CI: [+0.0133, +0.0571]) |
-| Reward-delta variance | 0.048985 |
-| Mean wall-clock delta | -36.22s |
-| Mean agent-execution delta | -101.06s |
+| Metric                     | Value                                |
+| -------------------------- | ------------------------------------ |
+| Paired tasks               | 370                                  |
+| Overall reward delta       | +0.0349 (95% CI: [+0.0130, +0.0579]) |
+| SDLC reward delta          | +0.0363 (95% CI: [-0.0083, +0.0835]) |
+| Org reward delta           | +0.0339 (95% CI: [+0.0133, +0.0571]) |
+| Reward-delta variance      | 0.048985                             |
+| Mean wall-clock delta      | -36.22s                              |
+| Mean agent-execution delta | -101.06s                             |
 
 ### 11.5 Information Retrieval Metrics
 
@@ -866,17 +867,18 @@ The retrieval pipeline was rerun over the analysis-set adapter input (`runs/_ana
 
 **Aggregate File-Level IR Metrics:**
 
-| Metric | Mean | Median | Std | n |
-|--------|------|--------|-----|---|
-| File Recall | 0.4598 | 0.4444 | 0.4226 | 311 |
-| MRR | 0.3644 | 0.0833 | 0.4325 | 311 |
-| MAP | 0.2514 | 0.0670 | 0.3451 | 311 |
+| Metric             | Mean   | Median | Std    | n   |
+| ------------------ | ------ | ------ | ------ | --- |
+| File Recall        | 0.4598 | 0.4444 | 0.4226 | 311 |
+| MRR                | 0.3644 | 0.0833 | 0.4325 | 311 |
+| MAP                | 0.2514 | 0.0670 | 0.3451 | 311 |
 | Context Efficiency | 0.1958 | 0.0545 | 0.2658 | 311 |
-| Precision@1 | 0.2926 | 0.0000 | 0.4557 | 311 |
-| Recall@5 | 0.2431 | 0.0000 | 0.3577 | 311 |
-| nDCG@10 | 0.3298 | 0.0000 | 0.3908 | 311 |
+| Precision@1        | 0.2926 | 0.0000 | 0.4557 | 311 |
+| Recall@5           | 0.2431 | 0.0000 | 0.3577 | 311 |
+| nDCG@10            | 0.3298 | 0.0000 | 0.3908 | 311 |
 
 Pipeline coverage summary:
+
 - Event files: **799**
 - Computable tasks: **311**
 - Skipped for missing GT: **488**
@@ -886,16 +888,17 @@ This indicates retrieval quality remains moderate on computable tasks, but groun
 
 **IR aggregates by configuration type (baseline vs MCP):**
 
-| Config Type | n | File Recall | Precision@5 | Recall@5 | F1@5 | MRR |
-|-------------|---|-------------|-------------|----------|------|-----|
-| baseline | 132 | 0.3295 | 0.2121 | 0.2368 | 0.1850 | 0.3462 |
-| mcp | 179 | 0.5558 | 0.2145 | 0.2476 | 0.2001 | 0.3778 |
+| Config Type | n   | File Recall | Precision@5 | Recall@5 | F1@5   | MRR    |
+| ----------- | --- | ----------- | ----------- | -------- | ------ | ------ |
+| baseline    | 132 | 0.3295      | 0.2121      | 0.2368   | 0.1850 | 0.3462 |
+| mcp         | 179 | 0.5558      | 0.2145      | 0.2476   | 0.2001 | 0.3778 |
 
 MCP runs show higher recall and slightly higher ranking/efficiency metrics on computable retrieval tasks.
 
 ### 11.5.1 Retrieval Breakdown on Newly Curated Ground Truth (runs/analysis)
 
 To isolate retrieval quality effects on the currently curated task set, we recomputed baseline-vs-MCP file-level metrics directly from `runs/analysis/**/agent/trajectory.json` and compared:
+
 - pre-existing ground truth (`ground_truth.json` / `oracle_answer.json`), and
 - curated ground truth (`ground_truth_agent.json` / `oracle_answer_agent.json`).
 
@@ -904,48 +907,50 @@ Output artifact: `results/ir/baseline_vs_mcp_breakdown_org_sdlc_runs_analysis_20
 Correction note: an earlier draft of this subsection undercounted Org baseline matches due to path-shape normalization differences (for example `repo/repo/path` vs `repo/path`). Numbers below use corrected canonical exact matching.
 
 Coverage in this analysis set:
+
 - Scored task pairs: **329** (`org=206`, `sdlc=123`)
 - Metrics shown: Precision@5, Recall@5, F1@5, Precision@10, Recall@10, F1@10, and full-set `total_file_recall`
 
 #### Curated Ground Truth (preferred)
 
-| Group | n | P@5 (BL / MCP) | R@5 (BL / MCP) | F1@5 (BL / MCP) | P@10 (BL / MCP) | R@10 (BL / MCP) | F1@10 (BL / MCP) | Total File Recall (BL / MCP) |
-|-------|---:|----------------|----------------|-----------------|-----------------|-----------------|------------------|-------------------------------|
-| Org | 206 | 0.007 / 0.471 | 0.002 / 0.149 | 0.003 / 0.206 | 0.007 / 0.311 | 0.004 / 0.177 | 0.005 / 0.200 | 0.005 / 0.182 |
-| SDLC | 123 | 0.364 / 0.489 | 0.261 / 0.371 | 0.260 / 0.356 | 0.243 / 0.318 | 0.314 / 0.430 | 0.234 / 0.308 | 0.331 / 0.437 |
-| Combined | 329 | 0.140 / 0.478 | 0.099 / 0.232 | 0.099 / 0.262 | 0.095 / 0.313 | 0.120 / 0.272 | 0.091 / 0.240 | 0.127 / 0.277 |
+| Group    |   n | P@5 (BL / MCP) | R@5 (BL / MCP) | F1@5 (BL / MCP) | P@10 (BL / MCP) | R@10 (BL / MCP) | F1@10 (BL / MCP) | Total File Recall (BL / MCP) |
+| -------- | --: | -------------- | -------------- | --------------- | --------------- | --------------- | ---------------- | ---------------------------- |
+| Org      | 206 | 0.007 / 0.471  | 0.002 / 0.149  | 0.003 / 0.206   | 0.007 / 0.311   | 0.004 / 0.177   | 0.005 / 0.200    | 0.005 / 0.182                |
+| SDLC     | 123 | 0.364 / 0.489  | 0.261 / 0.371  | 0.260 / 0.356   | 0.243 / 0.318   | 0.314 / 0.430   | 0.234 / 0.308    | 0.331 / 0.437                |
+| Combined | 329 | 0.140 / 0.478  | 0.099 / 0.232  | 0.099 / 0.262   | 0.095 / 0.313   | 0.120 / 0.272   | 0.091 / 0.240    | 0.127 / 0.277                |
 
 Key interpretation:
+
 - MCP improves retrieval substantially on both benchmark families in the curated set.
 - Largest absolute lift appears on Org tasks, where baseline retrieval against curated oracle is near-zero while MCP reaches meaningful coverage.
 
 #### Pre-existing Ground Truth (for continuity)
 
-| Group | n | P@5 (BL / MCP) | R@5 (BL / MCP) | F1@5 (BL / MCP) | P@10 (BL / MCP) | R@10 (BL / MCP) | F1@10 (BL / MCP) | Total File Recall (BL / MCP) |
-|-------|---:|----------------|----------------|-----------------|-----------------|-----------------|------------------|-------------------------------|
-| Org | 206 | 0.011 / 0.199 | 0.005 / 0.089 | 0.006 / 0.114 | 0.008 / 0.124 | 0.008 / 0.104 | 0.007 / 0.105 | 0.008 / 0.106 |
-| SDLC | 123 | 0.301 / 0.397 | 0.296 / 0.410 | 0.266 / 0.354 | 0.194 / 0.241 | 0.343 / 0.463 | 0.218 / 0.280 | 0.356 / 0.476 |
-| Combined | 329 | 0.119 / 0.273 | 0.114 / 0.209 | 0.103 / 0.204 | 0.078 / 0.167 | 0.133 / 0.238 | 0.086 / 0.170 | 0.138 / 0.244 |
+| Group    |   n | P@5 (BL / MCP) | R@5 (BL / MCP) | F1@5 (BL / MCP) | P@10 (BL / MCP) | R@10 (BL / MCP) | F1@10 (BL / MCP) | Total File Recall (BL / MCP) |
+| -------- | --: | -------------- | -------------- | --------------- | --------------- | --------------- | ---------------- | ---------------------------- |
+| Org      | 206 | 0.011 / 0.199  | 0.005 / 0.089  | 0.006 / 0.114   | 0.008 / 0.124   | 0.008 / 0.104   | 0.007 / 0.105    | 0.008 / 0.106                |
+| SDLC     | 123 | 0.301 / 0.397  | 0.296 / 0.410  | 0.266 / 0.354   | 0.194 / 0.241   | 0.343 / 0.463   | 0.218 / 0.280    | 0.356 / 0.476                |
+| Combined | 329 | 0.119 / 0.273  | 0.114 / 0.209  | 0.103 / 0.204   | 0.078 / 0.167   | 0.133 / 0.238   | 0.086 / 0.170    | 0.138 / 0.244                |
 
 #### Correlation Slices: Multi-Repo and Size Effects
 
 On curated ground truth (`MCP - Baseline`, combined):
 
-| Slice | n | Δ F1@10 | Δ Total File Recall |
-|-------|---:|--------:|--------------------:|
-| single_repo | 158 | +0.0853 | +0.1119 |
-| multi_repo | 171 | +0.2089 | +0.1862 |
+| Slice       |   n | Δ F1@10 | Δ Total File Recall |
+| ----------- | --: | ------: | ------------------: |
+| single_repo | 158 | +0.0853 |             +0.1119 |
+| multi_repo  | 171 | +0.2089 |             +0.1862 |
 
 Curated size-bin deltas (`MCP - Baseline`), using the revised LOC bands shared with prior repo-size analysis:
 
-| Size Bin | n | Δ F1@10 | Δ Total File Recall |
-|------------------|---:|--------:|--------------------:|
-| <400K | 15 | +0.2503 | +0.2780 |
-| 400K-2M | 31 | +0.2618 | +0.2424 |
-| 2M-8M | 143 | +0.1796 | +0.1622 |
-| 8M-40M | 74 | +0.0719 | +0.0590 |
-| >40M | 3 | +0.0242 | +0.0667 |
-| unknown | 63 | +0.0992 | +0.1601 |
+| Size Bin |   n | Δ F1@10 | Δ Total File Recall |
+| -------- | --: | ------: | ------------------: |
+| <400K    |  15 | +0.2503 |             +0.2780 |
+| 400K-2M  |  31 | +0.2618 |             +0.2424 |
+| 2M-8M    | 143 | +0.1796 |             +0.1622 |
+| 8M-40M   |  74 | +0.0719 |             +0.0590 |
+| >40M     |   3 | +0.0242 |             +0.0667 |
+| unknown  |  63 | +0.0992 |             +0.1601 |
 
 These results indicate MCP retrieval gains are larger on multi-repo tasks than single-repo tasks in this analysis set.
 
@@ -955,11 +960,11 @@ Methodology note: size bins are not `context_length` proxies. They are derived f
 
 Correlation was recomputed from the retrieval analysis output (`docs/analysis/ir_analysis_analysis_set_20260303.json`):
 
-| Correlation | Value |
-|-------------|-------|
+| Correlation                              | Value   |
+| ---------------------------------------- | ------- |
 | Spearman rho (MRR delta vs reward delta) | +0.1295 |
-| p-value | 0.1533 |
-| Paired tasks with both retrieval sides | 2 |
+| p-value                                  | 0.1533  |
+| Paired tasks with both retrieval sides   | 2       |
 
 Current interpretation: no statistically significant retrieval-outcome correlation signal yet in the paired subset, largely because paired retrieval coverage is still sparse.
 
@@ -967,26 +972,26 @@ Current interpretation: no statistically significant retrieval-outcome correlati
 
 Per-language results are computed from per-task means (multiple runs averaged first), and variance is reported on per-task reward deltas:
 
-| Language | n | BL Mean | MCP Mean | Δ Reward | Var(Δ Reward) |
-|----------|---|---------|----------|----------|---------------|
-| Go | 134 | 0.459 | 0.511 | +0.052 | 0.049442 |
-| C++ | 73 | 0.481 | 0.490 | +0.008 | 0.026095 |
-| Java | 57 | 0.483 | 0.502 | +0.019 | 0.030897 |
-| Python | 55 | 0.456 | 0.527 | +0.070 | 0.088567 |
-| Rust | 12 | 0.429 | 0.452 | +0.023 | 0.006496 |
-| C | 10 | 0.702 | 0.718 | +0.016 | 0.009334 |
-| JavaScript | 8 | 0.407 | 0.542 | +0.135 | 0.123174 |
-| TypeScript | 7 | 0.588 | 0.448 | -0.140 | 0.013694 |
+| Language   | n   | BL Mean | MCP Mean | Δ Reward | Var(Δ Reward) |
+| ---------- | --- | ------- | -------- | -------- | ------------- |
+| Go         | 134 | 0.459   | 0.511    | +0.052   | 0.049442      |
+| C++        | 73  | 0.481   | 0.490    | +0.008   | 0.026095      |
+| Java       | 57  | 0.483   | 0.502    | +0.019   | 0.030897      |
+| Python     | 55  | 0.456   | 0.527    | +0.070   | 0.088567      |
+| Rust       | 12  | 0.429   | 0.452    | +0.023   | 0.006496      |
+| C          | 10  | 0.702   | 0.718    | +0.016   | 0.009334      |
+| JavaScript | 8   | 0.407   | 0.542    | +0.135   | 0.123174      |
+| TypeScript | 7   | 0.588   | 0.448    | -0.140   | 0.013694      |
 
 Largest positive deltas are in JavaScript/Python/Go; TypeScript remains the strongest negative outlier.
 
 ### 11.8 Reward by Difficulty
 
-| Difficulty | n | BL Mean | MCP Mean | Δ Reward | Var(Δ Reward) |
-|-----------|---|---------|----------|----------|---------------|
-| Hard | 338 | 0.474 | 0.512 | +0.038 | 0.046768 |
-| Expert | 21 | 0.663 | 0.605 | -0.057 | 0.070557 |
-| Medium | 11 | 0.307 | 0.421 | +0.115 | 0.053039 |
+| Difficulty | n   | BL Mean | MCP Mean | Δ Reward | Var(Δ Reward) |
+| ---------- | --- | ------- | -------- | -------- | ------------- |
+| Hard       | 338 | 0.474   | 0.512    | +0.038   | 0.046768      |
+| Expert     | 21  | 0.663   | 0.605    | -0.057   | 0.070557      |
+| Medium     | 11  | 0.307   | 0.421    | +0.115   | 0.053039      |
 
 Difficulty is assigned by the `rescore_difficulty.py` pipeline, which combines code complexity, codebase size, and ground-truth depth into a composite score:
 
@@ -1001,13 +1006,13 @@ The benchmark remains dominated by hard tasks. In this aggregation, hard and med
 
 Codebase-scale analysis now uses cloc-derived repository LOC (`repo_approx_loc`), not GitHub repository size proxies. The canonical LOC bands are shared across reports and selection scripts.
 
-| LOC Band (cloc) | n | BL Mean | MCP Mean | Δ Reward |
-|-----------------|---|---------|----------|----------|
-| <400K | 50 | 0.404 | 0.483 | +0.079 |
-| 400K-2M | 169 | 0.516 | 0.525 | +0.009 |
-| 2M-8M | 129 | 0.433 | 0.433 | +0.000 |
-| 8M-40M | 47 | 0.494 | 0.511 | +0.017 |
-| >40M | 3 | 0.201 | 0.309 | +0.108 |
+| LOC Band (cloc) | n   | BL Mean | MCP Mean | Δ Reward |
+| --------------- | --- | ------- | -------- | -------- |
+| <400K           | 50  | 0.404   | 0.483    | +0.079   |
+| 400K-2M         | 169 | 0.516   | 0.525    | +0.009   |
+| 2M-8M           | 129 | 0.433   | 0.433    | +0.000   |
+| 8M-40M          | 47  | 0.494   | 0.511    | +0.017   |
+| >40M            | 3   | 0.201   | 0.309    | +0.108   |
 
 MCP reward impact is size-dependent: strong positive lift in 400K-2M and moderate lift in 8M-40M and >40M, with mixed signal in smaller/mid bands.
 
@@ -1016,6 +1021,7 @@ MCP reward impact is size-dependent: strong positive lift in 400K-2M and moderat
 Based on all MCP run rows in the analysis set (`n=910`):
 
 **Overall usage:**
+
 - Mean total tool calls per run: 32.12
 - Mean MCP tool calls per run: 22.46
 - Mean local tool calls per run: 9.58
@@ -1026,16 +1032,16 @@ Based on all MCP run rows in the analysis set (`n=910`):
 
 Top tools by total calls:
 
-| Tool | Total Calls |
-|------|-------------|
-| `mcp__sourcegraph__sg_read_file` | 8,605 |
-| `mcp__sourcegraph__sg_keyword_search` | 7,993 |
-| `Bash` | 5,146 |
-| `mcp__sourcegraph__sg_list_files` | 2,449 |
-| `Read` | 1,310 |
-| `Write` | 1,272 |
-| `mcp__sourcegraph__sg_nls_search` | 997 |
-| `Edit` | 715 |
+| Tool                                  | Total Calls |
+| ------------------------------------- | ----------- |
+| `mcp__sourcegraph__sg_read_file`      | 8,605       |
+| `mcp__sourcegraph__sg_keyword_search` | 7,993       |
+| `Bash`                                | 5,146       |
+| `mcp__sourcegraph__sg_list_files`     | 2,449       |
+| `Read`                                | 1,310       |
+| `Write`                               | 1,272       |
+| `mcp__sourcegraph__sg_nls_search`     | 997         |
+| `Edit`                                | 715         |
 
 The dominant pattern is unchanged: keyword search + read-file dominate MCP usage, and Deep Search remains near-zero.
 
@@ -1050,9 +1056,9 @@ Updated cost results are now reported from `runs/official/_raw` with a task-weig
 Source artifact: `docs/analysis/mcp_cost_pairs_official_raw_20260304.json`.
 Figure: `docs/assets/blog/codescalebench_mcp/figure_8_haiku_cost_baseline_vs_mcp.{png,svg}`.
 
-| Model | n paired tasks | BL $/task | MCP $/task | Δ $/task | MCP vs BL |
-|-------|-----------------|-----------|------------|----------|-----------|
-| haiku | 392 | 0.7333 | 0.5121 | -0.2212 | **-30.16%** |
+| Model | n paired tasks | BL $/task | MCP $/task | Δ $/task | MCP vs BL   |
+| ----- | -------------- | --------- | ---------- | -------- | ----------- |
+| haiku | 392            | 0.7333    | 0.5121     | -0.2212  | **-30.16%** |
 
 This is the canonical cost estimate in this report: for haiku (`n=392` valid pairs), MCP reduces average cost per task from **$0.7333** to **$0.5121** (**-30.16%**).
 
@@ -1060,13 +1066,13 @@ This is the canonical cost estimate in this report: for haiku (`n=392` valid pai
 
 Timing summary from the same canonical paired set:
 
-| Metric | Value |
-|--------|-------|
-| Paired tasks with timing deltas | 370 |
-| Baseline mean wall clock | **367.11s** |
-| MCP mean wall clock | **330.89s** |
-| Mean paired wall-clock delta | **−36.22s** |
-| Wall-clock delta (% of means) | **−9.87%** |
+| Metric                            | Value        |
+| --------------------------------- | ------------ |
+| Paired tasks with timing deltas   | 370          |
+| Baseline mean wall clock          | **367.11s**  |
+| MCP mean wall clock               | **330.89s**  |
+| Mean paired wall-clock delta      | **−36.22s**  |
+| Wall-clock delta (% of means)     | **−9.87%**   |
 | Mean paired agent-execution delta | **−101.06s** |
 
 MCP is faster on both wall-clock and agent-execution in the per-task averaged analysis.
@@ -1077,33 +1083,33 @@ MCP is faster on both wall-clock and agent-execution in the per-task averaged an
 
 ### 12.1 Internal Validity
 
-| Threat                        | Mitigation                                                                                                     |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Threat                        | Mitigation                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | **Agent non-determinism**     | 3+ independent runs per task per config; per-task means reduce sampling noise; bootstrap CIs on paired deltas |
-| **Verifier limitations**      | Multiple verifier types per task category; optional LLM judge layer; QA audit process (6 dimensions)           |
-| **Instruction contamination** | Automated checking for MCP/Sourcegraph references in baseline instructions                                     |
-| **Infrastructure confounds**  | Error fingerprinting (12 patterns) separates infra failures from task failures                                 |
-| **Preamble effects**          | V5 preamble isolated: leads with truncation constraint, avoids prescriptive workflow                           |
+| **Verifier limitations**      | Multiple verifier types per task category; optional LLM judge layer; QA audit process (6 dimensions)          |
+| **Instruction contamination** | Automated checking for MCP/Sourcegraph references in baseline instructions                                    |
+| **Infrastructure confounds**  | Error fingerprinting (12 patterns) separates infra failures from task failures                                |
+| **Preamble effects**          | V5 preamble isolated: leads with truncation constraint, avoids prescriptive workflow                          |
 
-In addition to the six-dimension QA framework, we run an explicit ABC audit via `scripts/abc_audit.py` that scores criteria across three dimensions: **Task Validity**, **Outcome Validity**, and **Reporting**. The ABC audit is used as a structured benchmark-quality gate and complements pre-flight/runtime task validation.
+In addition to the six-dimension QA framework, we run an explicit ABC audit via `scripts/evaluation/abc_audit.py` that scores criteria across three dimensions: **Task Validity**, **Outcome Validity**, and **Reporting**. The ABC audit is used as a structured benchmark-quality gate and complements pre-flight/runtime task validation.
 
 ### 12.2 External Validity
 
-| Threat                  | Mitigation                                                                                    |
-| ----------------------- | --------------------------------------------------------------------------------------------- |
-| **Single agent**        | Framework supports 6 agent harnesses (Claude Code, Codex, Cursor, Gemini, Copilot, OpenHands) |
-| **Single MCP provider** | MCP protocol is standardized; framework can accommodate other providers                       |
-| **Task selection bias** | Transparent MCP benefit scoring; systematic selection criteria documented                     |
+| Threat                  | Mitigation                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------- |
+| **Single agent**        | Framework supports 6 agent harnesses (Claude Code, Codex, Cursor, Gemini, Copilot, OpenHands)     |
+| **Single MCP provider** | MCP protocol is standardized; framework can accommodate other providers                           |
+| **Task selection bias** | Transparent MCP benefit scoring; systematic selection criteria documented                         |
 | **Repository coverage** | 50+ repos across 10 languages, including enterprise-scale monorepos; 370 tasks spanning 20 suites |
 
 ### 12.3 Construct Validity
 
-| Threat                                   | Discussion                                                                                  |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **Truncated source vs. real enterprise** | Truncation simulates the MCP use case but doesn't perfectly model partial local context     |
-| **Time limits**                          | Fixed limits may disadvantage MCP when remote API latency adds overhead                     |
-| **Oracle completeness**                  | Closed-world oracles may miss valid alternative solutions                                   |
-| **Scoring normalization**                | Different verifier types (test-ratio, checklist, similarity) may not be directly comparable |
+| Threat                                   | Discussion                                                                                                                                                                      |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Truncated source vs. real enterprise** | Truncation simulates the MCP use case but doesn't perfectly model partial local context                                                                                         |
+| **Time limits**                          | Fixed limits may disadvantage MCP when remote API latency adds overhead                                                                                                         |
+| **Oracle completeness**                  | Closed-world oracles may miss valid alternative solutions                                                                                                                       |
+| **Scoring normalization**                | Different verifier types (test-ratio, checklist, similarity) may not be directly comparable                                                                                     |
 | **Within-task variance**                 | V2 uses 3+ runs per task, enabling per-task averaging that reduces within-task noise; two-level hierarchical bootstrap could further separate task-level and run-level variance |
 
 ---
@@ -1140,14 +1146,14 @@ All current results use Claude Code as the sole agent harness. The framework alr
 | **Bootstrap CI**   | Non-parametric confidence intervals            | Percentile method, 10,000 resamples |
 | **Spearman rank**  | IR metric → reward correlation                 | `retrieval_impact_analysis.py`      |
 
-**Bootstrap CI methodology**: All confidence intervals reported in Section 11 use the percentile bootstrap method on paired deltas of per-task means. For each canonical task, the per-config mean reward is computed across all valid runs (3+ per config). The delta is then `mean(reward_mcp) - mean(reward_baseline)`. The vector of 370 per-task deltas is resampled with replacement 10,000 times (seed=42 for reproducibility), the mean is computed for each resample, and the 2.5th and 97.5th percentiles of the bootstrap distribution define the 95% CI bounds. This non-parametric approach makes no normality assumption, which is appropriate for bounded [0, 1] reward data that often exhibits bimodal distributions. Per-task averaging across multiple runs reduces within-task variance from agent non-determinism. Tasks with infrastructure errors (agent never executed) are excluded from paired analysis. The computation is implemented in `scripts/compute_bootstrap_cis.py` and the core bootstrap function in `scripts/csb_metrics/statistics.py:bootstrap_ci()`.
+**Bootstrap CI methodology**: All confidence intervals reported in Section 11 use the percentile bootstrap method on paired deltas of per-task means. For each canonical task, the per-config mean reward is computed across all valid runs (3+ per config). The delta is then `mean(reward_mcp) - mean(reward_baseline)`. The vector of 370 per-task deltas is resampled with replacement 10,000 times (seed=42 for reproducibility), the mean is computed for each resample, and the 2.5th and 97.5th percentiles of the bootstrap distribution define the 95% CI bounds. This non-parametric approach makes no normality assumption, which is appropriate for bounded [0, 1] reward data that often exhibits bimodal distributions. Per-task averaging across multiple runs reduces within-task variance from agent non-determinism. Tasks with infrastructure errors (agent never executed) are excluded from paired analysis. The computation is implemented in `scripts/analysis/compute_bootstrap_cis.py` and the core bootstrap function in `scripts/csb_metrics/statistics.py:bootstrap_ci()`.
 
 ### Appendix B: Task ID Naming Conventions
 
 | Suite Type    | Pattern                       | Example                         |
 | ------------- | ----------------------------- | ------------------------------- |
 | SDLC          | `{repo}-{desc}-{phase}-{NNN}` | `kubernetes-scheduler-arch-001` |
-| Org    | `ccx-{family}-{NNN}`          | `ccx-dep-trace-001`             |
+| Org           | `ccx-{family}-{NNN}`          | `ccx-dep-trace-001`             |
 | SWE-bench Pro | `{org}__{repo}-{issue}`       | `django__django-16820`          |
 
 ### Appendix C: CodeScaleBench-Org Task ID Registry
@@ -1169,11 +1175,11 @@ All current results use Claude Code as the sole agent harness. The framework alr
 | CrossRepo     | similarity    | `0.4×file_coverage + 0.6×pattern_score`                                     | Cross-repo tasks          |
 | CodeReview    | F1-hybrid     | `0.5×detection_F1 + 0.5×fix_score`                                          | Code review tasks         |
 | LinuxFLBench  | checklist     | 10-point rubric (file 4 + method 3 + reasoning 1 + confidence 1 + fields 1) | Kernel fault localization |
-| Oracle        | oracle-checks | `mean(check_scores)`                                                        | Org tasks          |
+| Oracle        | oracle-checks | `mean(check_scores)`                                                        | Org tasks                 |
 
 ### Appendix E: QA Audit Framework (6 Dimensions)
 
-This report uses two complementary audit layers: (1) the operational six-dimension QA audit below, and (2) an explicit ABC audit (`scripts/abc_audit.py`) across Task Validity, Outcome Validity, and Reporting.
+This report uses two complementary audit layers: (1) the operational six-dimension QA audit below, and (2) an explicit ABC audit (`scripts/evaluation/abc_audit.py`) across Task Validity, Outcome Validity, and Reporting.
 
 | Dimension                               | Focus                                         | Example Finding                           |
 | --------------------------------------- | --------------------------------------------- | ----------------------------------------- |
@@ -1213,7 +1219,7 @@ Pre-commit validation via `scripts/maintenance/repo_health.py`:
 
 | Term                | Definition                                                                           |
 | ------------------- | ------------------------------------------------------------------------------------ |
-| **CSB**             | CodeScaleBench                                                                     |
+| **CSB**             | CodeScaleBench                                                                       |
 | **Harbor**          | Docker-based task isolation runner                                                   |
 | **MCP**             | Model Context Protocol -- standard interface for connecting agents to external tools |
 | **SDLC**            | Software Development Lifecycle                                                       |
@@ -1222,7 +1228,7 @@ Pre-commit validation via `scripts/maintenance/repo_health.py`:
 | **nDCG**            | Normalized Discounted Cumulative Gain                                                |
 | **MAP**             | Mean Average Precision                                                               |
 | **TTFR**            | Time to First Relevant file                                                          |
-| **Oracle**          | Exhaustive ground truth specification for Org tasks                           |
+| **Oracle**          | Exhaustive ground truth specification for Org tasks                                  |
 | **sg-evals**        | GitHub organization hosting version-pinned repository mirrors                        |
 | **Preamble**        | Instructions prepended to task description for MCP-augmented agents                  |
 | **Clone-at-verify** | Pattern where full repo is cloned at verification time (not during agent execution)  |

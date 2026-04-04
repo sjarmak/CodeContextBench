@@ -917,7 +917,7 @@ C tasks have the highest mean reward (0.801), driven by the Linux kernel fault l
 
 The `hard > medium` result here is primarily a composition effect in the paired direct-run subset, not evidence that the difficulty metadata is inverted. Medium has only 21 paired tasks and is concentrated in lower-performing slices (`csb_sdlc_fix`, `csb_sdlc_build`, and `csb_sdlc_test`), while hard has 136 paired tasks spread across several higher-performing suites (`csb_sdlc_document`, `csb_sdlc_understand`, `csb_sdlc_secure`, `csb_sdlc_design`, etc.). Expert remains highest because this bucket is small (13 tasks) and dominated by Linux fault-localization tasks that currently score well under the rubric verifier.
 
-Difficulty metadata is assigned by the deterministic v2 formula used in `scripts/rescore_difficulty.py`:
+Difficulty metadata is assigned by the deterministic v2 formula used in `scripts/evaluation/rescore_difficulty.py`:
 
 ```text
 difficulty_score = 0.40*size_score + 0.35*complexity_score + 0.25*ground_truth_depth_score
@@ -1100,7 +1100,7 @@ The negative correlation between output tokens and reward (-0.187) suggests that
 | **Infrastructure confounds**  | Error fingerprinting (12 patterns) separates infra failures from task failures                                 |
 | **Preamble effects**          | V5 preamble isolated: leads with truncation constraint, avoids prescriptive workflow                           |
 
-In addition to the six-dimension QA framework, we run an explicit ABC audit via `scripts/abc_audit.py` that scores criteria across three dimensions: **Task Validity**, **Outcome Validity**, and **Reporting**. The ABC audit is used as a structured benchmark-quality gate and complements pre-flight/runtime task validation.
+In addition to the six-dimension QA framework, we run an explicit ABC audit via `scripts/evaluation/abc_audit.py` that scores criteria across three dimensions: **Task Validity**, **Outcome Validity**, and **Reporting**. The ABC audit is used as a structured benchmark-quality gate and complements pre-flight/runtime task validation.
 
 ### 12.2 External Validity
 
@@ -1226,7 +1226,7 @@ Major architectural decisions emerged through iterative dialogue:
 | **Bootstrap CI**   | Non-parametric confidence intervals            | Percentile method, 10,000 resamples |
 | **Spearman rank**  | IR metric → reward correlation                 | `retrieval_impact_analysis.py`      |
 
-**Bootstrap CI methodology**: All confidence intervals reported in Section 11 use the percentile bootstrap method on paired deltas. For each task pair, the delta is computed as `reward_mcp - reward_baseline`. The vector of deltas is resampled with replacement 10,000 times (seed=42 for reproducibility), the mean is computed for each resample, and the 2.5th and 97.5th percentiles of the bootstrap distribution define the 95% CI bounds. This non-parametric approach makes no normality assumption, which is appropriate for bounded [0, 1] reward data that often exhibits bimodal distributions. Tasks with infrastructure errors (agent never executed) are excluded from paired analysis. The computation is implemented in `scripts/compute_bootstrap_cis.py` and the core bootstrap function in `scripts/csb_metrics/statistics.py:bootstrap_ci()`.
+**Bootstrap CI methodology**: All confidence intervals reported in Section 11 use the percentile bootstrap method on paired deltas. For each task pair, the delta is computed as `reward_mcp - reward_baseline`. The vector of deltas is resampled with replacement 10,000 times (seed=42 for reproducibility), the mean is computed for each resample, and the 2.5th and 97.5th percentiles of the bootstrap distribution define the 95% CI bounds. This non-parametric approach makes no normality assumption, which is appropriate for bounded [0, 1] reward data that often exhibits bimodal distributions. Tasks with infrastructure errors (agent never executed) are excluded from paired analysis. The computation is implemented in `scripts/analysis/compute_bootstrap_cis.py` and the core bootstrap function in `scripts/csb_metrics/statistics.py:bootstrap_ci()`.
 
 ### Appendix B: Task ID Naming Conventions
 
@@ -1259,7 +1259,7 @@ Major architectural decisions emerged through iterative dialogue:
 
 ### Appendix E: QA Audit Framework (6 Dimensions)
 
-This report uses two complementary audit layers: (1) the operational six-dimension QA audit below, and (2) an explicit ABC audit (`scripts/abc_audit.py`) across Task Validity, Outcome Validity, and Reporting.
+This report uses two complementary audit layers: (1) the operational six-dimension QA audit below, and (2) an explicit ABC audit (`scripts/evaluation/abc_audit.py`) across Task Validity, Outcome Validity, and Reporting.
 
 | Dimension                               | Focus                                         | Example Finding                           |
 | --------------------------------------- | --------------------------------------------- | ----------------------------------------- |

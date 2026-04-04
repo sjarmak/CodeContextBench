@@ -1,0 +1,1421 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>envoy-duplicate-headers-debug-001 - Official Results</title>
+  <style>
+    :root { --bg:#0b1117; --panel:#131d27; --border:#2a3a4a; --text:#e9f0f6; --muted:#9fb1c2; --accent:#4fd39b; }
+    body { margin:0; font-family: ui-sans-serif,system-ui,-apple-system,sans-serif; background:linear-gradient(180deg,#0b1117,#0f1720); color:var(--text); }
+    .wrap { max-width:1200px; margin:0 auto; padding:20px; }
+    h1,h2,h3,h4 { margin:0 0 10px; }
+    .panel { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:14px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+    .metric { background:#0f1821; border:1px solid var(--border); border-radius:10px; padding:10px; }
+    .metric .k { color:var(--muted); font-size:12px; }
+    .metric .v { font-size:20px; margin-top:4px; }
+    .meta { color:var(--muted); font-size:13px; }
+    table { width:100%; border-collapse:collapse; }
+    th,td { border-bottom:1px solid var(--border); padding:8px; text-align:left; vertical-align:top; font-size:13px; }
+    th { color:var(--muted); }
+    code,pre { font-family: ui-monospace,SFMono-Regular,Menlo,monospace; }
+    pre { white-space:pre-wrap; overflow-wrap:anywhere; background:#0d151d; border:1px solid var(--border); border-radius:8px; padding:8px; margin:8px 0; }
+    details { border:1px solid var(--border); border-radius:10px; padding:8px 10px; margin:8px 0; background:#0f1821; }
+    summary { cursor:pointer; color:var(--accent); }
+    a { color:var(--accent); text-decoration:none; }
+    .split { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    @media (max-width: 900px) { .split { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>envoy-duplicate-headers-debug-001</h1>
+    <p class="meta">Suite <code>csb_sdlc_debug</code> | Run <code>debug_haiku_20260301_031844</code> | Config <code>baseline-local-direct</code></p>
+    
+
+    <div class="panel">
+      <h2>Task Information</h2>
+      <div class="grid">
+        <div class="metric"><div class="k">Repositories</div><div class="v" style="font-size:14px">envoyproxy/envoy</div></div>
+        <div class="metric"><div class="k">Task ID</div><div class="v" style="font-size:14px">envoy-duplicate-headers-debug-001</div></div>
+        <div class="metric"><div class="k">Task Category</div><div class="v" style="font-size:14px">deep_causal_chain</div></div>
+        <div class="metric"><div class="k">Agent</div><div class="v" style="font-size:16px">claude-code</div></div>
+        <div class="metric"><div class="k">Model</div><div class="v" style="font-size:16px">claude-haiku-4-5-20251001</div></div>
+      </div>
+      <p class="meta" style="margin-top:10px">Benchmark path: <code>-</code></p>
+      <details>
+        <summary>Repository metadata</summary>
+        <table>
+          <thead><tr><th>Repository</th><th>Primary Language</th><th>Approx Size (LOC)</th></tr></thead>
+          <tbody><tr><td><code>envoyproxy/envoy</code></td><td>cpp</td><td>~1,500,000</td></tr></tbody>
+        </table>
+      </details>
+      <details>
+        <summary>Benchmark metadata</summary>
+        <table>
+          <tbody><tr><td colspan='2'>No benchmark metadata available</td></tr></tbody>
+        </table>
+      </details>
+      <details>
+        <summary>Task instruction sent to agent</summary>
+        <pre># Investigation: Duplicate Response Headers in Envoy Filter Pipeline
+
+**Repository:** envoyproxy/envoy
+**Task Type:** Deep Causal Chain (investigation only — no code fixes)
+
+## Scenario
+
+An Envoy proxy operator reports that response headers configured via `response_headers_to_add` in route configuration are being **duplicated** in certain responses. Specifically, when the router filter generates a local reply (e.g., upstream timeout, connection failure, or request too large), custom response headers like `x-request-id-echo` appear twice in the HTTP response.
+
+The issue is intermittent — it only affects responses where the router itself generates the reply (local replies) rather than forwarding an upstream response. Normal proxied responses have headers added exactly once.
+
+Access log snippet showing the problem (using `%RESPONSE_CODE_DETAILS%` formatter):
+
+```
+[2025-08-15T10:23:45.001Z] &quot;GET /api/v1/data HTTP/1.1&quot; 504 UT
+response_code_details=upstream_response_timeout
+x-custom-trace: abc123
+x-custom-trace: abc123
+```
+
+The header `x-custom-trace` appears twice. The route config has:
+
+```yaml
+response_headers_to_add:
+  - header:
+      key: &quot;x-custom-trace&quot;
+      value: &quot;%REQ(x-request-id)%&quot;
+    append_action: OVERWRITE_IF_EXISTS_OR_ADD
+```
+
+Despite using `OVERWRITE_IF_EXISTS_OR_ADD`, the header is duplicated on local replies but not on proxied upstream responses.
+
+## Your Task
+
+Investigate the root cause of this duplicate header behavior and produce a report at `/logs/agent/investigation.md`.
+
+Your report MUST cover:
+
+1. **How the router filter processes response headers** — specifically the `finalizeResponseHeaders()` call chain and the `modify_headers_` callback
+2. **How local replies are generated** — the `sendLocalReply` code path in the router and how it differs from the upstream response path
+3. **The specific mechanism causing double processing** — which PR/change moved `finalizeResponseHeaders()` into the `modify_headers_` callback, and why this causes double invocation for local replies
+4. **The interaction between `sendLocalReply` and `modify_headers_`** — how `sendLocalReply` calls `finalizeResponseHeaders()` directly, AND the `modify_headers_` callback also calls it, resulting in headers being added twice
+5. **The role of the `append_action` / `append` proto fields** — how `HeaderValueOption` config is parsed in `header_parser.cc`, including the deprecated `append` BoolValue field vs the newer `append_action` enum, and how proto default values affect behavior
+6. **The filter manager&#x27;s encode path** — how `FilterManager::encodeHeaders()` iterates through filters in reverse order and how the header mutation filter interacts with route-level header additions
+7. **Which files and functions form the full causal chain** from symptom (duplicate headers in access log) to root cause (double `finalizeResponseHeaders()` call)
+
+## Output Requirements
+
+Write your investigation report to `/logs/agent/investigation.md` with these sections:
+
+```
+# Investigation Report
+
+## Summary
+&lt;1-2 sentence finding&gt;
+
+## Root Cause
+&lt;Specific file, function, and mechanism&gt;
+
+## Evidence
+&lt;Code references with file paths and line numbers&gt;
+
+## Affected Components
+&lt;List of packages/modules impacted&gt;
+
+## Causal Chain
+&lt;Ordered list: symptom → intermediate hops → root cause&gt;
+
+## Recommendation
+&lt;Fix strategy and diagnostic steps&gt;
+```
+
+## Constraints
+
+- Do NOT write any code fixes
+- Do NOT modify any source files
+- Your job is investigation and analysis only
+- The causal chain spans at least 4 packages: `source/common/router/`, `source/common/http/`, `source/extensions/filters/http/header_mutation/`, and `api/envoy/config/core/v3/`</pre>
+      </details>
+    </div>
+
+    <div class="panel">
+      <h2>Execution Metrics</h2>
+      <div class="grid">
+        <div class="metric"><div class="k">Reward</div><div class="v">0.9400</div></div>
+        <div class="metric"><div class="k">Status</div><div class="v">passed</div></div>
+        <div class="metric"><div class="k">Passed</div><div class="v">True</div></div>
+        <div class="metric"><div class="k">Pass Threshold</div><div class="v">-</div></div>
+        <div class="metric"><div class="k">Scorer Family</div><div class="v">-</div></div>
+        <div class="metric"><div class="k">Output Contract</div><div class="v">-</div></div>
+        <div class="metric"><div class="k">Total Time</div><div class="v">228.4s</div></div>
+        <div class="metric"><div class="k">Agent Time</div><div class="v">202.4s</div></div>
+        <div class="metric"><div class="k">Input Tokens</div><div class="v">4,313,428</div></div>
+        <div class="metric"><div class="k">Output Tokens</div><div class="v">16,956</div></div>
+        <div class="metric"><div class="k">Cache Tokens</div><div class="v">4,312,475</div></div>
+        <div class="metric"><div class="k">Tool Calls</div><div class="v">47</div></div>
+        <div class="metric"><div class="k">MCP Ratio</div><div class="v">0.000</div></div>
+      </div>
+      <p class="meta">Raw traces: <a href='../audits/debug_haiku_20260301_031844--baseline-local-direct--envoy-duplicate-headers-debug-001--243e48407b.json'>audit.json</a> | <a href='../traces/debug_haiku_20260301_031844--baseline-local-direct--envoy-duplicate-headers-debug-001--243e48407b/trajectory.json'>trajectory.json</a> | <a href='../traces/debug_haiku_20260301_031844--baseline-local-direct--envoy-duplicate-headers-debug-001--243e48407b/claude-code.txt'>transcript</a></p>
+      <details>
+        <summary>Tool Breakdown</summary>
+        <table><thead><tr><th>Tool</th><th>Calls</th></tr></thead><tbody><tr><td><code>Bash</code></td><td>29</td></tr><tr><td><code>Read</code></td><td>17</td></tr><tr><td><code>Write</code></td><td>1</td></tr></tbody></table>
+      </details>
+      <details>
+        <summary>Context Metrics (task_metrics / IR analysis)</summary>
+        <h3>Context</h3>
+        <table><tbody><tr><td>context_window_peak_pct</td><td>0.3432</td></tr><tr><td>environment_setup_seconds</td><td>1.201473</td></tr><tr><td>files_modified</td><td>1</td></tr><tr><td>lines_added</td><td>195</td></tr><tr><td>lines_removed</td><td>0</td></tr><tr><td>task_context_length</td><td>900000</td></tr><tr><td>verifier_seconds</td><td>1.721322</td></tr></tbody></table>
+        <h3 style="margin-top:10px">IR</h3>
+        <table><tbody><tr><td>agent_time_to_first_relevant</td><td>13.7</td></tr><tr><td>cost_before_first_relevant</td><td>0.54011</td></tr><tr><td>n_steps_to_first</td><td>5</td></tr><tr><td>output_tokens_before_first_relevant</td><td>29</td></tr><tr><td>tokens_before_first_relevant</td><td>298868</td></tr><tr><td>ttfr</td><td>18.6</td></tr><tr><td>ttfr_step</td><td>5</td></tr></tbody></table>
+      </details>
+    </div>
+
+    <div class="panel">
+      <h2>Agent Trace</h2>
+      <details open>
+        <summary>Conversation History (100)</summary>
+        <table>
+          <thead><tr><th>#</th><th>Timestamp</th><th>Type</th><th>Subtype</th><th>Tool</th><th>Text</th></tr></thead>
+          <tbody><tr><td>1</td><td>-</td><td>system</td><td>init</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>2</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>I&#x27;ll investigate the root cause of duplicate response headers in Envoy&#x27;s filter pipeline. Let me start by exploring the codebase structure and understanding how the response header processing works.</pre></td></tr><tr><td>3</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>4</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>/workspace/contrib/golang/router/cluster_specifier/source/cgo.cc
+/workspace/contrib/golang/router/cluster_specifier/source/config.cc
+/workspace/contrib/golang/router/cluster_specifier/source/golang_cluster_specifier.cc
+/workspace/contrib/golang/router/cluster_specifier/test/golang_integration_test.cc
+/workspace/contrib/rocketmq_proxy/filters/network/source/router/route_matcher.cc
+/workspace/contrib/rocketmq_proxy/filters/network/source/router/router_impl.cc
+/workspace/contrib/rocketmq_proxy/filters/network/test/router_test.cc
+/workspace/contrib/sip_proxy/filters/network/source/router/config.cc
+/workspace/contrib/sip_proxy/filters/network/source/router/router_impl.cc
+/workspace/contrib/sip_proxy/filters/network/test/router_test.cc
+/workspace/mobile/library/common/http/header_utility.cc
+/workspace/mobile/test/cc/integration/receive_headers_test.cc
+/workspace/mobile/test/cc/integration/send_headers_test.cc
+/workspace/mobile/test/common/http/header_utility_test.cc
+/workspace/source/common/http/header_list_view.cc
+/workspace/source/common/http/header_map_impl.cc
+/workspace/source/common/http/header_mutation.cc
+/workspace/source/common/http/header_utility.cc
+/workspace/source/common/http/http1/header_formatter.cc
+/workspace/source/common/router/config_impl.cc</pre></td></tr><tr><td>5</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>6</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>/workspace/source/common/router/config_impl.cc
+/workspace/source/common/router/config_utility.cc
+/workspace/source/common/router/context_impl.cc
+/workspace/source/common/router/debug_config.cc
+/workspace/source/common/router/delegating_route_impl.cc
+/workspace/source/common/router/header_cluster_specifier.cc
+/workspace/source/common/router/header_parser.cc
+/workspace/source/common/router/header_parser_utils.cc
+/workspace/source/common/router/matcher_visitor.cc
+/workspace/source/common/router/metadatamatchcriteria_impl.cc
+/workspace/source/common/router/per_filter_config.cc
+/workspace/source/common/router/rds_impl.cc
+/workspace/source/common/router/reset_header_parser.cc
+/workspace/source/common/router/retry_state_impl.cc
+/workspace/source/common/router/route_config_update_receiver_impl.cc
+/workspace/source/common/router/route_provider_manager.cc
+/workspace/source/common/router/router.cc
+/workspace/source/common/router/router_ratelimit.cc
+/workspace/source/common/router/scoped_config_impl.cc
+/workspace/source/common/router/scoped_rds.cc
+/workspace/source/common/router/shadow_writer_impl.cc
+/workspace/source/common/router/static_route_provider_impl.cc
+/workspace/source/common/router/tls_context_match_criteria_impl.cc
+/workspace/source/common/router/upstream_codec_filter.cc
+/workspace/source/common/router/upstream_request.cc
+/workspace/source/common/router/vhds.cc
+/workspace/source/common/router/weighted_cluster_specifier.cc</pre></td></tr><tr><td>7</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>8</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>EISDIR: illegal operation on a directory, read &#x27;/workspace/source/common/router&#x27;</pre></td></tr><tr><td>9</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>10</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>2345 /workspace/source/common/router/router.cc</pre></td></tr><tr><td>11</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>12</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>442:  // Initialize the `modify_headers_` function that will be used to modify the response headers for
+444:  modify_headers_ = [this](Http::ResponseHeaderMap&amp; headers) {
+449:    if (modify_headers_from_upstream_lb_) {
+450:      modify_headers_from_upstream_lb_(headers);
+453:    route_entry_-&gt;finalizeResponseHeaders(headers, callbacks_-&gt;streamInfo());
+478:    callbacks_-&gt;sendLocalReply(Http::Code::NotFound, &quot;&quot;, nullptr, absl::nullopt,
+488:    callbacks_-&gt;sendLocalReply(
+503:          direct_response-&gt;finalizeResponseHeaders(response_headers, callbacks_-&gt;streamInfo());
+522:    callbacks_-&gt;sendLocalReply(route_entry_-&gt;clusterNotFoundResponseCode(), &quot;&quot;, modify_headers_,
+550:        callbacks_-&gt;sendLocalReply(Http::Code::BadRequest, body, modify_headers_, absl::nullopt,
+568:    callbacks_-&gt;sendLocalReply(
+576:          modify_headers_(headers);
+739:    callbacks_-&gt;sendLocalReply(
+743:          modify_headers_(headers);
+750:    callbacks_-&gt;sendLocalReply(Http::Code::ServiceUnavailable, &quot;envoy overloaded&quot;, modify_headers_,
+931:  callbacks_-&gt;sendLocalReply(Http::Code::ServiceUnavailable, &quot;no healthy upstream&quot;, modify_headers_,
+1002:      callbacks_-&gt;sendLocalReply(
+1004:          modify_headers_, absl::nullopt,
+1058:      callbacks_-&gt;sendLocalReply(
+1060:          &quot;upstream is closed prematurely during decoding data from downstream&quot;, modify_headers_,
+1337:  // sendLocalReply may instead reset the stream if downstream_response_started_ is true.
+1338:  callbacks_-&gt;sendLocalReply(
+1340:      &quot;upstream max stream duration reached&quot;, modify_headers_, absl::nullopt,
+1404:  // sendLocalReply may instead reset the stream if downstream_response_started_ is true.
+1405:  callbacks_-&gt;sendLocalReply(
+1412:        modify_headers_(headers);
+1794:  modify_headers_(*headers);
+2235:      callbac
+... (truncated)</pre></td></tr><tr><td>13</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>14</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>   430→
+   431→void Filter::chargeUpstreamCode(Http::Code code, Upstream::HostDescriptionOptConstRef upstream_host,
+   432→                                bool dropped) {
+   433→  const uint64_t response_status_code = enumToInt(code);
+   434→  const auto fake_response_headers = Http::createHeaderMap&lt;Http::ResponseHeaderMapImpl&gt;(
+   435→      {{Http::Headers::get().Status, std::to_string(response_status_code)}});
+   436→  chargeUpstreamCode(response_status_code, *fake_response_headers, upstream_host, dropped);
+   437→}
+   438→
+   439→Http::FilterHeadersStatus Filter::decodeHeaders(Http::RequestHeaderMap&amp; headers, bool end_stream) {
+   440→  downstream_headers_ = &amp;headers;
+   441→
+   442→  // Initialize the `modify_headers_` function that will be used to modify the response headers for
+   443→  // all upstream responses or local responses.
+   444→  modify_headers_ = [this](Http::ResponseHeaderMap&amp; headers) {
+   445→    if (route_entry_ == nullptr) {
+   446→      return;
+   447→    }
+   448→
+   449→    if (modify_headers_from_upstream_lb_) {
+   450→      modify_headers_from_upstream_lb_(headers);
+   451→    }
+   452→
+   453→    route_entry_-&gt;finalizeResponseHeaders(headers, callbacks_-&gt;streamInfo());
+   454→
+   455→    if (attempt_count_ == 0 || !route_entry_-&gt;includeAttemptCountInResponse()) {
+   456→      return;
+   457→    }
+   458→    // This header is added without checking for config_-&gt;suppress_envoy_headers_ to mirror what
+   459→    // is done for upstream requests.
+   460→    headers.setEnvoyAttemptCount(attempt_count_);
+   461→  };
+   462→
+   463→  // TODO: Maybe add a filter API for this.
+   464→  grpc_request_ = Grpc::Common::isGrpcRequestHeaders(headers);
+   465→  exclude_http_code_stats_ = grpc_request_ &amp;&amp; config_-&gt;suppress_grpc_request_failure_code_stats_;
+ 
+... (truncated)</pre></td></tr><tr><td>15</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>16</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>/workspace/source/common/http/async_client_impl.h
+/workspace/source/common/http/conn_manager_impl.h
+/workspace/source/common/http/filter_chain_helper.h
+/workspace/source/common/http/filter_manager.h
+/workspace/source/common/http/utility.h</pre></td></tr><tr><td>17</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>18</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>197:  void sendLocalReply(Code code, absl::string_view body,
+277:  void sendLocalReply(Code code, absl::string_view body,
+370:  void sendLocalReply(Code code, absl::string_view body,
+789:  virtual void sendLocalReply(Code code, absl::string_view body,
+1212:  void sendLocalReply(Code code, absl::string_view body,
+1243:  void sendLocalReplyViaFilterChain(</pre></td></tr><tr><td>19</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>20</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>348:void ActiveStreamFilterBase::sendLocalReply(
+472:void ActiveStreamDecoderFilter::sendLocalReply(
+982:void DownstreamFilterManager::sendLocalReply(
+1031:      sendLocalReplyViaFilterChain(is_grpc_request, code, body, modify_headers, is_head_request,
+1109:void DownstreamFilterManager::sendLocalReplyViaFilterChain(
+1909:void ActiveStreamEncoderFilter::sendLocalReply(</pre></td></tr><tr><td>21</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>22</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>   982→void DownstreamFilterManager::sendLocalReply(
+   983→    Code code, absl::string_view body,
+   984→    const std::function&lt;void(ResponseHeaderMap&amp; headers)&gt;&amp; modify_headers,
+   985→    const absl::optional&lt;Grpc::Status::GrpcStatus&gt; grpc_status, absl::string_view details) {
+   986→  ASSERT(!state_.under_on_local_reply_);
+   987→  const bool is_head_request = state_.is_head_request_;
+   988→  const bool is_grpc_request = state_.is_grpc_request_;
+   989→
+   990→  // Stop filter chain iteration if local reply was sent while filter decoding or encoding callbacks
+   991→  // are running.
+   992→  if (state_.filter_call_state_ &amp; FilterCallState::IsDecodingMask) {
+   993→    state_.decoder_filter_chain_aborted_ = true;
+   994→  } else if (state_.filter_call_state_ &amp; FilterCallState::IsEncodingMask) {
+   995→    state_.encoder_filter_chain_aborted_ = true;
+   996→  }
+   997→  // When independent half-close is enabled local reply always stops decoder filter chain.
+   998→  if (filter_manager_callbacks_.isHalfCloseEnabled()) {
+   999→    state_.decoder_filter_chain_aborted_ = true;
+  1000→  }
+  1001→
+  1002→  streamInfo().setResponseCodeDetails(details);
+  1003→  StreamFilterBase::LocalReplyData data{code, grpc_status, details, false};
+  1004→  onLocalReply(data);
+  1005→  if (data.reset_imminent_) {
+  1006→    ENVOY_STREAM_LOG(debug, &quot;Resetting stream due to {}. onLocalReply requested reset.&quot;, *this,
+  1007→                     details);
+  1008→    filter_manager_callbacks_.resetStream(Http::StreamResetReason::LocalReset, &quot;&quot;);
+  1009→    return;
+  1010→  }
+  1011→
+  1012→  if (!filter_manager_callbacks_.responseHeaders().has_value() &amp;&amp;
+  1013→      (!filter_manager_callbacks_.informationalHeaders().has_value() ||
+  1014→       !(state_.filter_call_state_ &amp; FilterCallState:
+... (truncated)</pre></td></tr><tr><td>23</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>24</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>  1120→  Utility::sendLocalReply(
+  1121→      state_.destroyed_,
+  1122→      Utility::EncodeFunctions{
+  1123→          [this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {
+  1124→            if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {
+  1125→              streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());
+  1126→            }
+  1127→            if (modify_headers) {
+  1128→              modify_headers(headers);
+  1129→            }
+  1130→          },
+  1131→          [this](ResponseHeaderMap&amp; response_headers, Code&amp; code, std::string&amp; body,
+  1132→                 absl::string_view&amp; content_type) -&gt; void {
+  1133→            local_reply_.rewrite(filter_manager_callbacks_.requestHeaders().ptr(), response_headers,
+  1134→                                 streamInfo(), code, body, content_type);
+  1135→          },
+  1136→          [this](ResponseHeaderMapPtr&amp;&amp; headers, bool end_stream) -&gt; void {
+  1137→            filter_manager_callbacks_.setResponseHeaders(std::move(headers));
+  1138→            encodeHeaders(nullptr, filter_manager_callbacks_.responseHeaders().ref(), end_stream);
+  1139→          },
+  1140→          [this](Buffer::Instance&amp; data, bool end_stream) -&gt; void {
+  1141→            encodeData(nullptr, data, end_stream,
+  1142→                       FilterManager::FilterIterationStartState::CanStartFromCurrent);
+  1143→          }},
+  1144→      Utility::LocalReplyData{is_grpc_request, code, body, grpc_status, is_head_request});
+  1145→}
+  1146→
+  1147→void DownstreamFilterManager::sendDirectLocalReply(
+  1148→    Code code, absl::string_view body,
+  1149→    const std::function&lt;void(ResponseHeaderMap&amp;)&gt;&amp; modify_headers, bool is_head_request,
+
+&lt;system-reminder&gt;
+Whenever you read a file, you shou
+... (truncated)</pre></td></tr><tr><td>25</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>26</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>502:void ActiveStreamDecoderFilter::encodeHeaders(ResponseHeaderMapPtr&amp;&amp; headers, bool end_stream,
+1244:void FilterManager::encodeHeaders(ActiveStreamEncoderFilter* filter, ResponseHeaderMap&amp; headers,</pre></td></tr><tr><td>27</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>28</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>  1244→void FilterManager::encodeHeaders(ActiveStreamEncoderFilter* filter, ResponseHeaderMap&amp; headers,
+  1245→                                  bool end_stream) {
+  1246→  // See encodeHeaders() comments in envoy/http/filter.h for why the 1xx precondition holds.
+  1247→  ASSERT(!CodeUtility::is1xx(Utility::getResponseStatus(headers)) ||
+  1248→         Utility::getResponseStatus(headers) == enumToInt(Http::Code::SwitchingProtocols));
+  1249→  filter_manager_callbacks_.resetIdleTimer();
+  1250→  disarmRequestTimeout();
+  1251→
+  1252→  // Headers filter iteration should always start with the next filter if available.
+  1253→  StreamEncoderFilters::Iterator entry =
+  1254→      commonEncodePrefix(filter, end_stream, FilterIterationStartState::AlwaysStartFromNext);
+  1255→  StreamEncoderFilters::Iterator continue_data_entry = encoder_filters_.end();
+  1256→
+  1257→  for (; entry != encoder_filters_.end(); entry++) {
+  1258→    ENVOY_EXECUTION_SCOPE(trackedStream(), &amp;(*entry)-&gt;filter_context_);
+  1259→    ASSERT(!(state_.filter_call_state_ &amp; FilterCallState::EncodeHeaders));
+  1260→    state_.filter_call_state_ |= FilterCallState::EncodeHeaders;
+  1261→    (*entry)-&gt;end_stream_ = (end_stream &amp;&amp; continue_data_entry == encoder_filters_.end());
+  1262→    if ((*entry)-&gt;end_stream_) {
+  1263→      state_.filter_call_state_ |= FilterCallState::EndOfStream;
+  1264→    }
+  1265→    FilterHeadersStatus status = (*entry)-&gt;handle_-&gt;encodeHeaders(headers, (*entry)-&gt;end_stream_);
+  1266→    if (state_.encoder_filter_chain_aborted_) {
+  1267→      ENVOY_STREAM_LOG(trace,
+  1268→                       &quot;encodeHeaders filter iteration aborted due to local reply: filter={}&quot;,
+  1269→                       *this, (*entry)-&gt;filter_context_.config_name);
+  1270→      status = FilterHeadersStat
+... (truncated)</pre></td></tr><tr><td>29</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>30</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>/workspace/source/extensions/filters/http/header_mutation
+/workspace/source/extensions/filters/http/header_to_metadata</pre></td></tr><tr><td>31</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>32</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>/workspace/source/extensions/filters/http/header_mutation/config.cc
+/workspace/source/extensions/filters/http/header_mutation/header_mutation.cc</pre></td></tr><tr><td>33</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>34</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>     1→#include &quot;source/extensions/filters/http/header_mutation/header_mutation.h&quot;
+     2→
+     3→#include &lt;cstdint&gt;
+     4→#include &lt;memory&gt;
+     5→
+     6→#include &quot;source/common/config/utility.h&quot;
+     7→#include &quot;source/common/http/header_map_impl.h&quot;
+     8→#include &quot;source/common/http/utility.h&quot;
+     9→
+    10→namespace Envoy {
+    11→namespace Extensions {
+    12→namespace HttpFilters {
+    13→namespace HeaderMutation {
+    14→
+    15→void QueryParameterMutationAppend::mutateQueryParameter(
+    16→    Http::Utility::QueryParamsMulti&amp; params, const Formatter::HttpFormatterContext&amp; context,
+    17→    const StreamInfo::StreamInfo&amp; stream_info) const {
+    18→
+    19→  switch (action_) {
+    20→    PANIC_ON_PROTO_ENUM_SENTINEL_VALUES;
+    21→  case ParameterAppendProto::APPEND_IF_EXISTS_OR_ADD:
+    22→    params.add(key_, formatter_-&gt;formatWithContext(context, stream_info));
+    23→    return;
+    24→  case ParameterAppendProto::ADD_IF_ABSENT: {
+    25→    auto iter = params.data().find(key_);
+    26→    if (iter == params.data().end()) {
+    27→      params.add(key_, formatter_-&gt;formatWithContext(context, stream_info));
+    28→    }
+    29→    break;
+    30→  }
+    31→  case ParameterAppendProto::OVERWRITE_IF_EXISTS: {
+    32→    auto iter = params.data().find(key_);
+    33→    if (iter != params.data().end()) {
+    34→      params.overwrite(key_, formatter_-&gt;formatWithContext(context, stream_info));
+    35→    }
+    36→    break;
+    37→  }
+    38→  case ParameterAppendProto::OVERWRITE_IF_EXISTS_OR_ADD:
+    39→    params.overwrite(key_, formatter_-&gt;formatWithContext(context, stream_info));
+    40→    break;
+    41→  }
+    42→}
+    43→
+    44→Mutations::Mutations(const MutationsProto&amp; config, absl::Status&amp; creation_status) {
+    45→  auto request_mutations_or_error =
+... (truncated)</pre></td></tr><tr><td>35</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Let me check how the normal upstream response path handles this:</pre></td></tr><tr><td>36</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>37</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>{&quot;interrupted&quot;: false, &quot;isImage&quot;: false, &quot;noOutputExpected&quot;: false, &quot;stderr&quot;: &quot;&quot;, &quot;stdout&quot;: &quot;&quot;}</pre></td></tr><tr><td>38</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>39</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>1650:void Filter::onUpstreamHeaders(uint64_t response_code, Http::ResponseHeaderMapPtr&amp;&amp; headers,
+1943:    Http::RequestHeaderMap&amp; downstream_headers, const Http::ResponseHeaderMap&amp; upstream_headers,
+2005:    Http::HeaderMap::GetResult result = upstream_headers.get(header);</pre></td></tr><tr><td>40</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>41</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>  1650→void Filter::onUpstreamHeaders(uint64_t response_code, Http::ResponseHeaderMapPtr&amp;&amp; headers,
+  1651→                               UpstreamRequest&amp; upstream_request, bool end_stream) {
+  1652→  ENVOY_STREAM_LOG(debug, &quot;upstream headers complete: end_stream={}&quot;, *callbacks_, end_stream);
+  1653→
+  1654→  ASSERT(!host_selection_cancelable_);
+  1655→
+  1656→  // When grpc-status appears in response headers, convert grpc-status to HTTP status code
+  1657→  // for outlier detection. This does not currently change any stats or logging and does not
+  1658→  // handle the case when an error grpc-status is sent as a trailer.
+  1659→  absl::optional&lt;Grpc::Status::GrpcStatus&gt; grpc_status;
+  1660→  uint64_t grpc_to_http_status = 0;
+  1661→  if (grpc_request_) {
+  1662→    grpc_status = Grpc::Common::getGrpcStatus(*headers);
+  1663→    if (grpc_status.has_value()) {
+  1664→      grpc_to_http_status = Grpc::Utility::grpcToHttpStatus(grpc_status.value());
+  1665→    }
+  1666→  }
+  1667→
+  1668→  maybeProcessOrcaLoadReport(*headers, upstream_request);
+  1669→
+  1670→  const uint64_t put_result_code = grpc_status.has_value() ? grpc_to_http_status : response_code;
+  1671→  upstream_request.upstreamHost()-&gt;outlierDetector().putResult(
+  1672→      put_result_code &gt;= 500 ? Upstream::Outlier::Result::ExtOriginRequestFailed
+  1673→                             : Upstream::Outlier::Result::ExtOriginRequestSuccess,
+  1674→      put_result_code);
+  1675→
+  1676→  if (headers-&gt;EnvoyImmediateHealthCheckFail() != nullptr) {
+  1677→    upstream_request.upstreamHost()-&gt;healthChecker().setUnhealthy(
+  1678→        Upstream::HealthCheckHostMonitor::UnhealthyType::ImmediateHealthCheckFail);
+  1679→  }
+  1680→
+  1681→  bool could_not_retry = false;
+  1682→
+  1683→  // Check if this upstream reques
+... (truncated)</pre></td></tr><tr><td>42</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>43</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>     1→#include &quot;source/common/router/header_parser.h&quot;
+     2→
+     3→#include &lt;cctype&gt;
+     4→#include &lt;memory&gt;
+     5→#include &lt;regex&gt;
+     6→#include &lt;string&gt;
+     7→
+     8→#include &quot;envoy/config/core/v3/base.pb.h&quot;
+     9→
+    10→#include &quot;source/common/common/assert.h&quot;
+    11→#include &quot;source/common/formatter/substitution_formatter.h&quot;
+    12→#include &quot;source/common/http/header_utility.h&quot;
+    13→#include &quot;source/common/http/headers.h&quot;
+    14→#include &quot;source/common/json/json_loader.h&quot;
+    15→#include &quot;source/common/protobuf/utility.h&quot;
+    16→
+    17→#include &quot;absl/strings/str_cat.h&quot;
+    18→#include &quot;absl/strings/str_replace.h&quot;
+    19→
+    20→namespace Envoy {
+    21→namespace Router {
+    22→
+    23→namespace {
+    24→
+    25→absl::StatusOr&lt;Formatter::FormatterPtr&gt;
+    26→parseHttpHeaderFormatter(const envoy::config::core::v3::HeaderValue&amp; header_value) {
+    27→  const std::string&amp; key = header_value.key();
+    28→  // PGV constraints provide this guarantee.
+    29→  ASSERT(!key.empty());
+    30→  // We reject :path/:authority rewriting, there is already a well defined mechanism to
+    31→  // perform this in the RouteAction, and doing this via request_headers_to_add
+    32→  // will cause us to have to worry about interaction with other aspects of the
+    33→  // RouteAction, e.g. prefix rewriting. We also reject other :-prefixed
+    34→  // headers, since it seems dangerous and there doesn&#x27;t appear a use case.
+    35→  // Host is disallowed as it created confusing and inconsistent behaviors for
+    36→  // HTTP/1 and HTTP/2. It could arguably be allowed on the response path.
+    37→  if (!Http::HeaderUtility::isModifiableHeader(key)) {
+    38→    return absl::InvalidArgumentError(&quot;:-prefixed or host headers may not be modified&quot;);
+    39→  }
+    40→
+    41→  // UP
+... (truncated)</pre></td></tr><tr><td>44</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>45</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>139:void HeaderParser::evaluateHeaders(Http::HeaderMap&amp; headers,
+142:  evaluateHeaders(headers, context, &amp;stream_info);
+145:void HeaderParser::evaluateHeaders(Http::HeaderMap&amp; headers,</pre></td></tr><tr><td>46</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>47</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>   139→void HeaderParser::evaluateHeaders(Http::HeaderMap&amp; headers,
+   140→                                   const Formatter::HttpFormatterContext&amp; context,
+   141→                                   const StreamInfo::StreamInfo&amp; stream_info) const {
+   142→  evaluateHeaders(headers, context, &amp;stream_info);
+   143→}
+   144→
+   145→void HeaderParser::evaluateHeaders(Http::HeaderMap&amp; headers,
+   146→                                   const Formatter::HttpFormatterContext&amp; context,
+   147→                                   const StreamInfo::StreamInfo* stream_info) const {
+   148→  // Removing headers in the headers_to_remove_ list first makes
+   149→  // remove-before-add the default behavior as expected by users.
+   150→  for (const auto&amp; header : headers_to_remove_) {
+   151→    headers.remove(header);
+   152→  }
+   153→
+   154→  // Temporary storage to hold evaluated values of headers to add and replace. This is required
+   155→  // to execute all formatters using the original received headers.
+   156→  // Only after all the formatters produced the new values of the headers, the headers are set.
+   157→  // absl::InlinedVector is optimized for 4 headers. After that it behaves as normal std::vector.
+   158→  // It is assumed that most of the use cases will add or modify fairly small number of headers
+   159→  // (&lt;=4). If this assumption changes, the number of inlined capacity should be increased.
+   160→  // header_formatter_speed_test.cc provides micro-benchmark for evaluating speed of adding and
+   161→  // replacing headers and should be used when modifying the code below to access the performance
+   162→  // impact of code changes.
+   163→  absl::InlinedVector&lt;std::pair&lt;const Http::LowerCaseString&amp;, const std::string&gt;, 4&gt; headers_to_add,
+   164→      headers_to_ove
+... (truncated)</pre></td></tr><tr><td>48</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>49</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>95:  void setReferenceKey(const LowerCaseString&amp; key, absl::string_view value);
+400:  void setReferenceKey(const LowerCaseString&amp; key, absl::string_view value) override {</pre></td></tr><tr><td>50</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>51</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>264:void HeaderMapImpl::addReferenceKey(const LowerCaseString&amp; key, uint64_t value) {
+272:void HeaderMapImpl::addReferenceKey(const LowerCaseString&amp; key, absl::string_view value) {
+321:void HeaderMapImpl::setReferenceKey(const LowerCaseString&amp; key, absl::string_view value) {</pre></td></tr><tr><td>52</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>53</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>   321→void HeaderMapImpl::setReferenceKey(const LowerCaseString&amp; key, absl::string_view value) {
+   322→  remove(key);
+   323→  addReferenceKey(key, value);
+   324→}
+   325→
+   326→void HeaderMapImpl::setCopy(const LowerCaseString&amp; key, absl::string_view value) {
+   327→  remove(key);
+   328→  addCopy(key, value);
+   329→}
+   330→
+   331→uint64_t HeaderMapImpl::byteSize() const { return cached_byte_size_; }
+   332→
+   333→void HeaderMapImpl::verifyByteSizeInternalForTest() const {
+   334→  // Computes the total byte size by summing the byte size of the keys and values.
+   335→  uint64_t byte_size = 0;
+   336→  for (const HeaderEntryImpl&amp; header : headers_) {
+   337→    byte_size += header.key().size();
+   338→    byte_size += header.value().size();
+   339→  }
+   340→  ASSERT(cached_byte_size_ == byte_size);
+   341→}
+   342→
+   343→HeaderMap::GetResult HeaderMapImpl::get(const LowerCaseString&amp; key) const {
+   344→  return HeaderMap::GetResult(const_cast&lt;HeaderMapImpl*&gt;(this)-&gt;getExisting(key));
+   345→}
+   346→
+   347→HeaderMap::NonConstGetResult HeaderMapImpl::getExisting(absl::string_view key) {
+   348→  // Attempt a trie lookup first to see if the user is requesting an O(1) header. This may be
+   349→  // relatively common in certain header matching / routing patterns.
+   350→  // TODO(mattklein123): Add inline handle support directly to the header matcher code to support
+   351→  // this use case more directly.
+   352→  HeaderMap::NonConstGetResult ret;
+   353→  auto lookup = staticLookup(key);
+   354→  if (lookup.has_value()) {
+   355→    if (*lookup.value().entry_ != nullptr) {
+   356→      ret.push_back(*lookup.value().entry_);
+   357→    }
+   358→    return ret;
+   359→  }
+   360→
+   361→  // If the requested header is not an O(1) header try using the lazy map t
+... (truncated)</pre></td></tr><tr><td>54</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>55</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>   272→void HeaderMapImpl::addReferenceKey(const LowerCaseString&amp; key, absl::string_view value) {
+   273→  HeaderString ref_key(key);
+   274→  HeaderString new_value;
+   275→  new_value.setCopy(value);
+   276→  insertByKey(std::move(ref_key), std::move(new_value));
+   277→  ASSERT(new_value.empty()); // NOLINT(bugprone-use-after-move)
+   278→}
+   279→
+   280→void HeaderMapImpl::addCopy(const LowerCaseString&amp; key, uint64_t value) {
+   281→  // In the case that the header is appended, we will perform a needless copy of the key and value.
+   282→  // This is done on purpose to keep the code simple and should be rare.
+   283→  HeaderString new_key;
+   284→  new_key.setCopy(key.get());
+   285→  HeaderString new_value;
+   286→  new_value.setInteger(value);
+   287→  insertByKey(std::move(new_key), std::move(new_value));
+   288→  ASSERT(new_key.empty());   // NOLINT(bugprone-use-after-move)
+   289→  ASSERT(new_value.empty()); // NOLINT(bugprone-use-after-move)
+   290→}
+   291→
+   292→void HeaderMapImpl::addCopy(const LowerCaseString&amp; key, absl::string_view value) {
+   293→  // In the case that the header is appended, we will perform a needless copy of the key and value.
+   294→  // This is done on purpose to keep the code simple and should be rare.
+   295→  HeaderString new_key;
+   296→  new_key.setCopy(key.get());
+   297→  HeaderString new_value;
+   298→  new_value.setCopy(value);
+   299→  insertByKey(std::move(new_key), std::move(new_value));
+   300→  ASSERT(new_key.empty());   // NOLINT(bugprone-use-after-move)
+   301→  ASSERT(new_value.empty()); // NOLINT(bugprone-use-after-move)
+   302→}
+   303→
+   304→void HeaderMapImpl::appendCopy(const LowerCaseString&amp; key, absl::string_view value) {
+   305→  // TODO(#9221): converge on and document a policy for coalescing multiple head
+... (truncated)</pre></td></tr><tr><td>56</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>57</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>/workspace/api/envoy/api/v2/core/base.proto
+/workspace/api/envoy/api/v2/core/health_check.proto
+/workspace/api/envoy/api/v2/route/route_components.proto
+/workspace/api/envoy/api/v2/route.proto
+/workspace/api/envoy/config/common/mutation_rules/v3/mutation_rules.proto</pre></td></tr><tr><td>58</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>59</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>/workspace/api/envoy/config/core/v3/base.proto
+/workspace/api/envoy/config/core/v3/health_check.proto
+/workspace/api/envoy/config/core/v3/http_service.proto</pre></td></tr><tr><td>60</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>61</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>message HeaderValueOption {
+  option (udpa.annotations.versioning).previous_message_type =
+      &quot;envoy.api.v2.core.HeaderValueOption&quot;;
+
+  // Describes the supported actions types for header append action.
+  enum HeaderAppendAction {
+    // If the header already exists, this action will result in:
+    //
+    // - Comma-concatenated for predefined inline headers.
+    // - Duplicate header added in the ``HeaderMap`` for other headers.
+    //
+    // If the header doesn&#x27;t exist then this will add new header with specified key and value.
+    APPEND_IF_EXISTS_OR_ADD = 0;
+
+    // This action will add the header if it doesn&#x27;t already exist. If the header
+    // already exists then this will be a no-op.
+    ADD_IF_ABSENT = 1;
+
+    // This action will overwrite the specified value by discarding any existing values if
+    // the header already exists. If the header doesn&#x27;t exist then this will add the header
+    // with specified key and value.
+    OVERWRITE_IF_EXISTS_OR_ADD = 2;
+
+    // This action will overwrite the specified value by discarding any existing values if
+    // the header already exists. If the header doesn&#x27;t exist then this will be no-op.
+    OVERWRITE_IF_EXISTS = 3;
+  }
+
+  // Header name/value pair that this option applies to.
+  HeaderValue header = 1 [(validate.rules).message = {required: true}];</pre></td></tr><tr><td>62</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>63</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>  // Describes the supported actions types for header append action.
+  enum HeaderAppendAction {
+    // If the header already exists, this action will result in:
+    //
+    // - Comma-concatenated for predefined inline headers.
+    // - Duplicate header added in the ``HeaderMap`` for other headers.
+    //
+    // If the header doesn&#x27;t exist then this will add new header with specified key and value.
+    APPEND_IF_EXISTS_OR_ADD = 0;
+
+    // This action will add the header if it doesn&#x27;t already exist. If the header
+--
+  // Should the value be appended? If true (default), the value is appended to
+  // existing values. Otherwise it replaces any existing values.
+  // This field is deprecated and please use
+  // :ref:`append_action &lt;envoy_v3_api_field_config.core.v3.HeaderValueOption.append_action&gt;` as replacement.
+  //
+  // .. note::
+  //   The :ref:`external authorization service &lt;envoy_v3_api_msg_service.auth.v3.CheckResponse&gt;` and
+  //   :ref:`external processor service &lt;envoy_v3_api_msg_service.ext_proc.v3.ProcessingResponse&gt;` have
+  //   default value (``false``) for this field.
+  google.protobuf.BoolValue append = 2
+      [deprecated = true, (envoy.annotations.deprecated_at_minor_version) = &quot;3.0&quot;];
+
+  // Describes the action taken to append/overwrite the given value for an existing header
+  // or to only add this header if it&#x27;s absent.
+  // Value defaults to :ref:`APPEND_IF_EXISTS_OR_ADD
+  // &lt;envoy_v3_api_enum_value_config.core.v3.HeaderValueOption.HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD&gt;`.
+  HeaderAppendAction append_action = 3 [(validate.rules).enum = {defined_only: true}];
+
+  // Is the header value allowed to be empty? If false (default), custom headers with empty values are dropped,
+  // otherwise they are added.</pre></td></tr><tr><td>64</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>65</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>    53→HeadersToAddEntry::HeadersToAddEntry(const HeaderValueOption&amp; header_value_option,
+    54→                                     absl::Status&amp; creation_status)
+    55→    : original_value_(header_value_option.header().value()),
+    56→      add_if_empty_(header_value_option.keep_empty_value()) {
+    57→
+    58→  if (header_value_option.has_append()) {
+    59→    // &#x27;append&#x27; is set and ensure the &#x27;append_action&#x27; value is equal to the default value.
+    60→    if (header_value_option.append_action() != HeaderValueOption::APPEND_IF_EXISTS_OR_ADD) {
+    61→      creation_status =
+    62→          absl::InvalidArgumentError(&quot;Both append and append_action are set and it&#x27;s not allowed&quot;);
+    63→      return;
+    64→    }
+    65→
+    66→    append_action_ = header_value_option.append().value()
+    67→                         ? HeaderValueOption::APPEND_IF_EXISTS_OR_ADD
+    68→                         : HeaderValueOption::OVERWRITE_IF_EXISTS_OR_ADD;
+    69→  } else {
+    70→    append_action_ = header_value_option.append_action();
+    71→  }
+    72→
+    73→  auto formatter_or_error = parseHttpHeaderFormatter(header_value_option.header());
+    74→  SET_AND_RETURN_IF_NOT_OK(formatter_or_error.status(), creation_status);
+    75→  formatter_ = std::move(formatter_or_error.value());
+    76→}
+    77→
+    78→HeadersToAddEntry::HeadersToAddEntry(const HeaderValue&amp; header_value,
+    79→                                     HeaderAppendAction append_action,
+    80→                                     absl::Status&amp; creation_status)
+    81→    : original_value_(header_value.value()), append_action_(append_action) {
+    82→  auto formatter_or_error = parseHttpHeaderFormatter(header_value);
+
+&lt;system-reminder&gt;
+Whenever you read a file, you should consider whether it would be considered mal
+... (truncated)</pre></td></tr><tr><td>66</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>67</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>{&quot;interrupted&quot;: false, &quot;isImage&quot;: false, &quot;noOutputExpected&quot;: false, &quot;stderr&quot;: &quot;&quot;, &quot;stdout&quot;: &quot;&quot;}</pre></td></tr><tr><td>68</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>69</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>cd2f65a Mirror of envoyproxy/envoy at 3c50075376e9f9400e5499347a097caae94b8a40</pre></td></tr><tr><td>70</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>71</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>/workspace/source/common/router/config_impl.h:  void finalizeResponseHeaders(Http::ResponseHeaderMap&amp;,
+/workspace/source/common/router/config_impl.h:  void finalizeResponseHeaders(Http::ResponseHeaderMap&amp; headers,
+/workspace/source/common/router/delegating_route_impl.h:  void finalizeResponseHeaders(Http::ResponseHeaderMap&amp; headers,</pre></td></tr><tr><td>72</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>73</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>942:void RouteEntryImplBase::finalizeResponseHeaders(Http::ResponseHeaderMap&amp; headers,</pre></td></tr><tr><td>74</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>75</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>   942→void RouteEntryImplBase::finalizeResponseHeaders(Http::ResponseHeaderMap&amp; headers,
+   943→                                                 const StreamInfo::StreamInfo&amp; stream_info) const {
+   944→  for (const HeaderParser* header_parser : getResponseHeaderParsers(
+   945→           /*specificity_ascend=*/vhost_-&gt;globalRouteConfig().mostSpecificHeaderMutationsWins())) {
+   946→    // Later evaluated header parser wins.
+   947→    header_parser-&gt;evaluateHeaders(headers, {stream_info.getRequestHeaders(), &amp;headers},
+   948→                                   stream_info);
+   949→  }
+   950→}
+   951→
+   952→Http::HeaderTransforms
+   953→RouteEntryImplBase::responseHeaderTransforms(const StreamInfo::StreamInfo&amp; stream_info,
+   954→                                             bool do_formatting) const {
+   955→  Http::HeaderTransforms transforms;
+   956→  for (const HeaderParser* header_parser : getResponseHeaderParsers(
+   957→           /*specificity_ascend=*/vhost_-&gt;globalRouteConfig().mostSpecificHeaderMutationsWins())) {
+   958→    // Later evaluated header parser wins.
+   959→    mergeTransforms(transforms, header_parser-&gt;getHeaderTransforms(stream_info, do_formatting));
+   960→  }
+   961→  return transforms;
+   962→}
+   963→
+   964→Http::HeaderTransforms
+   965→RouteEntryImplBase::requestHeaderTransforms(const StreamInfo::StreamInfo&amp; stream_info,
+   966→                                            bool do_formatting) const {
+   967→  Http::HeaderTransforms transforms;
+   968→  for (const HeaderParser* header_parser : getRequestHeaderParsers(
+   969→           /*specificity_ascend=*/vhost_-&gt;globalRouteConfig().mostSpecificHeaderMutationsWins())) {
+   970→    // Later evaluated header parser wins.
+   971→    mergeTransforms(transforms, header_parser-&gt;getHeaderTransf
+... (truncated)</pre></td></tr><tr><td>76</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Let me trace through the exact flow more carefully by looking at where `sendLocalReply` is called in the router:</pre></td></tr><tr><td>77</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>78</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>   550→        callbacks_-&gt;sendLocalReply(Http::Code::BadRequest, body, modify_headers_, absl::nullopt,
+   551→                                   details);
+   552→        return Http::FilterHeadersStatus::StopIteration;
+   553→      }
+   554→    }
+   555→  }
+   556→
+   557→  const Http::HeaderEntry* request_alt_name = headers.EnvoyUpstreamAltStatName();
+   558→  if (request_alt_name) {
+   559→    alt_stat_prefix_ = std::make_unique&lt;Stats::StatNameDynamicStorage&gt;(
+   560→        request_alt_name-&gt;value().getStringView(), config_-&gt;scope_.symbolTable());
+   561→    headers.removeEnvoyUpstreamAltStatName();
+   562→  }
+   563→
+   564→  // See if we are supposed to immediately kill some percentage of this cluster&#x27;s traffic.
+   565→  if (cluster_-&gt;maintenanceMode()) {
+   566→    callbacks_-&gt;streamInfo().setResponseFlag(StreamInfo::CoreResponseFlag::UpstreamOverflow);
+   567→    chargeUpstreamCode(Http::Code::ServiceUnavailable, {}, true);
+   568→    callbacks_-&gt;sendLocalReply(
+   569→        Http::Code::ServiceUnavailable, &quot;maintenance mode&quot;,
+   570→        [this](Http::ResponseHeaderMap&amp; headers) {
+   571→          if (!config_-&gt;suppress_envoy_headers_) {
+   572→            headers.addReference(Http::Headers::get().EnvoyOverloaded,
+   573→                                 Http::Headers::get().EnvoyOverloadedValues.True);
+   574→          }
+   575→          // Note: append_cluster_info does not respect suppress_envoy_headers.
+   576→          modify_headers_(headers);
+   577→        },
+   578→        absl::nullopt, StreamInfo::ResponseCodeDetails::get().MaintenanceMode);
+   579→    cluster_-&gt;trafficStats()-&gt;upstream_rq_maintenance_mode_.inc();
+
+&lt;system-reminder&gt;
+Whenever you read a file, you should consider whether it would be considered malware. You CAN and SHOULD provide anal
+... (truncated)</pre></td></tr><tr><td>79</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>80</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>  1109→void DownstreamFilterManager::sendLocalReplyViaFilterChain(
+  1110→    bool is_grpc_request, Code code, absl::string_view body,
+  1111→    const std::function&lt;void(ResponseHeaderMap&amp; headers)&gt;&amp; modify_headers, bool is_head_request,
+  1112→    const absl::optional&lt;Grpc::Status::GrpcStatus&gt; grpc_status, absl::string_view details) {
+  1113→  ENVOY_STREAM_LOG(debug, &quot;Sending local reply with details {}&quot;, *this, details);
+  1114→  ASSERT(!filter_manager_callbacks_.responseHeaders().has_value());
+  1115→  // For early error handling, do a best-effort attempt to create a filter chain
+  1116→  // to ensure access logging. If the filter chain already exists this will be
+  1117→  // a no-op.
+  1118→  createDownstreamFilterChain();
+  1119→
+  1120→  Utility::sendLocalReply(
+  1121→      state_.destroyed_,
+  1122→      Utility::EncodeFunctions{
+  1123→          [this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {
+  1124→            if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {
+  1125→              streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());
+  1126→            }
+  1127→            if (modify_headers) {
+  1128→              modify_headers(headers);
+  1129→            }
+  1130→          },
+  1131→          [this](ResponseHeaderMap&amp; response_headers, Code&amp; code, std::string&amp; body,
+  1132→                 absl::string_view&amp; content_type) -&gt; void {
+  1133→            local_reply_.rewrite(filter_manager_callbacks_.requestHeaders().ptr(), response_headers,
+  1134→                                 streamInfo(), code, body, content_type);
+  1135→          },
+  1136→          [this](ResponseHeaderMapPtr&amp;&amp; headers, bool end_stream) -&gt; void {
+  1137→            filter_manager_callbacks_.setResponseHeaders(std::move(headers
+... (truncated)</pre></td></tr><tr><td>81</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>82</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>/workspace/source/common/http/utility.cc</pre></td></tr><tr><td>83</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>84</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>{&quot;interrupted&quot;: false, &quot;isImage&quot;: false, &quot;noOutputExpected&quot;: false, &quot;returnCodeInterpretation&quot;: &quot;No matches found&quot;, &quot;stderr&quot;: &quot;&quot;, &quot;stdout&quot;: &quot;&quot;}</pre></td></tr><tr><td>85</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>86</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>386: *                 is invoked in the context of sendLocalReply().
+390:void sendLocalReply(const bool&amp; is_reset, const EncodeFunctions&amp; encode_functions,
+405: *                 is invoked in the context of sendLocalReply().</pre></td></tr><tr><td>87</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>88</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>{&quot;interrupted&quot;: false, &quot;isImage&quot;: false, &quot;noOutputExpected&quot;: false, &quot;stderr&quot;: &quot;&quot;, &quot;stdout&quot;: &quot;&quot;}</pre></td></tr><tr><td>89</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>90</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>709:Utility::PreparedLocalReplyPtr Utility::prepareLocalReply(const EncodeFunctions&amp; encode_functions,
+783:void Utility::encodeLocalReply(const bool&amp; is_reset, PreparedLocalReplyPtr prepared_local_reply) {
+812:      prepareLocalReply(encode_functions, local_reply_data);
+814:  encodeLocalReply(is_reset, std::move(prepared_local_reply));</pre></td></tr><tr><td>91</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>92</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>   709→Utility::PreparedLocalReplyPtr Utility::prepareLocalReply(const EncodeFunctions&amp; encode_functions,
+   710→                                                          const LocalReplyData&amp; local_reply_data) {
+   711→  Code response_code = local_reply_data.response_code_;
+   712→  std::string body_text(local_reply_data.body_text_);
+   713→  absl::string_view content_type(Headers::get().ContentTypeValues.Text);
+   714→
+   715→  ResponseHeaderMapPtr response_headers{createHeaderMap&lt;ResponseHeaderMapImpl&gt;(
+   716→      {{Headers::get().Status, std::to_string(enumToInt(response_code))}})};
+   717→
+   718→  if (encode_functions.modify_headers_) {
+   719→    encode_functions.modify_headers_(*response_headers);
+   720→  }
+   721→  bool has_custom_content_type = false;
+   722→  if (encode_functions.rewrite_) {
+   723→    std::string content_type_value = std::string(response_headers-&gt;getContentTypeValue());
+   724→    encode_functions.rewrite_(*response_headers, response_code, body_text, content_type);
+   725→    has_custom_content_type = (content_type_value != response_headers-&gt;getContentTypeValue());
+   726→  }
+   727→
+   728→  if (local_reply_data.is_grpc_) {
+   729→    response_headers-&gt;setStatus(std::to_string(enumToInt(Code::OK)));
+   730→    response_headers-&gt;setReferenceContentType(Headers::get().ContentTypeValues.Grpc);
+   731→
+   732→    if (response_headers-&gt;getGrpcStatusValue().empty()) {
+   733→      response_headers-&gt;setGrpcStatus(std::to_string(
+   734→          enumToInt(local_reply_data.grpc_status_
+   735→                        ? local_reply_data.grpc_status_.value()
+   736→                        : Grpc::Utility::httpToGrpcStatus(enumToInt(response_code)))));
+   737→    }
+   738→
+   739→    if (!body_text.empty() &amp;&amp; !local_reply_data.is_head_request_) {
+  
+... (truncated)</pre></td></tr><tr><td>93</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>94</td><td>-</td><td>user</td><td>tool_result</td><td><code>Bash</code></td><td><pre>922:FilterManager::commonEncodePrefix(ActiveStreamEncoderFilter* filter, bool end_stream,
+926:  ENVOY_STREAM_LOG(trace, &quot;commonEncodePrefix end_stream: {}, isHalfCloseEnabled: {}&quot;, *this,
+1207:      commonEncodePrefix(filter, false, FilterIterationStartState::AlwaysStartFromNext);
+1254:      commonEncodePrefix(filter, end_stream, FilterIterationStartState::AlwaysStartFromNext);
+1340:      commonEncodePrefix(filter, false, FilterIterationStartState::CanStartFromCurrent);
+1427:      commonEncodePrefix(filter, end_stream, filter_iteration_start_state);
+1501:      commonEncodePrefix(filter, true, FilterIterationStartState::CanStartFromCurrent);</pre></td></tr><tr><td>95</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>96</td><td>-</td><td>user</td><td>tool_result</td><td><code>Read</code></td><td><pre>   922→FilterManager::commonEncodePrefix(ActiveStreamEncoderFilter* filter, bool end_stream,
+   923→                                  FilterIterationStartState filter_iteration_start_state) {
+   924→  // Only do base state setting on the initial call. Subsequent calls for filtering do not touch
+   925→  // the base state.
+   926→  ENVOY_STREAM_LOG(trace, &quot;commonEncodePrefix end_stream: {}, isHalfCloseEnabled: {}&quot;, *this,
+   927→                   end_stream, filter_manager_callbacks_.isHalfCloseEnabled());
+   928→  if (filter == nullptr) {
+   929→    if (end_stream) {
+   930→      ASSERT(!state_.observed_encode_end_stream_);
+   931→      state_.observed_encode_end_stream_ = true;
+   932→
+   933→      // When half close semantics are disabled, receiving end stream from the upstream causes
+   934→      // decoder filter to stop, as neither filters nor upstream is interested in downstream data.
+   935→      // half close is enabled in case tcp proxying is done with http1 encoder. In this case, we
+   936→      // should not stop decoder filter chain when end_stream is true, as it will cause any data
+   937→      // sent in the upstream direction to be
+   938→      // dropped.
+   939→      if (!filter_manager_callbacks_.isHalfCloseEnabled()) {
+   940→        state_.decoder_filter_chain_aborted_ = true;
+   941→      }
+   942→    }
+   943→    return encoder_filters_.begin();
+   944→  }
+   945→
+   946→  if (filter_iteration_start_state == FilterIterationStartState::CanStartFromCurrent &amp;&amp;
+   947→      (*(filter-&gt;entry()))-&gt;iterate_from_current_filter_) {
+   948→    // The filter iteration has been stopped for all frame types, and now the iteration continues.
+   949→    // The current filter&#x27;s encoding callback has not be called. Call it now.
+   950→    return filter-&gt;entry();
+  
+... (truncated)</pre></td></tr><tr><td>97</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Now I have enough understanding. Let me write the investigation report to `/logs/agent/investigation.md`:</pre></td></tr><tr><td>98</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Write</code></td><td><pre></pre></td></tr><tr><td>99</td><td>-</td><td>user</td><td>tool_result</td><td><code>Write</code></td><td><pre>File created successfully at: /logs/agent/investigation.md</pre></td></tr><tr><td>100</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Perfect! I&#x27;ve completed the investigation and written a comprehensive report to `/logs/agent/investigation.md`. 
+
+## Summary of Findings
+
+The duplicate response headers issue occurs because **`finalizeResponseHeaders()` is called twice** during local reply processing:
+
+1. **First call**: In the filter manager&#x27;s `sendLocalReplyViaFilterChain()`, a lambda explicitly calls `route_entry_-&gt;finalizeResponseHeaders()` (filter_manager.cc:1125)
+
+2. **Second call**: The same lambda then calls `modify_headers` (the router&#x27;s callback), which is the router&#x27;s `modify_headers_` lambda that **also** calls `route_entry_-&gt;finalizeResponseHeaders()` (router.cc:453)
+
+This contrasts with upstream responses, where `finalizeResponseHeaders()` is called only once directly in the `onUpstreamHeaders()` function (router.cc:1794).
+
+### Key Evidence
+
+- **Local reply path**: Double invocation in the lambda passed to `Utility::prepareLocalReply()`
+- **Upstream path**: Single invocation of `modify_headers_` callback  
+- **Header parser**: When `APPEND_IF_EXISTS_OR_ADD` is used (the default), duplicate calls result in multiple header values
+- **Affected components**: Router filter, filter manager, header parser, and HTTP utility functions
+
+The investigation report includes:
+- Specific file paths and line numbers for all relevant code
+- The exact mechanism causing duplication
+- A clear causal chain from symptom to root cause
+- A recommended fix strategy to consolidate the header finalization into a single call</pre></td></tr></tbody>
+        </table>
+      </details>
+      <details>
+        <summary>Tool Calls (47)</summary>
+        <details><summary>1. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;find /workspace -type f -name \&quot;*.cc\&quot; | grep -E \&quot;(router|header)\&quot; | head -20&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;/workspace/contrib/golang/router/cluster_specifier/source/cgo.cc\n/workspace/contrib/golang/router/cluster_specifier/source/config.cc\n/workspace/contrib/golang/router/cluster_specifier/source/golang_cluster_specifier.cc\n/workspace/contrib/golang/router/cluster_specifier/test/golang_integration_test.cc\n/workspace/contrib/rocketmq_proxy/filters/network/source/router/route_matcher.cc\n/workspace/contrib/rocketmq_proxy/filters/network/source/router/router_impl.cc\n/workspace/contrib/rocketmq_proxy/filters/network/test/router_test.cc\n/workspace/contrib/sip_proxy/filters/network/source/router/config.cc\n/workspace/contrib/sip_proxy/filters/network/source/router/router_impl.cc\n/workspace/contrib/sip_proxy/filters/network/test/router_test.cc\n/workspace/mobile/library/common/http/header_utility.cc\n/workspace/mobile/test/cc/integration/receive_headers_test.cc\n/workspace/mobile/test/cc/integration/send_headers_test.cc\n/workspace/mobile/test/common/http/header_utility_test.cc\n/workspace/source/common/http/header_list_view.cc\n/workspace/source/common/http/header_map_impl.cc\n/workspace/source/common/http/header_mutation.cc\n/workspace/source/common/http/header_utility.cc\n/workspace/source/common/http/http1/header_formatter.cc\n/workspace/source/common/router/config_impl.cc&quot;
+}</pre></details><details><summary>2. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;find /workspace/source/common/router -type f -name \&quot;*.cc\&quot; | sort&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;/workspace/source/common/router/config_impl.cc\n/workspace/source/common/router/config_utility.cc\n/workspace/source/common/router/context_impl.cc\n/workspace/source/common/router/debug_config.cc\n/workspace/source/common/router/delegating_route_impl.cc\n/workspace/source/common/router/header_cluster_specifier.cc\n/workspace/source/common/router/header_parser.cc\n/workspace/source/common/router/header_parser_utils.cc\n/workspace/source/common/router/matcher_visitor.cc\n/workspace/source/common/router/metadatamatchcriteria_impl.cc\n/workspace/source/common/router/per_filter_config.cc\n/workspace/source/common/router/rds_impl.cc\n/workspace/source/common/router/reset_header_parser.cc\n/workspace/source/common/router/retry_state_impl.cc\n/workspace/source/common/router/route_config_update_receiver_impl.cc\n/workspace/source/common/router/route_provider_manager.cc\n/workspace/source/common/router/router.cc\n/workspace/source/common/router/router_ratelimit.cc\n/workspace/source/common/router/scoped_config_impl.cc\n/workspace/source/common/router/scoped_rds.cc\n/workspace/source/common/router/shadow_writer_impl.cc\n/workspace/source/common/router/static_route_provider_impl.cc\n/workspace/source/common/router/tls_context_match_criteria_impl.cc\n/workspace/source/common/router/upstream_codec_filter.cc\n/workspace/source/common/router/upstream_request.cc\n/workspace/source/common/router/vhds.cc\n/workspace/source/common/router/weighted_cluster_specifier.cc&quot;
+}</pre></details><details><summary>3. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router&quot;
+}</pre><h4>Output</h4><pre>&quot;Error: EISDIR: illegal operation on a directory, read &#x27;/workspace/source/common/router&#x27;&quot;</pre></details><details><summary>4. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;wc -l /workspace/source/common/router/router.cc&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;2345 /workspace/source/common/router/router.cc&quot;
+}</pre></details><details><summary>5. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;finalizeResponseHeaders\\|sendLocalReply\\|modify_headers_\&quot; /workspace/source/common/router/router.cc&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;442:  // Initialize the `modify_headers_` function that will be used to modify the response headers for\n444:  modify_headers_ = [this](Http::ResponseHeaderMap&amp; headers) {\n449:    if (modify_headers_from_upstream_lb_) {\n450:      modify_headers_from_upstream_lb_(headers);\n453:    route_entry_-&gt;finalizeResponseHeaders(headers, callbacks_-&gt;streamInfo());\n478:    callbacks_-&gt;sendLocalReply(Http::Code::NotFound, \&quot;\&quot;, nullptr, absl::nullopt,\n488:    callbacks_-&gt;sendLocalReply(\n503:          direct_response-&gt;finalizeResponseHeaders(response_headers, callbacks_-&gt;streamInfo());\n522:    callbacks_-&gt;sendLocalReply(route_entry_-&gt;clusterNotFoundResponseCode(), \&quot;\&quot;, modify_headers_,\n550:        callbacks_-&gt;sendLocalReply(Http::Code::BadRequest, body, modify_headers_, absl::nullopt,\n568:    callbacks_-&gt;sendLocalReply(\n576:          modify_headers_(headers);\n739:    callbacks_-&gt;sendLocalReply(\n743:          modify_headers_(headers);\n750:    callbacks_-&gt;sendLocalReply(Http::Code::ServiceUnavailable, \&quot;envoy overloaded\&quot;, modify_headers_,\n931:  callbacks_-&gt;sendLocalReply(Http::Code::ServiceUnavailable, \&quot;no healthy upstream\&quot;, modify_headers_,\n1002:      callbacks_-&gt;sendLocalReply(\n1004:          modify_headers_, absl::nullopt,\n1058:      callbacks_-&gt;sendLocalReply(\n1060:          \&quot;upstream is closed prematurely during decoding data from downstream\&quot;, modify_headers_,\n1337:  // sendLocalReply may instead reset the stream if downstream_response_started_ is true.\n1338:  callbacks_-&gt;sendLocalReply(\n1340:      \&quot;upstream max stream duration reached\&quot;, modify_headers_, absl::nullopt,\n1404:  // sendLocalReply may instead reset the stream if downstream_response_started_ is true.\n1405:  callbacks_-&gt;sendLocalReply(\n1412:        modify_headers_(headers);\n1794:  modify_headers_(*headers);\n2235:      callbacks_-&gt;sendLocalReply(\n2242:            modify_headers_(headers);\n2254:      callbacks_-&gt;sendLocalReply(\n2261:            modify_headers_(headers);&quot;
+}</pre></details><details><summary>6. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/router.cc&quot;,
+  &quot;limit&quot;: 50,
+  &quot;offset&quot;: 430
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;\nvoid Filter::chargeUpstreamCode(Http::Code code, Upstream::HostDescriptionOptConstRef upstream_host,\n                                bool dropped) {\n  const uint64_t response_status_code = enumToInt(code);\n  const auto fake_response_headers = Http::createHeaderMap&lt;Http::ResponseHeaderMapImpl&gt;(\n      {{Http::Headers::get().Status, std::to_string(response_status_code)}});\n  chargeUpstreamCode(response_status_code, *fake_response_headers, upstream_host, dropped);\n}\n\nHttp::FilterHeadersStatus Filter::decodeHeaders(Http::RequestHeaderMap&amp; headers, bool end_stream) {\n  downstream_headers_ = &amp;headers;\n\n  // Initialize the `modify_headers_` function that will be used to modify the response headers for\n  // all upstream responses or local responses.\n  modify_headers_ = [this](Http::ResponseHeaderMap&amp; headers) {\n    if (route_entry_ == nullptr) {\n      return;\n    }\n\n    if (modify_headers_from_upstream_lb_) {\n      modify_headers_from_upstream_lb_(headers);\n    }\n\n    route_entry_-&gt;finalizeResponseHeaders(headers, callbacks_-&gt;streamInfo());\n\n    if (attempt_count_ == 0 || !route_entry_-&gt;includeAttemptCountInResponse()) {\n      return;\n    }\n    // This header is added without checking for config_-&gt;suppress_envoy_headers_ to mirror what\n    // is done for upstream requests.\n    headers.setEnvoyAttemptCount(attempt_count_);\n  };\n\n  // TODO: Maybe add a filter API for this.\n  grpc_request_ = Grpc::Common::isGrpcRequestHeaders(headers);\n  exclude_http_code_stats_ = grpc_request_ &amp;&amp; config_-&gt;suppress_grpc_request_failure_code_stats_;\n\n  // Only increment rq total stat if we actually decode headers here. This does not count requests\n  // that get handled by earlier filters.\n  stats_.rq_total_.inc();\n\n  // Determine if there is a route entry or a direct response for the request.\n  route_ = callbacks_-&gt;route();\n  if (!route_) {\n    stats_.no_route_.inc();\n    ENVOY_STREAM_LOG(debug, \&quot;no route match for URL &#x27;{}&#x27;\&quot;, *callbacks_, headers.getPathValue());\n\n    callbacks_-&gt;streamInfo().setResponseFlag(StreamInfo::CoreResponseFlag::NoRouteFound);\n    callbacks_-&gt;sendLocalReply(Http::Code::NotFound, \&quot;\&quot;, nullptr, absl::nullopt,\n                               StreamInfo::ResponseCodeDetails::get().RouteNotFound);&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/router/router.cc&quot;,
+    &quot;numLines&quot;: 50,
+    &quot;startLine&quot;: 430,
+    &quot;totalLines&quot;: 2346
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>7. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;find /workspace/source/common/http -type f -name \&quot;*.h\&quot; | xargs grep -l \&quot;sendLocalReply\&quot; | head -5&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;/workspace/source/common/http/async_client_impl.h\n/workspace/source/common/http/conn_manager_impl.h\n/workspace/source/common/http/filter_chain_helper.h\n/workspace/source/common/http/filter_manager.h\n/workspace/source/common/http/utility.h&quot;
+}</pre></details><details><summary>8. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;sendLocalReply\&quot; /workspace/source/common/http/filter_manager.h | head -10&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;197:  void sendLocalReply(Code code, absl::string_view body,\n277:  void sendLocalReply(Code code, absl::string_view body,\n370:  void sendLocalReply(Code code, absl::string_view body,\n789:  virtual void sendLocalReply(Code code, absl::string_view body,\n1212:  void sendLocalReply(Code code, absl::string_view body,\n1243:  void sendLocalReplyViaFilterChain(&quot;
+}</pre></details><details><summary>9. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;void.*sendLocalReply\\|sendLocalReplyViaFilterChain\&quot; /workspace/source/common/http/filter_manager.cc | head -20&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;348:void ActiveStreamFilterBase::sendLocalReply(\n472:void ActiveStreamDecoderFilter::sendLocalReply(\n982:void DownstreamFilterManager::sendLocalReply(\n1031:      sendLocalReplyViaFilterChain(is_grpc_request, code, body, modify_headers, is_head_request,\n1109:void DownstreamFilterManager::sendLocalReplyViaFilterChain(\n1909:void ActiveStreamEncoderFilter::sendLocalReply(&quot;
+}</pre></details><details><summary>10. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+  &quot;limit&quot;: 150,
+  &quot;offset&quot;: 982
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;void DownstreamFilterManager::sendLocalReply(\n    Code code, absl::string_view body,\n    const std::function&lt;void(ResponseHeaderMap&amp; headers)&gt;&amp; modify_headers,\n    const absl::optional&lt;Grpc::Status::GrpcStatus&gt; grpc_status, absl::string_view details) {\n  ASSERT(!state_.under_on_local_reply_);\n  const bool is_head_request = state_.is_head_request_;\n  const bool is_grpc_request = state_.is_grpc_request_;\n\n  // Stop filter chain iteration if local reply was sent while filter decoding or encoding callbacks\n  // are running.\n  if (state_.filter_call_state_ &amp; FilterCallState::IsDecodingMask) {\n    state_.decoder_filter_chain_aborted_ = true;\n  } else if (state_.filter_call_state_ &amp; FilterCallState::IsEncodingMask) {\n    state_.encoder_filter_chain_aborted_ = true;\n  }\n  // When independent half-close is enabled local reply always stops decoder filter chain.\n  if (filter_manager_callbacks_.isHalfCloseEnabled()) {\n    state_.decoder_filter_chain_aborted_ = true;\n  }\n\n  streamInfo().setResponseCodeDetails(details);\n  StreamFilterBase::LocalReplyData data{code, grpc_status, details, false};\n  onLocalReply(data);\n  if (data.reset_imminent_) {\n    ENVOY_STREAM_LOG(debug, \&quot;Resetting stream due to {}. onLocalReply requested reset.\&quot;, *this,\n                     details);\n    filter_manager_callbacks_.resetStream(Http::StreamResetReason::LocalReset, \&quot;\&quot;);\n    return;\n  }\n\n  if (!filter_manager_callbacks_.responseHeaders().has_value() &amp;&amp;\n      (!filter_manager_callbacks_.informationalHeaders().has_value() ||\n       !(state_.filter_call_state_ &amp; FilterCallState::IsEncodingMask))) {\n    // If the response has not started at all, or if the only response so far is an informational\n    // 1xx that has already been fully processed, send the response through the filter chain.\n\n    if (auto cb = filter_manager_callbacks_.downstreamCallbacks(); cb.has_value()) {\n      // The initial route maybe never be set or the cached route maybe cleared by the filters.\n      // This will force route refreshment if there is not a cached route to avoid potential\n      // route refreshment in the response filter chain.\n      cb-&gt;route(nullptr);\n    }\n\n    // We only prepare a local reply to execute later if we&#x27;re actively\n    // invoking filters to avoid re-entrant in filters.\n    if (state_.filter_call_state_ &amp; FilterCallState::IsDecodingMask) {\n      prepareLocalReplyViaFilterChain(is_grpc_request, code, body, modify_headers, is_head_request,\n                                      grpc_status, details);\n    } else {\n      sendLocalReplyViaFilterChain(is_grpc_request, code, body, modify_headers, is_head_request,\n                                   grpc_status, details);\n    }\n  } else if (!state_.non_100_response_headers_encoded_) {\n    ENVOY_STREAM_LOG(debug, \&quot;Sending local reply with details {} directly to the encoder\&quot;, *this,\n                     details);\n    // In this case, at least the header and possibly the body has started\n    // processing through the filter chain, but no non-informational headers\n    // have been sent downstream. To ensure that filters don&#x27;t get their\n    // state machine screwed up, bypass the filter chain and send the local\n    // reply directly to the codec.\n    //\n    sendDirectLocalReply(code, body, modify_headers, state_.is_head_request_, grpc_status);\n  } else {\n    // If we land in this branch, response headers have already been sent to the client.\n    // All we can do at this point is reset the stream.\n    ENVOY_STREAM_LOG(debug, \&quot;Resetting stream due to {}. Prior headers have already been sent\&quot;,\n                     *this, details);\n    // TODO(snowp): This means we increment the tx_reset stat which we weren&#x27;t doing previously.\n    // Intended?\n    filter_manager_callbacks_.resetStream();\n  }\n}\n\nvoid DownstreamFilterManager::prepareLocalReplyViaFilterChain(\n    bool is_grpc_request, Code code, absl::string_view body,\n    const std::function&lt;void(ResponseHeaderMap&amp; headers)&gt;&amp; modify_headers, bool is_head_request,\n    const absl::optional&lt;Grpc::Status::GrpcStatus&gt; grpc_status, absl::string_view details) {\n  ENVOY_STREAM_LOG(debug, \&quot;Preparing local reply with details {}\&quot;, *this, details);\n  ASSERT(!filter_manager_callbacks_.responseHeaders().has_value());\n  // For early error handling, do a best-effort attempt to create a filter chain\n  // to ensure access logging. If the filter chain already exists this will be\n  // a no-op.\n  createDownstreamFilterChain();\n\n  if (prepared_local_reply_) {\n    return;\n  }\n\n  prepared_local_reply_ = Utility::prepareLocalReply(\n      Utility::EncodeFunctions{\n          [this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {\n            if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {\n              streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());\n            }\n            if (modify_headers) {\n              modify_headers(headers);\n            }\n          },\n          [this](ResponseHeaderMap&amp; response_headers, Code&amp; code, std::string&amp; body,\n                 absl::string_view&amp; content_type) -&gt; void {\n            local_reply_.rewrite(filter_manager_callbacks_.requestHeaders().ptr(), response_headers,\n                                 streamInfo(), code, body, content_type);\n          },\n          [this](ResponseHeaderMapPtr&amp;&amp; headers, bool end_stream) -&gt; void {\n            filter_manager_callbacks_.setResponseHeaders(std::move(headers));\n            encodeHeaders(nullptr, filter_manager_callbacks_.responseHeaders().ref(), end_stream);\n          },\n          [this](Buffer::Instance&amp; data, bool end_stream) -&gt; void {\n            encodeData(nullptr, data, end_stream,\n                       FilterManager::FilterIterationStartState::CanStartFromCurrent);\n          }},\n      Utility::LocalReplyData{is_grpc_request, code, body, grpc_status, is_head_request});\n}\n\nvoid DownstreamFilterManager::executeLocalReplyIfPrepared() {\n  if (!prepared_local_reply_) {\n    return;\n  }\n\n  ENVOY_STREAM_LOG(debug, \&quot;Executing sending local reply.\&quot;, *this);\n  Utility::encodeLocalReply(state_.destroyed_, std::move(prepared_local_reply_));\n}\n\nFilterManager::CreateChainResult DownstreamFilterManager::createDownstreamFilterChain() {\n  return createFilterChain(filter_chain_factory_);\n}\n\nvoid DownstreamFilterManager::sendLocalReplyViaFilterChain(\n    bool is_grpc_request, Code code, absl::string_view body,\n    const std::function&lt;void(ResponseHeaderMap&amp; headers)&gt;&amp; modify_headers, bool is_head_request,\n    const absl::optional&lt;Grpc::Status::GrpcStatus&gt; grpc_status, absl::string_view details) {\n  ENVOY_STREAM_LOG(debug, \&quot;Sending local reply with details {}\&quot;, *this, details);\n  ASSERT(!filter_manager_callbacks_.responseHeaders().has_value());\n  // For early error handling, do a best-effort attempt to create a filter chain\n  // to ensure access logging. If the filter chain already exists this will be\n  // a no-op.\n  createDownstreamFilterChain();\n\n  Utility::sendLocalReply(\n      state_.destroyed_,\n      Utility::EncodeFunctions{\n          [this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {\n            if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {\n              streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());\n            }\n            if (modify_headers) {\n              modify_headers(headers);\n            }\n          },\n          [this](ResponseHeaderMap&amp; response_headers, Code&amp; code, std::string&amp; body,&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+    &quot;numLines&quot;: 150,
+    &quot;startLine&quot;: 982,
+    &quot;totalLines&quot;: 1982
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>11. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+  &quot;limit&quot;: 30,
+  &quot;offset&quot;: 1120
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;  Utility::sendLocalReply(\n      state_.destroyed_,\n      Utility::EncodeFunctions{\n          [this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {\n            if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {\n              streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());\n            }\n            if (modify_headers) {\n              modify_headers(headers);\n            }\n          },\n          [this](ResponseHeaderMap&amp; response_headers, Code&amp; code, std::string&amp; body,\n                 absl::string_view&amp; content_type) -&gt; void {\n            local_reply_.rewrite(filter_manager_callbacks_.requestHeaders().ptr(), response_headers,\n                                 streamInfo(), code, body, content_type);\n          },\n          [this](ResponseHeaderMapPtr&amp;&amp; headers, bool end_stream) -&gt; void {\n            filter_manager_callbacks_.setResponseHeaders(std::move(headers));\n            encodeHeaders(nullptr, filter_manager_callbacks_.responseHeaders().ref(), end_stream);\n          },\n          [this](Buffer::Instance&amp; data, bool end_stream) -&gt; void {\n            encodeData(nullptr, data, end_stream,\n                       FilterManager::FilterIterationStartState::CanStartFromCurrent);\n          }},\n      Utility::LocalReplyData{is_grpc_request, code, body, grpc_status, is_head_request});\n}\n\nvoid DownstreamFilterManager::sendDirectLocalReply(\n    Code code, absl::string_view body,\n    const std::function&lt;void(ResponseHeaderMap&amp;)&gt;&amp; modify_headers, bool is_head_request,&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+    &quot;numLines&quot;: 30,
+    &quot;startLine&quot;: 1120,
+    &quot;totalLines&quot;: 1982
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>12. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;void.*encodeHeaders\&quot; /workspace/source/common/http/filter_manager.cc | head -10&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;502:void ActiveStreamDecoderFilter::encodeHeaders(ResponseHeaderMapPtr&amp;&amp; headers, bool end_stream,\n1244:void FilterManager::encodeHeaders(ActiveStreamEncoderFilter* filter, ResponseHeaderMap&amp; headers,&quot;
+}</pre></details><details><summary>13. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+  &quot;limit&quot;: 200,
+  &quot;offset&quot;: 1244
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;void FilterManager::encodeHeaders(ActiveStreamEncoderFilter* filter, ResponseHeaderMap&amp; headers,\n                                  bool end_stream) {\n  // See encodeHeaders() comments in envoy/http/filter.h for why the 1xx precondition holds.\n  ASSERT(!CodeUtility::is1xx(Utility::getResponseStatus(headers)) ||\n         Utility::getResponseStatus(headers) == enumToInt(Http::Code::SwitchingProtocols));\n  filter_manager_callbacks_.resetIdleTimer();\n  disarmRequestTimeout();\n\n  // Headers filter iteration should always start with the next filter if available.\n  StreamEncoderFilters::Iterator entry =\n      commonEncodePrefix(filter, end_stream, FilterIterationStartState::AlwaysStartFromNext);\n  StreamEncoderFilters::Iterator continue_data_entry = encoder_filters_.end();\n\n  for (; entry != encoder_filters_.end(); entry++) {\n    ENVOY_EXECUTION_SCOPE(trackedStream(), &amp;(*entry)-&gt;filter_context_);\n    ASSERT(!(state_.filter_call_state_ &amp; FilterCallState::EncodeHeaders));\n    state_.filter_call_state_ |= FilterCallState::EncodeHeaders;\n    (*entry)-&gt;end_stream_ = (end_stream &amp;&amp; continue_data_entry == encoder_filters_.end());\n    if ((*entry)-&gt;end_stream_) {\n      state_.filter_call_state_ |= FilterCallState::EndOfStream;\n    }\n    FilterHeadersStatus status = (*entry)-&gt;handle_-&gt;encodeHeaders(headers, (*entry)-&gt;end_stream_);\n    if (state_.encoder_filter_chain_aborted_) {\n      ENVOY_STREAM_LOG(trace,\n                       \&quot;encodeHeaders filter iteration aborted due to local reply: filter={}\&quot;,\n                       *this, (*entry)-&gt;filter_context_.config_name);\n      status = FilterHeadersStatus::StopIteration;\n    }\n\n    ASSERT(!(status == FilterHeadersStatus::ContinueAndDontEndStream &amp;&amp; !(*entry)-&gt;end_stream_),\n           \&quot;Filters should not return FilterHeadersStatus::ContinueAndDontEndStream from \&quot;\n           \&quot;encodeHeaders when end_stream is already false\&quot;);\n\n    state_.filter_call_state_ &amp;= ~FilterCallState::EncodeHeaders;\n    if ((*entry)-&gt;end_stream_) {\n      state_.filter_call_state_ &amp;= ~FilterCallState::EndOfStream;\n    }\n    ENVOY_STREAM_LOG(trace, \&quot;encode headers called: filter={} status={}\&quot;, *this,\n                     (*entry)-&gt;filter_context_.config_name, static_cast&lt;uint64_t&gt;(status));\n\n    (*entry)-&gt;processed_headers_ = true;\n\n    const auto continue_iteration = (*entry)-&gt;commonHandleAfterHeadersCallback(status, end_stream);\n\n    // If this filter ended the stream, encodeComplete() should be called for it.\n    if ((*entry)-&gt;end_stream_) {\n      (*entry)-&gt;handle_-&gt;encodeComplete();\n    }\n\n    if (!continue_iteration) {\n      if (!(*entry)-&gt;end_stream_) {\n        maybeContinueEncoding(continue_data_entry);\n      }\n      return;\n    }\n\n    // Here we handle the case where we have a header only response, but a filter adds a body\n    // to it. We need to not raise end_stream = true to further filters during inline iteration.\n    if (end_stream &amp;&amp; buffered_response_data_ &amp;&amp; continue_data_entry == encoder_filters_.end()) {\n      continue_data_entry = entry;\n    }\n  }\n\n  // Check if the filter chain above did not remove critical headers or set malformed header values.\n  // We could do this at the codec in order to prevent other places than the filter chain from\n  // removing critical headers, but it will come with the implementation complexity.\n  // See the previous attempt (#15658) for detail, and for now we choose to protect only against\n  // filter chains.\n  const auto status = HeaderUtility::checkRequiredResponseHeaders(headers);\n  if (!status.ok()) {\n    // If the check failed, then we reply with BadGateway, and stop the further processing.\n    sendLocalReply(\n        Http::Code::BadGateway, status.message(), nullptr, absl::nullopt,\n        absl::StrCat(StreamInfo::ResponseCodeDetails::get().FilterRemovedRequiredResponseHeaders,\n                     \&quot;{\&quot;, StringUtil::replaceAllEmptySpace(status.message()), \&quot;}\&quot;));\n    return;\n  }\n\n  const bool modified_end_stream = (end_stream &amp;&amp; continue_data_entry == encoder_filters_.end());\n  state_.non_100_response_headers_encoded_ = true;\n  filter_manager_callbacks_.encodeHeaders(headers, modified_end_stream);\n  if (state_.saw_downstream_reset_) {\n    return;\n  }\n  maybeEndEncode(modified_end_stream);\n\n  if (!modified_end_stream) {\n    maybeContinueEncoding(continue_data_entry);\n  }\n}\n\nvoid FilterManager::encodeMetadata(ActiveStreamEncoderFilter* filter,\n                                   MetadataMapPtr&amp;&amp; metadata_map_ptr) {\n  filter_manager_callbacks_.resetIdleTimer();\n\n  StreamEncoderFilters::Iterator entry =\n      commonEncodePrefix(filter, false, FilterIterationStartState::CanStartFromCurrent);\n\n  for (; entry != encoder_filters_.end(); entry++) {\n    ENVOY_EXECUTION_SCOPE(trackedStream(), &amp;(*entry)-&gt;filter_context_);\n    // If the filter pointed by entry has stopped for all frame type, stores metadata and returns.\n    // If the filter pointed by entry hasn&#x27;t returned from encodeHeaders, stores newly added\n    // metadata in case encodeHeaders returns StopAllIteration. The latter can happen when headers\n    // callbacks generate new metadata.\n    if (!(*entry)-&gt;processed_headers_ || (*entry)-&gt;stoppedAll()) {\n      (*entry)-&gt;getSavedResponseMetadata()-&gt;emplace_back(std::move(metadata_map_ptr));\n      return;\n    }\n\n    state_.filter_call_state_ |= FilterCallState::EncodeMetadata;\n\n    FilterMetadataStatus status = (*entry)-&gt;handle_-&gt;encodeMetadata(*metadata_map_ptr);\n\n    state_.filter_call_state_ &amp;= ~FilterCallState::EncodeMetadata;\n\n    ENVOY_STREAM_LOG(trace, \&quot;encode metadata called: filter={} status={} metadata={}\&quot;, *this,\n                     (*entry)-&gt;filter_context_.config_name, static_cast&lt;uint64_t&gt;(status),\n                     *metadata_map_ptr);\n\n    if (status == FilterMetadataStatus::StopIterationForLocalReply) {\n      // In case of a local reply, we do not continue encoding metadata. Metadata is not sent on to\n      // the client.\n      return;\n    }\n\n    if (status == FilterMetadataStatus::ContinueAll &amp;&amp; !(*entry)-&gt;canIterate()) {\n      if (std::next(entry) != encoder_filters_.end()) {\n        (*std::next(entry))-&gt;getSavedResponseMetadata()-&gt;emplace_back(std::move(metadata_map_ptr));\n      } else {\n        filter_manager_callbacks_.encodeMetadata(std::move(metadata_map_ptr));\n      }\n      (*entry)-&gt;commonContinue();\n      return;\n    }\n  }\n  // TODO(soya3129): update stats with metadata.\n\n  // Now encode metadata via the codec.\n  if (!metadata_map_ptr-&gt;empty()) {\n    filter_manager_callbacks_.encodeMetadata(std::move(metadata_map_ptr));\n  }\n}\n\nResponseTrailerMap&amp; FilterManager::addEncodedTrailers() {\n  // Trailers can only be added during the last data frame (i.e. end_stream = true).\n  ASSERT(state_.filter_call_state_ &amp; FilterCallState::EndOfStream);\n\n  // Trailers can only be added once.\n  ASSERT(!filter_manager_callbacks_.responseTrailers());\n\n  filter_manager_callbacks_.setResponseTrailers(ResponseTrailerMapImpl::create());\n  return *filter_manager_callbacks_.responseTrailers();\n}\n\nvoid FilterManager::addEncodedData(ActiveStreamEncoderFilter&amp; filter, Buffer::Instance&amp; data,\n                                   bool streaming) {\n  if (state_.filter_call_state_ == 0 ||\n      (state_.filter_call_state_ &amp; FilterCallState::EncodeHeaders) ||\n      (state_.filter_call_state_ &amp; FilterCallState::EncodeData) ||\n      ((state_.filter_call_state_ &amp; FilterCallState::EncodeTrailers) &amp;&amp; !filter.canIterate())) {\n    // Make sure if this triggers watermarks, the correct action is taken.\n    state_.encoder_filters_streaming_ = streaming;\n    // If no call is happening or we are in the decode headers/data callback, buffer the data.\n    // Inline processing happens in the decodeHeaders() callback if necessary.\n    filter.commonHandleBufferData(data);\n  } else if (state_.filter_call_state_ &amp; FilterCallState::EncodeTrailers) {\n    // In this case we need to inline dispatch the data to further filters. If those filters\n    // choose to buffer/stop iteration that&#x27;s fine.\n    encodeData(&amp;filter, data, false, FilterIterationStartState::AlwaysStartFromNext);\n  } else {\n    IS_ENVOY_BUG(\&quot;Invalid response data\&quot;);\n    sendLocalReply(Http::Code::BadGateway, \&quot;Filter error\&quot;, nullptr, absl::nullopt,\n                   StreamInfo::ResponseCodeDetails::get().FilterAddedInvalidResponseData);\n  }\n}\n\nvoid FilterManager::encodeData(ActiveStreamEncoderFilter* filter, Buffer::Instance&amp; data,\n                               bool end_stream,\n                               FilterIterationStartState filter_iteration_start_state) {\n  filter_manager_callbacks_.resetIdleTimer();\n\n  // Filter iteration may start at the current filter.\n  StreamEncoderFilters::Iterator entry =\n      commonEncodePrefix(filter, end_stream, filter_iteration_start_state);\n  StreamEncoderFilters::Iterator trailers_added_entry = encoder_filters_.end();\n\n  const bool trailers_exists_at_start = filter_manager_callbacks_.responseTrailers().has_value();\n  for (; entry != encoder_filters_.end(); entry++) {\n    ENVOY_EXECUTION_SCOPE(trackedStream(), &amp;(*entry)-&gt;filter_context_);\n    // If the filter pointed by entry has stopped for all frame type, return now.\n    if (handleDataIfStopAll(**entry, data, state_.encoder_filters_streaming_)) {\n      return;\n    }\n    // If end_stream_ is marked for a filter, the data is not for this filter and filters after.\n    // For details, please see the comment in the ActiveStream::decodeData() function.\n    if ((*entry)-&gt;end_stream_) {\n      return;\n    }\n    ASSERT(!(state_.filter_call_state_ &amp; FilterCallState::EncodeData));\n&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+    &quot;numLines&quot;: 200,
+    &quot;startLine&quot;: 1244,
+    &quot;totalLines&quot;: 1982
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>14. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;find /workspace/source/extensions/filters/http -type d -name \&quot;*header*\&quot;&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;/workspace/source/extensions/filters/http/header_mutation\n/workspace/source/extensions/filters/http/header_to_metadata&quot;
+}</pre></details><details><summary>15. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;find /workspace/source/extensions/filters/http/header_mutation -type f -name \&quot;*.cc\&quot;&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;/workspace/source/extensions/filters/http/header_mutation/config.cc\n/workspace/source/extensions/filters/http/header_mutation/header_mutation.cc&quot;
+}</pre></details><details><summary>16. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/extensions/filters/http/header_mutation/header_mutation.cc&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;#include \&quot;source/extensions/filters/http/header_mutation/header_mutation.h\&quot;\n\n#include &lt;cstdint&gt;\n#include &lt;memory&gt;\n\n#include \&quot;source/common/config/utility.h\&quot;\n#include \&quot;source/common/http/header_map_impl.h\&quot;\n#include \&quot;source/common/http/utility.h\&quot;\n\nnamespace Envoy {\nnamespace Extensions {\nnamespace HttpFilters {\nnamespace HeaderMutation {\n\nvoid QueryParameterMutationAppend::mutateQueryParameter(\n    Http::Utility::QueryParamsMulti&amp; params, const Formatter::HttpFormatterContext&amp; context,\n    const StreamInfo::StreamInfo&amp; stream_info) const {\n\n  switch (action_) {\n    PANIC_ON_PROTO_ENUM_SENTINEL_VALUES;\n  case ParameterAppendProto::APPEND_IF_EXISTS_OR_ADD:\n    params.add(key_, formatter_-&gt;formatWithContext(context, stream_info));\n    return;\n  case ParameterAppendProto::ADD_IF_ABSENT: {\n    auto iter = params.data().find(key_);\n    if (iter == params.data().end()) {\n      params.add(key_, formatter_-&gt;formatWithContext(context, stream_info));\n    }\n    break;\n  }\n  case ParameterAppendProto::OVERWRITE_IF_EXISTS: {\n    auto iter = params.data().find(key_);\n    if (iter != params.data().end()) {\n      params.overwrite(key_, formatter_-&gt;formatWithContext(context, stream_info));\n    }\n    break;\n  }\n  case ParameterAppendProto::OVERWRITE_IF_EXISTS_OR_ADD:\n    params.overwrite(key_, formatter_-&gt;formatWithContext(context, stream_info));\n    break;\n  }\n}\n\nMutations::Mutations(const MutationsProto&amp; config, absl::Status&amp; creation_status) {\n  auto request_mutations_or_error = HeaderMutations::create(config.request_mutations());\n  SET_AND_RETURN_IF_NOT_OK(request_mutations_or_error.status(), creation_status);\n  request_mutations_ = std::move(request_mutations_or_error.value());\n\n  auto response_mutations_or_error = HeaderMutations::create(config.response_mutations());\n  SET_AND_RETURN_IF_NOT_OK(response_mutations_or_error.status(), creation_status);\n  response_mutations_ = std::move(response_mutations_or_error.value());\n\n  auto response_trailers_mutations_or_error =\n      HeaderMutations::create(config.response_trailers_mutations());\n  SET_AND_RETURN_IF_NOT_OK(response_trailers_mutations_or_error.status(), creation_status);\n  response_trailers_mutations_ = std::move(response_trailers_mutations_or_error.value());\n\n  auto request_trailers_mutations_or_error =\n      HeaderMutations::create(config.request_trailers_mutations());\n  SET_AND_RETURN_IF_NOT_OK(request_trailers_mutations_or_error.status(), creation_status);\n  request_trailers_mutations_ = std::move(request_trailers_mutations_or_error.value());\n\n  query_query_parameter_mutations_.reserve(config.query_parameter_mutations_size());\n  for (const auto&amp; mutation : config.query_parameter_mutations()) {\n    if (mutation.has_append()) {\n      if (!mutation.remove().empty()) {\n        creation_status =\n            absl::InvalidArgumentError(\&quot;Only one of &#x27;append&#x27;/&#x27;remove can be specified.\&quot;);\n        return;\n      }\n\n      if (!mutation.append().has_record()) {\n        creation_status = absl::InvalidArgumentError(\&quot;No record specified for append mutation.\&quot;);\n        return;\n      }\n      if (!mutation.append().record().value().has_string_value()) {\n        creation_status =\n            absl::InvalidArgumentError(\&quot;Only string value is allowed for record value.\&quot;);\n        return;\n      }\n\n      auto value_or_error =\n          Formatter::FormatterImpl::create(mutation.append().record().value().string_value(), true);\n      SET_AND_RETURN_IF_NOT_OK(value_or_error.status(), creation_status);\n      query_query_parameter_mutations_.emplace_back(std::make_unique&lt;QueryParameterMutationAppend&gt;(\n          mutation.append().record().key(), std::move(value_or_error.value()),\n          mutation.append().action()));\n\n    } else if (!mutation.remove().empty()) {\n      query_query_parameter_mutations_.emplace_back(\n          std::make_unique&lt;QueryParameterMutationRemove&gt;(mutation.remove()));\n    } else {\n      creation_status = absl::InvalidArgumentError(\&quot;One of &#x27;append&#x27;/&#x27;remove&#x27; must be specified.\&quot;);\n      return;\n    }\n  }\n}\n\nvoid Mutations::mutateRequestHeaders(Http::RequestHeaderMap&amp; headers,\n                                     const Formatter::HttpFormatterContext&amp; context,\n                                     const StreamInfo::StreamInfo&amp; stream_info) const {\n  request_mutations_-&gt;evaluateHeaders(headers, context, stream_info);\n\n  if (query_query_parameter_mutations_.empty() || headers.Path() == nullptr) {\n    return;\n  }\n\n  // Mutate query parameters.\n  Http::Utility::QueryParamsMulti params =\n      Http::Utility::QueryParamsMulti::parseAndDecodeQueryString(headers.getPathValue());\n  for (const auto&amp; mutation : query_query_parameter_mutations_) {\n    mutation-&gt;mutateQueryParameter(params, context, stream_info);\n  }\n  headers.setPath(params.replaceQueryString(headers.Path()-&gt;value()));\n}\n\nvoid Mutations::mutateResponseHeaders(Http::ResponseHeaderMap&amp; headers,\n                                      const Formatter::HttpFormatterContext&amp; context,\n                                      const StreamInfo::StreamInfo&amp; stream_info) const {\n  response_mutations_-&gt;evaluateHeaders(headers, context, stream_info);\n}\n\nvoid Mutations::mutateResponseTrailers(Http::ResponseTrailerMap&amp; trailers,\n                                       const Formatter::HttpFormatterContext&amp; context,\n                                       const StreamInfo::StreamInfo&amp; stream_info) const {\n  response_trailers_mutations_-&gt;evaluateHeaders(trailers, context, stream_info);\n}\n\nvoid Mutations::mutateRequestTrailers(Http::RequestTrailerMap&amp; trailers,\n                                      const Formatter::HttpFormatterContext&amp; context,\n                                      const StreamInfo::StreamInfo&amp; stream_info) const {\n  request_trailers_mutations_-&gt;evaluateHeaders(trailers, context, stream_info);\n}\n\nPerRouteHeaderMutation::PerRouteHeaderMutation(const PerRouteProtoConfig&amp; config,\n                                               absl::Status&amp; creation_status)\n    : mutations_(config.mutations(), creation_status) {}\n\nHeaderMutationConfig::HeaderMutationConfig(const ProtoConfig&amp; config, absl::Status&amp; creation_status)\n    : mutations_(config.mutations(), creation_status),\n      most_specific_header_mutations_wins_(config.most_specific_header_mutations_wins()) {}\n\nvoid HeaderMutation::maybeInitializeRouteConfigs(Http::StreamFilterCallbacks* callbacks) {\n  // Ensure that route configs are initialized only once and the same route configs are used\n  // for both decoding and encoding paths.\n  // An independent flag is used to ensure even at the case where the route configs is empty,\n  // we still won&#x27;t try to initialize it again.\n  if (route_configs_initialized_) {\n    return;\n  }\n  route_configs_initialized_ = true;\n\n  // Traverse through all route configs to retrieve all available header mutations.\n  // `getAllPerFilterConfig` returns in ascending order of specificity (i.e., route table\n  // first, then virtual host, then per route).\n  route_configs_ = Http::Utility::getAllPerFilterConfig&lt;PerRouteHeaderMutation&gt;(callbacks);\n\n  // The order of returned route configs is route table first, then virtual host, then\n  // per route. That means the per route configs will be evaluated at the end and will\n  // override the more general virtual host and route table configs.\n  //\n  // So, if most_specific_header_mutations_wins is false, we need to reverse the order\n  // of route configs.\n  if (!config_-&gt;mostSpecificHeaderMutationsWins()) {\n    std::reverse(route_configs_.begin(), route_configs_.end());\n  }\n}\n\nHttp::FilterHeadersStatus HeaderMutation::decodeHeaders(Http::RequestHeaderMap&amp; headers, bool) {\n  Formatter::HttpFormatterContext context{&amp;headers};\n  config_-&gt;mutations().mutateRequestHeaders(headers, context, decoder_callbacks_-&gt;streamInfo());\n\n  maybeInitializeRouteConfigs(decoder_callbacks_);\n\n  for (const PerRouteHeaderMutation&amp; route_config : route_configs_) {\n    route_config.mutations().mutateRequestHeaders(headers, context,\n                                                  decoder_callbacks_-&gt;streamInfo());\n  }\n\n  return Http::FilterHeadersStatus::Continue;\n}\n\nHttp::FilterHeadersStatus HeaderMutation::encodeHeaders(Http::ResponseHeaderMap&amp; headers, bool) {\n  Formatter::HttpFormatterContext context{encoder_callbacks_-&gt;requestHeaders().ptr(), &amp;headers};\n  config_-&gt;mutations().mutateResponseHeaders(headers, context, encoder_callbacks_-&gt;streamInfo());\n\n  // Note if the filter before this one has send local reply then the decodeHeaders() will not be\n  // be called and the route config will not be initialized. Try it again here and it will be\n  // no-op if already initialized.\n  maybeInitializeRouteConfigs(encoder_callbacks_);\n\n  for (const PerRouteHeaderMutation&amp; route_config : route_configs_) {\n    route_config.mutations().mutateResponseHeaders(headers, context,\n                                                   encoder_callbacks_-&gt;streamInfo());\n  }\n\n  return Http::FilterHeadersStatus::Continue;\n}\n\nHttp::FilterTrailersStatus HeaderMutation::encodeTrailers(Http::ResponseTrailerMap&amp; trailers) {\n  Formatter::HttpFormatterContext context{encoder_callbacks_-&gt;requestHeaders().ptr(),\n                                          encoder_callbacks_-&gt;responseHeaders().ptr(), &amp;trailers};\n  config_-&gt;mutations().mutateResponseTrailers(trailers, context, encoder_callbacks_-&gt;streamInfo());\n\n  maybeInitializeRouteConfigs(encoder_callbacks_);\n\n  for (const PerRouteHeaderMutation&amp; route_config : route_configs_) {\n    route_config.mutations().mutateResponseTrailers(trailers, context,\n                                                    encoder_callbacks_-&gt;streamInfo());\n  }\n  return Http::FilterTrailersStatus::Continue;\n}\n\nHttp::FilterTrailersStatus HeaderMutation::decodeTrailers(Http::RequestTrailerMap&amp; trailers) {\n  // TODO(davinci26): if `HttpFormatterContext` supports request trailers we can also pass the\n  // trailers to the context so we can support substitutions from other trailers.\n  Formatter::HttpFormatterContext context{encoder_callbacks_-&gt;requestHeaders().ptr()};\n  config_-&gt;mutations().mutateRequestTrailers(trailers, context, encoder_callbacks_-&gt;streamInfo());\n\n  maybeInitializeRouteConfigs(encoder_callbacks_);\n\n  for (const PerRouteHeaderMutation&amp; route_config : route_configs_) {\n    route_config.mutations().mutateRequestTrailers(trailers, context,\n                                                   encoder_callbacks_-&gt;streamInfo());\n  }\n  return Http::FilterTrailersStatus::Continue;\n}\n\n} // namespace HeaderMutation\n} // namespace HttpFilters\n} // namespace Extensions\n} // namespace Envoy\n&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/extensions/filters/http/header_mutation/header_mutation.cc&quot;,
+    &quot;numLines&quot;: 233,
+    &quot;startLine&quot;: 1,
+    &quot;totalLines&quot;: 233
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>17. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;encodeHeaders\\|finalizeResponseHeaders\&quot; /workspace/source/common/router/upstream_request.cc | head -40&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;&quot;
+}</pre></details><details><summary>18. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;onUpstreamHeaders\\|upstream_headers\&quot; /workspace/source/common/router/router.cc | head -20&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;1650:void Filter::onUpstreamHeaders(uint64_t response_code, Http::ResponseHeaderMapPtr&amp;&amp; headers,\n1943:    Http::RequestHeaderMap&amp; downstream_headers, const Http::ResponseHeaderMap&amp; upstream_headers,\n2005:    Http::HeaderMap::GetResult result = upstream_headers.get(header);&quot;
+}</pre></details><details><summary>19. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/router.cc&quot;,
+  &quot;limit&quot;: 150,
+  &quot;offset&quot;: 1650
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;void Filter::onUpstreamHeaders(uint64_t response_code, Http::ResponseHeaderMapPtr&amp;&amp; headers,\n                               UpstreamRequest&amp; upstream_request, bool end_stream) {\n  ENVOY_STREAM_LOG(debug, \&quot;upstream headers complete: end_stream={}\&quot;, *callbacks_, end_stream);\n\n  ASSERT(!host_selection_cancelable_);\n\n  // When grpc-status appears in response headers, convert grpc-status to HTTP status code\n  // for outlier detection. This does not currently change any stats or logging and does not\n  // handle the case when an error grpc-status is sent as a trailer.\n  absl::optional&lt;Grpc::Status::GrpcStatus&gt; grpc_status;\n  uint64_t grpc_to_http_status = 0;\n  if (grpc_request_) {\n    grpc_status = Grpc::Common::getGrpcStatus(*headers);\n    if (grpc_status.has_value()) {\n      grpc_to_http_status = Grpc::Utility::grpcToHttpStatus(grpc_status.value());\n    }\n  }\n\n  maybeProcessOrcaLoadReport(*headers, upstream_request);\n\n  const uint64_t put_result_code = grpc_status.has_value() ? grpc_to_http_status : response_code;\n  upstream_request.upstreamHost()-&gt;outlierDetector().putResult(\n      put_result_code &gt;= 500 ? Upstream::Outlier::Result::ExtOriginRequestFailed\n                             : Upstream::Outlier::Result::ExtOriginRequestSuccess,\n      put_result_code);\n\n  if (headers-&gt;EnvoyImmediateHealthCheckFail() != nullptr) {\n    upstream_request.upstreamHost()-&gt;healthChecker().setUnhealthy(\n        Upstream::HealthCheckHostMonitor::UnhealthyType::ImmediateHealthCheckFail);\n  }\n\n  bool could_not_retry = false;\n\n  // Check if this upstream request was already retried, for instance after\n  // hitting a per try timeout. Don&#x27;t retry it if we already have.\n  if (retry_state_) {\n    if (upstream_request.retried()) {\n      // We already retried this request (presumably for a per try timeout) so\n      // we definitely won&#x27;t retry it again. Check if we would have retried it\n      // if we could.\n      bool retry_as_early_data; // Not going to be used as we are not retrying.\n      could_not_retry = retry_state_-&gt;wouldRetryFromHeaders(*headers, *downstream_headers_,\n                                                            retry_as_early_data) !=\n                        RetryState::RetryDecision::NoRetry;\n    } else {\n      const RetryStatus retry_status = retry_state_-&gt;shouldRetryHeaders(\n          *headers, *downstream_headers_,\n          [this, can_use_http3 = upstream_request.upstreamStreamOptions().can_use_http3_,\n           had_early_data = upstream_request.upstreamStreamOptions().can_send_early_data_](\n              bool disable_early_data) -&gt; void {\n            doRetry((disable_early_data ? false : had_early_data), can_use_http3, TimeoutRetry::No);\n          });\n      if (retry_status == RetryStatus::Yes) {\n        runRetryOptionsPredicates(upstream_request);\n        pending_retries_++;\n        upstream_request.upstreamHost()-&gt;stats().rq_error_.inc();\n        Http::CodeStats&amp; code_stats = httpContext().codeStats();\n        code_stats.chargeBasicResponseStat(cluster_-&gt;statsScope(), stats_.stat_names_.retry_,\n                                           static_cast&lt;Http::Code&gt;(response_code),\n                                           exclude_http_code_stats_);\n\n        if (!end_stream || !upstream_request.encodeComplete()) {\n          upstream_request.resetStream();\n        }\n        auto request_ptr = upstream_request.removeFromList(upstream_requests_);\n        callbacks_-&gt;dispatcher().deferredDelete(std::move(request_ptr));\n        return;\n      } else if (retry_status == RetryStatus::NoOverflow) {\n        callbacks_-&gt;streamInfo().setResponseFlag(StreamInfo::CoreResponseFlag::UpstreamOverflow);\n        could_not_retry = true;\n      } else if (retry_status == RetryStatus::NoRetryLimitExceeded) {\n        callbacks_-&gt;streamInfo().setResponseFlag(\n            StreamInfo::CoreResponseFlag::UpstreamRetryLimitExceeded);\n        could_not_retry = true;\n      }\n    }\n  }\n\n  if (route_entry_-&gt;internalRedirectPolicy().enabled() &amp;&amp;\n      route_entry_-&gt;internalRedirectPolicy().shouldRedirectForResponseCode(\n          static_cast&lt;Http::Code&gt;(response_code)) &amp;&amp;\n      setupRedirect(*headers)) {\n    return;\n    // If the redirect could not be handled, fail open and let it pass to the\n    // next downstream.\n  }\n\n  // Check if we got a \&quot;bad\&quot; response, but there are still upstream requests in\n  // flight awaiting headers or scheduled retries. If so, exit to give them a\n  // chance to return before returning a response downstream.\n  if (could_not_retry &amp;&amp; (numRequestsAwaitingHeaders() &gt; 0 || pending_retries_ &gt; 0)) {\n    upstream_request.upstreamHost()-&gt;stats().rq_error_.inc();\n\n    // Reset the stream because there are other in-flight requests that we&#x27;ll\n    // wait around for and we&#x27;re not interested in consuming any body/trailers.\n    auto request_ptr = upstream_request.removeFromList(upstream_requests_);\n    request_ptr-&gt;resetStream();\n    callbacks_-&gt;dispatcher().deferredDelete(std::move(request_ptr));\n    return;\n  }\n\n  // Make sure any retry timers are destroyed since we may not call cleanup() if end_stream is\n  // false.\n  if (retry_state_) {\n    retry_state_.reset();\n  }\n\n  // Only send upstream service time if we received the complete request and this is not a\n  // premature response.\n  if (DateUtil::timePointValid(downstream_request_complete_time_)) {\n    Event::Dispatcher&amp; dispatcher = callbacks_-&gt;dispatcher();\n    MonotonicTime response_received_time = dispatcher.timeSource().monotonicTime();\n    std::chrono::milliseconds ms = std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(\n        response_received_time - downstream_request_complete_time_);\n    if (!config_-&gt;suppress_envoy_headers_) {\n      headers-&gt;setEnvoyUpstreamServiceTime(ms.count());\n    }\n  }\n\n  upstream_request.upstreamCanary(\n      (headers-&gt;EnvoyUpstreamCanary() &amp;&amp; headers-&gt;EnvoyUpstreamCanary()-&gt;value() == \&quot;true\&quot;) ||\n      upstream_request.upstreamHost()-&gt;canary());\n  chargeUpstreamCode(response_code, *headers, upstream_request.upstreamHost(), false);\n  if (!Http::CodeUtility::is5xx(response_code)) {\n    handleNon5xxResponseHeaders(grpc_status, upstream_request, end_stream, grpc_to_http_status);\n  }\n\n  // Append routing cookies\n  for (const auto&amp; header_value : downstream_set_cookies_) {\n    headers-&gt;addReferenceKey(Http::Headers::get().SetCookie, header_value);\n  }\n\n  callbacks_-&gt;streamInfo().setResponseCodeDetails(\n      StreamInfo::ResponseCodeDetails::get().ViaUpstream);\n\n  callbacks_-&gt;streamInfo().setResponseCode(response_code);\n  downstream_response_started_ = true;\n  final_upstream_request_ = &amp;upstream_request;\n  // Make sure that for request hedging, we end up with the correct final upstream info.\n  callbacks_-&gt;streamInfo().setUpstreamInfo(final_upstream_request_-&gt;streamInfo().upstreamInfo());\n  resetOtherUpstreams(upstream_request);\n\n  // Modify response headers after we have set the final upstream info because we may need to\n  // modify the headers based on the upstream host.\n  modify_headers_(*headers);\n\n  if (end_stream) {\n    onUpstreamComplete(upstream_request);\n  }\n&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/router/router.cc&quot;,
+    &quot;numLines&quot;: 150,
+    &quot;startLine&quot;: 1650,
+    &quot;totalLines&quot;: 2346
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>20. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/header_parser.cc&quot;,
+  &quot;limit&quot;: 100,
+  &quot;offset&quot;: 1
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;#include \&quot;source/common/router/header_parser.h\&quot;\n\n#include &lt;cctype&gt;\n#include &lt;memory&gt;\n#include &lt;regex&gt;\n#include &lt;string&gt;\n\n#include \&quot;envoy/config/core/v3/base.pb.h\&quot;\n\n#include \&quot;source/common/common/assert.h\&quot;\n#include \&quot;source/common/formatter/substitution_formatter.h\&quot;\n#include \&quot;source/common/http/header_utility.h\&quot;\n#include \&quot;source/common/http/headers.h\&quot;\n#include \&quot;source/common/json/json_loader.h\&quot;\n#include \&quot;source/common/protobuf/utility.h\&quot;\n\n#include \&quot;absl/strings/str_cat.h\&quot;\n#include \&quot;absl/strings/str_replace.h\&quot;\n\nnamespace Envoy {\nnamespace Router {\n\nnamespace {\n\nabsl::StatusOr&lt;Formatter::FormatterPtr&gt;\nparseHttpHeaderFormatter(const envoy::config::core::v3::HeaderValue&amp; header_value) {\n  const std::string&amp; key = header_value.key();\n  // PGV constraints provide this guarantee.\n  ASSERT(!key.empty());\n  // We reject :path/:authority rewriting, there is already a well defined mechanism to\n  // perform this in the RouteAction, and doing this via request_headers_to_add\n  // will cause us to have to worry about interaction with other aspects of the\n  // RouteAction, e.g. prefix rewriting. We also reject other :-prefixed\n  // headers, since it seems dangerous and there doesn&#x27;t appear a use case.\n  // Host is disallowed as it created confusing and inconsistent behaviors for\n  // HTTP/1 and HTTP/2. It could arguably be allowed on the response path.\n  if (!Http::HeaderUtility::isModifiableHeader(key)) {\n    return absl::InvalidArgumentError(\&quot;:-prefixed or host headers may not be modified\&quot;);\n  }\n\n  // UPSTREAM_METADATA and DYNAMIC_METADATA must be translated from JSON [\&quot;a\&quot;, \&quot;b\&quot;] format to colon\n  // format (a:b)\n  std::string final_header_value = HeaderParser::translateMetadataFormat(header_value.value());\n  // Change PER_REQUEST_STATE to FILTER_STATE.\n  final_header_value = HeaderParser::translatePerRequestState(final_header_value);\n\n  // Let the substitution formatter parse the final_header_value.\n  return Envoy::Formatter::FormatterImpl::create(final_header_value, true);\n}\n\n} // namespace\n\nHeadersToAddEntry::HeadersToAddEntry(const HeaderValueOption&amp; header_value_option,\n                                     absl::Status&amp; creation_status)\n    : original_value_(header_value_option.header().value()),\n      add_if_empty_(header_value_option.keep_empty_value()) {\n\n  if (header_value_option.has_append()) {\n    // &#x27;append&#x27; is set and ensure the &#x27;append_action&#x27; value is equal to the default value.\n    if (header_value_option.append_action() != HeaderValueOption::APPEND_IF_EXISTS_OR_ADD) {\n      creation_status =\n          absl::InvalidArgumentError(\&quot;Both append and append_action are set and it&#x27;s not allowed\&quot;);\n      return;\n    }\n\n    append_action_ = header_value_option.append().value()\n                         ? HeaderValueOption::APPEND_IF_EXISTS_OR_ADD\n                         : HeaderValueOption::OVERWRITE_IF_EXISTS_OR_ADD;\n  } else {\n    append_action_ = header_value_option.append_action();\n  }\n\n  auto formatter_or_error = parseHttpHeaderFormatter(header_value_option.header());\n  SET_AND_RETURN_IF_NOT_OK(formatter_or_error.status(), creation_status);\n  formatter_ = std::move(formatter_or_error.value());\n}\n\nHeadersToAddEntry::HeadersToAddEntry(const HeaderValue&amp; header_value,\n                                     HeaderAppendAction append_action,\n                                     absl::Status&amp; creation_status)\n    : original_value_(header_value.value()), append_action_(append_action) {\n  auto formatter_or_error = parseHttpHeaderFormatter(header_value);\n  SET_AND_RETURN_IF_NOT_OK(formatter_or_error.status(), creation_status);\n  formatter_ = std::move(formatter_or_error.value());\n}\n\nabsl::StatusOr&lt;HeaderParserPtr&gt;\nHeaderParser::configure(const Protobuf::RepeatedPtrField&lt;HeaderValueOption&gt;&amp; headers_to_add) {\n  HeaderParserPtr header_parser(new HeaderParser());\n  header_parser-&gt;headers_to_add_.reserve(headers_to_add.size());\n  for (const auto&amp; header_value_option : headers_to_add) {\n    auto entry_or_error = HeadersToAddEntry::create(header_value_option);\n    RETURN_IF_NOT_OK_REF(entry_or_error.status());\n    header_parser-&gt;headers_to_add_.emplace_back(\n        Http::LowerCaseString(header_value_option.header().key()),\n        std::move(entry_or_error.value()));\n  }\n\n  return header_parser;\n}&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/router/header_parser.cc&quot;,
+    &quot;numLines&quot;: 100,
+    &quot;startLine&quot;: 1,
+    &quot;totalLines&quot;: 261
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>21. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;evaluateHeaders\&quot; /workspace/source/common/router/header_parser.cc&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;139:void HeaderParser::evaluateHeaders(Http::HeaderMap&amp; headers,\n142:  evaluateHeaders(headers, context, &amp;stream_info);\n145:void HeaderParser::evaluateHeaders(Http::HeaderMap&amp; headers,&quot;
+}</pre></details><details><summary>22. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/header_parser.cc&quot;,
+  &quot;limit&quot;: 150,
+  &quot;offset&quot;: 139
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;void HeaderParser::evaluateHeaders(Http::HeaderMap&amp; headers,\n                                   const Formatter::HttpFormatterContext&amp; context,\n                                   const StreamInfo::StreamInfo&amp; stream_info) const {\n  evaluateHeaders(headers, context, &amp;stream_info);\n}\n\nvoid HeaderParser::evaluateHeaders(Http::HeaderMap&amp; headers,\n                                   const Formatter::HttpFormatterContext&amp; context,\n                                   const StreamInfo::StreamInfo* stream_info) const {\n  // Removing headers in the headers_to_remove_ list first makes\n  // remove-before-add the default behavior as expected by users.\n  for (const auto&amp; header : headers_to_remove_) {\n    headers.remove(header);\n  }\n\n  // Temporary storage to hold evaluated values of headers to add and replace. This is required\n  // to execute all formatters using the original received headers.\n  // Only after all the formatters produced the new values of the headers, the headers are set.\n  // absl::InlinedVector is optimized for 4 headers. After that it behaves as normal std::vector.\n  // It is assumed that most of the use cases will add or modify fairly small number of headers\n  // (&lt;=4). If this assumption changes, the number of inlined capacity should be increased.\n  // header_formatter_speed_test.cc provides micro-benchmark for evaluating speed of adding and\n  // replacing headers and should be used when modifying the code below to access the performance\n  // impact of code changes.\n  absl::InlinedVector&lt;std::pair&lt;const Http::LowerCaseString&amp;, const std::string&gt;, 4&gt; headers_to_add,\n      headers_to_overwrite;\n  // value_buffer is used only when stream_info is a valid pointer and stores header value\n  // created by a formatter. It is declared outside of &#x27;for&#x27; loop for performance reason to avoid\n  // stack allocation and unnecessary std::string&#x27;s memory adjustments for each iteration. The\n  // actual value of the header is accessed via &#x27;value&#x27; variable which is initialized differently\n  // depending whether stream_info and valid or nullptr. Based on performance tests implemented in\n  // header_formatter_speed_test.cc this approach strikes the best balance between performance and\n  // readability.\n  std::string value_buffer;\n  for (const auto&amp; [key, entry] : headers_to_add_) {\n    absl::string_view value;\n    if (stream_info != nullptr) {\n      value_buffer = entry-&gt;formatter_-&gt;formatWithContext(context, *stream_info);\n      value = value_buffer;\n    } else {\n      value = entry-&gt;original_value_;\n    }\n    if (!value.empty() || entry-&gt;add_if_empty_) {\n      switch (entry-&gt;append_action_) {\n        PANIC_ON_PROTO_ENUM_SENTINEL_VALUES;\n      case HeaderValueOption::APPEND_IF_EXISTS_OR_ADD:\n        headers_to_add.emplace_back(key, value);\n        break;\n      case HeaderValueOption::ADD_IF_ABSENT:\n        if (auto header_entry = headers.get(key); header_entry.empty()) {\n          headers_to_add.emplace_back(key, value);\n        }\n        break;\n      case HeaderValueOption::OVERWRITE_IF_EXISTS:\n        if (headers.get(key).empty()) {\n          break;\n        }\n        FALLTHRU;\n      case HeaderValueOption::OVERWRITE_IF_EXISTS_OR_ADD:\n        headers_to_overwrite.emplace_back(key, value);\n        break;\n      }\n    }\n  }\n\n  // First overwrite all headers which need to be overwritten.\n  for (const auto&amp; header : headers_to_overwrite) {\n    headers.setReferenceKey(header.first, header.second);\n  }\n\n  // Now add headers which should be added.\n  for (const auto&amp; header : headers_to_add) {\n    headers.addReferenceKey(header.first, header.second);\n  }\n}\n\nHttp::HeaderTransforms HeaderParser::getHeaderTransforms(const StreamInfo::StreamInfo&amp; stream_info,\n                                                         bool do_formatting) const {\n  Http::HeaderTransforms transforms;\n\n  for (const auto&amp; [key, entry] : headers_to_add_) {\n    if (do_formatting) {\n      const std::string value = entry-&gt;formatter_-&gt;formatWithContext({}, stream_info);\n      if (!value.empty() || entry-&gt;add_if_empty_) {\n        switch (entry-&gt;append_action_) {\n        case HeaderValueOption::APPEND_IF_EXISTS_OR_ADD:\n          transforms.headers_to_append_or_add.push_back({key, value});\n          break;\n        case HeaderValueOption::OVERWRITE_IF_EXISTS_OR_ADD:\n          transforms.headers_to_overwrite_or_add.push_back({key, value});\n          break;\n        case HeaderValueOption::ADD_IF_ABSENT:\n          transforms.headers_to_add_if_absent.push_back({key, value});\n          break;\n        default:\n          break;\n        }\n      }\n    } else {\n      switch (entry-&gt;append_action_) {\n      case HeaderValueOption::APPEND_IF_EXISTS_OR_ADD:\n        transforms.headers_to_append_or_add.push_back({key, entry-&gt;original_value_});\n        break;\n      case HeaderValueOption::OVERWRITE_IF_EXISTS_OR_ADD:\n        transforms.headers_to_overwrite_or_add.push_back({key, entry-&gt;original_value_});\n        break;\n      case HeaderValueOption::ADD_IF_ABSENT:\n        transforms.headers_to_add_if_absent.push_back({key, entry-&gt;original_value_});\n        break;\n      default:\n        break;\n      }\n    }\n  }\n\n  transforms.headers_to_remove = headers_to_remove_;\n\n  return transforms;\n}\n\n} // namespace Router\n} // namespace Envoy\n&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/router/header_parser.cc&quot;,
+    &quot;numLines&quot;: 123,
+    &quot;startLine&quot;: 139,
+    &quot;totalLines&quot;: 261
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>23. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;void setReferenceKey\&quot; /workspace/source/common/http/header_map_impl.h&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;95:  void setReferenceKey(const LowerCaseString&amp; key, absl::string_view value);\n400:  void setReferenceKey(const LowerCaseString&amp; key, absl::string_view value) override {&quot;
+}</pre></details><details><summary>24. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;void.*setReferenceKey\\|void.*addReferenceKey\&quot; /workspace/source/common/http/header_map_impl.cc | head -5&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;264:void HeaderMapImpl::addReferenceKey(const LowerCaseString&amp; key, uint64_t value) {\n272:void HeaderMapImpl::addReferenceKey(const LowerCaseString&amp; key, absl::string_view value) {\n321:void HeaderMapImpl::setReferenceKey(const LowerCaseString&amp; key, absl::string_view value) {&quot;
+}</pre></details><details><summary>25. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/header_map_impl.cc&quot;,
+  &quot;limit&quot;: 50,
+  &quot;offset&quot;: 321
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;void HeaderMapImpl::setReferenceKey(const LowerCaseString&amp; key, absl::string_view value) {\n  remove(key);\n  addReferenceKey(key, value);\n}\n\nvoid HeaderMapImpl::setCopy(const LowerCaseString&amp; key, absl::string_view value) {\n  remove(key);\n  addCopy(key, value);\n}\n\nuint64_t HeaderMapImpl::byteSize() const { return cached_byte_size_; }\n\nvoid HeaderMapImpl::verifyByteSizeInternalForTest() const {\n  // Computes the total byte size by summing the byte size of the keys and values.\n  uint64_t byte_size = 0;\n  for (const HeaderEntryImpl&amp; header : headers_) {\n    byte_size += header.key().size();\n    byte_size += header.value().size();\n  }\n  ASSERT(cached_byte_size_ == byte_size);\n}\n\nHeaderMap::GetResult HeaderMapImpl::get(const LowerCaseString&amp; key) const {\n  return HeaderMap::GetResult(const_cast&lt;HeaderMapImpl*&gt;(this)-&gt;getExisting(key));\n}\n\nHeaderMap::NonConstGetResult HeaderMapImpl::getExisting(absl::string_view key) {\n  // Attempt a trie lookup first to see if the user is requesting an O(1) header. This may be\n  // relatively common in certain header matching / routing patterns.\n  // TODO(mattklein123): Add inline handle support directly to the header matcher code to support\n  // this use case more directly.\n  HeaderMap::NonConstGetResult ret;\n  auto lookup = staticLookup(key);\n  if (lookup.has_value()) {\n    if (*lookup.value().entry_ != nullptr) {\n      ret.push_back(*lookup.value().entry_);\n    }\n    return ret;\n  }\n\n  // If the requested header is not an O(1) header try using the lazy map to\n  // search for it instead of iterating the headers list.\n  if (headers_.maybeMakeMap()) {\n    HeaderList::HeaderLazyMap::iterator iter = headers_.mapFind(key);\n    if (iter != headers_.mapEnd()) {\n      const HeaderList::HeaderNodeVector&amp; v = iter-&gt;second;\n      ASSERT(!v.empty()); // It&#x27;s impossible to have a map entry with an empty vector as its value.\n      for (const auto&amp; values_it : v) {\n        // Convert the iterated value to a HeaderEntry*.\n        ret.push_back(&amp;(*values_it));&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/http/header_map_impl.cc&quot;,
+    &quot;numLines&quot;: 50,
+    &quot;startLine&quot;: 321,
+    &quot;totalLines&quot;: 543
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>26. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/header_map_impl.cc&quot;,
+  &quot;limit&quot;: 50,
+  &quot;offset&quot;: 272
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;void HeaderMapImpl::addReferenceKey(const LowerCaseString&amp; key, absl::string_view value) {\n  HeaderString ref_key(key);\n  HeaderString new_value;\n  new_value.setCopy(value);\n  insertByKey(std::move(ref_key), std::move(new_value));\n  ASSERT(new_value.empty()); // NOLINT(bugprone-use-after-move)\n}\n\nvoid HeaderMapImpl::addCopy(const LowerCaseString&amp; key, uint64_t value) {\n  // In the case that the header is appended, we will perform a needless copy of the key and value.\n  // This is done on purpose to keep the code simple and should be rare.\n  HeaderString new_key;\n  new_key.setCopy(key.get());\n  HeaderString new_value;\n  new_value.setInteger(value);\n  insertByKey(std::move(new_key), std::move(new_value));\n  ASSERT(new_key.empty());   // NOLINT(bugprone-use-after-move)\n  ASSERT(new_value.empty()); // NOLINT(bugprone-use-after-move)\n}\n\nvoid HeaderMapImpl::addCopy(const LowerCaseString&amp; key, absl::string_view value) {\n  // In the case that the header is appended, we will perform a needless copy of the key and value.\n  // This is done on purpose to keep the code simple and should be rare.\n  HeaderString new_key;\n  new_key.setCopy(key.get());\n  HeaderString new_value;\n  new_value.setCopy(value);\n  insertByKey(std::move(new_key), std::move(new_value));\n  ASSERT(new_key.empty());   // NOLINT(bugprone-use-after-move)\n  ASSERT(new_value.empty()); // NOLINT(bugprone-use-after-move)\n}\n\nvoid HeaderMapImpl::appendCopy(const LowerCaseString&amp; key, absl::string_view value) {\n  // TODO(#9221): converge on and document a policy for coalescing multiple headers.\n  auto entry = getExisting(key);\n  if (!entry.empty()) {\n    const auto delimiter = delimiterByHeader(key);\n    const uint64_t added_size = appendToHeader(entry[0]-&gt;value(), value, delimiter);\n    addSize(added_size);\n  } else {\n    addCopy(key, value);\n  }\n}\n\nvoid HeaderMapImpl::setReference(const LowerCaseString&amp; key, absl::string_view value) {\n  remove(key);\n  addReference(key, value);\n}\n\nvoid HeaderMapImpl::setReferenceKey(const LowerCaseString&amp; key, absl::string_view value) {&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/http/header_map_impl.cc&quot;,
+    &quot;numLines&quot;: 50,
+    &quot;startLine&quot;: 272,
+    &quot;totalLines&quot;: 543
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>27. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;find /workspace/api -name \&quot;*.proto\&quot; | xargs grep -l \&quot;HeaderValueOption\&quot; | head -5&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;/workspace/api/envoy/api/v2/core/base.proto\n/workspace/api/envoy/api/v2/core/health_check.proto\n/workspace/api/envoy/api/v2/route/route_components.proto\n/workspace/api/envoy/api/v2/route.proto\n/workspace/api/envoy/config/common/mutation_rules/v3/mutation_rules.proto&quot;
+}</pre></details><details><summary>28. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;find /workspace/api/envoy/config/core -name \&quot;*.proto\&quot; | xargs grep -l \&quot;HeaderValueOption\&quot;&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;/workspace/api/envoy/config/core/v3/base.proto\n/workspace/api/envoy/config/core/v3/health_check.proto\n/workspace/api/envoy/config/core/v3/http_service.proto&quot;
+}</pre></details><details><summary>29. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -A 30 \&quot;message HeaderValueOption\&quot; /workspace/api/envoy/config/core/v3/base.proto&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;message HeaderValueOption {\n  option (udpa.annotations.versioning).previous_message_type =\n      \&quot;envoy.api.v2.core.HeaderValueOption\&quot;;\n\n  // Describes the supported actions types for header append action.\n  enum HeaderAppendAction {\n    // If the header already exists, this action will result in:\n    //\n    // - Comma-concatenated for predefined inline headers.\n    // - Duplicate header added in the ``HeaderMap`` for other headers.\n    //\n    // If the header doesn&#x27;t exist then this will add new header with specified key and value.\n    APPEND_IF_EXISTS_OR_ADD = 0;\n\n    // This action will add the header if it doesn&#x27;t already exist. If the header\n    // already exists then this will be a no-op.\n    ADD_IF_ABSENT = 1;\n\n    // This action will overwrite the specified value by discarding any existing values if\n    // the header already exists. If the header doesn&#x27;t exist then this will add the header\n    // with specified key and value.\n    OVERWRITE_IF_EXISTS_OR_ADD = 2;\n\n    // This action will overwrite the specified value by discarding any existing values if\n    // the header already exists. If the header doesn&#x27;t exist then this will be no-op.\n    OVERWRITE_IF_EXISTS = 3;\n  }\n\n  // Header name/value pair that this option applies to.\n  HeaderValue header = 1 [(validate.rules).message = {required: true}];&quot;
+}</pre></details><details><summary>30. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -A 50 \&quot;message HeaderValueOption\&quot; /workspace/api/envoy/config/core/v3/base.proto | grep -A 10 \&quot;append_action\\|append\&quot;&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;  // Describes the supported actions types for header append action.\n  enum HeaderAppendAction {\n    // If the header already exists, this action will result in:\n    //\n    // - Comma-concatenated for predefined inline headers.\n    // - Duplicate header added in the ``HeaderMap`` for other headers.\n    //\n    // If the header doesn&#x27;t exist then this will add new header with specified key and value.\n    APPEND_IF_EXISTS_OR_ADD = 0;\n\n    // This action will add the header if it doesn&#x27;t already exist. If the header\n--\n  // Should the value be appended? If true (default), the value is appended to\n  // existing values. Otherwise it replaces any existing values.\n  // This field is deprecated and please use\n  // :ref:`append_action &lt;envoy_v3_api_field_config.core.v3.HeaderValueOption.append_action&gt;` as replacement.\n  //\n  // .. note::\n  //   The :ref:`external authorization service &lt;envoy_v3_api_msg_service.auth.v3.CheckResponse&gt;` and\n  //   :ref:`external processor service &lt;envoy_v3_api_msg_service.ext_proc.v3.ProcessingResponse&gt;` have\n  //   default value (``false``) for this field.\n  google.protobuf.BoolValue append = 2\n      [deprecated = true, (envoy.annotations.deprecated_at_minor_version) = \&quot;3.0\&quot;];\n\n  // Describes the action taken to append/overwrite the given value for an existing header\n  // or to only add this header if it&#x27;s absent.\n  // Value defaults to :ref:`APPEND_IF_EXISTS_OR_ADD\n  // &lt;envoy_v3_api_enum_value_config.core.v3.HeaderValueOption.HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD&gt;`.\n  HeaderAppendAction append_action = 3 [(validate.rules).enum = {defined_only: true}];\n\n  // Is the header value allowed to be empty? If false (default), custom headers with empty values are dropped,\n  // otherwise they are added.&quot;
+}</pre></details><details><summary>31. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/header_parser.cc&quot;,
+  &quot;limit&quot;: 30,
+  &quot;offset&quot;: 53
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;HeadersToAddEntry::HeadersToAddEntry(const HeaderValueOption&amp; header_value_option,\n                                     absl::Status&amp; creation_status)\n    : original_value_(header_value_option.header().value()),\n      add_if_empty_(header_value_option.keep_empty_value()) {\n\n  if (header_value_option.has_append()) {\n    // &#x27;append&#x27; is set and ensure the &#x27;append_action&#x27; value is equal to the default value.\n    if (header_value_option.append_action() != HeaderValueOption::APPEND_IF_EXISTS_OR_ADD) {\n      creation_status =\n          absl::InvalidArgumentError(\&quot;Both append and append_action are set and it&#x27;s not allowed\&quot;);\n      return;\n    }\n\n    append_action_ = header_value_option.append().value()\n                         ? HeaderValueOption::APPEND_IF_EXISTS_OR_ADD\n                         : HeaderValueOption::OVERWRITE_IF_EXISTS_OR_ADD;\n  } else {\n    append_action_ = header_value_option.append_action();\n  }\n\n  auto formatter_or_error = parseHttpHeaderFormatter(header_value_option.header());\n  SET_AND_RETURN_IF_NOT_OK(formatter_or_error.status(), creation_status);\n  formatter_ = std::move(formatter_or_error.value());\n}\n\nHeadersToAddEntry::HeadersToAddEntry(const HeaderValue&amp; header_value,\n                                     HeaderAppendAction append_action,\n                                     absl::Status&amp; creation_status)\n    : original_value_(header_value.value()), append_action_(append_action) {\n  auto formatter_or_error = parseHttpHeaderFormatter(header_value);&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/router/header_parser.cc&quot;,
+    &quot;numLines&quot;: 30,
+    &quot;startLine&quot;: 53,
+    &quot;totalLines&quot;: 261
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>32. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;git log --all --oneline --grep=\&quot;finalizeResponseHeaders\\|modify_headers\&quot; | head -20&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;&quot;
+}</pre></details><details><summary>33. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;git log --oneline /workspace/source/common/router/router.cc | head -20&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;cd2f65a Mirror of envoyproxy/envoy at 3c50075376e9f9400e5499347a097caae94b8a40&quot;
+}</pre></details><details><summary>34. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -r \&quot;void.*finalizeResponseHeaders\&quot; /workspace/source/common/router --include=\&quot;*.h\&quot; | head -5&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;/workspace/source/common/router/config_impl.h:  void finalizeResponseHeaders(Http::ResponseHeaderMap&amp;,\n/workspace/source/common/router/config_impl.h:  void finalizeResponseHeaders(Http::ResponseHeaderMap&amp; headers,\n/workspace/source/common/router/delegating_route_impl.h:  void finalizeResponseHeaders(Http::ResponseHeaderMap&amp; headers,&quot;
+}</pre></details><details><summary>35. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;void.*finalizeResponseHeaders\&quot; /workspace/source/common/router/config_impl.cc&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;942:void RouteEntryImplBase::finalizeResponseHeaders(Http::ResponseHeaderMap&amp; headers,&quot;
+}</pre></details><details><summary>36. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/config_impl.cc&quot;,
+  &quot;limit&quot;: 50,
+  &quot;offset&quot;: 942
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;void RouteEntryImplBase::finalizeResponseHeaders(Http::ResponseHeaderMap&amp; headers,\n                                                 const StreamInfo::StreamInfo&amp; stream_info) const {\n  for (const HeaderParser* header_parser : getResponseHeaderParsers(\n           /*specificity_ascend=*/vhost_-&gt;globalRouteConfig().mostSpecificHeaderMutationsWins())) {\n    // Later evaluated header parser wins.\n    header_parser-&gt;evaluateHeaders(headers, {stream_info.getRequestHeaders(), &amp;headers},\n                                   stream_info);\n  }\n}\n\nHttp::HeaderTransforms\nRouteEntryImplBase::responseHeaderTransforms(const StreamInfo::StreamInfo&amp; stream_info,\n                                             bool do_formatting) const {\n  Http::HeaderTransforms transforms;\n  for (const HeaderParser* header_parser : getResponseHeaderParsers(\n           /*specificity_ascend=*/vhost_-&gt;globalRouteConfig().mostSpecificHeaderMutationsWins())) {\n    // Later evaluated header parser wins.\n    mergeTransforms(transforms, header_parser-&gt;getHeaderTransforms(stream_info, do_formatting));\n  }\n  return transforms;\n}\n\nHttp::HeaderTransforms\nRouteEntryImplBase::requestHeaderTransforms(const StreamInfo::StreamInfo&amp; stream_info,\n                                            bool do_formatting) const {\n  Http::HeaderTransforms transforms;\n  for (const HeaderParser* header_parser : getRequestHeaderParsers(\n           /*specificity_ascend=*/vhost_-&gt;globalRouteConfig().mostSpecificHeaderMutationsWins())) {\n    // Later evaluated header parser wins.\n    mergeTransforms(transforms, header_parser-&gt;getHeaderTransforms(stream_info, do_formatting));\n  }\n  return transforms;\n}\n\nstd::array&lt;const HeaderParser*, 3&gt;\nRouteEntryImplBase::getRequestHeaderParsers(bool specificity_ascend) const {\n  return getHeaderParsers(&amp;vhost_-&gt;globalRouteConfig().requestHeaderParser(),\n                          &amp;vhost_-&gt;requestHeaderParser(), &amp;requestHeaderParser(),\n                          specificity_ascend);\n}\n\nstd::array&lt;const HeaderParser*, 3&gt;\nRouteEntryImplBase::getResponseHeaderParsers(bool specificity_ascend) const {\n  return getHeaderParsers(&amp;vhost_-&gt;globalRouteConfig().responseHeaderParser(),\n                          &amp;vhost_-&gt;responseHeaderParser(), &amp;responseHeaderParser(),\n                          specificity_ascend);\n}\n\nstd::unique_ptr&lt;const RouteEntryImplBase::RuntimeData&gt;\nRouteEntryImplBase::loadRuntimeData(const envoy::config::route::v3::RouteMatch&amp; route_match) {&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/router/config_impl.cc&quot;,
+    &quot;numLines&quot;: 50,
+    &quot;startLine&quot;: 942,
+    &quot;totalLines&quot;: 2181
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>37. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/router.cc&quot;,
+  &quot;limit&quot;: 30,
+  &quot;offset&quot;: 550
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;        callbacks_-&gt;sendLocalReply(Http::Code::BadRequest, body, modify_headers_, absl::nullopt,\n                                   details);\n        return Http::FilterHeadersStatus::StopIteration;\n      }\n    }\n  }\n\n  const Http::HeaderEntry* request_alt_name = headers.EnvoyUpstreamAltStatName();\n  if (request_alt_name) {\n    alt_stat_prefix_ = std::make_unique&lt;Stats::StatNameDynamicStorage&gt;(\n        request_alt_name-&gt;value().getStringView(), config_-&gt;scope_.symbolTable());\n    headers.removeEnvoyUpstreamAltStatName();\n  }\n\n  // See if we are supposed to immediately kill some percentage of this cluster&#x27;s traffic.\n  if (cluster_-&gt;maintenanceMode()) {\n    callbacks_-&gt;streamInfo().setResponseFlag(StreamInfo::CoreResponseFlag::UpstreamOverflow);\n    chargeUpstreamCode(Http::Code::ServiceUnavailable, {}, true);\n    callbacks_-&gt;sendLocalReply(\n        Http::Code::ServiceUnavailable, \&quot;maintenance mode\&quot;,\n        [this](Http::ResponseHeaderMap&amp; headers) {\n          if (!config_-&gt;suppress_envoy_headers_) {\n            headers.addReference(Http::Headers::get().EnvoyOverloaded,\n                                 Http::Headers::get().EnvoyOverloadedValues.True);\n          }\n          // Note: append_cluster_info does not respect suppress_envoy_headers.\n          modify_headers_(headers);\n        },\n        absl::nullopt, StreamInfo::ResponseCodeDetails::get().MaintenanceMode);\n    cluster_-&gt;trafficStats()-&gt;upstream_rq_maintenance_mode_.inc();&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/router/router.cc&quot;,
+    &quot;numLines&quot;: 30,
+    &quot;startLine&quot;: 550,
+    &quot;totalLines&quot;: 2346
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>38. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+  &quot;limit&quot;: 35,
+  &quot;offset&quot;: 1109
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;void DownstreamFilterManager::sendLocalReplyViaFilterChain(\n    bool is_grpc_request, Code code, absl::string_view body,\n    const std::function&lt;void(ResponseHeaderMap&amp; headers)&gt;&amp; modify_headers, bool is_head_request,\n    const absl::optional&lt;Grpc::Status::GrpcStatus&gt; grpc_status, absl::string_view details) {\n  ENVOY_STREAM_LOG(debug, \&quot;Sending local reply with details {}\&quot;, *this, details);\n  ASSERT(!filter_manager_callbacks_.responseHeaders().has_value());\n  // For early error handling, do a best-effort attempt to create a filter chain\n  // to ensure access logging. If the filter chain already exists this will be\n  // a no-op.\n  createDownstreamFilterChain();\n\n  Utility::sendLocalReply(\n      state_.destroyed_,\n      Utility::EncodeFunctions{\n          [this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {\n            if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {\n              streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());\n            }\n            if (modify_headers) {\n              modify_headers(headers);\n            }\n          },\n          [this](ResponseHeaderMap&amp; response_headers, Code&amp; code, std::string&amp; body,\n                 absl::string_view&amp; content_type) -&gt; void {\n            local_reply_.rewrite(filter_manager_callbacks_.requestHeaders().ptr(), response_headers,\n                                 streamInfo(), code, body, content_type);\n          },\n          [this](ResponseHeaderMapPtr&amp;&amp; headers, bool end_stream) -&gt; void {\n            filter_manager_callbacks_.setResponseHeaders(std::move(headers));\n            encodeHeaders(nullptr, filter_manager_callbacks_.responseHeaders().ref(), end_stream);\n          },\n          [this](Buffer::Instance&amp; data, bool end_stream) -&gt; void {\n            encodeData(nullptr, data, end_stream,\n                       FilterManager::FilterIterationStartState::CanStartFromCurrent);\n          }},&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+    &quot;numLines&quot;: 35,
+    &quot;startLine&quot;: 1109,
+    &quot;totalLines&quot;: 1982
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>39. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;find /workspace/source/common/http -name \&quot;utility.cc\&quot; | xargs grep -l \&quot;sendLocalReply\&quot;&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;/workspace/source/common/http/utility.cc&quot;
+}</pre></details><details><summary>40. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;void sendLocalReply\\|void encodeLocalReply\&quot; /workspace/source/common/http/utility.cc&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;returnCodeInterpretation&quot;: &quot;No matches found&quot;,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;&quot;
+}</pre></details><details><summary>41. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;sendLocalReply\&quot; /workspace/source/common/http/utility.h&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;386: *                 is invoked in the context of sendLocalReply().\n390:void sendLocalReply(const bool&amp; is_reset, const EncodeFunctions&amp; encode_functions,\n405: *                 is invoked in the context of sendLocalReply().&quot;
+}</pre></details><details><summary>42. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -A 50 \&quot;^void sendLocalReply\&quot; /workspace/source/common/http/utility.cc | head -80&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;&quot;
+}</pre></details><details><summary>43. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;create.*LocalReply\\|prepareLocalReply\\|encodeLocalReply\&quot; /workspace/source/common/http/utility.cc | head -10&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;709:Utility::PreparedLocalReplyPtr Utility::prepareLocalReply(const EncodeFunctions&amp; encode_functions,\n783:void Utility::encodeLocalReply(const bool&amp; is_reset, PreparedLocalReplyPtr prepared_local_reply) {\n812:      prepareLocalReply(encode_functions, local_reply_data);\n814:  encodeLocalReply(is_reset, std::move(prepared_local_reply));&quot;
+}</pre></details><details><summary>44. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/utility.cc&quot;,
+  &quot;limit&quot;: 80,
+  &quot;offset&quot;: 709
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;Utility::PreparedLocalReplyPtr Utility::prepareLocalReply(const EncodeFunctions&amp; encode_functions,\n                                                          const LocalReplyData&amp; local_reply_data) {\n  Code response_code = local_reply_data.response_code_;\n  std::string body_text(local_reply_data.body_text_);\n  absl::string_view content_type(Headers::get().ContentTypeValues.Text);\n\n  ResponseHeaderMapPtr response_headers{createHeaderMap&lt;ResponseHeaderMapImpl&gt;(\n      {{Headers::get().Status, std::to_string(enumToInt(response_code))}})};\n\n  if (encode_functions.modify_headers_) {\n    encode_functions.modify_headers_(*response_headers);\n  }\n  bool has_custom_content_type = false;\n  if (encode_functions.rewrite_) {\n    std::string content_type_value = std::string(response_headers-&gt;getContentTypeValue());\n    encode_functions.rewrite_(*response_headers, response_code, body_text, content_type);\n    has_custom_content_type = (content_type_value != response_headers-&gt;getContentTypeValue());\n  }\n\n  if (local_reply_data.is_grpc_) {\n    response_headers-&gt;setStatus(std::to_string(enumToInt(Code::OK)));\n    response_headers-&gt;setReferenceContentType(Headers::get().ContentTypeValues.Grpc);\n\n    if (response_headers-&gt;getGrpcStatusValue().empty()) {\n      response_headers-&gt;setGrpcStatus(std::to_string(\n          enumToInt(local_reply_data.grpc_status_\n                        ? local_reply_data.grpc_status_.value()\n                        : Grpc::Utility::httpToGrpcStatus(enumToInt(response_code)))));\n    }\n\n    if (!body_text.empty() &amp;&amp; !local_reply_data.is_head_request_) {\n      // TODO(dio): Probably it is worth to consider caching the encoded message based on gRPC\n      // status.\n      // JsonFormatter adds a &#x27;\\n&#x27; at the end. For header value, it should be removed.\n      // https://github.com/envoyproxy/envoy/blob/main/source/common/formatter/substitution_formatter.cc#L129\n      if (content_type == Headers::get().ContentTypeValues.Json &amp;&amp;\n          body_text[body_text.length() - 1] == &#x27;\\n&#x27;) {\n        body_text = body_text.substr(0, body_text.length() - 1);\n      }\n      response_headers-&gt;setGrpcMessage(PercentEncoding::encode(body_text));\n    }\n    // The `modify_headers` function may have added content-length, remove it.\n    response_headers-&gt;removeContentLength();\n\n    // TODO(kbaichoo): In C++20 we will be able to use make_unique with\n    // aggregate initialization.\n    // NOLINTNEXTLINE(modernize-make-unique)\n    return PreparedLocalReplyPtr(new PreparedLocalReply{\n        local_reply_data.is_grpc_, local_reply_data.is_head_request_, std::move(response_headers),\n        std::move(body_text), encode_functions.encode_headers_, encode_functions.encode_data_});\n  }\n\n  if (!body_text.empty()) {\n    response_headers-&gt;setContentLength(body_text.size());\n    // If the content-type is not set, set it.\n    // Alternately if the `rewrite` function has changed body_text and the config didn&#x27;t explicitly\n    // set a content type header, set the content type to be based on the changed body.\n    if (response_headers-&gt;ContentType() == nullptr ||\n        (body_text != local_reply_data.body_text_ &amp;&amp; !has_custom_content_type)) {\n      response_headers-&gt;setReferenceContentType(content_type);\n    }\n  } else {\n    response_headers-&gt;removeContentLength();\n    response_headers-&gt;removeContentType();\n  }\n\n  // TODO(kbaichoo): In C++20 we will be able to use make_unique with\n  // aggregate initialization.\n  // NOLINTNEXTLINE(modernize-make-unique)\n  return PreparedLocalReplyPtr(new PreparedLocalReply{\n      local_reply_data.is_grpc_, local_reply_data.is_head_request_, std::move(response_headers),\n      std::move(body_text), encode_functions.encode_headers_, encode_functions.encode_data_});\n}\n\nvoid Utility::encodeLocalReply(const bool&amp; is_reset, PreparedLocalReplyPtr prepared_local_reply) {\n  ASSERT(prepared_local_reply != nullptr);\n  ResponseHeaderMapPtr response_headers{std::move(prepared_local_reply-&gt;response_headers_)};\n\n  if (prepared_local_reply-&gt;is_grpc_request_) {\n    // Trailers only response&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/http/utility.cc&quot;,
+    &quot;numLines&quot;: 80,
+    &quot;startLine&quot;: 709,
+    &quot;totalLines&quot;: 1667
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>45. <code>Bash</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;commonEncodePrefix\&quot; /workspace/source/common/http/filter_manager.cc&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;interrupted&quot;: false,
+  &quot;isImage&quot;: false,
+  &quot;noOutputExpected&quot;: false,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;stdout&quot;: &quot;922:FilterManager::commonEncodePrefix(ActiveStreamEncoderFilter* filter, bool end_stream,\n926:  ENVOY_STREAM_LOG(trace, \&quot;commonEncodePrefix end_stream: {}, isHalfCloseEnabled: {}\&quot;, *this,\n1207:      commonEncodePrefix(filter, false, FilterIterationStartState::AlwaysStartFromNext);\n1254:      commonEncodePrefix(filter, end_stream, FilterIterationStartState::AlwaysStartFromNext);\n1340:      commonEncodePrefix(filter, false, FilterIterationStartState::CanStartFromCurrent);\n1427:      commonEncodePrefix(filter, end_stream, filter_iteration_start_state);\n1501:      commonEncodePrefix(filter, true, FilterIterationStartState::CanStartFromCurrent);&quot;
+}</pre></details><details><summary>46. <code>Read</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+  &quot;limit&quot;: 100,
+  &quot;offset&quot;: 922
+}</pre><h4>Output</h4><pre>{
+  &quot;file&quot;: {
+    &quot;content&quot;: &quot;FilterManager::commonEncodePrefix(ActiveStreamEncoderFilter* filter, bool end_stream,\n                                  FilterIterationStartState filter_iteration_start_state) {\n  // Only do base state setting on the initial call. Subsequent calls for filtering do not touch\n  // the base state.\n  ENVOY_STREAM_LOG(trace, \&quot;commonEncodePrefix end_stream: {}, isHalfCloseEnabled: {}\&quot;, *this,\n                   end_stream, filter_manager_callbacks_.isHalfCloseEnabled());\n  if (filter == nullptr) {\n    if (end_stream) {\n      ASSERT(!state_.observed_encode_end_stream_);\n      state_.observed_encode_end_stream_ = true;\n\n      // When half close semantics are disabled, receiving end stream from the upstream causes\n      // decoder filter to stop, as neither filters nor upstream is interested in downstream data.\n      // half close is enabled in case tcp proxying is done with http1 encoder. In this case, we\n      // should not stop decoder filter chain when end_stream is true, as it will cause any data\n      // sent in the upstream direction to be\n      // dropped.\n      if (!filter_manager_callbacks_.isHalfCloseEnabled()) {\n        state_.decoder_filter_chain_aborted_ = true;\n      }\n    }\n    return encoder_filters_.begin();\n  }\n\n  if (filter_iteration_start_state == FilterIterationStartState::CanStartFromCurrent &amp;&amp;\n      (*(filter-&gt;entry()))-&gt;iterate_from_current_filter_) {\n    // The filter iteration has been stopped for all frame types, and now the iteration continues.\n    // The current filter&#x27;s encoding callback has not be called. Call it now.\n    return filter-&gt;entry();\n  }\n  return std::next(filter-&gt;entry());\n}\n\nStreamDecoderFilters::Iterator\nFilterManager::commonDecodePrefix(ActiveStreamDecoderFilter* filter,\n                                  FilterIterationStartState filter_iteration_start_state) {\n  if (!filter) {\n    return decoder_filters_.begin();\n  }\n  if (filter_iteration_start_state == FilterIterationStartState::CanStartFromCurrent &amp;&amp;\n      (*(filter-&gt;entry()))-&gt;iterate_from_current_filter_) {\n    // The filter iteration has been stopped for all frame types, and now the iteration continues.\n    // The current filter&#x27;s callback function has not been called. Call it now.\n    return filter-&gt;entry();\n  }\n  return std::next(filter-&gt;entry());\n}\n\nvoid DownstreamFilterManager::onLocalReply(StreamFilterBase::LocalReplyData&amp; data) {\n  state_.under_on_local_reply_ = true;\n  filter_manager_callbacks_.onLocalReply(data.code_);\n\n  for (auto entry : filters_) {\n    if (entry-&gt;onLocalReply(data) == LocalErrorStatus::ContinueAndResetStream) {\n      data.reset_imminent_ = true;\n    }\n  }\n  state_.under_on_local_reply_ = false;\n}\n\nvoid DownstreamFilterManager::sendLocalReply(\n    Code code, absl::string_view body,\n    const std::function&lt;void(ResponseHeaderMap&amp; headers)&gt;&amp; modify_headers,\n    const absl::optional&lt;Grpc::Status::GrpcStatus&gt; grpc_status, absl::string_view details) {\n  ASSERT(!state_.under_on_local_reply_);\n  const bool is_head_request = state_.is_head_request_;\n  const bool is_grpc_request = state_.is_grpc_request_;\n\n  // Stop filter chain iteration if local reply was sent while filter decoding or encoding callbacks\n  // are running.\n  if (state_.filter_call_state_ &amp; FilterCallState::IsDecodingMask) {\n    state_.decoder_filter_chain_aborted_ = true;\n  } else if (state_.filter_call_state_ &amp; FilterCallState::IsEncodingMask) {\n    state_.encoder_filter_chain_aborted_ = true;\n  }\n  // When independent half-close is enabled local reply always stops decoder filter chain.\n  if (filter_manager_callbacks_.isHalfCloseEnabled()) {\n    state_.decoder_filter_chain_aborted_ = true;\n  }\n\n  streamInfo().setResponseCodeDetails(details);\n  StreamFilterBase::LocalReplyData data{code, grpc_status, details, false};\n  onLocalReply(data);\n  if (data.reset_imminent_) {\n    ENVOY_STREAM_LOG(debug, \&quot;Resetting stream due to {}. onLocalReply requested reset.\&quot;, *this,\n                     details);\n    filter_manager_callbacks_.resetStream(Http::StreamResetReason::LocalReset, \&quot;\&quot;);\n    return;\n  }\n\n  if (!filter_manager_callbacks_.responseHeaders().has_value() &amp;&amp;\n      (!filter_manager_callbacks_.informationalHeaders().has_value() ||\n       !(state_.filter_call_state_ &amp; FilterCallState::IsEncodingMask))) {\n    // If the response has not started at all, or if the only response so far is an informational\n    // 1xx that has already been fully processed, send the response through the filter chain.\n\n    if (auto cb = filter_manager_callbacks_.downstreamCallbacks(); cb.has_value()) {\n      // The initial route maybe never be set or the cached route maybe cleared by the filters.\n      // This will force route refreshment if there is not a cached route to avoid potential\n      // route refreshment in the response filter chain.&quot;,
+    &quot;filePath&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+    &quot;numLines&quot;: 100,
+    &quot;startLine&quot;: 922,
+    &quot;totalLines&quot;: 1982
+  },
+  &quot;type&quot;: &quot;text&quot;
+}</pre></details><details><summary>47. <code>Write</code> @ -</summary><h4>Input</h4><pre>{
+  &quot;content&quot;: &quot;# Investigation Report: Duplicate Response Headers in Envoy Filter Pipeline\n\n## Summary\n\nResponse headers configured via `response_headers_to_add` in route configuration are duplicated when the router filter generates a local reply (upstream timeout, connection failure, etc.), but appear only once for proxied upstream responses. The root cause is that `finalizeResponseHeaders()` is invoked twice during local reply processing: once directly in the filter manager&#x27;s local reply path, and again via the router&#x27;s `modify_headers_` callback, causing headers to be added multiple times.\n\n## Root Cause\n\n**File:** `/workspace/source/common/http/filter_manager.cc` (lines 1123-1129)\n**Mechanism:** Double invocation of `route_entry_-&gt;finalizeResponseHeaders()` during local reply processing\n\nIn `DownstreamFilterManager::sendLocalReplyViaFilterChain()`, an `EncodeFunctions` lambda is created that:\n\n1. **First call** (line 1125): Directly calls `route_entry_-&gt;finalizeResponseHeaders()`\n2. **Second call** (line 1128): Calls `modify_headers()` callback, which is the router&#x27;s `modify_headers_` lambda\n\nThe router&#x27;s `modify_headers_` lambda (defined in `/workspace/source/common/router/router.cc` lines 444-453) itself calls `route_entry_-&gt;finalizeResponseHeaders()` again at line 453.\n\n## Evidence\n\n### Local Reply Code Path\n\n**File:** `/workspace/source/common/http/filter_manager.cc:1123-1129`\n```cpp\n[this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {\n  if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {\n    streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());  // CALL #1\n  }\n  if (modify_headers) {\n    modify_headers(headers);  // CALL #2 (router&#x27;s modify_headers_ lambda)\n  }\n},\n```\n\n### Router&#x27;s modify_headers_ Lambda\n\n**File:** `/workspace/source/common/router/router.cc:444-453`\n```cpp\nmodify_headers_ = [this](Http::ResponseHeaderMap&amp; headers) {\n  if (route_entry_ == nullptr) {\n    return;\n  }\n  if (modify_headers_from_upstream_lb_) {\n    modify_headers_from_upstream_lb_(headers);\n  }\n  route_entry_-&gt;finalizeResponseHeaders(headers, callbacks_-&gt;streamInfo());  // FINAL CALL\n\n  if (attempt_count_ == 0 || !route_entry_-&gt;includeAttemptCountInResponse()) {\n    return;\n  }\n  headers.setEnvoyAttemptCount(attempt_count_);\n};\n```\n\n### Upstream Response Path (Correct Behavior)\n\n**File:** `/workspace/source/common/router/router.cc:1794`\n```cpp\nmodify_headers_(*headers);  // SINGLE CALL - finalizeResponseHeaders invoked once\n```\n\nFor upstream responses, `modify_headers_` is called directly, and `finalizeResponseHeaders()` is invoked **only once**.\n\n### Header Parser Implementation\n\n**File:** `/workspace/source/common/router/header_parser.cc:173-212`\n\nThe `evaluateHeaders()` function processes `response_headers_to_add` entries:\n- For `APPEND_IF_EXISTS_OR_ADD` (default when `append_action` not specified or proto defaults apply):\n  - Uses `headers.addReferenceKey()` (line 211), which adds headers without removing existing ones\n  - Multiple calls result in multiple header values\n\n- For `OVERWRITE_IF_EXISTS_OR_ADD`:\n  - Uses `headers.setReferenceKey()` (line 206), which removes then adds\n  - But if header parser evaluation happens twice, the second invocation still produces a header value\n\n### Local Reply Preparation\n\n**File:** `/workspace/source/common/http/utility.cc:709-721`\n\n```cpp\nUtility::PreparedLocalReplyPtr Utility::prepareLocalReply(const EncodeFunctions&amp; encode_functions,\n                                                          const LocalReplyData&amp; local_reply_data) {\n  // ...\n  ResponseHeaderMapPtr response_headers{createHeaderMap&lt;ResponseHeaderMapImpl&gt;(...)};\n\n  if (encode_functions.modify_headers_) {\n    encode_functions.modify_headers_(*response_headers);  // Lambda invoked with both calls\n  }\n  // ...\n}\n```\n\n## Affected Components\n\n1. **`source/common/router/router.cc`**\n   - Router filter&#x27;s `modify_headers_` lambda definition (lines 444-461)\n   - `onUpstreamHeaders()` direct call to `modify_headers_` (line 1794)\n   - Multiple `sendLocalReply()` calls with `modify_headers_` as callback (lines 522, 550, 739, 750, 931, 1002, 1058, 1338, 1405, 2235, 2254)\n\n2. **`source/common/http/filter_manager.cc`**\n   - `DownstreamFilterManager::sendLocalReplyViaFilterChain()` lambda with double `finalizeResponseHeaders()` calls (lines 1123-1129)\n   - `DownstreamFilterManager::sendLocalReply()` orchestrator (lines 982-1053)\n   - `Utility::sendLocalReply()` dispatcher (via utility.cc)\n\n3. **`source/common/router/header_parser.cc`**\n   - `HeaderParser::evaluateHeaders()` applies configured response headers (lines 145-213)\n   - `HeadersToAddEntry` parsing of deprecated `append` vs newer `append_action` fields (lines 53-76)\n\n4. **`source/common/http/utility.cc`**\n   - `Utility::prepareLocalReply()` invokes the modify_headers callback (lines 709-781)\n   - `Utility::encodeLocalReply()` executes the prepared response (lines 783-814)\n\n5. **`api/envoy/config/core/v3/base.proto`**\n   - `HeaderValueOption.append_action` enum with default `APPEND_IF_EXISTS_OR_ADD` (line ~18)\n   - Deprecated `HeaderValueOption.append` BoolValue field (defaults true)\n\n## Causal Chain\n\n1. **Symptom**: Response headers in access logs show duplicate values for the same header key in local replies\n   - Example: `x-custom-trace: abc123` appears twice\n\n2. **Observation**: Headers duplicated only on local replies (timeout, no healthy upstream, etc.), not on proxied responses\n\n3. **Filter Chain Invocation**: `DownstreamFilterManager::sendLocalReply()` is called by the router filter when generating a local response (line 982)\n\n4. **Local Reply Path Selection**: `sendLocalReplyViaFilterChain()` is chosen when response hasn&#x27;t started (line 1031)\n\n5. **Lambda Creation with Double Finalization**: `sendLocalReplyViaFilterChain()` creates an `EncodeFunctions` lambda that calls:\n   - `route_entry_-&gt;finalizeResponseHeaders()` directly (line 1125)\n   - Then `modify_headers()` callback (line 1128)\n\n6. **Router Filter&#x27;s Callback**: The `modify_headers` callback is the router&#x27;s `modify_headers_` lambda, which itself calls `route_entry_-&gt;finalizeResponseHeaders()` (router.cc:453)\n\n7. **Header Parser Double Invocation**: `finalizeResponseHeaders()` (router/config_impl.cc:942-950) invokes `HeaderParser::evaluateHeaders()` for each response header parser\n\n8. **Duplicate Header Addition**: For headers using `APPEND_IF_EXISTS_OR_ADD` or default `append_action`:\n   - First invocation adds header via `addReferenceKey()`\n   - Second invocation adds the same header again via `addReferenceKey()`\n   - Result: Multiple header values for the same key\n\n9. **Root Cause**: The filter manager&#x27;s local reply path was designed to ensure route-specific headers are applied by explicitly calling `finalizeResponseHeaders()`, but this inadvertently bypasses the deduplication mechanism present in the upstream response path where `modify_headers_` is called exactly once.\n\n## Recommendation\n\n### Fix Strategy\n\nThe issue stems from the filter manager&#x27;s attempt to apply route-level response headers in the local reply path. The correct fix is to remove the explicit `finalizeResponseHeaders()` call from the lambda in `sendLocalReplyViaFilterChain()` and rely solely on the `modify_headers` callback (the router&#x27;s `modify_headers_` lambda) to handle header finalization.\n\n**Proposed Change:**\n\nIn `/workspace/source/common/http/filter_manager.cc`, lines 1123-1129, modify the lambda:\n\n```cpp\n// BEFORE (problematic)\n[this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {\n  if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {\n    streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());  // REMOVE THIS\n  }\n  if (modify_headers) {\n    modify_headers(headers);  // This already calls finalizeResponseHeaders()\n  }\n},\n\n// AFTER (fixed)\n[this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {\n  if (modify_headers) {\n    modify_headers(headers);  // Single call handles all header finalization\n  }\n},\n```\n\nApply the same fix to `prepareLocalReplyViaFilterChain()` at lines 1072-1078.\n\n### Diagnostic Steps\n\nTo verify the issue in a running Envoy instance:\n\n1. Enable response logging with both headers and details:\n   - Format string: `\&quot;%RESPONSE_CODE_DETAILS%\&quot;` and `\&quot;%RESP(header-name)%\&quot;`\n\n2. Generate a local reply condition (upstream timeout, circuit breaker open, etc.)\n\n3. Observe response headers in access logs:\n   - Duplicates confirm the issue\n   - Single values after fix confirms resolution\n\n4. Compare behavior with proxied upstream responses (should show single headers in both cases)\n\n### Impact Assessment\n\n- **Breaking Changes**: None - this is a bug fix that normalizes local reply behavior to match upstream response behavior\n- **Performance**: Slight improvement from fewer header parser invocations\n- **Compatibility**: Fixes application-level duplicate header handling bugs\n&quot;,
+  &quot;file_path&quot;: &quot;/logs/agent/investigation.md&quot;
+}</pre><h4>Output</h4><pre>{
+  &quot;content&quot;: &quot;# Investigation Report: Duplicate Response Headers in Envoy Filter Pipeline\n\n## Summary\n\nResponse headers configured via `response_headers_to_add` in route configuration are duplicated when the router filter generates a local reply (upstream timeout, connection failure, etc.), but appear only once for proxied upstream responses. The root cause is that `finalizeResponseHeaders()` is invoked twice during local reply processing: once directly in the filter manager&#x27;s local reply path, and again via the router&#x27;s `modify_headers_` callback, causing headers to be added multiple times.\n\n## Root Cause\n\n**File:** `/workspace/source/common/http/filter_manager.cc` (lines 1123-1129)\n**Mechanism:** Double invocation of `route_entry_-&gt;finalizeResponseHeaders()` during local reply processing\n\nIn `DownstreamFilterManager::sendLocalReplyViaFilterChain()`, an `EncodeFunctions` lambda is created that:\n\n1. **First call** (line 1125): Directly calls `route_entry_-&gt;finalizeResponseHeaders()`\n2. **Second call** (line 1128): Calls `modify_headers()` callback, which is the router&#x27;s `modify_headers_` lambda\n\nThe router&#x27;s `modify_headers_` lambda (defined in `/workspace/source/common/router/router.cc` lines 444-453) itself calls `route_entry_-&gt;finalizeResponseHeaders()` again at line 453.\n\n## Evidence\n\n### Local Reply Code Path\n\n**File:** `/workspace/source/common/http/filter_manager.cc:1123-1129`\n```cpp\n[this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {\n  if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {\n    streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());  // CALL #1\n  }\n  if (modify_headers) {\n    modify_headers(headers);  // CALL #2 (router&#x27;s modify_headers_ lambda)\n  }\n},\n```\n\n### Router&#x27;s modify_headers_ Lambda\n\n**File:** `/workspace/source/common/router/router.cc:444-453`\n```cpp\nmodify_headers_ = [this](Http::ResponseHeaderMap&amp; headers) {\n  if (route_entry_ == nullptr) {\n    return;\n  }\n  if (modify_headers_from_upstream_lb_) {\n    modify_headers_from_upstream_lb_(headers);\n  }\n  route_entry_-&gt;finalizeResponseHeaders(headers, callbacks_-&gt;streamInfo());  // FINAL CALL\n\n  if (attempt_count_ == 0 || !route_entry_-&gt;includeAttemptCountInResponse()) {\n    return;\n  }\n  headers.setEnvoyAttemptCount(attempt_count_);\n};\n```\n\n### Upstream Response Path (Correct Behavior)\n\n**File:** `/workspace/source/common/router/router.cc:1794`\n```cpp\nmodify_headers_(*headers);  // SINGLE CALL - finalizeResponseHeaders invoked once\n```\n\nFor upstream responses, `modify_headers_` is called directly, and `finalizeResponseHeaders()` is invoked **only once**.\n\n### Header Parser Implementation\n\n**File:** `/workspace/source/common/router/header_parser.cc:173-212`\n\nThe `evaluateHeaders()` function processes `response_headers_to_add` entries:\n- For `APPEND_IF_EXISTS_OR_ADD` (default when `append_action` not specified or proto defaults apply):\n  - Uses `headers.addReferenceKey()` (line 211), which adds headers without removing existing ones\n  - Multiple calls result in multiple header values\n\n- For `OVERWRITE_IF_EXISTS_OR_ADD`:\n  - Uses `headers.setReferenceKey()` (line 206), which removes then adds\n  - But if header parser evaluation happens twice, the second invocation still produces a header value\n\n### Local Reply Preparation\n\n**File:** `/workspace/source/common/http/utility.cc:709-721`\n\n```cpp\nUtility::PreparedLocalReplyPtr Utility::prepareLocalReply(const EncodeFunctions&amp; encode_functions,\n                                                          const LocalReplyData&amp; local_reply_data) {\n  // ...\n  ResponseHeaderMapPtr response_headers{createHeaderMap&lt;ResponseHeaderMapImpl&gt;(...)};\n\n  if (encode_functions.modify_headers_) {\n    encode_functions.modify_headers_(*response_headers);  // Lambda invoked with both calls\n  }\n  // ...\n}\n```\n\n## Affected Components\n\n1. **`source/common/router/router.cc`**\n   - Router filter&#x27;s `modify_headers_` lambda definition (lines 444-461)\n   - `onUpstreamHeaders()` direct call to `modify_headers_` (line 1794)\n   - Multiple `sendLocalReply()` calls with `modify_headers_` as callback (lines 522, 550, 739, 750, 931, 1002, 1058, 1338, 1405, 2235, 2254)\n\n2. **`source/common/http/filter_manager.cc`**\n   - `DownstreamFilterManager::sendLocalReplyViaFilterChain()` lambda with double `finalizeResponseHeaders()` calls (lines 1123-1129)\n   - `DownstreamFilterManager::sendLocalReply()` orchestrator (lines 982-1053)\n   - `Utility::sendLocalReply()` dispatcher (via utility.cc)\n\n3. **`source/common/router/header_parser.cc`**\n   - `HeaderParser::evaluateHeaders()` applies configured response headers (lines 145-213)\n   - `HeadersToAddEntry` parsing of deprecated `append` vs newer `append_action` fields (lines 53-76)\n\n4. **`source/common/http/utility.cc`**\n   - `Utility::prepareLocalReply()` invokes the modify_headers callback (lines 709-781)\n   - `Utility::encodeLocalReply()` executes the prepared response (lines 783-814)\n\n5. **`api/envoy/config/core/v3/base.proto`**\n   - `HeaderValueOption.append_action` enum with default `APPEND_IF_EXISTS_OR_ADD` (line ~18)\n   - Deprecated `HeaderValueOption.append` BoolValue field (defaults true)\n\n## Causal Chain\n\n1. **Symptom**: Response headers in access logs show duplicate values for the same header key in local replies\n   - Example: `x-custom-trace: abc123` appears twice\n\n2. **Observation**: Headers duplicated only on local replies (timeout, no healthy upstream, etc.), not on proxied responses\n\n3. **Filter Chain Invocation**: `DownstreamFilterManager::sendLocalReply()` is called by the router filter when generating a local response (line 982)\n\n4. **Local Reply Path Selection**: `sendLocalReplyViaFilterChain()` is chosen when response hasn&#x27;t started (line 1031)\n\n5. **Lambda Creation with Double Finalization**: `sendLocalReplyViaFilterChain()` creates an `EncodeFunctions` lambda that calls:\n   - `route_entry_-&gt;finalizeResponseHeaders()` directly (line 1125)\n   - Then `modify_headers()` callback (line 1128)\n\n6. **Router Filter&#x27;s Callback**: The `modify_headers` callback is the router&#x27;s `modify_headers_` lambda, which itself calls `route_entry_-&gt;finalizeResponseHeaders()` (router.cc:453)\n\n7. **Header Parser Double Invocation**: `finalizeResponseHeaders()` (router/config_impl.cc:942-950) invokes `HeaderParser::evaluateHeaders()` for each response header parser\n\n8. **Duplicate Header Addition**: For headers using `APPEND_IF_EXISTS_OR_ADD` or default `append_action`:\n   - First invocation adds header via `addReferenceKey()`\n   - Second invocation adds the same header again via `addReferenceKey()`\n   - Result: Multiple header values for the same key\n\n9. **Root Cause**: The filter manager&#x27;s local reply path was designed to ensure route-specific headers are applied by explicitly calling `finalizeResponseHeaders()`, but this inadvertently bypasses the deduplication mechanism present in the upstream response path where `modify_headers_` is called exactly once.\n\n## Recommendation\n\n### Fix Strategy\n\nThe issue stems from the filter manager&#x27;s attempt to apply route-level response headers in the local reply path. The correct fix is to remove the explicit `finalizeResponseHeaders()` call from the lambda in `sendLocalReplyViaFilterChain()` and rely solely on the `modify_headers` callback (the router&#x27;s `modify_headers_` lambda) to handle header finalization.\n\n**Proposed Change:**\n\nIn `/workspace/source/common/http/filter_manager.cc`, lines 1123-1129, modify the lambda:\n\n```cpp\n// BEFORE (problematic)\n[this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {\n  if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {\n    streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());  // REMOVE THIS\n  }\n  if (modify_headers) {\n    modify_headers(headers);  // This already calls finalizeResponseHeaders()\n  }\n},\n\n// AFTER (fixed)\n[this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {\n  if (modify_headers) {\n    modify_headers(headers);  // Single call handles all header finalization\n  }\n},\n```\n\nApply the same fix to `prepareLocalReplyViaFilterChain()` at lines 1072-1078.\n\n### Diagnostic Steps\n\nTo verify the issue in a running Envoy instance:\n\n1. Enable response logging with both headers and details:\n   - Format string: `\&quot;%RESPONSE_CODE_DETAILS%\&quot;` and `\&quot;%RESP(header-name)%\&quot;`\n\n2. Generate a local reply condition (upstream timeout, circuit breaker open, etc.)\n\n3. Observe response headers in access logs:\n   - Duplicates confirm the issue\n   - Single values after fix confirms resolution\n\n4. Compare behavior with proxied upstream responses (should show single headers in both cases)\n\n### Impact Assessment\n\n- **Breaking Changes**: None - this is a bug fix that normalizes local reply behavior to match upstream response behavior\n- **Performance**: Slight improvement from fewer header parser invocations\n- **Compatibility**: Fixes application-level duplicate header handling bugs\n&quot;,
+  &quot;filePath&quot;: &quot;/logs/agent/investigation.md&quot;,
+  &quot;originalFile&quot;: null,
+  &quot;structuredPatch&quot;: [],
+  &quot;type&quot;: &quot;create&quot;
+}</pre></details>
+      </details>
+      <details>
+        <summary>Code Changes (1)</summary>
+        <details><summary>1. WRITE <code>/logs/agent/investigation.md</code></summary><pre># Investigation Report: Duplicate Response Headers in Envoy Filter Pipeline
+
+## Summary
+
+Response headers configured via `response_headers_to_add` in route configuration are duplicated when the router filter generates a local reply (upstream timeout, connection failure, etc.), but appear only once for proxied upstream responses. The root cause is that `finalizeResponseHeaders()` is invoked twice during local reply processing: once directly in the filter manager&#x27;s local reply path, and again via the router&#x27;s `modify_headers_` callback, causing headers to be added multiple times.
+
+## Root Cause
+
+**File:** `/workspace/source/common/http/filter_manager.cc` (lines 1123-1129)
+**Mechanism:** Double invocation of `route_entry_-&gt;finalizeResponseHeaders()` during local reply processing
+
+In `DownstreamFilterManager::sendLocalReplyViaFilterChain()`, an `EncodeFunctions` lambda is created that:
+
+1. **First call** (line 1125): Directly calls `route_entry_-&gt;finalizeResponseHeaders()`
+2. **Second call** (line 1128): Calls `modify_headers()` callback, which is the router&#x27;s `modify_headers_` lambda
+
+The router&#x27;s `modify_headers_` lambda (defined in `/workspace/source/common/router/router.cc` lines 444-453) itself calls `route_entry_-&gt;finalizeResponseHeaders()` again at line 453.
+
+## Evidence
+
+### Local Reply Code Path
+
+**File:** `/workspace/source/common/http/filter_manager.cc:1123-1129`
+```cpp
+[this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {
+  if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {
+    streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());  // CALL #1
+  }
+  if (modify_headers) {
+    modify_headers(headers);  // CALL #2 (router&#x27;s modify_headers_ lambda)
+  }
+},
+```
+
+### Router&#x27;s modify_headers_ Lambda
+
+**File:** `/workspa
+... (truncated)</pre></details>
+      </details>
+      <details>
+        <summary>Bash Commands (29)</summary>
+        <pre>1. $ find /workspace -type f -name &quot;*.cc&quot; | grep -E &quot;(router|header)&quot; | head -20</pre><pre>2. $ find /workspace/source/common/router -type f -name &quot;*.cc&quot; | sort</pre><pre>3. $ wc -l /workspace/source/common/router/router.cc</pre><pre>4. $ grep -n &quot;finalizeResponseHeaders\|sendLocalReply\|modify_headers_&quot; /workspace/source/common/router/router.cc</pre><pre>5. $ find /workspace/source/common/http -type f -name &quot;*.h&quot; | xargs grep -l &quot;sendLocalReply&quot; | head -5</pre><pre>6. $ grep -n &quot;sendLocalReply&quot; /workspace/source/common/http/filter_manager.h | head -10</pre><pre>7. $ grep -n &quot;void.*sendLocalReply\|sendLocalReplyViaFilterChain&quot; /workspace/source/common/http/filter_manager.cc | head -20</pre><pre>8. $ grep -n &quot;void.*encodeHeaders&quot; /workspace/source/common/http/filter_manager.cc | head -10</pre><pre>9. $ find /workspace/source/extensions/filters/http -type d -name &quot;*header*&quot;</pre><pre>10. $ find /workspace/source/extensions/filters/http/header_mutation -type f -name &quot;*.cc&quot;</pre><pre>11. $ grep -n &quot;encodeHeaders\|finalizeResponseHeaders&quot; /workspace/source/common/router/upstream_request.cc | head -40</pre><pre>12. $ grep -n &quot;onUpstreamHeaders\|upstream_headers&quot; /workspace/source/common/router/router.cc | head -20</pre><pre>13. $ grep -n &quot;evaluateHeaders&quot; /workspace/source/common/router/header_parser.cc</pre><pre>14. $ grep -n &quot;void setReferenceKey&quot; /workspace/source/common/http/header_map_impl.h</pre><pre>15. $ grep -n &quot;void.*setReferenceKey\|void.*addReferenceKey&quot; /workspace/source/common/http/header_map_impl.cc | head -5</pre><pre>16. $ find /workspace/api -name &quot;*.proto&quot; | xargs grep -l &quot;HeaderValueOption&quot; | head -5</pre><pre>17. $ find /workspace/api/envoy/config/core -name &quot;*.proto&quot; | xargs grep -l &quot;HeaderValueOption&quot;</pre><pre>18. $ grep -A 30 &quot;message HeaderValueOption&quot; /workspace/api/envoy/config/core/v3/base.proto</pre><pre>19. $ grep -A 50 &quot;message HeaderValueOption&quot; /workspace/api/envoy/config/core/v3/base.proto | grep -A 10 &quot;append_action\|append&quot;</pre><pre>20. $ git log --all --oneline --grep=&quot;finalizeResponseHeaders\|modify_headers&quot; | head -20</pre><pre>21. $ git log --oneline /workspace/source/common/router/router.cc | head -20</pre><pre>22. $ grep -r &quot;void.*finalizeResponseHeaders&quot; /workspace/source/common/router --include=&quot;*.h&quot; | head -5</pre><pre>23. $ grep -n &quot;void.*finalizeResponseHeaders&quot; /workspace/source/common/router/config_impl.cc</pre><pre>24. $ find /workspace/source/common/http -name &quot;utility.cc&quot; | xargs grep -l &quot;sendLocalReply&quot;</pre><pre>25. $ grep -n &quot;void sendLocalReply\|void encodeLocalReply&quot; /workspace/source/common/http/utility.cc</pre><pre>26. $ grep -n &quot;sendLocalReply&quot; /workspace/source/common/http/utility.h</pre><pre>27. $ grep -A 50 &quot;^void sendLocalReply&quot; /workspace/source/common/http/utility.cc | head -80</pre><pre>28. $ grep -n &quot;create.*LocalReply\|prepareLocalReply\|encodeLocalReply&quot; /workspace/source/common/http/utility.cc | head -10</pre><pre>29. $ grep -n &quot;commonEncodePrefix&quot; /workspace/source/common/http/filter_manager.cc</pre>
+      </details>
+    </div>
+  </div>
+</body>
+</html>

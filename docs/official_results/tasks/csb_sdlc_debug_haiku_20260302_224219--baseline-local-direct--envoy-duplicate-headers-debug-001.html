@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>envoy-duplicate-headers-debug-001 - Official Results</title>
+  <style>
+    :root { --bg:#0b1117; --panel:#131d27; --border:#2a3a4a; --text:#e9f0f6; --muted:#9fb1c2; --accent:#4fd39b; }
+    body { margin:0; font-family: ui-sans-serif,system-ui,-apple-system,sans-serif; background:linear-gradient(180deg,#0b1117,#0f1720); color:var(--text); }
+    .wrap { max-width:1200px; margin:0 auto; padding:20px; }
+    h1,h2,h3,h4 { margin:0 0 10px; }
+    .panel { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:14px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+    .metric { background:#0f1821; border:1px solid var(--border); border-radius:10px; padding:10px; }
+    .metric .k { color:var(--muted); font-size:12px; }
+    .metric .v { font-size:20px; margin-top:4px; }
+    .meta { color:var(--muted); font-size:13px; }
+    table { width:100%; border-collapse:collapse; }
+    th,td { border-bottom:1px solid var(--border); padding:8px; text-align:left; vertical-align:top; font-size:13px; }
+    th { color:var(--muted); }
+    code,pre { font-family: ui-monospace,SFMono-Regular,Menlo,monospace; }
+    pre { white-space:pre-wrap; overflow-wrap:anywhere; background:#0d151d; border:1px solid var(--border); border-radius:8px; padding:8px; margin:8px 0; }
+    details { border:1px solid var(--border); border-radius:10px; padding:8px 10px; margin:8px 0; background:#0f1821; }
+    summary { cursor:pointer; color:var(--accent); }
+    a { color:var(--accent); text-decoration:none; }
+    .split { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    @media (max-width: 900px) { .split { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>envoy-duplicate-headers-debug-001</h1>
+    <p class="meta">Suite <code>csb_sdlc_debug</code> | Run <code>csb_sdlc_debug_haiku_20260302_224219</code> | Config <code>baseline-local-direct</code></p>
+
+    <div class="panel">
+      <h2>Task Information</h2>
+      <div class="grid">
+        <div class="metric"><div class="k">Repositories</div><div class="v" style="font-size:14px">envoyproxy/envoy</div></div>
+        <div class="metric"><div class="k">Task ID</div><div class="v" style="font-size:14px">envoy-duplicate-headers-debug-001</div></div>
+        <div class="metric"><div class="k">Agent</div><div class="v" style="font-size:16px">claude-code</div></div>
+        <div class="metric"><div class="k">Model</div><div class="v" style="font-size:16px">claude-haiku-4-5-20251001</div></div>
+      </div>
+      <p class="meta" style="margin-top:10px">Benchmark path: <code>configs/../benchmarks/csb_sdlc_debug/envoy-duplicate-headers-debug-001</code></p>
+      <details>
+        <summary>Task instruction sent to agent</summary>
+        <pre># Investigation: Duplicate Response Headers in Envoy Filter Pipeline
+
+**Repository:** envoyproxy/envoy
+**Task Type:** Deep Causal Chain (investigation only — no code fixes)
+
+## Scenario
+
+An Envoy proxy operator reports that response headers configured via `response_headers_to_add` in route configuration are being **duplicated** in certain responses. Specifically, when the router filter generates a local reply (e.g., upstream timeout, connection failure, or request too large), custom response headers like `x-request-id-echo` appear twice in the HTTP response.
+
+The issue is intermittent — it only affects responses where the router itself generates the reply (local replies) rather than forwarding an upstream response. Normal proxied responses have headers added exactly once.
+
+Access log snippet showing the problem (using `%RESPONSE_CODE_DETAILS%` formatter):
+
+```
+[2025-08-15T10:23:45.001Z] &quot;GET /api/v1/data HTTP/1.1&quot; 504 UT
+response_code_details=upstream_response_timeout
+x-custom-trace: abc123
+x-custom-trace: abc123
+```
+
+The header `x-custom-trace` appears twice. The route config has:
+
+```yaml
+response_headers_to_add:
+  - header:
+      key: &quot;x-custom-trace&quot;
+      value: &quot;%REQ(x-request-id)%&quot;
+    append_action: OVERWRITE_IF_EXISTS_OR_ADD
+```
+
+Despite using `OVERWRITE_IF_EXISTS_OR_ADD`, the header is duplicated on local replies but not on proxied upstream responses.
+
+## Your Task
+
+Investigate the root cause of this duplicate header behavior and produce a report at `/logs/agent/investigation.md`.
+
+Your report MUST cover:
+
+1. **How the router filter processes response headers** — specifically the `finalizeResponseHeaders()` call chain and the `modify_headers_` callback
+2. **How local replies are generated** — the `sendLocalReply` code path in the router and how it differs from the upstream response path
+3. **The specific mechanism causing double processing** — which PR/change moved `finalizeResponseHeaders()` into the `modify_headers_` callback, and why this causes double invocation for local replies
+4. **The interaction between `sendLocalReply` and `modify_headers_`** — how `sendLocalReply` calls `finalizeResponseHeaders()` directly, AND the `modify_headers_` callback also calls it, resulting in headers being added twice
+5. **The role of the `append_action` / `append` proto fields** — how `HeaderValueOption` config is parsed in `header_parser.cc`, including the deprecated `append` BoolValue field vs the newer `append_action` enum, and how proto default values affect behavior
+6. **The filter manager&#x27;s encode path** — how `FilterManager::encodeHeaders()` iterates through filters in reverse order and how the header mutation filter interacts with route-level header additions
+7. **Which files and functions form the full causal chain** from symptom (duplicate headers in access log) to root cause (double `finalizeResponseHeaders()` call)
+
+## Output Requirements
+
+Write your investigation report to `/logs/agent/investigation.md` with these sections:
+
+```
+# Investigation Report
+
+## Summary
+&lt;1-2 sentence finding&gt;
+
+## Root Cause
+&lt;Specific file, function, and mechanism&gt;
+
+## Evidence
+&lt;Code references with file paths and line numbers&gt;
+
+## Affected Components
+&lt;List of packages/modules impacted&gt;
+
+## Causal Chain
+&lt;Ordered list: symptom → intermediate hops → root cause&gt;
+
+## Recommendation
+&lt;Fix strategy and diagnostic steps&gt;
+```
+
+## Constraints
+
+- Do NOT write any code fixes
+- Do NOT modify any source files
+- Your job is investigation and analysis only
+- The causal chain spans at least 4 packages: `source/common/router/`, `source/common/http/`, `source/extensions/filters/http/header_mutation/`, and `api/envoy/config/core/v3/`</pre>
+      </details>
+    </div>
+
+    <div class="panel">
+      <h2>Execution Metrics</h2>
+      <div class="grid">
+        <div class="metric"><div class="k">Reward</div><div class="v">0.9400</div></div>
+        <div class="metric"><div class="k">Status</div><div class="v">passed</div></div>
+        <div class="metric"><div class="k">Total Time</div><div class="v">211.4s</div></div>
+        <div class="metric"><div class="k">Agent Time</div><div class="v">187.6s</div></div>
+        <div class="metric"><div class="k">Input Tokens</div><div class="v">4,246,562</div></div>
+        <div class="metric"><div class="k">Output Tokens</div><div class="v">18,059</div></div>
+        <div class="metric"><div class="k">Cache Tokens</div><div class="v">4,245,658</div></div>
+        <div class="metric"><div class="k">Tool Calls</div><div class="v">41</div></div>
+        <div class="metric"><div class="k">MCP Ratio</div><div class="v">0.000</div></div>
+      </div>
+      <p class="meta">Raw traces: <a href='../audits/csb_sdlc_debug_haiku_20260302_224219--baseline-local-direct--envoy-duplicate-headers-debug-001.json'>audit.json</a> | <a href='../traces/csb_sdlc_debug_haiku_20260302_224219--baseline-local-direct--envoy-duplicate-headers-debug-001/trajectory.json'>trajectory.json</a> | <a href='../traces/csb_sdlc_debug_haiku_20260302_224219--baseline-local-direct--envoy-duplicate-headers-debug-001/claude-code.txt'>transcript</a></p>
+      <details>
+        <summary>Tool Breakdown</summary>
+        <table><thead><tr><th>Tool</th><th>Calls</th></tr></thead><tbody><tr><td><code>Bash</code></td><td>25</td></tr><tr><td><code>Read</code></td><td>14</td></tr><tr><td><code>Glob</code></td><td>1</td></tr><tr><td><code>Write</code></td><td>1</td></tr></tbody></table>
+      </details>
+      <details>
+        <summary>Context Metrics (task_metrics / IR analysis)</summary>
+        <h3>Context</h3>
+        <table><tbody><tr><td>context_window_peak_pct</td><td>0.4045</td></tr><tr><td>environment_setup_seconds</td><td>0.966913</td></tr><tr><td>files_modified</td><td>1</td></tr><tr><td>lines_added</td><td>248</td></tr><tr><td>lines_removed</td><td>0</td></tr><tr><td>task_context_length</td><td>900000</td></tr><tr><td>verifier_seconds</td><td>0.623361</td></tr></tbody></table>
+        <h3 style="margin-top:10px">IR</h3>
+        <table><tbody><tr><td colspan='2'>No IR metrics available</td></tr></tbody></table>
+      </details>
+    </div>
+
+    <div class="panel">
+      <h2>Agent Trace</h2>
+      <details open>
+        <summary>Conversation History (90)</summary>
+        <table>
+          <thead><tr><th>#</th><th>Timestamp</th><th>Type</th><th>Subtype</th><th>Tool</th><th>Text</th></tr></thead>
+          <tbody><tr><td>1</td><td>-</td><td>system</td><td>init</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>2</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>I&#x27;ll investigate this duplicate response headers issue in Envoy. This is a complex causal chain problem that requires tracing through multiple components. Let me start by exploring the repository structure and the relevant code paths.</pre></td></tr><tr><td>3</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>4</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>5</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>6</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>7</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>8</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>9</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>10</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>11</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Glob</code></td><td><pre></pre></td></tr><tr><td>12</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>13</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>14</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>15</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>16</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>17</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>18</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>19</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>20</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>21</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>22</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>23</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Now let me look at the relevant code sections. I need to search for `sendLocalReply` and `finalizeResponseHeaders`:</pre></td></tr><tr><td>24</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>25</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>26</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>27</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>28</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>29</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>30</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>31</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>32</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>33</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>34</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>35</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>36</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>37</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>38</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>39</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>40</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>41</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>42</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>43</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>44</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>45</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>46</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>47</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>48</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>49</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>50</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>51</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>52</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>53</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>54</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>55</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>56</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Now let me check the proto definition for HeaderValueOption to understand the append_action field:</pre></td></tr><tr><td>57</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>58</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>59</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>60</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>61</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>62</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>63</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>64</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>65</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>66</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>67</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>68</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>69</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>70</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>71</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>72</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>73</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>74</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>75</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>76</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>77</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>78</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>79</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>80</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>81</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Let me create a comprehensive investigation report by checking a few more critical code sections:</pre></td></tr><tr><td>82</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Read</code></td><td><pre></pre></td></tr><tr><td>83</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>84</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Let me search for how the actual header mutations work when called multiple times:</pre></td></tr><tr><td>85</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Bash</code></td><td><pre></pre></td></tr><tr><td>86</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>87</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Now I have enough information to write a detailed investigation report. Let me create it:</pre></td></tr><tr><td>88</td><td>-</td><td>assistant</td><td>tool_use</td><td><code>Write</code></td><td><pre></pre></td></tr><tr><td>89</td><td>-</td><td>user</td><td>text</td><td><code>-</code></td><td><pre></pre></td></tr><tr><td>90</td><td>-</td><td>assistant</td><td>text</td><td><code>-</code></td><td><pre>Perfect! I&#x27;ve completed a comprehensive investigation of the duplicate response headers issue in Envoy. Here&#x27;s a summary of what I found:
+
+## Investigation Complete
+
+I&#x27;ve created a detailed investigation report at `/logs/agent/investigation.md` that covers the entire causal chain of the duplicate header issue.
+
+### Key Findings:
+
+**Root Cause**: `finalizeResponseHeaders()` is being called **twice** for local reply responses:
+1. **First call** in `filter_manager.cc:1125` (inside `sendLocalReplyViaFilterChain()`)
+2. **Second call** in `router.cc:453` (inside the `modify_headers_` lambda)
+
+**Why Local Replies Are Affected**:
+- When an upstream timeout or error occurs, the router filter calls `sendLocalReply()` with a callback that invokes `modify_headers_`
+- The filter manager&#x27;s local reply handler creates a lambda that calls `finalizeResponseHeaders()` directly AND then calls the `modify_headers` callback
+- The `modify_headers` callback is the router filter&#x27;s lambda, which also calls `finalizeResponseHeaders()`
+- This results in response header transformations being applied twice
+
+**Why Normal Upstream Responses Don&#x27;t Have This Problem**:
+- For upstream responses, `finalizeResponseHeaders()` is only called once during normal response encoding, not through the double-lambda pattern used for local replies
+
+**The Four-Package Causal Chain**:
+1. **source/common/router/** - Router filter creates `modify_headers_` callback and calls `sendLocalReply()`
+2. **source/common/http/** - FilterManager&#x27;s `sendLocalReplyViaFilterChain()` adds the first `finalizeResponseHeaders()` call
+3. **source/common/router/config_impl.cc** - Contains `RouteEntryImplBase::finalizeResponseHeaders()` (the function being called twice)
+4. **api/envoy/config/core/v3/base.proto** - Defines the `HeaderValueO
+... (truncated)</pre></td></tr></tbody>
+        </table>
+      </details>
+      <details>
+        <summary>Tool Calls (41)</summary>
+        <details><summary>1. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;find /workspace -type f -name \&quot;*.md\&quot; | grep -i readme | head -5&quot;
+}</pre></details><details><summary>2. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;ls -la /workspace/source/common/router/ | head -20&quot;
+}</pre></details><details><summary>3. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;ls -la /workspace/source/common/router/ | tail -20&quot;
+}</pre></details><details><summary>4. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;ls -la /workspace/source/extensions/filters/http/header_mutation/ 2&gt;/dev/null || echo \&quot;Not found with that path, let me search\&quot;&quot;
+}</pre></details><details><summary>5. <code>Glob</code> @ -</summary><pre>{
+  &quot;pattern&quot;: &quot;source/common/router/filter.h&quot;
+}</pre></details><details><summary>6. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;find /workspace/source/common/router -name \&quot;*.h\&quot; -o -name \&quot;*.cc\&quot; | grep -E \&quot;(filter|router)\&quot; | head -20&quot;
+}</pre></details><details><summary>7. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;find /workspace/source/extensions/filters/http -type d -name \&quot;*router*\&quot;&quot;
+}</pre></details><details><summary>8. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;ls -la /workspace/source/extensions/filters/http/router/&quot;
+}</pre></details><details><summary>9. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;find /workspace/source -type f -name \&quot;*.h\&quot; -path \&quot;*/router*\&quot; | grep -v test | head -30&quot;
+}</pre></details><details><summary>10. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/router.h&quot;
+}</pre></details><details><summary>11. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -rn \&quot;sendLocalReply\&quot; /workspace/source/common/router/ --include=\&quot;*.cc\&quot; --include=\&quot;*.h\&quot; | head -20&quot;
+}</pre></details><details><summary>12. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -rn \&quot;finalizeResponseHeaders\&quot; /workspace/source/common/router/ --include=\&quot;*.cc\&quot; --include=\&quot;*.h\&quot;&quot;
+}</pre></details><details><summary>13. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/router.cc&quot;,
+  &quot;limit&quot;: 100,
+  &quot;offset&quot;: 440
+}</pre></details><details><summary>14. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -rn \&quot;void sendLocalReply\&quot; /workspace/source/common/http/ --include=\&quot;*.h\&quot; | head -10&quot;
+}</pre></details><details><summary>15. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;void FilterManager::sendLocalReply\\|void FilterManager::sendLocalReplyViaFilterChain\&quot; /workspace/source/common/http/filter_manager.cc | head -10&quot;
+}</pre></details><details><summary>16. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;find /workspace/source/common/http -name \&quot;*.cc\&quot; -exec grep -l \&quot;sendLocalReply\&quot; {} \\;&quot;
+}</pre></details><details><summary>17. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;sendLocalReply\&quot; /workspace/source/common/http/filter_manager.cc | head -20&quot;
+}</pre></details><details><summary>18. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+  &quot;limit&quot;: 150,
+  &quot;offset&quot;: 982
+}</pre></details><details><summary>19. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/config_impl.cc&quot;,
+  &quot;limit&quot;: 50,
+  &quot;offset&quot;: 935
+}</pre></details><details><summary>20. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/header_parser.h&quot;
+}</pre></details><details><summary>21. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/header_parser.cc&quot;
+}</pre></details><details><summary>22. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;addReferenceKey\\|setReferenceKey\&quot; /workspace/source/common/http/header_map_impl.h | head -20&quot;
+}</pre></details><details><summary>23. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;void HeaderMapImpl::addReferenceKey\\|void HeaderMapImpl::setReferenceKey\&quot; /workspace/source/common/http/header_map_impl.cc&quot;
+}</pre></details><details><summary>24. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/header_map_impl.cc&quot;,
+  &quot;limit&quot;: 80,
+  &quot;offset&quot;: 264
+}</pre></details><details><summary>25. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;void HeaderMapImpl::insertByKey\\|HeaderMapImpl::insertByKey\&quot; /workspace/source/common/http/header_map_impl.cc | head -5&quot;
+}</pre></details><details><summary>26. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/header_map_impl.cc&quot;,
+  &quot;limit&quot;: 35,
+  &quot;offset&quot;: 234
+}</pre></details><details><summary>27. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;find /workspace/api -name \&quot;*.proto\&quot; -path \&quot;*core*\&quot; | head -10&quot;
+}</pre></details><details><summary>28. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;find /workspace/api -name \&quot;base.proto\&quot; | grep v3&quot;
+}</pre></details><details><summary>29. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;message HeaderValueOption\&quot; /workspace/api/envoy/config/core/v3/base.proto&quot;
+}</pre></details><details><summary>30. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/api/envoy/config/core/v3/base.proto&quot;,
+  &quot;limit&quot;: 50,
+  &quot;offset&quot;: 429
+}</pre></details><details><summary>31. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;git log --oneline --all -20 | head -20&quot;
+}</pre></details><details><summary>32. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;git log --oneline source/common/router/router.cc 2&gt;/dev/null | head -20&quot;
+}</pre></details><details><summary>33. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/extensions/filters/http/header_mutation/header_mutation.h&quot;
+}</pre></details><details><summary>34. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/extensions/filters/http/header_mutation/header_mutation.cc&quot;
+}</pre></details><details><summary>35. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;encodeHeaders\&quot; /workspace/source/common/http/filter_manager.cc | head -20&quot;
+}</pre></details><details><summary>36. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+  &quot;limit&quot;: 100,
+  &quot;offset&quot;: 1244
+}</pre></details><details><summary>37. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;onPerTryTimeout\\|onResponseTimeout\\|onUpstreamTimeoutAbort\&quot; /workspace/source/common/router/router.cc | head -20&quot;
+}</pre></details><details><summary>38. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/router/router.cc&quot;,
+  &quot;limit&quot;: 80,
+  &quot;offset&quot;: 1372
+}</pre></details><details><summary>39. <code>Read</code> @ -</summary><pre>{
+  &quot;file_path&quot;: &quot;/workspace/source/common/http/filter_manager.cc&quot;,
+  &quot;limit&quot;: 30,
+  &quot;offset&quot;: 1070
+}</pre></details><details><summary>40. <code>Bash</code> @ -</summary><pre>{
+  &quot;command&quot;: &quot;grep -n \&quot;void Utility::sendLocalReply\\|void Utility::prepareLocalReply\&quot; /workspace/source/common/http/utility.cc | head -5&quot;
+}</pre></details><details><summary>41. <code>Write</code> @ -</summary><pre>{
+  &quot;content&quot;: &quot;# Investigation Report: Duplicate Response Headers in Envoy Filter Pipeline\n\n## Summary\n\nResponse headers configured via `response_headers_to_add` in route configuration are being **duplicated in local reply responses** because `finalizeResponseHeaders()` is called twice through different code paths: once directly in `sendLocalReplyViaFilterChain()` and again indirectly through the `modify_headers_` callback from the router filter. This double invocation applies the same header transformations twice, resulting in duplicate headers for local replies (timeouts, connection failures, etc.) while normal proxied upstream responses remain unaffected.\n\n## Root Cause\n\n**Double invocation of `finalizeResponseHeaders()` specific to the local reply code path.**\n\nThe causal mechanism:\n1. **Initial Setup (router.cc:444-461)**: The router filter&#x27;s `decodeHeaders()` method creates a `modify_headers_` lambda closure that captures `this` and calls `route_entry_-&gt;finalizeResponseHeaders()` (line 453)\n2. **Local Reply Initiated (router.cc:1405-1414)**: When the router filter needs to send a local reply (e.g., upstream timeout in `onUpstreamAbort()`), it calls `callbacks_-&gt;sendLocalReply()` passing a callback that invokes `modify_headers_(headers)`\n3. **First Finalization (filter_manager.cc:1120-1129)**: In `sendLocalReplyViaFilterChain()`, Envoy creates a lambda that:\n   - Calls `streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders()` directly at line 1125\n   - Then calls the `modify_headers` callback (the one from step 2) at line 1128\n4. **Second Finalization (router.cc:453)**: The callback from step 2 executes the `modify_headers_` lambda from step 1, which calls `finalizeResponseHeaders()` again\n5. **Result**: `finalizeResponseHeaders()` is invoked twice on the same response header map, applying all header transformations (including `response_headers_to_add`) twice\n\nFor upstream responses that are **not** local replies, `modify_headers_` is only invoked once during normal response processing, so duplicates do not occur.\n\n## Evidence\n\n### Code Path Evidence\n\n**Router Filter Setup (source/common/router/router.cc:444-461)**:\n```cpp\nmodify_headers_ = [this](Http::ResponseHeaderMap&amp; headers) {\n  if (route_entry_ == nullptr) {\n    return;\n  }\n  if (modify_headers_from_upstream_lb_) {\n    modify_headers_from_upstream_lb_(headers);\n  }\n  route_entry_-&gt;finalizeResponseHeaders(headers, callbacks_-&gt;streamInfo());  // LINE 453\n  // ... attempt count logic ...\n};\n```\n\n**Local Reply Invocation (source/common/router/router.cc:1405-1414)**:\n```cpp\nvoid Filter::onUpstreamAbort(Http::Code code, StreamInfo::CoreResponseFlag response_flags,\n                             absl::string_view body, bool dropped, absl::string_view details) {\n  // ...\n  callbacks_-&gt;sendLocalReply(\n      code, body,\n      [dropped, this](Http::ResponseHeaderMap&amp; headers) {  // Anonymous callback\n        if (dropped &amp;&amp; !config_-&gt;suppress_envoy_headers_) {\n          headers.addReference(Http::Headers::get().EnvoyOverloaded, ...);\n        }\n        modify_headers_(headers);  // LINE 1412: Calls router filter&#x27;s lambda\n      },\n      absl::nullopt, details);\n}\n```\n\n**FilterManager&#x27;s Local Reply Finalization (source/common/http/filter_manager.cc:1120-1129)**:\n```cpp\nvoid DownstreamFilterManager::sendLocalReplyViaFilterChain(\n    bool is_grpc_request, Code code, absl::string_view body,\n    const std::function&lt;void(ResponseHeaderMap&amp; headers)&gt;&amp; modify_headers, ...) {\n  // ...\n  Utility::sendLocalReply(\n      state_.destroyed_,\n      Utility::EncodeFunctions{\n          [this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {\n            if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {\n              streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());  // LINE 1125\n            }\n            if (modify_headers) {\n              modify_headers(headers);  // LINE 1128: Calls the callback that calls modify_headers_\n            }\n          },\n          // ... other encode functions ...\n      },\n      // ...\n  );\n}\n```\n\n**Identical Pattern in Prepare Path (source/common/http/filter_manager.cc:1070-1078)**:\n```cpp\nprepared_local_reply_ = Utility::prepareLocalReply(\n    Utility::EncodeFunctions{\n        [this, modify_headers](ResponseHeaderMap&amp; headers) -&gt; void {\n          if (streamInfo().route() &amp;&amp; streamInfo().route()-&gt;routeEntry()) {\n            streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders(headers, streamInfo());  // LINE 1074\n          }\n          if (modify_headers) {\n            modify_headers(headers);  // LINE 1077\n          }\n        },\n        // ...\n    },\n    // ...\n);\n```\n\n### Header Transformation Evidence\n\n**Header Parser&#x27;s `evaluateHeaders()` (source/common/router/header_parser.cc:139-213)**:\n\nWhen `finalizeResponseHeaders()` calls `header_parser-&gt;evaluateHeaders()`, the logic processes headers based on `append_action_`:\n\n```cpp\nvoid HeaderParser::evaluateHeaders(Http::HeaderMap&amp; headers,\n                                   const Formatter::HttpFormatterContext&amp; context,\n                                   const StreamInfo::StreamInfo* stream_info) const {\n  // ... remove headers ...\n  for (const auto&amp; [key, entry] : headers_to_add_) {\n    // ... format value ...\n    switch (entry-&gt;append_action_) {\n      case HeaderValueOption::APPEND_IF_EXISTS_OR_ADD:\n        headers_to_add.emplace_back(key, value);  // Will call addReferenceKey\n        break;\n      case HeaderValueOption::ADD_IF_ABSENT:\n        if (headers.get(key).empty()) {\n          headers_to_add.emplace_back(key, value);\n        }\n        break;\n      case HeaderValueOption::OVERWRITE_IF_EXISTS_OR_ADD:\n        headers_to_overwrite.emplace_back(key, value);  // Will call setReferenceKey\n        break;\n    }\n  }\n  // First overwrite\n  for (const auto&amp; header : headers_to_overwrite) {\n    headers.setReferenceKey(header.first, header.second);  // LINE 206\n  }\n  // Then add\n  for (const auto&amp; header : headers_to_add) {\n    headers.addReferenceKey(header.first, header.second);  // LINE 211\n  }\n}\n```\n\n**Proto Definition (api/envoy/config/core/v3/base.proto:429-476)**:\n\nThe proto defines `HeaderAppendAction`:\n- `APPEND_IF_EXISTS_OR_ADD = 0` (default): Appends comma-concatenated (for inline headers) or as duplicate headers\n- `ADD_IF_ABSENT = 1`: Only adds if header doesn&#x27;t exist\n- `OVERWRITE_IF_EXISTS_OR_ADD = 2`: Overwrites existing or adds new\n- `OVERWRITE_IF_EXISTS = 3`: Only overwrites existing\n\nWhen `append_action_` is `APPEND_IF_EXISTS_OR_ADD`, calling `addReferenceKey()` twice on the same header results in the header being appended twice. When it&#x27;s `OVERWRITE_IF_EXISTS_OR_ADD`, `setReferenceKey()` should replace, but the double call still means the header transformation is processed twice.\n\n### Why Local Replies are Affected but Not Upstream Responses\n\n**Local Reply Path**:\n- `sendLocalReply()` \u2192 `sendLocalReplyViaFilterChain()` \u2192 Creates lambda that calls `finalizeResponseHeaders()` AND the `modify_headers_` callback\n- `modify_headers_` callback also calls `finalizeResponseHeaders()` via router filter&#x27;s lambda\n- **Result: `finalizeResponseHeaders()` called twice**\n\n**Upstream Response Path**:\n- Headers received from upstream go directly to `onUpstreamHeaders()`\n- Response headers are finalized during normal encoding via the filter chain\n- `modify_headers_` is used in `encodeHeaders()` but is only invoked once\n- **Result: `finalizeResponseHeaders()` called once**\n\n## Affected Components\n\nThe causal chain spans these packages:\n\n1. **source/common/router/** (`router.cc`, `router.h`):\n   - `Filter::decodeHeaders()`: Creates `modify_headers_` lambda\n   - `Filter::onUpstreamAbort()`, `onPerTryTimeoutCommon()`, `onSoftPerTryTimeout()`, `onUpstreamTimeoutAbort()`: Calls `sendLocalReply()` with `modify_headers_` callback\n   - These methods are entry points for all local reply generation\n\n2. **source/common/http/filter_manager.cc** (`filter_manager.h`):\n   - `DownstreamFilterManager::sendLocalReply()`: Entry point for local reply handling\n   - `DownstreamFilterManager::sendLocalReplyViaFilterChain()`: Creates lambda that calls `finalizeResponseHeaders()` directly (line 1125)\n   - `DownstreamFilterManager::prepareLocalReplyViaFilterChain()`: Creates similar lambda (line 1074)\n   - These are the code sections that introduce the first `finalizeResponseHeaders()` call for local replies\n\n3. **source/common/router/config_impl.cc** (`config_impl.h`):\n   - `RouteEntryImplBase::finalizeResponseHeaders()`: The function being called twice\n   - Iterates through header parsers and calls `evaluateHeaders()` on each\n\n4. **source/common/router/header_parser.cc** (`header_parser.h`):\n   - `HeaderParser::evaluateHeaders()`: Applies the `response_headers_to_add` transformations\n   - `HeadersToAddEntry` constructor: Parses `HeaderValueOption` proto, handles proto field compatibility (lines 53-76)\n   - The `append_action_` field (proto field 3) defaults to `APPEND_IF_EXISTS_OR_ADD` per proto comments\n\n5. **api/envoy/config/core/v3/base.proto**:\n   - `HeaderValueOption.HeaderAppendAction` enum definition\n   - `HeaderValueOption.append_action` field (line 476) with default `APPEND_IF_EXISTS_OR_ADD`\n   - `HeaderValueOption.append` field (line 469) - deprecated BoolValue with default `false`\n\n## Causal Chain\n\n```\nSymptom: Duplicate headers in local reply responses\n    \u2193\nUpstream timeout/error occurs (onUpstreamAbort, onPerTryTimeout, etc.)\n    \u2193\nRouter filter calls sendLocalReply() with modify_headers_ callback\n    \u2193\nFilterManager&#x27;s sendLocalReplyViaFilterChain() creates wrapper lambda\n    \u2193\nWrapper lambda [1] calls finalizeResponseHeaders() directly (filter_manager.cc:1125)\n    \u2193\nWrapper lambda [1] then calls modify_headers callback\n    \u2193\nRouter&#x27;s modify_headers_ lambda [2] calls finalizeResponseHeaders() again (router.cc:453)\n    \u2193\nBoth finalizeResponseHeaders() calls invoke HeaderParser::evaluateHeaders()\n    \u2193\nHeader transformations from response_headers_to_add applied twice\n    \u2193\nFor APPEND_IF_EXISTS_OR_ADD: addReferenceKey() called twice \u2192 header appears twice\nFor OVERWRITE_IF_EXISTS_OR_ADD: setReferenceKey() called twice \u2192 transformer runs twice\n    \u2193\nFinal response contains duplicate header values in access log\n```\n\n## Recommendation\n\n### Root Cause Analysis\n\nThe architectural issue is that `sendLocalReplyViaFilterChain()` and `prepareLocalReplyViaFilterChain()` were designed to call `finalizeResponseHeaders()` directly (as a convenience), but this violates the Single Responsibility Principle when combined with the `modify_headers_` callback pattern that also calls `finalizeResponseHeaders()`.\n\nThe historical context: The `modify_headers_` callback was created to ensure route-level header modifications are applied consistently to both upstream responses and local replies. However, when the local reply code path was updated to call `finalizeResponseHeaders()` directly in the filter manager (lines 1074-1075, 1125), it created a double-call scenario because the `modify_headers_` callback still also calls `finalizeResponseHeaders()`.\n\n### Fix Strategies\n\n**Option A (Recommended)**: Remove the direct `finalizeResponseHeaders()` call from `sendLocalReplyViaFilterChain()` and `prepareLocalReplyViaFilterChain()` (filter_manager.cc:1074-1075, 1125). Let only the `modify_headers_` callback handle finalization. This maintains the single call pattern.\n\n**Option B**: Create a flag in the `modify_headers_` callback to skip finalization if it&#x27;s already been done, preventing duplicate execution.\n\n**Option C**: Separate the `modify_headers_` callback into two concerns: route finalization (applied once) and load balancer header modifications (applied separately), ensuring each is invoked exactly once.\n\n### Diagnostic Steps\n\n1. **Verify the double invocation**: Add logging/tracing at router.cc:453 and filter_manager.cc:1125 to confirm `finalizeResponseHeaders()` is being called twice for local reply scenarios.\n\n2. **Identify affected scenarios**:\n   - Upstream timeouts (global or per-try)\n   - No healthy upstream\n   - Cluster not found\n   - Request timeout\n   - Any scenario where router calls `sendLocalReply()` directly\n\n3. **Test with different append_action values**:\n   - Headers with `APPEND_IF_EXISTS_OR_ADD` will show clearly as duplicates\n   - Headers with `OVERWRITE_IF_EXISTS_OR_ADD` may not show duplicates but transformer logic runs twice (performance impact)\n\n4. **Verify fix doesn&#x27;t break upstream response path**: Ensure normal upstream response processing still properly applies route header modifications exactly once.\n&quot;,
+  &quot;file_path&quot;: &quot;/logs/agent/investigation.md&quot;
+}</pre></details>
+      </details>
+      <details>
+        <summary>Code Changes (1)</summary>
+        <details><summary>1. WRITE <code>/logs/agent/investigation.md</code></summary><pre># Investigation Report: Duplicate Response Headers in Envoy Filter Pipeline
+
+## Summary
+
+Response headers configured via `response_headers_to_add` in route configuration are being **duplicated in local reply responses** because `finalizeResponseHeaders()` is called twice through different code paths: once directly in `sendLocalReplyViaFilterChain()` and again indirectly through the `modify_headers_` callback from the router filter. This double invocation applies the same header transformations twice, resulting in duplicate headers for local replies (timeouts, connection failures, etc.) while normal proxied upstream responses remain unaffected.
+
+## Root Cause
+
+**Double invocation of `finalizeResponseHeaders()` specific to the local reply code path.**
+
+The causal mechanism:
+1. **Initial Setup (router.cc:444-461)**: The router filter&#x27;s `decodeHeaders()` method creates a `modify_headers_` lambda closure that captures `this` and calls `route_entry_-&gt;finalizeResponseHeaders()` (line 453)
+2. **Local Reply Initiated (router.cc:1405-1414)**: When the router filter needs to send a local reply (e.g., upstream timeout in `onUpstreamAbort()`), it calls `callbacks_-&gt;sendLocalReply()` passing a callback that invokes `modify_headers_(headers)`
+3. **First Finalization (filter_manager.cc:1120-1129)**: In `sendLocalReplyViaFilterChain()`, Envoy creates a lambda that:
+   - Calls `streamInfo().route()-&gt;routeEntry()-&gt;finalizeResponseHeaders()` directly at line 1125
+   - Then calls the `modify_headers` callback (the one from step 2) at line 1128
+4. **Second Finalization (router.cc:453)**: The callback from step 2 executes the `modify_headers_` lambda from step 1, which calls `finalizeResponseHeaders()` again
+5. **Result**: `finalizeResponseHeaders()` is invoked twice on the same response head
+... (truncated)</pre></details>
+      </details>
+      <details>
+        <summary>Bash Commands (25)</summary>
+        <pre>1. $ find /workspace -type f -name &quot;*.md&quot; | grep -i readme | head -5</pre><pre>2. $ ls -la /workspace/source/common/router/ | head -20</pre><pre>3. $ ls -la /workspace/source/common/router/ | tail -20</pre><pre>4. $ ls -la /workspace/source/extensions/filters/http/header_mutation/ 2&gt;/dev/null || echo &quot;Not found with that path, let me search&quot;</pre><pre>5. $ find /workspace/source/common/router -name &quot;*.h&quot; -o -name &quot;*.cc&quot; | grep -E &quot;(filter|router)&quot; | head -20</pre><pre>6. $ find /workspace/source/extensions/filters/http -type d -name &quot;*router*&quot;</pre><pre>7. $ ls -la /workspace/source/extensions/filters/http/router/</pre><pre>8. $ find /workspace/source -type f -name &quot;*.h&quot; -path &quot;*/router*&quot; | grep -v test | head -30</pre><pre>9. $ grep -rn &quot;sendLocalReply&quot; /workspace/source/common/router/ --include=&quot;*.cc&quot; --include=&quot;*.h&quot; | head -20</pre><pre>10. $ grep -rn &quot;finalizeResponseHeaders&quot; /workspace/source/common/router/ --include=&quot;*.cc&quot; --include=&quot;*.h&quot;</pre><pre>11. $ grep -rn &quot;void sendLocalReply&quot; /workspace/source/common/http/ --include=&quot;*.h&quot; | head -10</pre><pre>12. $ grep -n &quot;void FilterManager::sendLocalReply\|void FilterManager::sendLocalReplyViaFilterChain&quot; /workspace/source/common/http/filter_manager.cc | head -10</pre><pre>13. $ find /workspace/source/common/http -name &quot;*.cc&quot; -exec grep -l &quot;sendLocalReply&quot; {} \;</pre><pre>14. $ grep -n &quot;sendLocalReply&quot; /workspace/source/common/http/filter_manager.cc | head -20</pre><pre>15. $ grep -n &quot;addReferenceKey\|setReferenceKey&quot; /workspace/source/common/http/header_map_impl.h | head -20</pre><pre>16. $ grep -n &quot;void HeaderMapImpl::addReferenceKey\|void HeaderMapImpl::setReferenceKey&quot; /workspace/source/common/http/header_map_impl.cc</pre><pre>17. $ grep -n &quot;void HeaderMapImpl::insertByKey\|HeaderMapImpl::insertByKey&quot; /workspace/source/common/http/header_map_impl.cc | head -5</pre><pre>18. $ find /workspace/api -name &quot;*.proto&quot; -path &quot;*core*&quot; | head -10</pre><pre>19. $ find /workspace/api -name &quot;base.proto&quot; | grep v3</pre><pre>20. $ grep -n &quot;message HeaderValueOption&quot; /workspace/api/envoy/config/core/v3/base.proto</pre><pre>21. $ git log --oneline --all -20 | head -20</pre><pre>22. $ git log --oneline source/common/router/router.cc 2&gt;/dev/null | head -20</pre><pre>23. $ grep -n &quot;encodeHeaders&quot; /workspace/source/common/http/filter_manager.cc | head -20</pre><pre>24. $ grep -n &quot;onPerTryTimeout\|onResponseTimeout\|onUpstreamTimeoutAbort&quot; /workspace/source/common/router/router.cc | head -20</pre><pre>25. $ grep -n &quot;void Utility::sendLocalReply\|void Utility::prepareLocalReply&quot; /workspace/source/common/http/utility.cc | head -5</pre>
+      </details>
+    </div>
+  </div>
+</body>
+</html>
