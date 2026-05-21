@@ -1,0 +1,43 @@
+# Incident Debugging: Envoy Connection Pool Exhaustion
+
+## Your Task
+
+A production Envoy proxy is logging `upstream connect error or disconnect/reset before headers. reset reason: overflow`. Trace the error to its source in `envoyproxy/envoy`. Find: 1. The C++ source file that defines the `overflow` reset reason string. 2. The connection pool implementation files under `source/common/conn_pool/` or `source/common/http/` that trigger this overflow condition. 3. The configuration protobuf in `envoyproxy/data-plane-api` that controls `max_connections` and `max_pending_requests` circuit breaker thresholds.
+
+## Context
+
+You are working on a codebase task involving repos from the incident domain.
+
+## Available Resources
+
+## Output Format
+
+Use the published task contract:
+
+- `TASK_WORKDIR=/workspace`
+- `TASK_REPO_ROOT=/workspace`
+- `TASK_OUTPUT=/workspace/answer.json`
+
+Create a file at `TASK_OUTPUT` (`/workspace/answer.json`) with your findings in the following structure:
+
+```json
+{
+  "files": [
+    {"repo": "repo-name", "path": "relative/path/to/file.go"}
+  ],
+  "symbols": [
+    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
+  ],
+  "chain": [
+    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "FunctionName"}
+  ],
+  "text": "Narrative explanation of your findings, citing repos and file paths."
+}
+```
+
+Include only the fields relevant to this task. Your answer is evaluated against a closed-world oracle — completeness matters.
+
+## Evaluation
+
+Your answer will be scored on:
+- **File recall and precision**: Did you find all relevant files?

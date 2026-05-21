@@ -1,0 +1,43 @@
+# Kubernetes sig-node Kubelet Component Ownership Map
+
+## Your Task
+
+Map the major kubelet components in kubernetes/kubernetes owned by sig-node. Find the Go source files that implement: the pod lifecycle manager, the container runtime interface (CRI) client, the volume manager, and the device plugin manager.
+
+## Context
+
+You are working on a codebase task involving repos from the org domain.
+
+## Available Resources
+
+## Output Format
+
+Use the published task contract:
+
+- `TASK_WORKDIR=/workspace`
+- `TASK_REPO_ROOT=/workspace`
+- `TASK_OUTPUT=/workspace/answer.json`
+
+Create a file at `TASK_OUTPUT` (`/workspace/answer.json`) with your findings in the following structure:
+
+```json
+{
+  "files": [
+    {"repo": "org/repo-name", "path": "relative/path/to/file.go"}
+  ],
+  "symbols": [
+    {"repo": "org/repo-name", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
+  ],
+  "chain": [
+    {"repo": "org/repo-name", "path": "relative/path/to/file.go", "symbol": "FunctionName"}
+  ],
+  "text": "Narrative explanation of your findings, citing repos and file paths."
+}
+```
+
+Include only the fields relevant to this task. Your answer is evaluated against a closed-world oracle — completeness matters.
+
+## Evaluation
+
+Your answer will be scored on:
+- **File recall and precision**: Did you find all relevant files?

@@ -1,0 +1,43 @@
+# Envoy HTTP/1.1 to HTTP/2 Header Normalization Migration
+
+## Your Task
+
+Find all C++ source files in envoyproxy/envoy that handle HTTP/1.1 to HTTP/2 header translation: the header case normalization (lowercase), the pseudo-header injection (:method, :path, :scheme, :authority), and the upgrade header handling.
+
+## Context
+
+You are working on a codebase task involving repos from the migration domain.
+
+## Available Resources
+
+## Output Format
+
+Use the published task contract:
+
+- `TASK_WORKDIR=/workspace`
+- `TASK_REPO_ROOT=/workspace`
+- `TASK_OUTPUT=/workspace/answer.json`
+
+Create a file at `TASK_OUTPUT` (`/workspace/answer.json`) with your findings in the following structure:
+
+```json
+{
+  "files": [
+    {"repo": "org/repo-name", "path": "relative/path/to/file.go"}
+  ],
+  "symbols": [
+    {"repo": "org/repo-name", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
+  ],
+  "chain": [
+    {"repo": "org/repo-name", "path": "relative/path/to/file.go", "symbol": "FunctionName"}
+  ],
+  "text": "Narrative explanation of your findings, citing repos and file paths."
+}
+```
+
+Include only the fields relevant to this task. Your answer is evaluated against a closed-world oracle — completeness matters.
+
+## Evaluation
+
+Your answer will be scored on:
+- **File recall and precision**: Did you find all relevant files?
