@@ -89,6 +89,24 @@ is an artifact of the sandbox failing, not a fair retrieval comparison.
 
 Pass `--include-broken-env-baselines` to keep them (diagnostic only).
 
+## Official-manifest filter
+
+After the broken-environment filter, each pair must also appear in
+`runs/official/MANIFEST.json` as **both** a baseline-config run **and** an
+MCP-config run (matched on task name + short model identifier:
+`haiku45`/`sonnet46`/`opus`). Pairs whose corresponding canonical runs
+aren't recorded in the manifest are **excluded by default** — they're
+local-only trials that weren't part of the canonical benchmark sweep, so
+treating them as canonical comparisons would be misleading.
+
+The classifier looks for `baseline*` and `mcp*` / `sourcegraph*` tokens
+in the run name. Other configs (`augment-*`, `github-*`, `cursor-*`) do
+not count as baseline or MCP for this check.
+
+Pass `--include-non-official` to keep non-canonical pairs (or
+`--official-manifest /dev/null` to skip the check entirely — useful on
+machines without `runs/official/`).
+
 ## Source runs
 
 These comparisons are built from `runs/analysis/<suite>/<model>/{baseline,mcp}/`

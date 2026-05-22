@@ -258,6 +258,82 @@ def has_broken_baseline_env(pair: Pair) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Official-manifest cross-reference
+# ---------------------------------------------------------------------------
+
+DEFAULT_MANIFEST = REPO_ROOT / "runs" / "official" / "MANIFEST.json"
+_BASELINE_RUN_TOKENS = ("baseline",)
+_MCP_RUN_TOKENS = ("mcp", "sourcegraph")  # excludes Augment / GitHub MCP / Cursor variants
+
+
+def _model_short(model_name: str) -> str:
+    m = (model_name or "").lower()
+    if "haiku" in m:
+        return "haiku45"
+    if "sonnet" in m:
+        return "sonnet46"
+    if "opus" in m:
+        return "opus"
+    return "unknown"
+
+
+def _cell_model_short(cell_model: str) -> str:
+    """Map analysis cell model dir name (cc_haiku45, oh_sonnet46, ...) to the
+    short model identifier used in MANIFEST classification.
+    """
+    return _model_short(cell_model)
+
+
+def _run_config_kind(run_name: str) -> str | None:
+    """Classify an official run name as 'baseline', 'mcp', or None (other config)."""
+    n = run_name.lower()
+    if any(t in n for t in _MCP_RUN_TOKENS):
+        return "mcp"
+    if any(t in n for t in _BASELINE_RUN_TOKENS):
+        return "baseline"
+    return None
+
+
+def load_official_keys(manifest_path: Path = DEFAULT_MANIFEST) -> set[tuple[str, str, str]]:
+    """Build a set of (task_name_lower, model_short, config_kind) tuples from
+    runs/official/MANIFEST.json. Used to require that every pair surfaced in
+    the gallery is backed by canonical baseline AND MCP runs.
+
+    Returns an empty set if the manifest is missing (filter becomes a no-op so
+    the script still works on machines without runs/official/).
+    """
+    keys: set[tuple[str, str, str]] = set()
+    if not manifest_path.is_file():
+        return keys
+    try:
+        data = json.loads(manifest_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return keys
+    for run_name, info in (data.get("runs") or {}).items():
+        kind = _run_config_kind(run_name)
+        if kind is None:
+            continue
+        model = _model_short(info.get("model", ""))
+        for task in (info.get("tasks") or {}):
+            keys.add((task.lower(), model, kind))
+    return keys
+
+
+def pair_in_official(pair: Pair, official_keys: set[tuple[str, str, str]]) -> bool:
+    """True if both the baseline and the MCP side of this pair appear in the
+    official manifest at the same task name and (short) model.
+    """
+    if not official_keys:
+        return True  # No manifest available: don't filter.
+    mod = _cell_model_short(pair.cell.model)
+    tname = pair.task.lower()
+    return (
+        (tname, mod, "baseline") in official_keys
+        and (tname, mod, "mcp") in official_keys
+    )
+
+
+# ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
 
@@ -484,6 +560,16 @@ def main(argv: list[str] | None = None) -> int:
                          "workspace directory, agent couldn't recover). Excluded by "
                          "default because such 'wins' are sandbox failures, not real "
                          "retrieval comparisons.")
+    ap.add_argument("--official-manifest", type=Path, default=DEFAULT_MANIFEST,
+                    help="Path to runs/official/MANIFEST.json. Pairs not present in "
+                         "the manifest as both a baseline-config run AND an MCP/"
+                         "sourcegraph-config run (at the same task name and model) "
+                         "are excluded by default. Set to /dev/null to disable.")
+    ap.add_argument("--include-non-official", action="store_true",
+                    help="Keep pairs whose (task, model) does not appear in both "
+                         "a baseline-config run AND an MCP-config run in the official "
+                         "MANIFEST. By default these are excluded as non-canonical "
+                         "comparisons.")
     args = ap.parse_args(argv)
 
     analysis_root: Path = args.analysis_root
@@ -510,6 +596,21 @@ def main(argv: list[str] | None = None) -> int:
             for p in excluded:
                 print(f"    - {p.cell.suite}/{p.cell.model}/{p.task} "
                       f"(delta={p.delta:+.3f})")
+
+    if not args.include_non_official:
+        official_keys = load_official_keys(args.official_manifest)
+        if not official_keys:
+            print(f"  Note: {args.official_manifest} missing or empty — "
+                  "non-official filter is a no-op.")
+        else:
+            non_official = [p for p in pairs if not pair_in_official(p, official_keys)]
+            pairs = [p for p in pairs if pair_in_official(p, official_keys)]
+            if non_official:
+                print(f"  Excluded {len(non_official)} pair(s) absent from official "
+                      f"MANIFEST ({args.official_manifest.name}):")
+                for p in non_official:
+                    print(f"    - {p.cell.suite}/{p.cell.model}/{p.task} "
+                          f"(delta={p.delta:+.3f})")
 
     wins = [p for p in pairs if p.delta >= args.threshold]
     wins.sort(key=lambda p: p.delta, reverse=True)
