@@ -63,6 +63,18 @@ For each `runs/analysis/<suite>/<model>/` cell with both `baseline/` and
 4. A pair counts as an "MCP win" when `mcp_reward - baseline_reward >=
    threshold` (default 0.20).
 
+## Broken-environment filter
+
+Pairs whose **baseline** trial used ≥ 10 `WebSearch`/`WebFetch` calls and
+≤ 5 local-file calls (`Read`, `Glob`, `Grep`, `Edit`, `Write`, `Bash`,
+`str_replace_editor`, `execute_bash`) are **excluded by default**. These
+typically mark a broken sandbox where the workspace mount failed, so the
+baseline agent fell back to web search instead of touching local files —
+any MCP "win" against that baseline is an artifact of the broken
+environment, not a fair retrieval comparison.
+
+Pass `--include-broken-env-baselines` to keep them (diagnostic only).
+
 ## Source runs
 
 These comparisons are built from `runs/analysis/<suite>/<model>/{baseline,mcp}/`

@@ -153,6 +153,27 @@ def collect_pairs(cells: list[Cell]) -> list[Pair]:
     return pairs
 
 
+# Local-filesystem tool names across both agent harnesses (Claude Code + OpenHands).
+_LOCAL_FILE_TOOLS = (
+    "Read", "Glob", "Grep", "Edit", "Write", "Bash",
+    "str_replace_editor", "execute_bash", "execute_ipython_cell",
+)
+_WEB_TOOLS = ("WebSearch", "WebFetch")
+
+
+def has_broken_baseline_env(pair: Pair, web_min: int = 10, local_max: int = 5) -> bool:
+    """True when the baseline trial appears to have had no local-file access and
+    fell back to web search instead. Signal: many web tool calls (>= web_min) AND
+    almost no local-file calls (<= local_max). This typically marks a broken
+    Daytona/Docker sandbox where the workspace mount failed, so the win is
+    an artifact of MCP merely having any access at all, not a fair comparison.
+    """
+    tools = (pair.baseline or {}).get("tool_calls_by_name") or {}
+    web = sum(tools.get(k, 0) for k in _WEB_TOOLS)
+    local = sum(tools.get(k, 0) for k in _LOCAL_FILE_TOOLS)
+    return web >= web_min and local <= local_max
+
+
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
@@ -369,6 +390,12 @@ def main(argv: list[str] | None = None) -> int:
                          "The full manifest still lists every win.")
     ap.add_argument("--render-all", action="store_true",
                     help="Render every win as HTML (ignores --gallery-limit). Big.")
+    ap.add_argument("--include-broken-env-baselines", action="store_true",
+                    help="Keep pairs where the baseline trial appears to have had no "
+                         "local-file access and fell back to web search (>= 10 WebSearch/"
+                         "WebFetch calls, <= 5 local-file calls). Excluded by default "
+                         "because such 'wins' are artifacts of the sandbox failing, not "
+                         "evidence that MCP retrieval beat a real local-file baseline.")
     args = ap.parse_args(argv)
 
     analysis_root: Path = args.analysis_root
@@ -384,6 +411,16 @@ def main(argv: list[str] | None = None) -> int:
 
     pairs = collect_pairs(cells)
     print(f"  Collected {len(pairs)} task pairs.")
+
+    if not args.include_broken_env_baselines:
+        excluded = [p for p in pairs if has_broken_baseline_env(p)]
+        pairs = [p for p in pairs if not has_broken_baseline_env(p)]
+        if excluded:
+            print(f"  Excluded {len(excluded)} pair(s) with broken-env baseline "
+                  "(heavy web-search use, no local-file access):")
+            for p in excluded:
+                print(f"    - {p.cell.suite}/{p.cell.model}/{p.task} "
+                      f"(delta={p.delta:+.3f})")
 
     wins = [p for p in pairs if p.delta >= args.threshold]
     wins.sort(key=lambda p: p.delta, reverse=True)

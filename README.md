@@ -48,7 +48,7 @@ python3 -m http.server 8000 -d docs/analysis/compare
 ```
 
 The committed snapshot is the top 20 MCP wins by reward delta plus a full
-manifest of all 84 wins (`wins_manifest.json`). To regenerate the rest
+manifest of all 83 wins (`wins_manifest.json`). To regenerate the rest
 locally from your own `runs/analysis/<suite>/<model>/{baseline,mcp}/` trees:
 
 ```bash
@@ -176,9 +176,26 @@ CodeScaleBench includes a multi-stage QA pipeline:
 | Phase | Script | Purpose |
 |-------|--------|---------|
 | **Pre-flight** | `scripts/authoring/validate_tasks_preflight.py` | Task integrity checks |
+| **Calibration triad** | `scripts/authoring/calibrate_task.py` | Null/golden/adversarial gates on the artifact verifier |
 | **Infra check** | `scripts/infra/check_infra.py` | OAuth tokens, Docker, disk |
 | **Post-run** | `scripts/authoring/validate_task_run.py` | Scoring anomalies, MCP usage |
 | **Snapshot verify** | `scripts/publishing/verify_snapshot.py` | Symlink integrity, completeness |
+
+### Calibration triad (upstream push gate)
+
+Before a task is pushed to the public `sourcegraph/CodeScaleBench` mirror,
+its artifact verifier must pass three calibration gates:
+
+* **null** — empty answer scores ≤ 0.1
+* **golden** — canonical `oracle_answer.json` (or synthesized perfect input)
+  scores ≥ 0.9
+* **adversarial** — keyword dump with empty structured arrays scores ≤ 0.5
+
+The triad gates the **upstream push**, not the public corpus's existence.
+Failing tasks are not removed; per-cluster fix beads are filed in CSB scope
+and resolved independently. See
+[`docs/qa/calibration_run_2026_04_30.md`](docs/qa/calibration_run_2026_04_30.md)
+for the most recent corpus run and cluster breakdown.
 
 ---
 
