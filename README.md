@@ -48,7 +48,7 @@ python3 -m http.server 8000 -d docs/analysis/compare
 ```
 
 The committed snapshot is the top 20 MCP wins by reward delta plus a full
-manifest of all 83 wins (`wins_manifest.json`). To regenerate the rest
+manifest of all 77 wins (`wins_manifest.json`). To regenerate the rest
 locally from your own `runs/analysis/<suite>/<model>/{baseline,mcp}/` trees:
 
 ```bash

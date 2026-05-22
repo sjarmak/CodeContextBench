@@ -65,13 +65,21 @@ For each `runs/analysis/<suite>/<model>/` cell with both `baseline/` and
 
 ## Broken-environment filter
 
-Pairs whose **baseline** trial used ≥ 10 `WebSearch`/`WebFetch` calls and
-≤ 5 local-file calls (`Read`, `Glob`, `Grep`, `Edit`, `Write`, `Bash`,
-`str_replace_editor`, `execute_bash`) are **excluded by default**. These
-typically mark a broken sandbox where the workspace mount failed, so the
-baseline agent fell back to web search instead of touching local files —
-any MCP "win" against that baseline is an artifact of the broken
-environment, not a fair retrieval comparison.
+Pairs whose baseline trial shows **any** of three broken-environment
+signals are **excluded by default**. Any MCP "win" against such a baseline
+is an artifact of the sandbox failing, not a fair retrieval comparison.
+
+1. **Web-search fallback** — baseline made ≥ 10 `WebSearch`/`WebFetch`
+   calls and ≤ 5 local-file calls (`Read`, `Glob`, `Grep`, `Edit`,
+   `Write`, `Bash`, `str_replace_editor`, `execute_bash`). The agent gave
+   up on local files entirely.
+2. **Agent never ran** — `tool_calls_total` is null/zero and no local-file
+   calls were recorded. The sandbox aborted before the agent could
+   execute.
+3. **Workspace mount failed mid-run** — transcript (≤ 50 KB) contains
+   ≥ 5 `/workspace/...: No such file or directory` errors AND the
+   baseline scored 0. The workspace was missing or empty when the agent
+   tried to read it.
 
 Pass `--include-broken-env-baselines` to keep them (diagnostic only).
 

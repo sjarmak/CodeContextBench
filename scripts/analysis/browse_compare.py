@@ -159,19 +159,72 @@ _LOCAL_FILE_TOOLS = (
     "str_replace_editor", "execute_bash", "execute_ipython_cell",
 )
 _WEB_TOOLS = ("WebSearch", "WebFetch")
+# Matches workspace-mount failures captured in agent transcripts. Examples:
+#   ls: cannot access '/workspace/sg-evals/grafana--26d36ec/': No such file or directory
+#   /workspace/foo/bar.go: No such file or directory
+_WORKSPACE_FAIL_RE = re.compile(
+    r"cannot access '?/workspace/|/workspace/\S+: No such file or directory",
+    re.IGNORECASE,
+)
 
 
-def has_broken_baseline_env(pair: Pair, web_min: int = 10, local_max: int = 5) -> bool:
-    """True when the baseline trial appears to have had no local-file access and
-    fell back to web search instead. Signal: many web tool calls (>= web_min) AND
-    almost no local-file calls (<= local_max). This typically marks a broken
-    Daytona/Docker sandbox where the workspace mount failed, so the win is
-    an artifact of MCP merely having any access at all, not a fair comparison.
+def _baseline_used_web_fallback(pair: Pair, web_min: int = 10, local_max: int = 5) -> bool:
+    """Baseline made >= web_min WebSearch/WebFetch calls and <= local_max local-file
+    calls — signals a sandbox where the workspace mount failed and the agent gave
+    up on local files entirely.
     """
     tools = (pair.baseline or {}).get("tool_calls_by_name") or {}
     web = sum(tools.get(k, 0) for k in _WEB_TOOLS)
     local = sum(tools.get(k, 0) for k in _LOCAL_FILE_TOOLS)
     return web >= web_min and local <= local_max
+
+
+def _baseline_never_ran(pair: Pair) -> bool:
+    """Baseline made zero tool calls — agent never executed (sandbox aborted
+    pre-flight). Manifests as `tool_calls_total` being None or 0 with no
+    local-file tool calls recorded.
+    """
+    bl = pair.baseline or {}
+    tc_total = bl.get("tool_calls_total")
+    tools = bl.get("tool_calls_by_name") or {}
+    local = sum(tools.get(k, 0) for k in _LOCAL_FILE_TOOLS)
+    return (tc_total in (None, 0)) and local == 0
+
+
+def _baseline_workspace_mount_failed(pair: Pair, min_hits: int = 5,
+                                     max_transcript_bytes: int = 50_000) -> bool:
+    """Baseline transcript contains many `/workspace/...: No such file or directory`
+    errors AND the trial scored 0 AND the transcript is on the small side
+    (suggesting the agent gave up rather than recovered). Signals a mid-run
+    workspace mount failure.
+    """
+    bl = pair.baseline or {}
+    if (bl.get("reward") or 0) > 0.01:
+        return False
+    trial_dir = Path(bl.get("trial_dir") or "")
+    if not trial_dir.is_dir():
+        return False
+    for name in ("claude-code.txt", "trajectory.json"):
+        path = trial_dir / "agent" / name
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        if len(text) > max_transcript_bytes:
+            return False
+        return len(_WORKSPACE_FAIL_RE.findall(text)) >= min_hits
+    return False
+
+
+def has_broken_baseline_env(pair: Pair) -> bool:
+    """Composite filter: any of three independent broken-environment signals."""
+    return (
+        _baseline_used_web_fallback(pair)
+        or _baseline_never_ran(pair)
+        or _baseline_workspace_mount_failed(pair)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -391,11 +444,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--render-all", action="store_true",
                     help="Render every win as HTML (ignores --gallery-limit). Big.")
     ap.add_argument("--include-broken-env-baselines", action="store_true",
-                    help="Keep pairs where the baseline trial appears to have had no "
-                         "local-file access and fell back to web search (>= 10 WebSearch/"
-                         "WebFetch calls, <= 5 local-file calls). Excluded by default "
-                         "because such 'wins' are artifacts of the sandbox failing, not "
-                         "evidence that MCP retrieval beat a real local-file baseline.")
+                    help="Keep pairs whose baseline trial shows any of three broken-"
+                         "environment signals: (1) heavy WebSearch/WebFetch fallback "
+                         "(>=10 web, <=5 local-file calls); (2) zero tool calls "
+                         "(agent never ran); (3) many '/workspace/...: No such file' "
+                         "errors with zero reward on a short transcript (workspace "
+                         "mount failed mid-run). Excluded by default because such "
+                         "'wins' are sandbox failures, not real retrieval comparisons.")
     args = ap.parse_args(argv)
 
     analysis_root: Path = args.analysis_root
@@ -417,7 +472,7 @@ def main(argv: list[str] | None = None) -> int:
         pairs = [p for p in pairs if not has_broken_baseline_env(p)]
         if excluded:
             print(f"  Excluded {len(excluded)} pair(s) with broken-env baseline "
-                  "(heavy web-search use, no local-file access):")
+                  "(web-search fallback / agent never ran / workspace mount failed):")
             for p in excluded:
                 print(f"    - {p.cell.suite}/{p.cell.model}/{p.task} "
                       f"(delta={p.delta:+.3f})")
