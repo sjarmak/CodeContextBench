@@ -29,6 +29,37 @@ Each snapshot includes:
 
 Full agent trajectories are available as compressed archives in the corresponding [GitHub Release](https://github.com/sourcegraph/CodeScaleBench/releases).
 
+### Baseline vs MCP side-by-side browser
+
+[`docs/analysis/compare/`](docs/analysis/compare/) contains a pre-rendered
+gallery of side-by-side compare pages — for every task where Sourcegraph MCP
+outperformed the local-filesystem baseline, the full agent tool-call sequence
+on both sides is laid out in two columns (search queries, file reads, edits,
+bash commands, conversation events).
+
+To browse it on any machine:
+
+```bash
+git clone --branch public --single-branch \
+    https://github.com/sourcegraph/CodeScaleBench.git
+cd CodeScaleBench
+python3 -m http.server 8000 -d docs/analysis/compare
+# then open http://localhost:8000
+```
+
+The committed snapshot is the top 20 MCP wins by reward delta plus a full
+manifest of all 84 wins (`wins_manifest.json`). To regenerate the rest
+locally from your own `runs/analysis/<suite>/<model>/{baseline,mcp}/` trees:
+
+```bash
+python3 scripts/analysis/browse_compare.py \
+    --threshold 0.20 --render-all --out browse/compare
+```
+
+The generator has no external dependencies (Python stdlib only). See
+[`docs/analysis/compare/README.md`](docs/analysis/compare/README.md) for
+pairing rules, filter semantics, and source-run requirements.
+
 ---
 
 ## Benchmark Suites
