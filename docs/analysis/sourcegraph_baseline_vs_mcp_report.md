@@ -21,7 +21,7 @@ The MCP advantage previously reported (+0.277) was an artifact of two broken bas
 
 > **Browse side-by-side retrieval histories** for every task where MCP
 > outperformed baseline across the full benchmark suite:
-> [`compare/index.html`](./compare/index.html) (77 MCP wins, top 20
+> [`compare/index.html`](./compare/index.html) (69 MCP wins, top 20
 > pre-rendered). Generator + regen instructions:
 > [`compare/README.md`](./compare/README.md).
 

@@ -65,7 +65,7 @@ For each `runs/analysis/<suite>/<model>/` cell with both `baseline/` and
 
 ## Broken-environment filter
 
-Pairs whose baseline trial shows **any** of three broken-environment
+Pairs whose baseline trial shows **any** of four broken-environment
 signals are **excluded by default**. Any MCP "win" against such a baseline
 is an artifact of the sandbox failing, not a fair retrieval comparison.
 
@@ -78,8 +78,14 @@ is an artifact of the sandbox failing, not a fair retrieval comparison.
    execute.
 3. **Workspace mount failed mid-run** — transcript (≤ 50 KB) contains
    ≥ 5 `/workspace/...: No such file or directory` errors AND the
-   baseline scored 0. The workspace was missing or empty when the agent
-   tried to read it.
+   baseline scored 0. The workspace path was missing.
+4. **Empty workspace directory** — the agent's thinking explicitly says
+   "workspace is empty" AND the baseline scored < 0.5. The workspace
+   directory existed but was empty (no `No such file` errors fired); the
+   agent observed this and couldn't recover. Cases where the baseline
+   observed an empty workspace but then successfully ran `git clone` and
+   completed the task (scoring ≥ 0.5) are kept — those represent real
+   work, not broken sandboxes.
 
 Pass `--include-broken-env-baselines` to keep them (diagnostic only).
 

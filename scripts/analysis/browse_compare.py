@@ -218,12 +218,42 @@ def _baseline_workspace_mount_failed(pair: Pair, min_hits: int = 5,
     return False
 
 
+def _baseline_observed_empty_workspace(pair: Pair, max_baseline_reward: float = 0.5) -> bool:
+    """Baseline transcript explicitly says 'workspace is empty' AND baseline scored
+    below max_baseline_reward. Catches cases the mount-failure regex misses:
+    the workspace directory exists but is empty, so `ls /workspace` returns
+    `total 0` without producing any 'No such file' error string. The agent
+    notices and writes 'The workspace is empty' in its thinking block.
+
+    A reward cutoff guards against the (legitimate) pattern where the agent
+    observes the empty workspace, runs `git clone`, and then completes the
+    task normally — those runs score >= 0.5 and stay in the comparison.
+    """
+    bl = pair.baseline or {}
+    if (bl.get("reward") or 0) >= max_baseline_reward:
+        return False
+    trial_dir = Path(bl.get("trial_dir") or "")
+    if not trial_dir.is_dir():
+        return False
+    for name in ("claude-code.txt", "trajectory.json"):
+        path = trial_dir / "agent" / name
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        return "workspace is empty" in text.lower()
+    return False
+
+
 def has_broken_baseline_env(pair: Pair) -> bool:
-    """Composite filter: any of three independent broken-environment signals."""
+    """Composite filter: any of four independent broken-environment signals."""
     return (
         _baseline_used_web_fallback(pair)
         or _baseline_never_ran(pair)
         or _baseline_workspace_mount_failed(pair)
+        or _baseline_observed_empty_workspace(pair)
     )
 
 
@@ -444,13 +474,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--render-all", action="store_true",
                     help="Render every win as HTML (ignores --gallery-limit). Big.")
     ap.add_argument("--include-broken-env-baselines", action="store_true",
-                    help="Keep pairs whose baseline trial shows any of three broken-"
+                    help="Keep pairs whose baseline trial shows any of four broken-"
                          "environment signals: (1) heavy WebSearch/WebFetch fallback "
                          "(>=10 web, <=5 local-file calls); (2) zero tool calls "
                          "(agent never ran); (3) many '/workspace/...: No such file' "
                          "errors with zero reward on a short transcript (workspace "
-                         "mount failed mid-run). Excluded by default because such "
-                         "'wins' are sandbox failures, not real retrieval comparisons.")
+                         "mount failed mid-run); (4) baseline transcript says "
+                         "'workspace is empty' and the trial scored < 0.5 (empty "
+                         "workspace directory, agent couldn't recover). Excluded by "
+                         "default because such 'wins' are sandbox failures, not real "
+                         "retrieval comparisons.")
     args = ap.parse_args(argv)
 
     analysis_root: Path = args.analysis_root
@@ -472,7 +505,8 @@ def main(argv: list[str] | None = None) -> int:
         pairs = [p for p in pairs if not has_broken_baseline_env(p)]
         if excluded:
             print(f"  Excluded {len(excluded)} pair(s) with broken-env baseline "
-                  "(web-search fallback / agent never ran / workspace mount failed):")
+                  "(web-search fallback / agent never ran / workspace mount failed "
+                  "/ empty workspace observed):")
             for p in excluded:
                 print(f"    - {p.cell.suite}/{p.cell.model}/{p.task} "
                       f"(delta={p.delta:+.3f})")
