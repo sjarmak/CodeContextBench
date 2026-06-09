@@ -46,6 +46,23 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 # ---------------------------------------------------------------------------
+# PII patterns — maintainer/operator identifiers that leak into recorded
+# trajectories (git author config, absolute home paths) and must not ship in
+# the public mirror. Generic benchmark-task emails (random commit authors in
+# task repos) are intentionally NOT matched — those are reproducible fixture
+# data. Keep these narrow to operator identity only.
+# ---------------------------------------------------------------------------
+
+_PII_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # Operator emails: corporate + local-machine git author addresses.
+    (re.compile(r"[a-zA-Z0-9._%+\-]*jarmak[0-9]*@(?:sourcegraph\.com|[A-Za-z0-9.\-]+\.local)"), "EMAIL"),
+    # Operator username in absolute paths (/home/stephanie_jarmak/...,
+    # ~/.claude/projects/-home-stephanie-jarmak-...).
+    (re.compile(r"stephanie[_\-]jarmak"), "USER"),
+]
+
+
+# ---------------------------------------------------------------------------
 # Allowlist — known fake / test credentials embedded in benchmark tasks.
 # These are intentional fixtures (e.g. security awareness tasks, locobench
 # dummy Stripe keys). Values are substring prefixes that, when matched,
@@ -67,6 +84,9 @@ FAKE_KEY_ALLOWLIST: set[str] = {
 # Substrings that, if present anywhere in a matched secret, mark it as
 # clearly fake/placeholder regardless of provider prefix.
 _FAKE_INDICATORS = ("XXXX", "aBcDeF", "a1b2c3d4", "example", "test_key", "dummy")
+
+# Stable, path-safe replacements for PII matches (keeps redacted paths valid).
+_PII_REPLACEMENTS: dict[str, str] = {"EMAIL": "dev@example.com", "USER": "user"}
 
 
 def _is_allowlisted(match_text: str) -> bool:
@@ -91,6 +111,8 @@ def redact_secrets(text: str) -> str:
             lambda m: m.group(0) if _is_allowlisted(m.group(0)) else f"[REDACTED:{label}]",
             text,
         )
+    for pattern, label in _PII_PATTERNS:
+        text = pattern.sub(_PII_REPLACEMENTS[label], text)
     return text
 
 

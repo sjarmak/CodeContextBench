@@ -118,20 +118,20 @@ def extract_transitions_and_files(transcript_dir):
                     fp = block.get("input", {}).get("file_path", "")
                     if fp:
                         fp = re.sub(
-                            r"^/home/stephanie_jarmak/CodeScaleBench/", "", fp
+                            r"^/home/user/CodeScaleBench/", "", fp
                         )
                         # Also strip evals path for the agent file
                         fp = re.sub(
-                            r"^/home/stephanie_jarmak/evals/custom_agents/agents/claudecode/",
+                            r"^/home/user/evals/custom_agents/agents/claudecode/",
                             "(evals) ", fp,
                         )
                         # Strip memory path
                         fp = re.sub(
-                            r"^/home/stephanie_jarmak/.claude/projects/-home-stephanie-jarmak-CodeScaleBench/",
+                            r"^/home/user/.claude/projects/-home-user-CodeScaleBench/",
                             "(.claude) ", fp,
                         )
                         fp = re.sub(
-                            r"^/home/stephanie_jarmak/.claude/",
+                            r"^/home/user/.claude/",
                             "(.claude) ", fp,
                         )
                         if name == "Read":
@@ -474,7 +474,7 @@ def main():
     parser.add_argument(
         "--transcript-dir",
         default=os.path.expanduser(
-            "~/.claude/projects/-home-stephanie-jarmak-CodeScaleBench/"
+            "~/.claude/projects/-home-user-CodeScaleBench/"
         ),
     )
     parser.add_argument("--style", choices=["light", "dark"], default="light")

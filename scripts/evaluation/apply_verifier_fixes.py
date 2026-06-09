@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-BENCHMARKS = Path("/home/stephanie_jarmak/CodeScaleBench/benchmarks")
+BENCHMARKS = Path("/home/user/CodeScaleBench/benchmarks")
 
 # ── Fix 1: Python-level no_changes_guard ──────────────────────────────────
 

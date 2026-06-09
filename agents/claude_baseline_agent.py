@@ -28,7 +28,7 @@ from harbor.environments.base import BaseEnvironment
 logger = logging.getLogger(__name__)
 
 # Path to CLAUDE.md template for Deep Search tasks
-LOCOBENCH_CLAUDE_MD_TEMPLATE = Path("/home/stephanie_jarmak/CodeScaleBench/benchmarks/locobench_agent/templates/CLAUDE.md")
+LOCOBENCH_CLAUDE_MD_TEMPLATE = Path("/home/user/CodeScaleBench/benchmarks/locobench_agent/templates/CLAUDE.md")
 
 # System prompt for evaluation context - delivered via --append-system-prompt for ALL modes
 # This is the single authoritative source of test-first instructions (US-003)

@@ -323,7 +323,7 @@ def write_outputs(topic_by_date, session_counts, interactive_counts,
 
 def main():
     transcript_dir = os.path.expanduser(
-        "~/.claude/projects/-home-stephanie-jarmak-CodeContextBench/"
+        "~/.claude/projects/-home-user-CodeContextBench/"
     )
     output_dir = "data/build_diary"
 
