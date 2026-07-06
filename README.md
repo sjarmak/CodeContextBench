@@ -1,5 +1,15 @@
 # CodeScaleBench
 
+<p align="center">
+  <a href="https://huggingface.co/datasets/sgjarmak/CodeScaleBench"><img alt="Hugging Face Dataset" src="https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-CodeScaleBench-ffce1c?style=for-the-badge"></a>
+  <a href="https://github.com/sourcegraph/CodeScaleBench"><img alt="Paper" src="https://img.shields.io/badge/Paper-arXiv%20soon-b31b1b?style=for-the-badge"></a>
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/License-Apache%202.0-2ea44f?style=for-the-badge"></a>
+</p>
+
+<!-- When the paper is on arXiv, replace the Paper badge above with:
+  <a href="https://arxiv.org/abs/XXXX.XXXXX"><img alt="Paper" src="https://img.shields.io/badge/arXiv-XXXX.XXXXX-b31b1b?style=for-the-badge"></a>
+-->
+
 CodeScaleBench measures how external code-retrieval tooling changes what an AI coding agent produces, on realistic developer tasks in large, enterprise-scale codebases. Retrieval is a controlled variable: the same agent and model run on each task with the source available locally and with it reachable only through a retrieval server, and the paired difference is the reported quantity.
 
 - **Dataset:** [`sgjarmak/CodeScaleBench`](https://huggingface.co/datasets/sgjarmak/CodeScaleBench) on Hugging Face — the 370-task problem layer (instruction, repo, base commit, metadata; repository contents and verifiers are materialized by the eval kit).
