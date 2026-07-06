@@ -1,13 +1,17 @@
 # CodeScaleBench
 
-Benchmark suite for evaluating how AI coding agents leverage external context retrieval tools on realistic developer tasks in large, enterprise-scale codebases.
+CodeScaleBench measures how external code-retrieval tooling changes what an AI coding agent produces, on realistic developer tasks in large, enterprise-scale codebases. Retrieval is a controlled variable: the same agent and model run on each task with the source available locally and with it reachable only through a retrieval server, and the paired difference is the reported quantity.
+
+- **Dataset:** [`sgjarmak/CodeScaleBench`](https://huggingface.co/datasets/sgjarmak/CodeScaleBench) on Hugging Face — the 370-task problem layer (instruction, repo, base commit, metadata; repository contents and verifiers are materialized by the eval kit).
+- **Reproduce the published results:** `git clone --branch v1-mixed371 https://github.com/sourcegraph/CodeScaleBench.git` yields the exact 370-task analysis set, the frozen suite definition, and the result snapshot.
 
 This repository contains:
-- **275 benchmark tasks** across 20 suites covering 9 developer work types
-- **Versioned benchmark suites** with dual-verifier support (`benchmarks/suites/`)
-- **Auditable results snapshots** with per-task traces, scores, timing, and cost (`runs/snapshots/`)
-- **Metrics extraction and reporting pipelines** for score/cost/retrieval analysis
-- **Task indexes** by complexity, language, repo size, and multi-repo scope (`benchmarks/indexes/`)
+- **370 benchmark tasks** (`csb-v1-mixed371`) — the analysis set behind the published results, spanning software-lifecycle and organization-scale work across more than forty repositories and nine languages
+- **Auditable result snapshots** with per-task traces, scores, timing, and cost (`runs/snapshots/`)
+- **The eval kit** — the Harbor-based harness, deterministic gated verifiers, and metrics/reporting pipelines for running and scoring submissions
+- **Task indexes** by complexity, language, repo size, and multi-repository scope (`benchmarks/indexes/`)
+
+The corpus is under active curation: the default branch tracks the evolving maintained set, while `csb-v1-mixed371` is the frozen set the paper reports, retained under a tag. Cite the suite id with any result.
 
 Tasks are executed via the [Harbor](https://github.com/laude-institute/harbor/tree/main) runner with the Claude Code agent harness.
 
